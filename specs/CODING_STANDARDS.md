@@ -20,18 +20,40 @@ Cross-references to ARCHITECTURE.md use `[ARCH §n]` notation.
 
 ### §2.1 Module Structure
 
-Every domain MUST contain the following files. Absent a file means absent functionality — do
-not create placeholder files.
+Every domain MUST contain the **base files** listed below. Absent a base file means absent
+functionality — do not create placeholder files. The **conditional files** MUST be created only
+when the domain needs them; do not create them as placeholders.
+
+**Base files (all domains):**
 
 ```
 src/{domain}/
-├── mod.rs          # Re-exports, domain-level doc comments
-├── handlers.rs     # Axum route handlers (thin layer only)
-├── service.rs      # Business logic
-├── repository.rs   # Database access (all queries live here)
-├── models.rs       # Request/response types, DTOs
-└── entities/       # SeaORM-generated entity files (do not hand-edit)
+├── mod.rs              # Re-exports, domain-level doc comments
+├── handlers.rs         # Axum route handlers (thin layer only)
+├── service.rs          # Business logic
+├── repository.rs       # Database access (all queries live here)
+├── models.rs           # Request/response types, DTOs
+├── ports.rs            # Service + repository trait definitions [§8.2]
+└── entities/           # SeaORM-generated entity files (do not hand-edit)
 ```
+
+**Conditional files (add when the domain needs them):**
+
+```
+src/{domain}/
+├── events.rs           # Domain event types emitted by this domain (if any) [§8.4]
+├── event_handlers.rs   # Handlers for events from other domains (if any) [§8.4]
+├── adapters/           # External service wrappers (if domain calls external APIs) [§8.1]
+│   ├── mod.rs
+│   └── {service}.rs
+└── domain/             # Aggregate roots + value objects (complex domains only) [§8.3]
+    ├── mod.rs
+    ├── {aggregate}.rs
+    └── errors.rs
+```
+
+> `ports.rs` is **required** for all domains (§8.2). `events.rs`, `event_handlers.rs`,
+> `adapters/`, and `domain/` are conditional — only create them when the domain needs them.
 
 **Layer responsibilities** — violations are bugs:
 
@@ -41,6 +63,10 @@ src/{domain}/
 | `service.rs` | Orchestrate business rules, call repositories, enforce invariants | Execute raw SQL, call another domain's repository |
 | `repository.rs` | Execute database queries, map SeaORM results to domain types | Contain business logic, call other repositories across domain boundaries |
 | `models.rs` | Define request/response structs with serde/OpenAPI derives | Contain logic |
+| `ports.rs` | Define `{Domain}Service` and `{Entity}Repository` traits (inbound and outbound ports) | Contain implementations |
+| `adapters/*.rs` | Wrap external SDK calls; return domain types only | Contain business logic |
+| `domain/*.rs` | Enforce aggregate invariants via methods; emit domain events | Access database directly |
+| `events.rs` | Define domain event types emitted by this domain | Import other domains' services |
 
 ### §2.2 Error Handling
 
@@ -114,6 +140,7 @@ The following patterns are **never** acceptable in committed code:
 | `todo!()` or `unimplemented!()` in committed code | Panics on invocation |
 | `serde_json::Value` in non-JSONB API types | Destroys type safety at the API boundary |
 | Raw SQL strings in application code (outside migrations) | Bypasses SeaORM type safety |
+| Raw SDK call in `service.rs` (e.g., `stripe.create_customer()`) | Bypasses adapter isolation; blocks vendor swaps and unit testing `[ARCH §4.3]` |
 | Logging PII, tokens, or secrets | Privacy and security violation `[ARCH §1.5]` |
 
 ### §2.8 Testing
@@ -124,6 +151,17 @@ The following patterns are **never** acceptable in committed code:
 - Every new public API endpoint MUST have at least one integration test covering the
   happy path and at least one covering an authorization failure.
 - Test database setup MUST use migrations to create schema (not hand-rolled DDL).
+
+**Unit vs. integration test distinction:**
+
+- Service-layer business logic SHOULD have unit tests in `#[cfg(test)]` blocks within
+  `service.rs` that inject mock `impl {Entity}Repository` types. This is enabled by the
+  port traits defined in `ports.rs` (§8.2).
+- Mock repository implementations are `#[cfg(test)]`-only and MUST be defined inline in
+  the test module — never in production code paths.
+- **Unit tests** (in-file, mock repo) verify *business logic* in isolation.
+  **Integration tests** (`tests/`, real `Pg*Repository`) verify *correctness with a real
+  database*. Both are required for domains with non-trivial service logic.
 
 ---
 
@@ -261,6 +299,7 @@ Before writing a new utility, check `src/shared/` for an existing implementation
 | `src/shared/db.rs` | Database connection pool acquisition |
 | `src/shared/redis.rs` | Redis connection and caching helpers |
 | `src/shared/types.rs` | Common newtypes (e.g., `FamilyId`, `UserId`) |
+| `src/shared/events.rs` | `EventBus` and `DomainEvent` trait (§8.4) |
 
 MUST NOT duplicate functionality already present in `src/shared/`. Extend the shared
 module instead.
@@ -324,7 +363,7 @@ These rules apply when Claude (or any AI assistant) is generating or modifying c
 
 ### §7.1 Before Writing Code
 
-1. Read `specs/ARCHITECTURE.md` §1 (Principles) and the relevant domain section.
+1. Read `specs/ARCHITECTURE.md` §1 (Principles), §4 (Internal Architecture Patterns), and the relevant domain section.
 2. Read `specs/SPEC.md` for the requirements in the domain being worked on.
 3. Check `src/shared/` for existing utilities before writing new ones.
 4. Read the existing module files (if any) to understand current patterns before adding to them.
@@ -353,3 +392,100 @@ on a feature branch.
 - MUST NOT refactor code that is not directly related to the current task.
 - MUST NOT add features, fallback handling, or configuration options beyond what the
   current task requires (no speculative generality).
+
+---
+
+## §8 Architectural Pattern Rules
+
+These rules are the enforcement layer for the pattern stack defined in `[ARCH §4]`. Do not
+read this section for rationale — read `specs/ARCHITECTURE.md §4` for that. Every rule
+here is an absolute enforcement imperative.
+
+### §8.1 Bounded Context Rules
+
+`[ARCH §4.2]`
+
+- MUST NOT write to another domain's prefixed tables from outside that domain. Each domain
+  owns its `{prefix}_*` tables exclusively.
+- MUST NOT call another domain's `repository.rs` directly. Call its service trait instead.
+  (Reinforces §2.4 with explicit bounded-context framing.)
+- MUST wrap all external SDK calls (Stripe, Kratos, R2, Thorn Safer, Postmark, Rekognition)
+  in an `adapters/` file within the owning domain. No raw SDK calls in `service.rs`.
+- MUST NOT add files to `src/shared/` without explicit justification that the utility is
+  needed by three or more domains. Convenience refactors do not qualify.
+
+**Forbidden patterns** (additions to the §2.7 table):
+
+| Pattern | Why it is forbidden |
+|---------|---------------------|
+| Domain A writing to `domain_b_*` tables | Violates domain table ownership `[ARCH §4.2]` |
+| Raw SDK call in `service.rs` | Bypasses adapter isolation, blocks vendor swaps `[ARCH §4.3]` |
+| Adding to `src/shared/` for convenience | Grows the Shared Kernel; increases coupling `[ARCH §4.2]` |
+
+### §8.2 Port Trait Rules (Inbound + Outbound)
+
+`[ARCH §4.4]`
+
+- MUST define a service trait before implementing it. The trait MUST be named `{Domain}Service`
+  (e.g., `LearningService`). The implementation MUST be named `{Domain}ServiceImpl`.
+- MUST define a repository trait before implementing it. The trait MUST be named
+  `{Entity}Repository` (e.g., `ActivityRepository`). The concrete PostgreSQL implementation
+  MUST be named `Pg{Entity}Repository`.
+- Handlers MUST receive the service as `Arc<dyn DomainService>` via Axum `State`. MUST NOT
+  receive the concrete `{Domain}ServiceImpl` type.
+- Services MUST receive repositories as `Arc<dyn RepositoryTrait>`. MUST NOT construct or
+  hold a concrete `Pg*Repository` directly.
+- MUST NOT construct concrete service or repository implementations inside handlers or
+  other services. Wiring happens exclusively in `app.rs` / `main.rs` at startup.
+- Trait definitions MUST live in `ports.rs` within the domain directory. For simple domains
+  where the trait is short (≤20 lines), it MAY be colocated at the top of `service.rs` or
+  `repository.rs` — but the placement MUST be consistent across all files in the domain.
+
+### §8.3 Domain Layer Rules (Complex Domains)
+
+`[ARCH §4.5]`
+
+Applies to: `learn/`, `social/`, `mkt/`, `safety/`, `comply/`, `method/`.
+
+- MUST add a `domain/` subdirectory to any of the above domains before implementing
+  state-machine logic or invariant enforcement.
+- Aggregate root structs MUST have all fields `private` (no `pub` fields). State transitions
+  happen exclusively via methods on the aggregate.
+- MUST NOT modify aggregate state directly in `service.rs`. The service calls aggregate
+  methods (which return `Result<DomainEvent, DomainError>`), then persists and publishes.
+- Domain events returned from aggregate methods MUST be published via `EventBus` (§8.4).
+  MUST NOT silently discard returned domain events.
+- `DomainError` types MUST be defined in `domain/errors.rs` and MUST NOT be the same type
+  as `AppError`. Conversion from `DomainError` to `AppError` happens in `service.rs`.
+
+### §8.4 Event Bus Rules
+
+`[ARCH §4.6]`
+
+- MUST use `EventBus::publish` for all cross-domain reactions. MUST NOT import another
+  domain's service to call it directly in response to a domain event.
+- Event types MUST be defined in the *emitting* domain's `events.rs` file. The consuming
+  domain imports the event type, never the emitting domain's service.
+- Event handler implementations MUST live in the *consuming* domain, in a file named
+  `{event_name}_handler.rs` or grouped in `event_handlers.rs`.
+- Handlers that perform heavy work (image scanning, search indexing, email sending) MUST
+  enqueue a background job rather than executing the work inline. MUST NOT block the
+  request thread with expensive operations inside an event handler.
+- `EventBus` subscriptions MUST be registered at application startup (in `app.rs` or
+  `main.rs`). MUST NOT register subscriptions dynamically at runtime.
+
+### §8.5 CQRS Rules (Applicable Domains)
+
+`[ARCH §4.7]`
+
+Applies to: `social/`, `mkt/`, `learn/`, `comply/`, `search/`, `ai/`.
+
+- Command functions (writes) MUST return `Result<Id, AppError>` or `Result<(), AppError>`.
+  MUST NOT return rich read models after a write ("return-what-you-created" pattern).
+- Query functions (reads) MUST NOT have side effects. MUST NOT mutate state, emit events,
+  or enqueue jobs.
+- MUST NOT mix command and query logic in the same service method. A method that both
+  writes and returns a rich read is a violation of this rule.
+- Read-side optimization MUST follow the progressive ladder defined in `[ARCH §4.7]`.
+  MUST NOT add Redis caching or materialized views for a query before measuring that the
+  standard SeaORM query is actually insufficient.

@@ -541,9 +541,516 @@ src/
 
 ---
 
-## 4. Data Architecture
+## 4. Internal Architecture Patterns
 
-### 4.1 Schema Organization
+This section defines the named, coherent pattern stack used inside the monolith. It bridges
+the gap between "we use Rust + Axum + SeaORM" (§2) and "here are the file naming rules"
+(CODING_STANDARDS.md §2.1). Without explicit patterns, AI-assisted code generation defaults
+to whatever pattern the LLM has seen most — typically anemic domain models with god-services,
+or over-engineered hexagonal abstractions. Naming the patterns here makes intent unambiguous.
+
+### 4.1 Pattern Stack Overview
+
+The six patterns below are layered from strategic to tactical. Each is adopted because of
+specific project characteristics, not generic "best practices."
+
+| Layer | Pattern | Scope | Primary Benefit |
+|-------|---------|-------|-----------------|
+| Strategic | Modular Monolith with Bounded Contexts | Entire system | Domain isolation with extraction path |
+| Intra-domain | Application Service Layer (Ports & Adapters) | Every domain | Testable, swappable adapters |
+| Outbound ports | Repository Trait Pattern | Every domain | Service unit tests without DB |
+| Inbound ports | Service Interface Traits | Every domain | Extraction-ready seams, handler decoupling |
+| Complex domains | Domain Model Layer (Aggregates) | 6 domains | State machine invariant enforcement |
+| Cross-domain | In-Process Domain Event Bus | System-wide | Cross-domain decoupling, no circular imports |
+| Read-heavy | Lightweight CQRS | 6 domains | Separation of write/read path optimization |
+
+### 4.2 Bounded Contexts (the 14 Modules)
+
+The 14 Rust modules (`iam::`, `social::`, `learn::`, etc.) are **Bounded Contexts** in
+Domain-Driven Design terminology. This is already committed to — this section names it
+explicitly so the intent is clear to all contributors (human and AI).
+
+**Why bounded contexts fit this project**: 14 distinct problem domains with their own
+vocabulary, rules, and data ownership. All share infrastructure (one PostgreSQL database,
+one Redis instance) but must not share implementation. The extraction path to microservices
+(§1.2) is possible only if domain boundaries are respected from the start.
+
+**Shared Kernel** — `src/shared/` contains the minimal cross-cutting types all domains
+need. Every addition to `shared/` is a deliberate decision, not a convenience refactor.
+The shared kernel is strictly limited to:
+
+| File | Contents |
+|------|----------|
+| `shared/family_scope.rs` | `FamilyScope` type for privacy-enforcing queries |
+| `shared/types.rs` | Newtypes (`FamilyId`, `UserId`, `StudentId`, etc.) |
+| `shared/db.rs` | Database pool and transaction helpers |
+| `shared/redis.rs` | Redis connection pool and caching helpers |
+| `shared/pagination.rs` | Cursor-based and offset pagination |
+| `shared/events.rs` | `EventBus` and `DomainEvent` trait (§4.6) |
+| `shared/error.rs` | `AppError` and error-to-HTTP mapping |
+
+**Anti-Corruption Layers (ACLs)** — External services (Stripe, Ory Kratos, S3/R2, Thorn
+Safer, Postmark) are wrapped in Adapter modules within the domain that owns the interaction.
+No raw SDK calls exist outside these adapters:
+
+| External Service | Owning Domain | Adapter Location |
+|-----------------|---------------|-----------------|
+| Stripe + Stripe Connect | `billing::` | `src/billing/adapters/stripe.rs` |
+| Ory Kratos (auth) | `iam::` | `src/iam/adapters/kratos.rs` |
+| Cloudflare R2 | `media::` | `src/media/adapters/r2.rs` |
+| Thorn Safer (CSAM) | `safety::` | `src/safety/adapters/thorn.rs` |
+| AWS Rekognition | `safety::` | `src/safety/adapters/rekognition.rs` |
+| Postmark (email) | `notify::` | `src/notify/adapters/postmark.rs` |
+
+**What bounded contexts rule out**:
+- Domain A writing directly to domain B's prefixed tables
+- Domain A calling domain B's `repository.rs` directly
+- Raw SDK calls scattered through `service.rs` files
+- Utility modules that don't belong to a domain or `shared/`
+
+### 4.3 Application Service Layer
+
+The `handlers.rs / service.rs / repository.rs` file split is a Ports & Adapters
+implementation. The port is the `service.rs` interface; handlers and repositories are
+adapters on each side:
+
+```
+HTTP Request  →  handlers.rs      (Inbound Adapter)
+                      ↓
+               service.rs         (Application / Use-Case Layer — the "port")
+                      ↓
+               repository.rs      (Outbound Adapter — database)
+               adapters/*.rs      (Outbound Adapter — third-party APIs)
+```
+
+**External service adapter pattern** — Integrations with third-party APIs MUST go through
+dedicated `adapters/` files, not inline in `service.rs`:
+
+```
+src/billing/
+├── handlers.rs
+├── service.rs
+├── repository.rs
+├── models.rs
+├── adapters/
+│   ├── mod.rs
+│   └── stripe.rs     ← wraps Stripe SDK, returns domain types only
+└── entities/
+```
+
+Services call `billing::adapters::stripe::charge_card(...)` which returns
+`Result<ChargeId, BillingError>`. If Stripe is ever replaced, only `adapters/stripe.rs`
+changes. Handlers and service logic are unaffected.
+
+**Why this fits**: The existing split is 95% of the way there. Making external adapters
+explicit prevents the common pattern of SDK calls proliferating through service methods,
+which makes testing and future vendor swaps painful.
+
+### 4.4 Ports & Adapters (Full — Service and Repository Traits)
+
+Every domain service and every repository MUST be defined as a Rust trait before the
+implementation. This makes both inbound and outbound ports explicit and compiler-checked.
+
+#### Inbound Ports — Service Traits
+
+Handlers receive `Arc<dyn DomainService>` via Axum State, never the concrete type:
+
+```rust
+// src/learn/ports.rs  (or at the top of service.rs)
+#[async_trait]
+pub trait LearningService: Send + Sync {
+    async fn log_activity(
+        &self,
+        cmd: LogActivityCommand,
+        scope: FamilyScope,
+    ) -> Result<ActivityId, AppError>;
+
+    async fn get_progress_summary(
+        &self,
+        query: ProgressSummaryQuery,
+        scope: FamilyScope,
+    ) -> Result<ProgressSummary, AppError>;
+    // ... all use cases exposed to other layers
+}
+
+// src/learn/service.rs
+pub struct LearningServiceImpl {
+    activities: Arc<dyn ActivityRepository>,
+    events: Arc<EventBus>,
+}
+
+impl LearningService for LearningServiceImpl { ... }
+```
+
+Axum state wires the concrete type behind the trait:
+
+```rust
+// In app setup (app.rs or main.rs)
+let app_state = AppState {
+    learning: Arc::new(LearningServiceImpl::new(...)) as Arc<dyn LearningService>,
+    // ...
+};
+```
+
+#### Outbound Ports — Repository Traits
+
+Services receive `Arc<dyn RepositoryTrait>`, not the concrete `Pg*Repository`:
+
+```rust
+// src/learn/ports.rs  (or at the top of repository.rs)
+#[async_trait]
+pub trait ActivityRepository: Send + Sync {
+    async fn create(
+        &self,
+        cmd: CreateActivity,
+        scope: FamilyScope,
+    ) -> Result<Activity, AppError>;
+
+    async fn list(
+        &self,
+        query: ActivityQuery,
+        scope: FamilyScope,
+    ) -> Result<Vec<Activity>, AppError>;
+
+    async fn get_progress_summary(
+        &self,
+        query: ProgressQuery,
+        scope: FamilyScope,
+    ) -> Result<ProgressSummary, AppError>;
+}
+
+// src/learn/repository.rs
+pub struct PgActivityRepository {
+    pool: DbPool,
+}
+
+impl ActivityRepository for PgActivityRepository { ... }
+```
+
+**Naming conventions**:
+- Trait: `{Domain}Service` / `{Domain}Repository` (e.g., `LearningService`, `ActivityRepository`)
+- Implementation: `{Domain}ServiceImpl` / `Pg{Entity}Repository` (e.g., `LearningServiceImpl`, `PgActivityRepository`)
+- Trait file: `ports.rs` within the domain directory (or colocated at the top of `service.rs` / `repository.rs` for simple domains — team decides, must be consistent)
+
+**Why all domains, not just complex ones**:
+
+1. **Extraction path** — When a domain is extracted as a microservice, only the adapter
+   changes: `LearningServiceImpl` → `LearningServiceHttpClient`. Handlers are untouched.
+   This seam must exist *before* extraction, not added during it.
+
+2. **Consistent rule** — AI-generated code benefits from one rule ("all domains have a
+   service trait") rather than a conditional rule ("complex domains get traits"). Conditional
+   rules create ambiguity that leads to inconsistency.
+
+3. **Minimal overhead** — With `async fn in trait` stable since Rust 1.75, there is no
+   meaningful ergonomic friction. A service trait is ~15-20 lines per domain.
+
+4. **Authoritative contract** — The trait is the compiler-checked documentation of a
+   domain's public use cases. Without it, there is no single place to see what a domain
+   exposes to handlers or other domains.
+
+**Phase 1 → Phase 2 extraction path (no handler changes required)**:
+
+```
+Phase 1 (monolith):
+  AppState { learning: Arc::new(LearningServiceImpl::new(pool, bus)) as Arc<dyn LearningService> }
+
+Phase 2 (extracted service):
+  AppState { learning: Arc::new(LearningServiceHttpClient::new(base_url)) as Arc<dyn LearningService> }
+  // Handlers are identical — they only see Arc<dyn LearningService>
+```
+
+### 4.5 Domain Model Layer (Complex Domains Only)
+
+For simple domains (Discovery, Notifications, Content/Media, Onboarding, AI, Search,
+Billing), the service + repository split is sufficient — there is no complex business logic
+that needs structural enforcement.
+
+For complex domains, a `domain/` subdirectory adds **Aggregate Roots** and **Value Objects**
+that enforce invariants structurally (not by convention):
+
+| Domain | Complex? | Reason |
+|--------|----------|--------|
+| `learn/` | **Yes** | Activity logging invariants, tool lifecycles, multi-student assignment, progress state |
+| `social/` | **Yes** | Friend system invariants, visibility rules, blocking logic |
+| `mkt/` | **Yes** | Listing lifecycle state machine (Draft → Review → Published → Archived), purchase invariants |
+| `safety/` | **Yes** | Moderation state machine, CSAM handling pipeline |
+| `comply/` | **Yes** | Attendance thresholds, GPA calculation, state config rules |
+| `method/` | **Yes** | Tool activation rules, multi-methodology union logic |
+| `discover/` | No | Read-only public content, simple queries |
+| `notify/` | No | Event-triggered dispatch, no complex invariants |
+| `media/` | No | Upload/process/store/serve, infrastructure domain |
+| `search/` | No | Indexing and retrieval, no business invariants |
+| `ai/` | No | Recommendation queries, no invariants to enforce |
+| `onboard/` | No | Workflow steps, IAM interactions |
+| `billing/` | No | Stripe delegation; subscription state machine lives in Stripe |
+| `iam/` | No | Identity data, permissions; session state is Kratos' responsibility |
+
+**Module structure for complex domains**:
+
+```
+src/mkt/
+├── mod.rs
+├── handlers.rs
+├── service.rs
+├── repository.rs
+├── models.rs
+├── adapters/
+│   └── stripe.rs
+├── domain/
+│   ├── mod.rs
+│   ├── listing.rs      ← Aggregate Root: MarketplaceListing
+│   └── value_objects.rs
+└── entities/
+```
+
+**Aggregate Root pattern** (Rust-specific — private fields, state changes via methods only):
+
+```rust
+// src/mkt/domain/listing.rs
+#[derive(Debug)]
+pub struct MarketplaceListing {
+    id: ListingId,
+    state: ListingState,      // enum: Draft | UnderReview | Published | Archived
+    creator_id: CreatorId,
+    title: ListingTitle,      // value object with validation
+    price_cents: u32,
+    // All fields private — state only changes via the methods below
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ListingState {
+    Draft,
+    UnderReview,
+    Published,
+    Archived,
+}
+
+impl MarketplaceListing {
+    pub fn submit_for_review(&mut self) -> Result<ListingSubmittedEvent, DomainError> {
+        match self.state {
+            ListingState::Draft => {
+                self.state = ListingState::UnderReview;
+                Ok(ListingSubmittedEvent { listing_id: self.id, creator_id: self.creator_id })
+            }
+            other => Err(DomainError::InvalidStateTransition {
+                from: other,
+                action: "submit_for_review",
+            }),
+        }
+    }
+
+    pub fn publish(&mut self, reviewer_id: UserId) -> Result<ListingPublishedEvent, DomainError> {
+        match self.state {
+            ListingState::UnderReview => {
+                self.state = ListingState::Published;
+                Ok(ListingPublishedEvent { listing_id: self.id, reviewer_id })
+            }
+            other => Err(DomainError::InvalidStateTransition {
+                from: other,
+                action: "publish",
+            }),
+        }
+    }
+}
+```
+
+The service layer loads the aggregate from the repository, calls methods (which enforce
+invariants and return domain events), then persists the updated aggregate and publishes events:
+
+```rust
+// src/mkt/service.rs
+impl MarketplaceService for MarketplaceServiceImpl {
+    async fn submit_listing_for_review(
+        &self,
+        cmd: SubmitListingCommand,
+        scope: FamilyScope,
+    ) -> Result<(), AppError> {
+        let mut listing = self.listings.get(cmd.listing_id, scope).await?;
+        let event = listing.submit_for_review()?;           // invariant enforced here
+        self.listings.save(&listing, scope).await?;
+        self.events.publish(event)?;                        // domain event emitted
+        Ok(())
+    }
+}
+```
+
+**Why it fits**: State machines (listing lifecycle, moderation pipeline, attendance
+thresholds) MUST be enforced somewhere. An aggregate root with private fields and
+method-only state transitions makes invalid states unrepresentable in Rust's type system.
+A fat service method could be bypassed. A Rust aggregate cannot.
+
+### 4.6 Domain Event Bus
+
+When domain A completes an operation that domain B needs to react to, domain A MUST NOT
+import domain B's service or call it directly. Instead, domain A publishes a domain event
+and domain B subscribes to it.
+
+**Implementation** — a lightweight in-process event bus, wired at application startup:
+
+```rust
+// src/shared/events.rs
+
+pub trait DomainEvent: Send + Sync + 'static {}
+
+#[async_trait]
+pub trait DomainEventHandler<E: DomainEvent>: Send + Sync {
+    async fn handle(&self, event: &E) -> Result<(), AppError>;
+}
+
+pub struct EventBus {
+    // Internal dispatch map: TypeId → Vec<Box<dyn ErasedHandler>>
+    // Implementation detail; callers use only publish() and subscribe()
+}
+
+impl EventBus {
+    pub fn publish<E: DomainEvent>(&self, event: E) -> Result<(), AppError>;
+    pub fn subscribe<E: DomainEvent, H: DomainEventHandler<E>>(
+        &mut self,
+        handler: Arc<H>,
+    );
+}
+```
+
+**Cross-domain event flows**:
+
+| Event (defined in) | Subscribing Domains | Effect |
+|---|---|---|
+| `ActivityLogged` (`learn::events`) | `comply::`, `ai::`, `notify::` | Attendance tracking, recommendation signal, streak milestone check |
+| `PostCreated` (`social::events`) | `safety::`, `search::` | Content scan, search index update |
+| `PurchaseCompleted` (`mkt::events`) | `learn::`, `billing::`, `notify::` | Tool access grant, creator earnings credit, receipt email |
+| `ContentFlagged` (`safety::events`) | `notify::` | Moderation queue alert |
+| `MethodologyConfigUpdated` (`method::events`) | All domains | Config cache invalidation |
+| `MilestoneAchieved` (`learn::events`) | `notify::`, `social::` | In-app + email notification, optional milestone post |
+
+**Event ownership rule** — Event types are defined in the *emitting* domain's `events.rs`
+file. The consuming domain imports the event type, never the emitting domain's service:
+
+```rust
+// src/learn/events.rs  — defined here, consumed elsewhere
+#[derive(Clone, Debug)]
+pub struct ActivityLogged {
+    pub family_id: FamilyId,
+    pub student_id: StudentId,
+    pub activity_id: ActivityId,
+    pub subject: Subject,
+    pub duration_minutes: u32,
+}
+impl DomainEvent for ActivityLogged {}
+
+// src/comply/handlers/activity_handler.rs  — subscribes here
+pub struct ActivityLoggedHandler { ... }
+
+#[async_trait]
+impl DomainEventHandler<ActivityLogged> for ActivityLoggedHandler {
+    async fn handle(&self, event: &ActivityLogged) -> Result<(), AppError> {
+        self.comply_service.record_attendance(event).await
+    }
+}
+```
+
+**Phase 1 → Phase 2 transition**:
+
+- **Phase 1** (current): Synchronous dispatch within the same request. `EventBus::publish`
+  calls handlers inline before the request returns. Simple, no message broker needed,
+  consistent (event handlers participate in the request's error context).
+
+- **Phase 2** (when async is needed): Handlers that do heavy work (CSAM scanning, search
+  indexing, email sending) enqueue a background job instead of executing inline.
+  The event handler's `handle()` method enqueues a job to Redis; the actual work runs
+  in a `sidekiq-rs` worker. The event bus is unchanged; only the handler implementation
+  changes.
+
+**What the event bus rules out**: Domain A importing domain B's service to call it directly
+in response to a domain A event. That pattern creates coupling that prevents independent
+extraction and creates circular dependency risks.
+
+### 4.7 Lightweight CQRS
+
+This is NOT full CQRS (no separate event store, no separate read model database). Instead:
+separate **command functions** (writes with side effects) from **query functions** (reads
+optimized for the UI) within the same service and repository.
+
+**Applies to these domains** (identified from spec analysis — clear read/write asymmetry):
+
+| Domain | Write (command) side | Read (query) side |
+|--------|---------------------|-------------------|
+| `social/` | Post creation, friend request | Feed aggregation, friend timeline |
+| `mkt/` | Listing CRUD, purchase flow | Faceted marketplace browse |
+| `learn/` | Activity log, book completion | Progress trends, subject balance |
+| `comply/` | Attendance mark, assessment record | Attendance summary, threshold check |
+| `search/` | Index document, update index | Full-text search, autocomplete |
+| `ai/` | Record learning signal | Fetch pre-computed recommendations |
+
+**Implementation pattern** — command and query functions coexist in the same service trait
+but are clearly separated by naming and return type conventions:
+
+```rust
+#[async_trait]
+pub trait LearningService: Send + Sync {
+    // --- Command side (write, has side effects) ---
+    // Return only IDs or () — never rich reads after write (no "return what you created")
+    async fn log_activity(
+        &self,
+        cmd: LogActivityCommand,
+        scope: FamilyScope,
+    ) -> Result<ActivityId, AppError>;
+
+    async fn complete_book(
+        &self,
+        cmd: CompleteBookCommand,
+        scope: FamilyScope,
+    ) -> Result<(), AppError>;
+
+    // --- Query side (read, no side effects) ---
+    async fn get_progress_summary(
+        &self,
+        query: ProgressSummaryQuery,
+        scope: FamilyScope,
+    ) -> Result<ProgressSummary, AppError>;
+
+    async fn get_feed(
+        &self,
+        query: FeedQuery,
+        scope: FamilyScope,
+    ) -> Result<FeedPage, AppError>;
+}
+```
+
+Read-side query optimization is progressive (never add the next level until the previous
+is measured as insufficient):
+
+| Level | Mechanism | When to use |
+|-------|-----------|-------------|
+| 0 | Standard SeaORM query | Always start here |
+| 1 | PostgreSQL aggregate / window functions | Complex analytics (progress trends, subject balance) |
+| 2 | Materialized views | Expensive pre-computations refreshed on schedule |
+| 3 | Redis sorted sets / caches | Feed data, frequently accessed aggregates |
+| 4 | Read replica | Write throughput exceeds single-server capacity (~Phase 3) |
+
+**Why it fits**: The spec identifies clear read/write asymmetries — social feed reads vastly
+exceed post writes; marketplace browse dwarfs listing updates; progress dashboard queries
+are more complex than activity log writes. Without separating these, the repository becomes
+a mixed bag of CRUD and complex analytical queries. Separating command and query *functions*
+(not separate stores) creates the seam needed to later add caching, materialized views, or
+a read replica without restructuring the service interface.
+
+### 4.8 Patterns NOT Used and Why
+
+| Pattern | Decision | Rationale |
+|---------|----------|-----------|
+| **Full Event Sourcing** | Rejected | Massive operational complexity (append-only log, snapshot management, replay logic). No consistency requirement that demands it. Domain events (§4.6) provide cross-domain decoupling without the overhead. |
+| **Saga Orchestration** | Deferred | Current cross-domain flows (purchase → access + earnings + notification) are simple enough for the event bus. Add sagas only if distributed transactions become a problem after service extraction. |
+| **Actor Model (Actix)** | Rejected | Over-complex for this use case. Tokio + Axum handles concurrency well. The actor model adds message-passing overhead without meaningful benefit for request/response workloads. |
+| **Anemic Domain Model** | Rejected | Domains with rich invariants (Marketplace, Trust & Safety, Compliance) have state machines that MUST be enforced structurally, not by convention. Anemic models push invariant enforcement into service methods that can be bypassed. |
+| **Redux / Command Bus (MediatR style)** | Rejected | Too much indirection for Rust. Direct method calls on trait objects (§4.4) are idiomatic, explicit, and compiler-checked. MediatR-style patterns obscure data flow in ways that make AI-generated code harder to review. |
+| **Separate Read Model (full CQRS)** | Deferred | Start with query/command separation within the same repository (§4.7). Add a separate read store (e.g., denormalized Redis hashes) only when the progressive optimization ladder (§4.7) is insufficient. |
+
+---
+
+## 5. Data Architecture
+
+### 5.1 Schema Organization
 
 Tables are prefixed by domain to avoid collision and provide clear ownership. `[S§16]`
 
@@ -564,7 +1071,7 @@ Tables are prefixed by domain to avoid collision and provide clear ownership. `[
 | Search | `search_` | (uses FTS indexes on domain tables directly) |
 | Content & Media | `media_` | `media_uploads`, `media_processing_jobs` |
 
-### 4.2 Core Schema Design
+### 5.2 Core Schema Design
 
 #### Family & Identity `[S§3.1]`
 
@@ -874,7 +1381,7 @@ CREATE TABLE mkt_reviews (
 );
 ```
 
-### 4.3 JSONB Usage Patterns
+### 5.3 JSONB Usage Patterns
 
 Methodology configuration uses JSONB for flexible, schema-less data that varies per methodology. `[S§4.1]`
 
@@ -901,7 +1408,7 @@ VALUES (
 );
 ```
 
-### 4.4 PostGIS for Location Discovery `[S§7.8]`
+### 5.4 PostGIS for Location Discovery `[S§7.8]`
 
 ```sql
 -- Add PostGIS geometry for coarse location
@@ -924,7 +1431,7 @@ WHERE ST_DWithin(f.location_point::geography, target.location_point::geography, 
 ORDER BY km;
 ```
 
-### 4.5 Entity Relationship Summary
+### 5.5 Entity Relationship Summary
 
 ```
 iam_families ──┬── 1:N ── iam_parents ──── 0:1 ── mkt_creators
@@ -950,9 +1457,9 @@ method_definitions ── N:M ── method_tools (via method_tool_activations)
 
 ---
 
-## 5. Authentication & Authorization
+## 6. Authentication & Authorization
 
-### 5.1 Ory Kratos Configuration
+### 6.1 Ory Kratos Configuration
 
 Kratos runs as a sidecar container alongside the Rust API, managing the full authentication lifecycle. `[S§3]`
 
@@ -1031,7 +1538,7 @@ session:
     same_site: Lax
 ```
 
-### 5.2 Auth Middleware (Rust)
+### 6.2 Auth Middleware (Rust)
 
 ```rust
 use axum::{extract::State, http::Request, middleware::Next, response::Response};
@@ -1111,7 +1618,7 @@ pub async fn auth_middleware(
 }
 ```
 
-### 5.3 COPPA Consent State Machine `[S§17.2]`
+### 6.3 COPPA Consent State Machine `[S§17.2]`
 
 COPPA consent is tracked per family, built on top of Kratos's registration flow:
 
@@ -1178,7 +1685,7 @@ pub async fn require_coppa_consent(
 }
 ```
 
-### 5.4 Family Account Model `[S§3.1]`
+### 6.4 Family Account Model `[S§3.1]`
 
 ```rust
 /// Post-registration hook: creates family + parent atomically [S§6.1]
@@ -1223,7 +1730,7 @@ pub async fn handle_post_registration(
 }
 ```
 
-### 5.5 Role-Based Access Control `[S§3.2]`
+### 6.5 Role-Based Access Control `[S§3.2]`
 
 Permission checks are implemented as Axum extractors:
 
@@ -1280,9 +1787,9 @@ async fn generate_portfolio(
 
 ---
 
-## 6. Methodology System Implementation
+## 7. Methodology System Implementation
 
-### 6.1 Config-Driven Architecture `[S§4.1]`
+### 7.1 Config-Driven Architecture `[S§4.1]`
 
 The methodology system is the platform's most distinctive architectural pattern. Every methodology-dependent behavior resolves through configuration lookup — never through conditionals.
 
@@ -1364,7 +1871,7 @@ pub async fn resolve_student_tools(
 }
 ```
 
-### 6.2 Methodology-Aware API Responses
+### 7.2 Methodology-Aware API Responses
 
 API responses include methodology context so the frontend renders appropriately:
 
@@ -1391,7 +1898,7 @@ pub struct MethodologyContext {
 }
 ```
 
-### 6.3 Adding a New Methodology
+### 7.3 Adding a New Methodology
 
 Adding a new methodology (e.g., Reggio Emilia) requires zero code changes `[S§4.5]`:
 
@@ -1440,9 +1947,9 @@ VALUES (
 
 ---
 
-## 7. File & Media Architecture
+## 8. File & Media Architecture
 
-### 7.1 Upload Pipeline `[S§14 Content & Media]`
+### 8.1 Upload Pipeline `[S§14 Content & Media]`
 
 All user file uploads follow the same pipeline, regardless of context (profile photos, journal images, marketplace content files):
 
@@ -1531,7 +2038,7 @@ pub async fn request_upload(
 }
 ```
 
-### 7.2 Image Processing
+### 8.2 Image Processing
 
 After upload confirmation, a background job handles image processing:
 
@@ -1579,7 +2086,7 @@ pub async fn process_image(upload_id: Uuid, state: &AppState) -> Result<(), JobE
 }
 ```
 
-### 7.3 Marketplace File Delivery `[S§9.4]`
+### 8.3 Marketplace File Delivery `[S§9.4]`
 
 Purchased marketplace files are delivered via time-limited signed URLs:
 
@@ -1610,9 +2117,9 @@ pub async fn download_purchased_file(
 
 ---
 
-## 8. Search Architecture
+## 9. Search Architecture
 
-### 8.1 Phase 1: PostgreSQL Full-Text Search `[S§14]`
+### 9.1 Phase 1: PostgreSQL Full-Text Search `[S§14]`
 
 Phase 1 uses PostgreSQL's built-in full-text search capabilities. Three search scopes are implemented as defined in `[S§14.1]`:
 
@@ -1717,7 +2224,7 @@ ORDER BY sim DESC
 LIMIT 10;
 ```
 
-### 8.2 Phase 2+: Meilisearch Migration Path
+### 9.2 Phase 2+: Meilisearch Migration Path
 
 When marketplace exceeds ~100K listings or search latency exceeds 500ms p95:
 
@@ -1735,7 +2242,7 @@ pub async fn search_marketplace(
 ) -> Result<SearchResults, SearchError> {
     match backend {
         SearchBackend::PostgresFts => {
-            // Use PostgreSQL FTS queries from §8.1
+            // Use PostgreSQL FTS queries from §9.1
             postgres_marketplace_search(query).await
         }
         SearchBackend::Meilisearch(client) => {
@@ -1764,9 +2271,9 @@ pub async fn search_marketplace(
 
 ---
 
-## 9. API Design
+## 10. API Design
 
-### 9.1 RESTful JSON API `[S§17.3]`
+### 10.1 RESTful JSON API `[S§17.3]`
 
 The API follows REST conventions with consistent patterns across all 14 domains:
 
@@ -1778,7 +2285,7 @@ Content-Type: application/json
 Rate Limiting: Token bucket per user (100 req/min default) [S§2.3]
 ```
 
-### 9.2 URL Structure
+### 10.2 URL Structure
 
 ```
 # Identity & Access [S§3]
@@ -1843,7 +2350,7 @@ GET    /v1/notifications/preferences            # Get preferences
 PATCH  /v1/notifications/preferences            # Update preferences
 ```
 
-### 9.3 Pagination `[S§17.3]`
+### 10.3 Pagination `[S§17.3]`
 
 All list endpoints use cursor-based pagination for consistent performance:
 
@@ -1880,7 +2387,7 @@ fn decode_cursor(cursor: &str) -> Result<(Uuid, DateTime<Utc>), ApiError> {
 }
 ```
 
-### 9.4 OpenAPI & TypeScript Client Generation
+### 10.4 OpenAPI & TypeScript Client Generation
 
 ```rust
 // Using utoipa for OpenAPI spec generation from Rust types
@@ -1927,7 +2434,7 @@ npx openapi-typescript-codegen \
     --client fetch
 ```
 
-### 9.5 Error Response Format
+### 10.5 Error Response Format
 
 ```rust
 #[derive(Serialize)]
@@ -1968,7 +2475,7 @@ impl IntoResponse for ApiError {
 }
 ```
 
-### 9.6 Rate Limiting `[S§2.3]`
+### 10.6 Rate Limiting `[S§2.3]`
 
 ```rust
 /// Rate limit configuration per endpoint category
@@ -1983,9 +2490,9 @@ pub struct RateLimitConfig {
 
 ---
 
-## 10. Frontend Architecture
+## 11. Frontend Architecture
 
-### 10.1 React SPA Structure
+### 11.1 React SPA Structure
 
 The frontend mirrors the backend's domain structure for clear ownership and navigation:
 
@@ -1996,7 +2503,7 @@ frontend/
 │   ├── App.tsx                    # Root layout + router
 │   ├── api/
 │   │   ├── client.ts              # Fetch wrapper with auth cookie
-│   │   └── generated/             # Auto-generated from OpenAPI [§9.4]
+│   │   └── generated/             # Auto-generated from OpenAPI [§10.4]
 │   ├── components/
 │   │   ├── ui/                    # Shared UI primitives (Button, Input, Modal, etc.)
 │   │   ├── layout/                # Shell, Sidebar, Header
@@ -2051,7 +2558,7 @@ frontend/
 └── package.json
 ```
 
-### 10.2 State Management
+### 11.2 State Management
 
 **Server state** is managed entirely by TanStack Query (React Query). No Redux, no Zustand — server cache is the source of truth.
 
@@ -2130,7 +2637,7 @@ function LearningDashboard() {
 }
 ```
 
-### 10.3 Routing
+### 11.3 Routing
 
 ```typescript
 // routes.tsx — React Router v7
@@ -2192,7 +2699,7 @@ export const router = createBrowserRouter([
 ]);
 ```
 
-### 10.4 WebSocket Integration `[S§7.5, S§13]`
+### 11.4 WebSocket Integration `[S§7.5, S§13]`
 
 ```typescript
 // Real-time connection for messaging + notifications
@@ -2231,7 +2738,7 @@ function useWebSocket() {
 }
 ```
 
-### 10.5 Accessibility `[S§17.6]`
+### 11.5 Accessibility `[S§17.6]`
 
 WCAG 2.1 Level AA compliance is enforced through:
 
@@ -2242,7 +2749,7 @@ WCAG 2.1 Level AA compliance is enforced through:
 - **Screen reader support** — All images have alt text, dynamic content uses `aria-live` regions.
 - **Testing** — `@axe-core/react` integration for automated accessibility audits in development.
 
-### 10.6 Internationalization Readiness `[S§17.7]`
+### 11.6 Internationalization Readiness `[S§17.7]`
 
 All user-facing strings are externalized from day one, even though Phase 1 is US-only:
 
@@ -2257,9 +2764,9 @@ Date, time, and number formatting use `Intl` APIs with locale-aware formatting.
 
 ---
 
-## 11. Background Processing
+## 12. Background Processing
 
-### 11.1 Job Queue Architecture `[S§13, S§12]`
+### 12.1 Job Queue Architecture `[S§13, S§12]`
 
 Redis-backed job queue using `sidekiq-rs` with three priority tiers:
 
@@ -2278,7 +2785,7 @@ pub enum JobQueue {
 }
 ```
 
-### 11.2 Key Jobs by Domain
+### 12.2 Key Jobs by Domain
 
 | Domain | Job | Queue | Description |
 |--------|-----|-------|-------------|
@@ -2287,7 +2794,7 @@ pub enum JobQueue {
 | **Notifications** | `SendEmailJob` | Default | Deliver transactional email via Postmark `[S§13.2]` |
 | **Notifications** | `PushNotificationJob` | Default | Deliver in-app notification `[S§13.1]` |
 | **Social** | `FanOutPostJob` | Default | Fan-out new post to friends' feeds `[S§7.2]` |
-| **Media** | `ProcessImageJob` | Default | Resize images, generate thumbnails `[§7.2]` |
+| **Media** | `ProcessImageJob` | Default | Resize images, generate thumbnails `[§8.2]` |
 | **Media** | `CsamScanJob` | Default | Scan uploaded media via Thorn Safer `[S§12.1]` |
 | **Search** | `IndexContentJob` | Default | Update search indexes on content change `[S§14]` |
 | **Marketplace** | `ProcessPayoutJob` | Default | Calculate and initiate creator payouts `[S§9.6]` |
@@ -2296,7 +2803,7 @@ pub enum JobQueue {
 | **Learning** | `ProgressAggregationJob` | Low | Aggregate progress metrics per student `[S§8.1.7]` |
 | **Billing** | `SubscriptionRenewalCheckJob` | Low | Check upcoming renewals, send reminders `[S§15.3]` |
 
-### 11.3 Recurring Schedule
+### 12.3 Recurring Schedule
 
 ```rust
 /// Recurring jobs (cron-style)
@@ -2318,7 +2825,7 @@ pub fn register_recurring_jobs(scheduler: &mut Scheduler) {
 }
 ```
 
-### 11.4 Social Feed Fan-Out `[S§7.2]`
+### 12.4 Social Feed Fan-Out `[S§7.2]`
 
 The feed uses a **fan-out-on-write** pattern via Redis sorted sets:
 
@@ -2381,9 +2888,9 @@ pub async fn get_feed(
 
 ---
 
-## 12. Deployment & Infrastructure
+## 13. Deployment & Infrastructure
 
-### 12.1 Docker Multi-Stage Build
+### 13.1 Docker Multi-Stage Build
 
 ```dockerfile
 # Stage 1: Build Rust binary
@@ -2411,7 +2918,7 @@ EXPOSE 3000
 CMD ["homegrown-academy"]
 ```
 
-### 12.2 AWS Infrastructure (Phase 1) `[S§17.5]`
+### 13.2 AWS Infrastructure (Phase 1) `[S§17.5]`
 
 ```
 AWS VPC (10.0.0.0/16) — us-east-1
@@ -2450,7 +2957,7 @@ AWS VPC (10.0.0.0/16) — us-east-1
     └── UptimeRobot (external availability)
 ```
 
-### 12.3 ALB Configuration + Security Headers
+### 13.3 ALB Configuration + Security Headers
 
 ALB replaces Caddy for TLS termination and request routing. Security headers move into Axum middleware since ALB does not natively inject response headers.
 
@@ -2504,7 +3011,7 @@ fn security_headers() -> tower::util::Stack<
 }
 ```
 
-### 12.4 Scaling Path
+### 13.4 Scaling Path
 
 ```
 Phase 1 (MVP) ~$110/mo          Phase 2 ~$250/mo                  Phase 3 ~$500-800/mo
@@ -2528,7 +3035,7 @@ Single-AZ, 1 instance           Multi-AZ, auto-scaling            Managed + dedi
 └──────────────┘                └──────────────┘                  └──────────────┘
 ```
 
-### 12.5 Backup Strategy
+### 13.5 Backup Strategy
 
 | Component | Method | Retention | Recovery |
 |-----------|--------|-----------|----------|
@@ -2551,7 +3058,7 @@ pg_dump -Fc -h $RDS_ENDPOINT -U $DB_USER homegrown_academy | \
 
 **Revision trigger**: Add cross-region RDS read replica for disaster recovery when the platform handles paying customers (Phase 2).
 
-### 12.6 CI/CD Pipeline (GitHub Actions) `[S§17.1]`
+### 13.6 CI/CD Pipeline (GitHub Actions) `[S§17.1]`
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -2648,9 +3155,9 @@ jobs:
           npx wrangler pages deploy dist --project-name=homegrown-app
 ```
 
-### 12.7 Infrastructure as Code (AWS CDK)
+### 13.7 Infrastructure as Code (AWS CDK)
 
-All AWS resources described in §12.2 are provisioned via a single AWS CDK (TypeScript) stack. See §2.17 for the technology selection rationale.
+All AWS resources described in §13.2 are provisioned via a single AWS CDK (TypeScript) stack. See §2.17 for the technology selection rationale.
 
 **Project structure**:
 
@@ -2679,7 +3186,7 @@ infra/
 
 | Construct | File | Provisions | Key Outputs |
 |-----------|------|------------|-------------|
-| Networking | `networking.ts` | VPC (10.0.0.0/16), 2 public + 2 private subnets, NAT gateway, 5 security groups (§12.2) | `vpc`, `sgAlb`, `sgEcs`, `sgRds`, `sgRedis`, `sgSsh` |
+| Networking | `networking.ts` | VPC (10.0.0.0/16), 2 public + 2 private subnets, NAT gateway, 5 security groups (§13.2) | `vpc`, `sgAlb`, `sgEcs`, `sgRds`, `sgRedis`, `sgSsh` |
 | Database | `database.ts` | RDS PostgreSQL 16 (db.t4g.medium, 20GB gp3, Single-AZ), auto-generated credentials in Secrets Manager | `dbInstance`, `dbSecret`, `dbEndpoint` |
 | Cache | `cache.ts` | ElastiCache Redis 7 (cache.t4g.micro, 7-day snapshots) | `redisEndpoint` |
 | ContainerRegistry | `container-registry.ts` | ECR repository, lifecycle policy (retain last 10 images) | `repository` |
@@ -2760,36 +3267,36 @@ Overrides provided via CDK context (`cdk.json` or `--context` flag).
 
 ---
 
-## 13. Security Architecture
+## 14. Security Architecture
 
-### 13.1 Network Security `[S§17.1]`
+### 14.1 Network Security `[S§17.1]`
 
 | Layer | Control |
 |-------|---------|
 | **VPC isolation** | Compute (ECS) and data (RDS, ElastiCache) run in private subnets with no direct internet access. Only ALB is in public subnets |
-| **Security Groups** | Least-privilege ingress: ALB accepts 443 from internet → ECS accepts 3000 from ALB only → RDS/Redis accept connections from ECS only (§12.2) |
+| **Security Groups** | Least-privilege ingress: ALB accepts 443 from internet → ECS accepts 3000 from ALB only → RDS/Redis accept connections from ECS only (§13.2) |
 | **TLS** | ALB terminates TLS 1.3 via ACM-managed certificates (auto-renewing, no manual cert management) `[S§17.1]` |
-| **CSP** | Content Security Policy set in Axum middleware (§12.3) — restricts script sources, image sources, connection targets |
+| **CSP** | Content Security Policy set in Axum middleware (§13.3) — restricts script sources, image sources, connection targets |
 | **CORS** | Strict origin allowlist: `app.homegrown.academy`, `homegrown.academy` |
 | **SSH** | Restricted to admin IPs via Security Group. Key-only authentication on EC2 instances |
 | **Audit** | CloudTrail logs all AWS API calls for security audit trail |
 
-### 13.2 Application Security (OWASP Top 10) `[S§17.1]`
+### 14.2 Application Security (OWASP Top 10) `[S§17.1]`
 
 | OWASP Risk | Rust/Axum Mitigation |
 |------------|---------------------|
-| **A01: Broken Access Control** | Family-scoped queries via `FamilyScoped` trait (§5.2). Every handler receives `AuthContext` with verified `family_id`. Permission extractors enforce role checks at compile time. |
+| **A01: Broken Access Control** | Family-scoped queries via `FamilyScoped` trait (§6.2). Every handler receives `AuthContext` with verified `family_id`. Permission extractors enforce role checks at compile time. |
 | **A02: Cryptographic Failures** | Passwords handled by Ory Kratos (Argon2id). Sensitive data encrypted at rest via PostgreSQL `pgcrypto`. All transit encrypted via TLS. |
 | **A03: Injection** | SeaORM parameterized queries prevent SQL injection. Rust's type system prevents most injection vectors. User input validated via `serde` deserialization with strict types. |
-| **A04: Insecure Design** | Privacy-by-architecture (§1.5). COPPA consent state machine (§5.3). No public user content by design. |
-| **A05: Security Misconfiguration** | Docker containers run as non-root. Minimal base images (Debian slim). Security headers set in Axum middleware (§12.3). ECS-optimized AMI managed by AWS. |
+| **A04: Insecure Design** | Privacy-by-architecture (§1.5). COPPA consent state machine (§6.3). No public user content by design. |
+| **A05: Security Misconfiguration** | Docker containers run as non-root. Minimal base images (Debian slim). Security headers set in Axum middleware (§13.3). ECS-optimized AMI managed by AWS. |
 | **A06: Vulnerable Components** | `cargo audit` + `npm audit` in CI pipeline. Dependabot for automated dependency updates. |
 | **A07: Auth Failures** | Ory Kratos handles auth — battle-tested implementation. MFA encouraged. Rate-limited login attempts (10/min). Session timeout (30 days, revocable). |
 | **A08: Data Integrity** | All API inputs validated via typed `serde` structs. CSRF protection via SameSite cookies. Webhook signatures verified (Stripe, Kratos). |
 | **A09: Logging Failures** | Security events logged via `tracing` crate. Audit logging for admin actions `[S§2.3]`. Logs shipped to Sentry. |
 | **A10: SSRF** | No user-controlled URL fetching in backend. R2 presigned URLs are generated server-side with controlled parameters. |
 
-### 13.3 Rust's Memory Safety Advantages
+### 14.3 Rust's Memory Safety Advantages
 
 Rust eliminates entire categories of vulnerabilities that plague C/C++ and even garbage-collected languages:
 
@@ -2801,7 +3308,7 @@ Rust eliminates entire categories of vulnerabilities that plague C/C++ and even 
 
 These guarantees are especially valuable for a platform handling children's data `[S§17.2]` — memory safety vulnerabilities are among the most exploited attack vectors, and Rust makes them structurally impossible.
 
-### 13.4 Data Encryption `[S§17.1]`
+### 14.4 Data Encryption `[S§17.1]`
 
 | Data | At Rest | In Transit |
 |------|---------|------------|
@@ -2812,21 +3319,21 @@ These guarantees are especially valuable for a platform handling children's data
 | **Media files** | R2 server-side encryption | TLS 1.3 to/from R2 |
 | **Backups** | Encrypted R2 storage | TLS 1.3 during transfer |
 
-### 13.5 COPPA Security Controls `[S§17.2]`
+### 14.5 COPPA Security Controls `[S§17.2]`
 
 | Control | Implementation |
 |---------|---------------|
 | **Data minimization** | Student profiles collect only name, birth year, grade. No email, no credentials, no social profile. `[S§3.1.3]` |
-| **Parental consent** | COPPA consent state machine (§5.3) required before creating student profiles |
+| **Parental consent** | COPPA consent state machine (§6.3) required before creating student profiles |
 | **Data access** | Parents have complete visibility into all student data `[S§3.3]` |
 | **Data deletion** | Parents can request deletion of child data; processed within COPPA's required timeframe `[S§16.3]` |
 | **Third-party sharing** | Student data never shared with third parties except CSAM reporting (legal requirement) |
 | **No direct contact** | Platform prohibits unmediated adult-student communication `[S§3.3]` |
 
-### 13.6 Dependency Security
+### 14.6 Dependency Security
 
 ```bash
-# Automated via CI/CD (§12.6)
+# Automated via CI/CD (§13.6)
 cargo audit                    # Rust dependency vulnerabilities
 npm audit --production         # Node.js dependency vulnerabilities
 
@@ -2846,11 +3353,11 @@ updates:
 
 ---
 
-## 14. Phase 1 (MVP) Scope `[S§19]`
+## 15. Phase 1 (MVP) Scope `[S§19]`
 
 This section maps each Phase 1 domain from `[S§19]` to concrete implementation artifacts.
 
-### 14.1 Identity & Access `[S§3]`
+### 15.1 Identity & Access `[S§3]`
 
 **Scope**: Family accounts, parent users, student profiles, email + OAuth authentication.
 
@@ -2866,7 +3373,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **React Components**: `Login`, `Register`, `FamilySettings`, `StudentManager`.
 
-### 14.2 Methodology `[S§4]`
+### 15.2 Methodology `[S§4]`
 
 **Scope**: 6 methodologies, tool registry, philosophy modules.
 
@@ -2881,7 +3388,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **React Components**: `MethodologyBadge`, `ToolCard`.
 
-### 14.3 Discovery `[S§5]`
+### 15.3 Discovery `[S§5]`
 
 **Scope**: Methodology quiz, methodology explorer pages, state legal guides (all 51), Homeschooling 101, advocacy content.
 
@@ -2898,7 +3405,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **Astro Pages**: Methodology explorer (6 pages), state guides (51 pages), 101 content (~10 pages), quiz page.
 
-### 14.4 Onboarding `[S§6]`
+### 15.4 Onboarding `[S§6]`
 
 **Scope**: Full onboarding flow — account creation, family setup, methodology wizard, getting-started roadmaps, starter recommendations, community connections.
 
@@ -2915,7 +3422,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **React Components**: `OnboardingWizard` (multi-step), `MethodologyWizard`, `FamilySetup`, `GettingStartedRoadmap`.
 
-### 14.5 Social `[S§7]`
+### 15.5 Social `[S§7]`
 
 **Scope**: Profiles, timeline/feed (reverse-chronological), comments (threaded), friend system, direct messaging (friends-only), platform-managed methodology groups, events (basic), location-based discovery (opt-in).
 
@@ -2934,7 +3441,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **React Components**: `Feed`, `PostComposer`, `FriendsList`, `DirectMessages`, `GroupDetail`, `EventsList`, `NearbyFamilies`.
 
-### 14.6 Learning `[S§8]`
+### 15.6 Learning `[S§8]`
 
 **Scope**: Activities, Reading Lists, Journaling & Narration, basic Progress Tracking.
 
@@ -2951,7 +3458,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **React Components**: `LearningDashboard`, `ActivityLog`, `JournalEditor`, `ReadingList`, `ProgressView`.
 
-### 14.7 Marketplace `[S§9]`
+### 15.7 Marketplace `[S§9]`
 
 **Scope**: Creator onboarding, content listings, browse/search/filter, purchase flow, ratings & reviews (verified-purchaser), basic creator dashboard.
 
@@ -2970,7 +3477,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **React Components**: `MarketplaceBrowse`, `ListingDetail`, `Cart`, `Checkout`, `ReviewForm`, `CreatorDashboard`.
 
-### 14.8 Trust & Safety `[S§12]`
+### 15.8 Trust & Safety `[S§12]`
 
 **Scope**: CSAM detection, automated content screening, user reporting, bot prevention, community guidelines, basic moderation dashboard.
 
@@ -2984,7 +3491,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **API Endpoints**: ~6 endpoints (report content, moderation queue, mod actions).
 
-### 14.9 Billing `[S§15]`
+### 15.9 Billing `[S§15]`
 
 **Scope**: Free tier, marketplace transactions, payment processing, sales tax.
 
@@ -2998,7 +3505,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **API Endpoints**: ~4 endpoints (create checkout session, webhook handler, purchase history).
 
-### 14.10 Notifications `[S§13]`
+### 15.10 Notifications `[S§13]`
 
 **Scope**: In-app notification center, transactional email.
 
@@ -3012,7 +3519,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **API Endpoints**: ~4 endpoints (list, mark read, preferences CRUD).
 
-### 14.11 Search `[S§14]`
+### 15.11 Search `[S§14]`
 
 **Scope**: Full-text search (social + marketplace), basic autocomplete.
 
@@ -3025,19 +3532,19 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **API Endpoints**: 2 endpoints (search, autocomplete).
 
-### 14.12 Content & Media
+### 15.12 Content & Media
 
 **Scope**: Image/file upload, storage, delivery.
 
 | Component | Implementation |
 |-----------|---------------|
-| **Upload** | Presigned URL upload to R2 `[§7.1]` |
-| **Processing** | Background image resize, CSAM scan `[§7.2]` |
-| **Delivery** | Cloudflare CDN via R2 `[§7.3]` |
+| **Upload** | Presigned URL upload to R2 `[§8.1]` |
+| **Processing** | Background image resize, CSAM scan `[§8.2]` |
+| **Delivery** | Cloudflare CDN via R2 `[§8.3]` |
 
 **API Endpoints**: 3 endpoints (request upload, confirm upload, download).
 
-### 14.13 Privacy/Compliance `[S§17.2]`
+### 15.13 Privacy/Compliance `[S§17.2]`
 
 **Scope**: COPPA compliance, privacy policy, terms of service, data export.
 
@@ -3052,7 +3559,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 ---
 
-## 15. Architecture Decision Records
+## 16. Architecture Decision Records
 
 ### ADR-001: Rust over TypeScript for Backend
 
@@ -3095,7 +3602,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 **Consequences**:
 - **Positive**: Single database to operate, back up, and monitor. PostgreSQL's JSONB is performant enough for methodology config. PostGIS eliminates a separate geo service. FTS eliminates a search service for Phase 1. Strong consistency guarantees.
 - **Negative**: PostgreSQL FTS lacks typo tolerance and instant search capabilities that Meilisearch provides. JSONB queries are less optimized than purpose-built document stores.
-- **Mitigation**: Meilisearch migration path defined (§8.2) with specific trigger (100K listings or 500ms p95 latency). JSONB data volume is small (6 methodologies × ~10KB each).
+- **Mitigation**: Meilisearch migration path defined (§9.2) with specific trigger (100K listings or 500ms p95 latency). JSONB data volume is small (6 methodologies × ~10KB each).
 
 **Revision trigger**: Add Meilisearch when search latency exceeds 500ms p95 or marketplace exceeds 100K listings.
 
@@ -3140,7 +3647,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 **Consequences**:
 - **Positive**: ~90% cost savings vs. AWS/GCP for equivalent hardware. Predictable pricing. No vendor lock-in (standard Linux + Docker). Sufficient for 10K-50K concurrent users with Rust.
 - **Negative**: No managed services (must operate PostgreSQL, Redis yourself). No auto-scaling. Single datacenter (no multi-region).
-- **Mitigation**: Automated backups (§12.5). Monitoring (§2.14). Scaling path documented (§12.4). Multi-region is a Phase 4 concern.
+- **Mitigation**: Automated backups (§13.5). Monitoring (§2.14). Scaling path documented (§13.4). Multi-region is a Phase 4 concern.
 
 **Revision trigger**: ~~Move to managed services (AWS RDS, ElastiCache) when operational complexity of self-managing databases exceeds a solo developer's capacity, or when multi-region is required.~~ Triggered before initial deployment — operational risk of self-managing databases for COPPA-regulated children's data deemed unacceptable for a solo developer. See ADR-010.
 
@@ -3250,7 +3757,7 @@ WHERE f1.requester_family_id = $1  -- current user
 
 **Context**: Infrastructure needs to be provisioned reproducibly. Two leading IaC options: AWS CDK (TypeScript) and Terraform (HCL). The project is AWS-only (ADR-010) and already uses TypeScript for the React frontend.
 
-**Decision**: AWS CDK v2 (TypeScript). Single stack with 9 constructs in `infra/`. See §2.17 for technology selection and §12.7 for full construct breakdown.
+**Decision**: AWS CDK v2 (TypeScript). Single stack with 9 constructs in `infra/`. See §2.17 for technology selection and §13.7 for full construct breakdown.
 
 **Consequences**:
 - **Positive**: Same language as frontend (TypeScript) — no new language to introduce. Type-safe constructs catch configuration errors at compile time. L2 constructs reduce boilerplate (VPC in ~5 lines vs ~50 in Terraform). `cdk synth` validates without deploying. Single `cdk deploy` provisions everything.
