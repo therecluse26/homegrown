@@ -350,6 +350,26 @@ Pipeline stages:
 
 **Revision trigger**: None for the WebSocket layer. Redis pub/sub scales to the connection counts needed through Phase 3.
 
+### 2.17 Infrastructure as Code: AWS CDK (TypeScript)
+
+**Satisfies**: `[S§17.5]` availability, `[S§17.1]` security (reproducible, auditable infrastructure)
+
+| Attribute | Value |
+|-----------|-------|
+| **Language** | TypeScript |
+| **Framework** | AWS CDK v2 |
+| **Stack count** | 1 |
+| **Constructs** | 9 |
+
+**Rationale**: TypeScript is already in the stack (React frontend), so CDK adds no new language. CDK provides type-safe, high-level constructs that reduce boilerplate vs raw CloudFormation — a VPC with subnets is ~5 lines instead of ~50. A single `cdk deploy` provisions the entire Phase 1 infrastructure. `cdk synth` validates the template without touching AWS, catching misconfigurations before deployment.
+
+**Rejected alternatives**:
+- **Terraform / OpenTofu (HCL)**: HCL is another language to learn and maintain. CDK's L2 constructs are more concise for this AWS-only setup. Terraform's multi-cloud abstraction is unnecessary overhead when the project is committed to AWS (ADR-010).
+- **Raw CloudFormation (YAML/JSON)**: Verbose, no type safety, no abstractions. A single CDK construct replaces hundreds of lines of CloudFormation.
+- **Pulumi**: Smaller ecosystem, unnecessary multi-cloud abstraction layer, and less mature AWS construct library compared to CDK.
+
+**Revision trigger**: If the project moves multi-cloud, evaluate Terraform. CDK's construct library is AWS-only.
+
 ---
 
 ## 3. System Architecture
@@ -2628,6 +2648,116 @@ jobs:
           npx wrangler pages deploy dist --project-name=homegrown-app
 ```
 
+### 12.7 Infrastructure as Code (AWS CDK)
+
+All AWS resources described in §12.2 are provisioned via a single AWS CDK (TypeScript) stack. See §2.17 for the technology selection rationale.
+
+**Project structure**:
+
+```
+infra/
+├── bin/infra.ts                    # CDK app entry point
+├── lib/
+│   ├── homegrown-stack.ts          # Main stack — composes all constructs
+│   ├── config.ts                   # Typed config interface + defaults
+│   └── constructs/
+│       ├── networking.ts           # VPC, subnets, NAT gateway, security groups
+│       ├── database.ts             # RDS PostgreSQL, Secrets Manager
+│       ├── cache.ts                # ElastiCache Redis
+│       ├── container-registry.ts   # ECR + lifecycle policy
+│       ├── load-balancer.ts        # ALB, ACM certificate, target group
+│       ├── compute.ts              # ECS cluster, EC2 capacity, task def, service
+│       ├── monitoring.ts           # CloudWatch log groups + alarms
+│       ├── ci-cd.ts                # GitHub Actions OIDC provider + deploy role
+│       └── backup.ts              # ECS scheduled task for weekly pg_dump → R2
+├── cdk.json
+├── tsconfig.json
+└── package.json
+```
+
+**Stack organization** — single stack with 9 CDK Constructs:
+
+| Construct | File | Provisions | Key Outputs |
+|-----------|------|------------|-------------|
+| Networking | `networking.ts` | VPC (10.0.0.0/16), 2 public + 2 private subnets, NAT gateway, 5 security groups (§12.2) | `vpc`, `sgAlb`, `sgEcs`, `sgRds`, `sgRedis`, `sgSsh` |
+| Database | `database.ts` | RDS PostgreSQL 16 (db.t4g.medium, 20GB gp3, Single-AZ), auto-generated credentials in Secrets Manager | `dbInstance`, `dbSecret`, `dbEndpoint` |
+| Cache | `cache.ts` | ElastiCache Redis 7 (cache.t4g.micro, 7-day snapshots) | `redisEndpoint` |
+| ContainerRegistry | `container-registry.ts` | ECR repository, lifecycle policy (retain last 10 images) | `repository` |
+| LoadBalancer | `load-balancer.ts` | ALB, ACM certificate, HTTPS listener (TLS 1.3), HTTP→HTTPS redirect, target group with health checks | `alb`, `targetGroup` |
+| Compute | `compute.ts` | ECS cluster, EC2 ASG (t4g.small, ECS-optimized ARM AMI), capacity provider, task definition (API + Kratos sidecar), ECS service, IAM task roles | `cluster`, `service` |
+| Monitoring | `monitoring.ts` | CloudWatch log groups (API, Kratos, backup), alarms (CPU, memory, RDS, Redis, ALB 5xx) | log group refs |
+| CiCd | `ci-cd.ts` | GitHub Actions OIDC provider, IAM deploy role scoped to `repo:org/repo:ref:refs/heads/main` | `deployRoleArn` |
+| Backup | `backup.ts` | ECS scheduled task (weekly `pg_dump` → R2), EventBridge cron rule | — |
+
+**Dependency graph** (composition order in `homegrown-stack.ts`):
+
+```
+Networking ──┬──→ Database
+             ├──→ Cache
+             ├──→ LoadBalancer ──┐
+             │                   ├──→ Compute ──┬──→ CiCd
+ContainerRegistry ───────────────┘              └──→ Backup
+Monitoring ──────────────────────────────────────┘
+```
+
+**Configuration** — typed `HomegrownConfig` interface in `config.ts` centralizing all tunable parameters:
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `projectName` | `"homegrown"` | Resource naming prefix |
+| `region` | `"us-east-1"` | AWS region |
+| `vpcCidr` | `"10.0.0.0/16"` | VPC CIDR block |
+| `adminSshCidrs` | `[]` | IP ranges for SSH access |
+| `domainName` | `"api.homegrown.academy"` | ACM certificate domain |
+| `certificateArn` | `undefined` | Skip ACM creation if pre-existing cert |
+| `ec2InstanceType` | `"t4g.small"` | ECS EC2 instance type |
+| `rdsInstanceType` | `"db.t4g.medium"` | RDS instance type |
+| `redisNodeType` | `"cache.t4g.micro"` | ElastiCache node type |
+| `githubOrg` / `githubRepo` | — | OIDC trust scope |
+| `placeholderMode` | `true` | Use nginx:alpine until first real image push |
+
+Overrides provided via CDK context (`cdk.json` or `--context` flag).
+
+**Secrets management**:
+
+| Secret | Storage | Injection |
+|--------|---------|-----------|
+| RDS credentials | Secrets Manager (auto-generated by CDK) | `ecs.Secret.fromSecretsManager()` |
+| Kratos cookie/cipher | Secrets Manager (values set manually post-deploy) | `ecs.Secret.fromSecretsManager()` |
+| OIDC client secrets | Secrets Manager (values set manually post-deploy) | Kratos container env |
+| R2 credentials | Secrets Manager (values set manually post-deploy) | Backup task container env |
+
+**Deploy workflow**:
+
+```
+1. npm install              # Install CDK dependencies
+2. cdk bootstrap            # One-time: create CDKToolkit stack in AWS account
+3. cdk synth                # Validate — generates CloudFormation template without deploying
+4. cdk deploy               # Provision all resources (~15-20 min first deploy)
+5. Add ACM CNAME to DNS     # Manual: copy CNAME from deploy output → Cloudflare DNS
+6. Note stack outputs       # ALB DNS name, ECR URI, deploy role ARN, RDS/Redis endpoints
+7. Configure GitHub secrets # AWS_DEPLOY_ROLE_ARN from stack output
+```
+
+**Stack outputs** (CloudFormation):
+
+| Output | Used By |
+|--------|---------|
+| `AlbDnsName` | DNS CNAME target for `api.homegrown.academy` |
+| `EcrRepositoryUri` | CI/CD pipeline `docker push` target |
+| `GithubDeployRoleArn` | GitHub Actions `AWS_DEPLOY_ROLE_ARN` secret |
+| `RdsEndpoint` | Reference / debugging |
+| `RedisEndpoint` | Reference / debugging |
+
+**Key patterns**:
+- Stateful resources (RDS, ECR) use `removalPolicy: RETAIN` + `deletionProtection: true` — `cdk destroy` won't delete data
+- All container secrets injected via Secrets Manager, never plain environment variables
+- ECS service uses `minHealthyPercent: 0` for single-instance rolling deploy (brief downtime acceptable in Phase 1)
+- Kratos configured via environment variables (all YAML keys map to `SCREAMING_SNAKE_CASE` env vars)
+- ElastiCache uses L1 constructs (`CfnCacheCluster`) since no L2 exists in CDK
+
+**Revision trigger**: Split into multiple stacks if independent deployment cadences are needed (e.g., update ALB rules without touching database). Current single-stack approach is sufficient through Phase 2.
+
 ---
 
 ## 13. Security Architecture
@@ -3113,6 +3243,21 @@ WHERE f1.requester_family_id = $1  -- current user
 - **Mitigation**: Application code is cloud-agnostic — standard PostgreSQL wire protocol, standard Redis protocol, standard HTTP. Only infrastructure configuration (Terraform/CDK) is AWS-specific. Migration to another provider requires only infrastructure re-provisioning, not application changes.
 
 **Revision trigger**: Consider Fargate if EC2 instance management becomes a burden. Consider dedicated servers only with a dedicated DevOps hire.
+
+### ADR-011: AWS CDK over Terraform
+
+**Status**: Accepted
+
+**Context**: Infrastructure needs to be provisioned reproducibly. Two leading IaC options: AWS CDK (TypeScript) and Terraform (HCL). The project is AWS-only (ADR-010) and already uses TypeScript for the React frontend.
+
+**Decision**: AWS CDK v2 (TypeScript). Single stack with 9 constructs in `infra/`. See §2.17 for technology selection and §12.7 for full construct breakdown.
+
+**Consequences**:
+- **Positive**: Same language as frontend (TypeScript) — no new language to introduce. Type-safe constructs catch configuration errors at compile time. L2 constructs reduce boilerplate (VPC in ~5 lines vs ~50 in Terraform). `cdk synth` validates without deploying. Single `cdk deploy` provisions everything.
+- **Negative**: AWS-only (no multi-cloud). CloudFormation under the hood (slower deploys than Terraform apply). Debugging sometimes requires reading CloudFormation events.
+- **Mitigation**: Application code is cloud-agnostic (ADR-010) — standard PostgreSQL wire protocol, standard Redis protocol, standard HTTP. Only IaC is AWS-specific. If multi-cloud is needed, Terraform migration is straightforward — construct boundaries map cleanly to Terraform modules.
+
+**Revision trigger**: Evaluate Terraform if the project moves multi-cloud or if a DevOps hire prefers HCL.
 
 ---
 
