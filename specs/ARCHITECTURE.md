@@ -81,7 +81,7 @@ Every selection references the spec requirement it satisfies, names rejected alt
 | **Expected throughput** | 32,000-52,000 requests/sec with DB (single server) |
 | **Memory footprint** | 8-20MB per instance |
 
-**Rationale**: AI generates Rust code; the borrow checker catches memory safety, data races, and null pointer errors at compile time — for free. A solo developer cannot manually review every line. Rust's compiler is the second reviewer. Performance means Phase 1-2 runs comfortably on a single $60/mo server, saving thousands in infrastructure costs annually.
+**Rationale**: AI generates Rust code; the borrow checker catches memory safety, data races, and null pointer errors at compile time — for free. A solo developer cannot manually review every line. Rust's compiler is the second reviewer. Performance means Phase 1-2 runs comfortably on a ~$110/mo AWS setup (§2.11), keeping infrastructure costs minimal.
 
 **Rejected alternatives**:
 - **TypeScript (Node.js)**: 3-5x lower throughput, no compile-time safety beyond types, `null`/`undefined` hazards, need for runtime validation libraries. Reasonable choice, but Rust's compile-time guarantees are more valuable for AI-generated code.
@@ -157,7 +157,7 @@ Every selection references the spec requirement it satisfies, names rejected alt
 |-----------|-------|
 | **Version** | PostgreSQL 16+ |
 | **Extensions** | `pg_trgm`, `PostGIS`, `pgcrypto`, `uuid-ossp` |
-| **Connection pooling** | PgBouncer (transaction mode) |
+| **Connection pooling** | RDS manages server-side connections; SeaORM's built-in pool handles app-side pooling |
 
 **Capabilities used**:
 - **JSONB**: Methodology configuration, tool registry, quiz scoring weights `[S§4.1]`
@@ -252,25 +252,36 @@ Redis also serves as:
 
 **Revision trigger**: None. S3-compatible API means migration is straightforward if needed.
 
-### 2.11 Hosting: Hetzner Dedicated Server
+### 2.11 Hosting: AWS (ECS + Managed Services)
 
-**Satisfies**: `[S§17.3]` performance, `[S§17.5]` availability
+**Satisfies**: `[S§17.3]` performance, `[S§17.5]` availability, `[S§17.1]` security
 
 | Attribute | Value |
 |-----------|-------|
-| **Server** | Hetzner AX52 (or equivalent): 8-core AMD, 64GB RAM, 2x1TB NVMe |
-| **Cost** | ~$60/mo |
-| **Location** | US East (Ashburn) or EU (Falkenstein) |
-| **OS** | Ubuntu 24.04 LTS |
+| **Compute** | ECS on EC2 (Graviton): t4g.small (2 vCPU, 2 GB ARM), ECS-optimized AMI |
+| **Sidecar** | Ory Kratos as second container in same ECS Task Definition |
+| **Database** | RDS PostgreSQL 16: db.t4g.medium, Single-AZ, 20 GB gp3 |
+| **Cache/Queue** | ElastiCache Redis 7: cache.t4g.micro, Single-AZ |
+| **Load balancer** | ALB with TLS via ACM (free, auto-renewing certificates) |
+| **Container registry** | ECR with lifecycle policy retaining last 10 images |
+| **Region** | us-east-1 (N. Virginia) |
+| **Est. cost** | ~$100-120/mo |
 
-**Rationale**: Rust's efficiency means a single Hetzner dedicated server handles Phase 1-2 comfortably. At $60/mo vs. $500-2,000/mo for equivalent AWS/GCP instances, infrastructure costs stay minimal while the platform grows.
+**Rationale**: A solo developer building a COPPA-regulated platform handling children's data cannot afford the operational risk of self-managing PostgreSQL (backups, upgrades, replication), Redis, TLS certificates, firewall rules, and OS patching. AWS managed services (RDS, ElastiCache, ACM, ALB) shift this operational burden to AWS. Rust's minimal resource profile (8-20MB memory, steady CPU) keeps managed service costs predictable. ECS on EC2 with Graviton provides the best price-performance: t4g.small at ~$12/mo vs. Fargate's ~$25-35/mo for equivalent compute.
+
+**Rejected alternatives**:
+- **Hetzner dedicated server ($60/mo)**: ~50% cheaper, but requires self-managing PostgreSQL backups/PITR, Redis persistence, TLS certificates (Let's Encrypt), firewall rules (UFW), and OS patching. Operational burden and risk outweigh cost savings for a solo developer with COPPA obligations. (See ADR-010.)
+- **EKS**: Control plane alone is $73/mo. Kubernetes is overkill for a single-binary monolith with a sidecar.
+- **Lightsail**: Limited networking, no ECS integration, restrictive scaling options.
 
 **Scaling path**:
-- **Phase 1-2**: Single server (this spec)
-- **Phase 2-3**: Add a second server behind a load balancer (Hetzner Load Balancer or Caddy reverse proxy)
-- **Phase 3+**: PostgreSQL read replicas, dedicated Redis server, media processing worker
+- **Phase 1**: 1 EC2 instance, Single-AZ RDS + Redis (~$110/mo)
+- **Phase 2**: Multiple EC2 instances or migrate to Fargate launch type, Multi-AZ RDS, ECS auto-scaling (~$250/mo)
+- **Phase 3+**: Aurora PostgreSQL + read replicas, ElastiCache cluster, Meilisearch on separate ECS task (~$500-800/mo)
 
-**Revision trigger**: Scale when sustained CPU utilization exceeds 70% or memory utilization exceeds 80% during peak hours.
+**Upgrade path — Fargate**: If managing the EC2 instance (AMI patching, capacity planning) becomes burdensome, migrate ECS tasks from EC2 to Fargate launch type. Same task definitions, same service — only the launch type changes.
+
+**Revision trigger**: Consider Fargate when instance management overhead exceeds 2 hours/month. Consider dedicated servers only with a dedicated DevOps hire.
 
 ### 2.12 Email: Postmark
 
@@ -307,8 +318,9 @@ Redis also serves as:
 |-----------|---------|---------|
 | **Error tracking** | Sentry | Rust + React error capture, performance monitoring |
 | **Uptime** | UptimeRobot | External availability monitoring, alerting |
+| **Infrastructure** | CloudWatch | ECS, RDS, ElastiCache metrics, alarms, and log aggregation |
 
-**Revision trigger**: Add Grafana + Prometheus when operating multiple servers (Phase 3+).
+**Revision trigger**: CloudWatch provides sufficient infrastructure metrics for Phase 1-2. Add Grafana + Prometheus when custom application metrics or cross-service dashboards are needed (Phase 3+).
 
 ### 2.15 CI/CD: GitHub Actions
 
@@ -320,7 +332,7 @@ Pipeline stages:
 3. `cargo audit` — dependency vulnerability scan
 4. `npm audit` — frontend dependency scan
 5. Docker multi-stage build
-6. Deploy to Hetzner via SSH + Docker
+6. Push image to Amazon ECR, update ECS service (rolling deployment)
 
 **Revision trigger**: None. GitHub Actions is sufficient for any scale of this project.
 
@@ -2379,94 +2391,145 @@ EXPOSE 3000
 CMD ["homegrown-academy"]
 ```
 
-### 12.2 Server Configuration (Phase 1-2) `[S§17.5]`
+### 12.2 AWS Infrastructure (Phase 1) `[S§17.5]`
 
 ```
-Hetzner AX52 (~$60/mo)
-├── Docker Engine
-│   ├── homegrown-api       (Rust binary, port 3000)
-│   ├── ory-kratos          (sidecar, port 4433/4434)
-│   ├── postgresql-16       (port 5432, data on NVMe)
-│   ├── redis-7             (port 6379)
-│   ├── pgbouncer           (port 6432, connection pooling)
-│   └── caddy               (reverse proxy, TLS termination, port 443)
-├── Data volumes
-│   ├── /data/postgresql     (NVMe, 500GB)
-│   ├── /data/redis          (NVMe, 10GB)
-│   └── /data/backups        (NVMe, 200GB)
+AWS VPC (10.0.0.0/16) — us-east-1
+│
+├── Public Subnets
+│   ├── us-east-1a (10.0.1.0/24)
+│   │   ├── ALB (TLS termination via ACM)
+│   │   └── NAT Gateway
+│   └── us-east-1b (10.0.2.0/24)
+│       └── ALB (second AZ, required by ALB)
+│
+├── Private Subnets
+│   ├── us-east-1a (10.0.10.0/24)
+│   │   ├── EC2 t4g.small (ECS-optimized AMI)
+│   │   │   └── ECS Task
+│   │   │       ├── homegrown-api    (Rust binary, port 3000)
+│   │   │       └── ory-kratos       (sidecar, port 4433/4434)
+│   │   ├── RDS PostgreSQL 16       (db.t4g.medium, 20 GB gp3)
+│   │   └── ElastiCache Redis 7     (cache.t4g.micro)
+│   └── us-east-1b (10.0.11.0/24)
+│       └── (reserved for Multi-AZ in Phase 2)
+│
+├── Security Groups
+│   ├── sg-alb:       ingress 443 from 0.0.0.0/0
+│   ├── sg-ecs:       ingress 3000 from sg-alb only
+│   ├── sg-rds:       ingress 5432 from sg-ecs only
+│   ├── sg-redis:     ingress 6379 from sg-ecs only
+│   └── sg-ssh:       ingress 22 from admin IPs only
+│
+├── ECR Repository
+│   └── homegrown-api (lifecycle: retain last 10 images)
+│
 └── Monitoring
-    ├── Sentry SDK (in-process)
-    └── UptimeRobot (external)
+    ├── CloudWatch (ECS, RDS, ElastiCache metrics + alarms)
+    ├── Sentry SDK (in-process error tracking)
+    └── UptimeRobot (external availability)
 ```
 
-### 12.3 Caddy Reverse Proxy
+### 12.3 ALB Configuration + Security Headers
 
-```
-# Caddyfile
-api.homegrown.academy {
-    reverse_proxy localhost:3000
+ALB replaces Caddy for TLS termination and request routing. Security headers move into Axum middleware since ALB does not natively inject response headers.
 
-    # WebSocket upgrade for /ws path
-    @websocket {
-        header Connection *Upgrade*
-        header Upgrade websocket
-    }
-    reverse_proxy @websocket localhost:3000
+**ALB configuration**:
 
-    # Security headers [S§17.1]
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        Content-Security-Policy "default-src 'self'; img-src 'self' https://*.r2.cloudflarestorage.com; connect-src 'self' wss://api.homegrown.academy"
-        Referrer-Policy "strict-origin-when-cross-origin"
-    }
+| Setting | Value |
+|---------|-------|
+| **Listener** | HTTPS :443, TLS certificate from ACM (auto-renewing) |
+| **Target group** | ECS tasks on port 3000, HTTP health check `GET /health` |
+| **Health check** | Interval 30s, healthy threshold 2, unhealthy threshold 3 |
+| **Idle timeout** | 300s (supports long-lived WebSocket connections) |
+| **Stickiness** | Disabled (application is stateless; sessions stored in Redis) |
+| **HTTP→HTTPS** | Redirect rule on port 80 |
+
+**Security headers** — Axum middleware via `tower-http` `[S§17.1]`:
+
+```rust
+use axum::http::{HeaderName, HeaderValue};
+use tower_http::set_header::SetResponseHeaderLayer;
+
+fn security_headers() -> tower::util::Stack<
+    SetResponseHeaderLayer<HeaderValue>,
+    // ... nested layers
+> {
+    ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("strict-transport-security"),
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("x-content-type-options"),
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("x-frame-options"),
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("content-security-policy"),
+            HeaderValue::from_static(
+                "default-src 'self'; \
+                 img-src 'self' https://*.r2.cloudflarestorage.com; \
+                 connect-src 'self' wss://api.homegrown.academy"
+            ),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("referrer-policy"),
+            HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
+        .into_inner()
 }
-
-# Kratos public API (proxied through main API, not exposed directly)
 ```
 
 ### 12.4 Scaling Path
 
 ```
-Phase 1 (MVP)                    Phase 2-3                         Phase 3+
-─────────────                    ─────────                         ─────────
-Single Hetzner server            Add second server                 Multi-server
+Phase 1 (MVP) ~$110/mo          Phase 2 ~$250/mo                  Phase 3 ~$500-800/mo
+──────────────────────           ────────────────                  ────────────────────
+Single-AZ, 1 instance           Multi-AZ, auto-scaling            Managed + dedicated
 
 ┌──────────────┐                ┌──────────────┐                  ┌──────────────┐
-│  App + DB +  │                │  Load        │                  │  LB (Caddy)  │
-│  Redis +     │       →        │  Balancer    │        →         ├──────────────┤
-│  Kratos      │                ├──────────────┤                  │  App 1       │
-│              │                │  App Server  │                  │  App 2       │
-└──────────────┘                │  + Redis +   │                  │  App N       │
-                                │  Kratos      │                  ├──────────────┤
-                                ├──────────────┤                  │  PG Primary  │
-                                │  DB Server   │                  │  PG Replica  │
-                                │  (PostgreSQL)│                  ├──────────────┤
-                                └──────────────┘                  │  Redis       │
-                                                                  │  Meilisearch │
-                                                                  │  Kratos      │
-                                                                  └──────────────┘
+│  ALB         │                │  ALB         │                  │  ALB         │
+├──────────────┤                ├──────────────┤                  ├──────────────┤
+│  1x EC2      │                │  ECS Service │                  │  ECS Fargate │
+│  t4g.small   │       →        │  2-4 tasks   │        →         │  auto-scale  │
+│  (ECS task:  │                │  (EC2 or     │                  ├──────────────┤
+│   API +      │                │   Fargate)   │                  │  Aurora PG   │
+│   Kratos)    │                ├──────────────┤                  │  + replicas  │
+├──────────────┤                │  RDS Multi-AZ│                  ├──────────────┤
+│  RDS Single  │                │  (auto       │                  │  ElastiCache │
+│  -AZ         │                │   failover)  │                  │  cluster     │
+├──────────────┤                ├──────────────┤                  ├──────────────┤
+│  ElastiCache │                │  ElastiCache │                  │  Meilisearch │
+│  single node │                │  single node │                  │  (ECS task)  │
+└──────────────┘                └──────────────┘                  └──────────────┘
 ```
 
 ### 12.5 Backup Strategy
 
-```bash
-# PostgreSQL backups — daily full + continuous WAL archiving
-# Full backup daily at 1:00 AM UTC
-pg_dump -Fc homegrown_academy > /data/backups/pg_$(date +%Y%m%d).dump
+| Component | Method | Retention | Recovery |
+|-----------|--------|-----------|----------|
+| **RDS PostgreSQL** | Automated daily snapshots + continuous WAL archiving | 30 days | Point-in-Time Recovery (PITR) to any second within retention window |
+| **Off-site backup** | Weekly `pg_dump` via ECS Scheduled Task → Cloudflare R2 | 12 weekly, 12 monthly | Full database restore from portable dump file |
+| **ElastiCache Redis** | Automatic daily snapshots | 7 days | Restore to new cache node |
+| **Redis data** | Ephemeral by design (cache, feeds, rate limits) | N/A | Feeds rebuild from PostgreSQL; cache repopulates on demand |
 
-# Upload to R2 for off-site storage
-aws s3 cp /data/backups/pg_$(date +%Y%m%d).dump \
-    s3://homegrown-backups/postgresql/pg_$(date +%Y%m%d).dump \
+**Off-site backup task** (ECS Scheduled Task, weekly):
+
+```bash
+# Runs as a one-off ECS task on a cron schedule
+# Connects to RDS, dumps to R2 for provider-independent backup
+pg_dump -Fc -h $RDS_ENDPOINT -U $DB_USER homegrown_academy | \
+    aws s3 cp - s3://homegrown-backups/postgresql/pg_$(date +%Y%m%d).dump \
     --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
 
-# Retention: 30 daily, 12 monthly, 2 yearly
-# R2 lifecycle rules handle cleanup
-
-# Redis: RDB snapshots (default Redis config, persisted to NVMe)
-# Redis data is ephemeral (cache + feeds) — loss is tolerable, feeds rebuild from PostgreSQL
+# R2 lifecycle rules handle retention cleanup
 ```
+
+**Revision trigger**: Add cross-region RDS read replica for disaster recovery when the platform handles paying customers (Phase 2).
 
 ### 12.6 CI/CD Pipeline (GitHub Actions) `[S§17.1]`
 
@@ -2513,29 +2576,56 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC token for AWS auth
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t homegrown-api:${{ github.sha }} .
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
 
-      - name: Build frontend
-        run: cd frontend && npm ci && npm run build
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Deploy API to Hetzner
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Push image to registry, SSH to server, pull and restart
-          docker save homegrown-api:${{ github.sha }} | \
-            ssh deploy@${{ secrets.SERVER_IP }} 'docker load && \
-            docker compose up -d api'
+          docker build -t $ECR_REGISTRY/homegrown-api:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/homegrown-api:$IMAGE_TAG
 
-      - name: Deploy frontend to Cloudflare Pages
-        run: npx wrangler pages deploy frontend/dist --project-name=homegrown-app
-
-      - name: Run migrations
+      - name: Run database migrations
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          ssh deploy@${{ secrets.SERVER_IP }} \
-            'docker exec homegrown-api sea-orm-cli migrate up'
+          # Run migrations as a one-off ECS task before deploying
+          aws ecs run-task \
+            --cluster homegrown \
+            --task-definition homegrown-migrate \
+            --overrides '{"containerOverrides":[{"name":"migrate","command":["sea-orm-cli","migrate","up"]}]}' \
+            --network-configuration "${{ secrets.ECS_NETWORK_CONFIG }}" \
+            --launch-type EC2
+
+      - name: Update ECS service (rolling deploy)
+        run: |
+          aws ecs update-service \
+            --cluster homegrown \
+            --service homegrown-api \
+            --force-new-deployment
+          aws ecs wait services-stable \
+            --cluster homegrown \
+            --services homegrown-api
+
+      - name: Build and deploy frontend
+        run: |
+          cd frontend && npm ci && npm run build
+          npx wrangler pages deploy dist --project-name=homegrown-app
 ```
 
 ---
@@ -2546,11 +2636,13 @@ jobs:
 
 | Layer | Control |
 |-------|---------|
-| **TLS** | All traffic encrypted via TLS 1.3 (Caddy auto-manages Let's Encrypt certificates) `[S§17.1]` |
-| **Firewall** | UFW: allow 443 (HTTPS), 22 (SSH from admin IPs only). All other ports blocked externally |
-| **CSP** | Content Security Policy prevents XSS — restricts script sources, image sources, connection targets |
+| **VPC isolation** | Compute (ECS) and data (RDS, ElastiCache) run in private subnets with no direct internet access. Only ALB is in public subnets |
+| **Security Groups** | Least-privilege ingress: ALB accepts 443 from internet → ECS accepts 3000 from ALB only → RDS/Redis accept connections from ECS only (§12.2) |
+| **TLS** | ALB terminates TLS 1.3 via ACM-managed certificates (auto-renewing, no manual cert management) `[S§17.1]` |
+| **CSP** | Content Security Policy set in Axum middleware (§12.3) — restricts script sources, image sources, connection targets |
 | **CORS** | Strict origin allowlist: `app.homegrown.academy`, `homegrown.academy` |
-| **SSH** | Key-only authentication, no password login. Fail2ban for brute-force protection |
+| **SSH** | Restricted to admin IPs via Security Group. Key-only authentication on EC2 instances |
+| **Audit** | CloudTrail logs all AWS API calls for security audit trail |
 
 ### 13.2 Application Security (OWASP Top 10) `[S§17.1]`
 
@@ -2560,7 +2652,7 @@ jobs:
 | **A02: Cryptographic Failures** | Passwords handled by Ory Kratos (Argon2id). Sensitive data encrypted at rest via PostgreSQL `pgcrypto`. All transit encrypted via TLS. |
 | **A03: Injection** | SeaORM parameterized queries prevent SQL injection. Rust's type system prevents most injection vectors. User input validated via `serde` deserialization with strict types. |
 | **A04: Insecure Design** | Privacy-by-architecture (§1.5). COPPA consent state machine (§5.3). No public user content by design. |
-| **A05: Security Misconfiguration** | Docker containers run as non-root. Minimal base images (Debian slim). Security headers set in Caddy. |
+| **A05: Security Misconfiguration** | Docker containers run as non-root. Minimal base images (Debian slim). Security headers set in Axum middleware (§12.3). ECS-optimized AMI managed by AWS. |
 | **A06: Vulnerable Components** | `cargo audit` + `npm audit` in CI pipeline. Dependabot for automated dependency updates. |
 | **A07: Auth Failures** | Ory Kratos handles auth — battle-tested implementation. MFA encouraged. Rate-limited login attempts (10/min). Session timeout (30 days, revocable). |
 | **A08: Data Integrity** | All API inputs validated via typed `serde` structs. CSRF protection via SameSite cookies. Webhook signatures verified (Stripe, Kratos). |
@@ -2909,7 +3001,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 ### ADR-006: Hetzner over Cloud Providers
 
-**Status**: Accepted
+**Status**: Superseded by ADR-010
 
 **Context**: Comparable AWS EC2 instances cost $500-2,000/mo. Rust's efficiency means a single dedicated server handles Phase 1-2 workloads comfortably.
 
@@ -2920,7 +3012,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 - **Negative**: No managed services (must operate PostgreSQL, Redis yourself). No auto-scaling. Single datacenter (no multi-region).
 - **Mitigation**: Automated backups (§12.5). Monitoring (§2.14). Scaling path documented (§12.4). Multi-region is a Phase 4 concern.
 
-**Revision trigger**: Move to managed services (AWS RDS, ElastiCache) when operational complexity of self-managing databases exceeds a solo developer's capacity, or when multi-region is required.
+**Revision trigger**: ~~Move to managed services (AWS RDS, ElastiCache) when operational complexity of self-managing databases exceeds a solo developer's capacity, or when multi-region is required.~~ Triggered before initial deployment — operational risk of self-managing databases for COPPA-regulated children's data deemed unacceptable for a solo developer. See ADR-010.
 
 ### ADR-007: Stripe Connect for Marketplace Payments
 
@@ -3006,6 +3098,21 @@ WHERE f1.requester_family_id = $1  -- current user
 ```
 
 **Revision trigger**: Install Apache AGE when implementing Phase 3 recommendation features or when friend-of-friend queries exceed 100ms with relational approach.
+
+### ADR-010: AWS over Hetzner Dedicated Server
+
+**Status**: Accepted (supersedes ADR-006)
+
+**Context**: ADR-006 selected Hetzner dedicated server (~$60/mo) for cost efficiency. However, this requires the solo developer to self-manage PostgreSQL (backups, upgrades, PITR, replication), Redis persistence, TLS certificates (Let's Encrypt via Caddy), firewall rules (UFW), and OS patching. For a COPPA-regulated platform handling children's learning data, the operational burden and risk of data loss from self-managed infrastructure outweighs the cost savings. The ADR-006 revision trigger — "when operational complexity exceeds a solo developer's capacity" — was triggered before initial deployment.
+
+**Decision**: AWS managed services — ECS on EC2 (Graviton) for compute, RDS PostgreSQL 16 for database, ElastiCache Redis 7 for cache/queue, ALB with ACM for TLS termination. Estimated ~$100-120/mo (Phase 1).
+
+**Consequences**:
+- **Positive**: RDS automated backups with 30-day PITR. Auto-renewing TLS via ACM (zero certificate management). VPC network isolation (private subnets for compute and data). ECS-optimized AMI managed by AWS. Clear scaling path from Single-AZ to Multi-AZ to Aurora. No manual database operations.
+- **Negative**: ~2x cost ($110 vs $60/mo). Partial vendor lock-in to AWS managed service APIs. NAT Gateway fixed cost (~$32/mo). Upfront VPC and IAM configuration complexity.
+- **Mitigation**: Application code is cloud-agnostic — standard PostgreSQL wire protocol, standard Redis protocol, standard HTTP. Only infrastructure configuration (Terraform/CDK) is AWS-specific. Migration to another provider requires only infrastructure re-provisioning, not application changes.
+
+**Revision trigger**: Consider Fargate if EC2 instance management becomes a burden. Consider dedicated servers only with a dedicated DevOps hire.
 
 ---
 
