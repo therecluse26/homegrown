@@ -1,6 +1,18 @@
 # Homegrown Academy — Product Vision
 
-## 1. Overview
+## 1. Mission
+
+Children in the United States spend roughly 14,000 hours — from age five to eighteen — inside institutions that separate them from their families for the majority of their waking lives. These institutions suppress natural curiosity in favor of compliance, enforce age-segregated conformity, and measure success by standardized test performance. Children are sorted, ranked, and processed through a system designed for administrative efficiency, not human flourishing.
+
+Homeschooling restores what that system takes away. Family presence. Individualized learning. The freedom for a child to develop at their own pace and according to their own nature. A seven-year-old who reads voraciously isn't held back to grade level; a ten-year-old who needs more time with fractions isn't shamed for falling behind a bell curve. Parents know their children. Schools process them.
+
+**Homegrown Academy exists to make homeschooling accessible to every family that wants it.** The mission succeeds when more families homeschool — whether or not they use the platform.
+
+The platform is a tool in service of that mission. It removes barriers: the administrative complexity that overwhelms new families, the isolation that discourages them, the fragmented tooling that wastes their time. It builds the community infrastructure that homeschooling families deserve but have never had. And it meets families at the very beginning — before they've made the decision, before they know what methodology means, before they've pulled a child out of school — because that is where the mission starts.
+
+---
+
+## 2. Overview
 
 ### Project Name
 Homegrown Academy
@@ -9,13 +21,13 @@ Homegrown Academy
 A hybrid social-media + learning subscription platform that helps homeschooling families track progress, discover methodology-aligned content, and build local & online community relationships.
 
 ### Why It Matters
-- **Administrative burden**: Homeschooling parents currently cobble together fragmented tools (planners, Facebook groups, curriculum marketplaces, record-keeping apps) with no integration between them. Homegrown Academy unifies curriculum planning, progress tracking, and community coordination into a single platform.
+- **Barriers prevent families from starting — or make them quit.** Homeschooling parents currently cobble together fragmented tools (planners, Facebook groups, curriculum marketplaces, record-keeping apps) with no integration between them. This administrative burden is one of the top reasons families never start homeschooling or return to conventional school within the first two years. Homegrown Academy unifies curriculum planning, progress tracking, and community coordination into a single platform — removing the friction that costs families their freedom.
 - **Methodology empowerment**: Parents deserve tools that respect and support their chosen educational philosophy — not a one-size-fits-all curriculum. Homegrown Academy delivers methodology-specific functionality, curated content, and AI-driven recommendations tailored to how each family actually homeschools.
-- **Sustainable business model**: Tiered family subscriptions and a revenue-share curriculum marketplace create diversified, recurring revenue while keeping the core social experience free to drive network effects.
+- **Sustainable business model**: Tiered family subscriptions and a revenue-share curriculum marketplace create diversified, recurring revenue while keeping the core social experience free to drive network effects. Revenue sustains the mission — it does not define it.
 
 ---
 
-## 2. Market Context
+## 3. Market Context
 
 ### Target Market
 - **Geography**: United States (initial launch)
@@ -47,9 +59,10 @@ The homeschool technology market is large, growing rapidly, and highly fragmente
 
 ---
 
-## 3. Stakeholders & Personas
+## 4. Stakeholders & Personas
 
 ### End Users
+- **Prospective homeschoolers**: Families exploring whether homeschooling is right for them. They interact with public-facing discovery tools — the methodology quiz, state legal guides, and educational content — before creating an account. This audience is critical because serving them IS the mission: every family that gains the confidence and information to start homeschooling is a success, regardless of whether they become platform users.
 - **Parents (account owners)**: The primary users. They manage family accounts, select methodologies, plan curriculum, track progress, participate in the social layer, and purchase marketplace content.
 - **Students (parent-mediated accounts)**: Children Pre-K through 12. They do not have independent accounts — all student activity is managed through and visible to the parent account. Students interact with age-appropriate learning tools curated by their parents.
 - **Content/curriculum creators**: Independent educators, curriculum developers, and publishers who sell digital resources through the marketplace. They set prices, manage listings, and earn revenue through the platform's revenue-share model.
@@ -63,7 +76,7 @@ The homeschool technology market is large, growing rapidly, and highly fragmente
 
 ---
 
-## 4. Core Architecture: Methodology as a First-Class Concept
+## 5. Core Architecture: Methodology as a First-Class Concept
 
 The platform's central organizing principle is the **educational methodology**. A methodology is not just a content tag — it is a first-class architectural entity that shapes the entire user experience.
 
@@ -91,7 +104,42 @@ A Charlotte Mason parent logging in sees a fundamentally different platform than
 
 ---
 
-## 5. Social Layer
+## 6. Discovery & Onboarding
+
+The platform does not assume families have already decided to homeschool or already know their methodology. Prospective and new homeschoolers feel overwhelmed — by the decision itself, by legal requirements, by the sheer number of approaches. The platform meets them where they are and guides them forward.
+
+### Public-Facing Discovery (Pre-Account)
+
+These tools are accessible without an account. They are genuine resources AND the mission in action — helping families make informed decisions and take their first steps.
+
+- **"What methodology fits your family?" quiz** — An interactive assessment that asks about the family's values, learning preferences, and practical constraints, then recommends methodologies with clear explanations of why each is a fit. Not a lead-capture form disguised as a quiz — a genuinely useful tool that families share with each other.
+- **Methodology explorer** — Deep-dive pages for each methodology: philosophy and history, what a typical day looks like, pros and cons, recommended starting resources, and real family stories. Detailed enough that a parent can confidently choose an approach.
+- **"How to start homeschooling in [state]" guides** — State-specific legal requirements, notification processes, record-keeping rules, assessment obligations, and umbrella school options. Authoritative, regularly updated, and genuinely hard to find elsewhere. (High-value SEO target — these searches have strong intent and poor existing results.)
+- **Homeschooling 101 content** — Addressing the real concerns that stop families: socialization, cost, time commitment, dual-income families, special needs, transitioning from public school mid-year, and what to tell skeptical relatives.
+- **The case for homeschooling** — Not defensive, not apologetic. Clear-eyed content about what conventional schooling does and what families gain by choosing differently. The same confidence that lives in the Mission section, made accessible to families still deciding.
+
+### Guided Onboarding (Post-Account)
+
+Once a family creates an account, the platform walks them through setup with methodology-aware guidance — not a generic settings wizard.
+
+- **Family profile setup** — Children, ages, grade levels, and any relevant context (special needs, prior schooling, family schedule)
+- **Methodology selection wizard** — Builds on the quiz if the family already took it. Deeper questions, video and text introductions to each methodology, and the ability to explore before committing. Families can select multiple methodologies (eclectic approach) with clear guidance on how that works.
+- **Getting started roadmap** — A methodology-specific first-week checklist. Charlotte Mason families get a different roadmap than Traditional families. Concrete, actionable, and designed to build early confidence.
+- **Starter curriculum recommendations** — Curated and specific: "the 3 most popular Charlotte Mason starter packages for a 2nd grader," not an overwhelming catalog dump. Drawn from the marketplace with community ratings.
+- **Community connections** — Methodology-matched groups, nearby homeschool families, and mentor matching with experienced homeschoolers who use the same approach.
+
+### Ongoing Parental Growth
+
+Homeschooling is a practice, not a one-time decision. Parents grow into their methodology over years, and the platform supports that growth.
+
+- **Methodology mastery paths** — Beginner, intermediate, and advanced modules for each methodology. A first-year Charlotte Mason parent learns about short lessons and narration; a third-year parent dives into handicrafts and nature study integration.
+- **Seasonal and milestone guidance** — Age-appropriate suggestions as children grow: "Your child is entering the grammar stage — here's what changes in Classical education," or "Transitioning from early elementary to middle school with Waldorf."
+- **Community mentorship** — Connecting experienced families with newer ones, methodology-matched. Structured enough to be useful, informal enough to feel like community rather than a program.
+- **"Homeschool confidence" signals** — Progress dashboards and milestone celebrations that remind parents they are doing this well. Homeschooling parents, especially in their first years, need reassurance that their children are thriving. The platform provides it with data and community, not empty affirmations.
+
+---
+
+## 7. Social Layer
 
 The social layer is a full-featured, private social network purpose-built for homeschooling families. It is **free for all users** to maximize adoption and drive network effects.
 
@@ -106,7 +154,9 @@ The social layer is a full-featured, private social network purpose-built for ho
 - **Location-based discovery** — Find nearby homeschool families, groups, and events
 
 ### Privacy Model
-**Everything is private by default.** No public profiles, no public posts, no public content. All social content is visible only to friends. This is a non-negotiable design principle — details about children will be shared on this platform, and privacy must be absolute.
+**Everything is private by default.** No public profiles, no public posts, no public user-generated content. All social content is visible only to friends. This is a non-negotiable design principle — details about children will be shared on this platform, and privacy must be absolute.
+
+Public-facing discovery content (methodology guides, state legal guides, the methodology quiz) is intentionally accessible without an account. This is educational and informational content — no user-generated content, no personal data, and no social features are public. The privacy-first principle applies to all user and family data without exception.
 
 ### Child Safety
 - **Parent-mediated accounts only** — Children do not have independent accounts. All student activity is managed through the parent account.
@@ -122,7 +172,7 @@ The social layer is a full-featured, private social network purpose-built for ho
 
 ---
 
-## 6. Learning Layer
+## 8. Learning Layer
 
 The learning layer provides methodology-scoped tools for planning, executing, and tracking a family's homeschool education.
 
@@ -137,9 +187,7 @@ The available tools vary based on the family's selected methodology(ies). Exampl
 - **Progress tracking & analytics** — Visualize student progress over time across subjects and skills
 
 ### Parent Education
-- Methodology philosophy modules — helping parents understand and implement their chosen approach
-- Practical guides and resources for each methodology
-- Community-sourced tips and advice
+Tool-adjacent tips and methodology-specific guidance integrated directly into the learning tools — for example, "how to use narration effectively" surfaced within the narration tool, or "choosing living books" guidance within the reading list feature. Deeper methodology education and parental growth content lives in the Discovery & Onboarding section (§6, Ongoing Parental Growth).
 
 ### AI-Powered Recommendations
 AI serves as an **important enhancement** to the platform, not the core differentiator:
@@ -155,7 +203,7 @@ AI serves as an **important enhancement** to the platform, not the core differen
 
 ---
 
-## 7. Curriculum Marketplace
+## 9. Curriculum Marketplace
 
 An open marketplace where independent creators sell digital curriculum and educational content directly to homeschool families.
 
@@ -182,15 +230,18 @@ The marketplace is not a standalone storefront — it is deeply integrated with 
 
 ---
 
-## 8. Revenue Model
+## 10. Revenue Model
 
 The revenue model is designed to keep the social layer free (maximizing network effects and adoption) while generating sustainable revenue through multiple streams.
+
+The free tier and public-facing tools are not loss leaders — they are the mission. Revenue sustains the mission; it does not define it.
 
 ### Free Tier — Growth Engine
 - Full social features (timeline, posts, profiles, chat, groups, events, discovery)
 - Basic methodology-scoped learning tools
 - Marketplace access (browse, purchase, rate)
 - Methodology education modules
+- Discovery tools, methodology explorer, getting started roadmaps, and onboarding flow
 
 The free tier must be genuinely useful — not a crippled experience. Its purpose is to drive adoption, build community, and generate marketplace transaction revenue.
 
@@ -200,6 +251,7 @@ A family-level subscription (not per-student) for advanced platform features:
 - Advanced progress analytics and insights
 - AI-powered content recommendations
 - Enhanced storage for journals, projects, and portfolios
+- Advanced methodology mastery paths and personalized growth recommendations
 - Additional premium features TBD
 
 Pricing TBD, but competitive positioning suggests a family-level price point (market benchmarks: planners are $5-8/mo; Schoolio is $30/mo per student).
@@ -215,10 +267,11 @@ Pricing TBD, but competitive positioning suggests a family-level price point (ma
 - Tutoring marketplace
 - Sponsored/featured content placements (with clear labeling)
 - Partnership integrations with curriculum publishers
+- Lead generation from public-facing content (quiz completions, state guide visits → account creation)
 
 ---
 
-## 9. Platform & Technology
+## 11. Platform & Technology
 
 ### Platform Strategy
 - **Web-first** — Launch as a responsive web application
@@ -231,12 +284,14 @@ Pricing TBD, but competitive positioning suggests a family-level price point (ma
 
 ---
 
-## 10. Guiding Principles
+## 12. Guiding Principles
 
-1. **Privacy first** — Everything is private by default. No public content. Children's data is sacred.
-2. **Methodology respect** — The platform does not favor any methodology over another. Every approach is equally supported with real, dedicated functionality.
-3. **Content neutrality** — Both religious and secular content is welcome. Content is tagged by worldview so families can filter to their preferences. The platform itself is neutral.
-4. **Parent authority** — Parents are the ultimate decision-makers for their children's education and social interactions on the platform. The platform provides tools and information; parents make choices.
-5. **Community over content** — The social layer and community connections are the core value proposition and growth engine, not the content itself.
-6. **Creator-friendly** — The marketplace must be attractive to creators through fair revenue sharing, good tooling, and access to an engaged audience.
-7. **Simplicity over complexity** — Reduce the administrative burden of homeschooling; don't add to it.
+1. **Mission first** — The platform exists to help more families homeschool. Every product decision is measured against this purpose. Revenue sustains the mission; growth serves the mission. If a feature helps families homeschool but doesn't help the business, we still build it.
+2. **Meet families where they are** — The platform serves families at every stage: considering, beginning, practicing, and mastering. No one should feel they need to already know what they're doing to benefit from what the platform offers.
+3. **Privacy first** — All user and family data is private by default. No public profiles, no public posts, no public user-generated content. Children's data is sacred. The intentional exception is educational and informational content (methodology guides, state legal guides, the quiz) — these are public resources that contain no user data.
+4. **Methodology respect** — The platform does not favor any methodology over another. Every approach is equally supported with real, dedicated functionality.
+5. **Content neutrality** — Both religious and secular content is welcome. Content is tagged by worldview so families can filter to their preferences. The platform itself is neutral.
+6. **Parent authority** — Parents are the ultimate decision-makers for their children's education and social interactions on the platform. The platform provides tools and information; parents make choices.
+7. **Community over content** — The social layer and community connections are the core value proposition and growth engine, not the content itself.
+8. **Creator-friendly** — The marketplace must be attractive to creators through fair revenue sharing, good tooling, and access to an engaged audience.
+9. **Simplicity over complexity** — Reduce the administrative burden of homeschooling; don't add to it.
