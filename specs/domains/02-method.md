@@ -830,7 +830,8 @@ pub struct MethodologyDetailResponse {
     pub short_desc: String,
     pub icon_url: Option<String>,
     pub philosophy: serde_json::Value,         // [S§4.1] full philosophy module
-    pub onboarding_config: serde_json::Value,  // [S§6.4]
+    pub onboarding_config: serde_json::Value,  // [S§6.4] consumed by onboard:: for materialization
+    pub community_config: serde_json::Value,   // [S§6.6] consumed by onboard:: for community suggestions
     pub mastery_paths: serde_json::Value,      // [S§4.1]
     pub terminology: serde_json::Value,        // [S§4.4]
 }
@@ -1184,7 +1185,7 @@ src/method/
 |--------|-----------|-----------|
 | `MethodologyService` trait methods | All domains | `Arc<dyn MethodologyService>` via AppState |
 | `list_methodologies()` | `onboard::`, `discover::` | Service call — methodology selection wizard, quiz |
-| `get_methodology()` | `discover::` | Service call — methodology explorer pages |
+| `get_methodology()` | `discover::`, `onboard::` | Service call — methodology explorer pages, onboarding materialization (onboarding_config + community_config) `[S§6.4, S§6.6]` |
 | `resolve_family_tools()` | `learn::` | Service call — determines which tools to show |
 | `resolve_student_tools()` | `learn::` | Service call — student-specific tool set |
 | `validate_methodology_id()` | `iam::` | Service call — validates during registration |
