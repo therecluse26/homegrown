@@ -18,8 +18,13 @@ other domain depends on.
 | **Key constraint** | Auth delegated to Ory Kratos; IAM owns identity *data* and *authorization* |
 
 **What IAM owns**: Family accounts, parent users, student profiles, COPPA consent tracking,
-co-parent invitations, role-based extractors (`AuthContext`, `FamilyScope`, `RequirePremium`,
-`RequireCreator`, `RequireCoppaConsent`, `RequirePrimaryParent`), Kratos webhook handlers.
+co-parent invitations, Kratos webhook handlers, auth middleware *implementation* (calls
+`KratosAdapter`), `AuthContext` *population* logic.
+
+**Shared infrastructure** (defined in 00-core, consumed by IAM and all other domains):
+`AuthContext` type (00-core §7.2), `FamilyScope` type (00-core §8), `AppError` base variants
+(00-core §6), role extractors `RequirePremium`, `RequireCreator`, `RequireCoppaConsent`,
+`RequirePrimaryParent` (00-core §13.3).
 
 **What IAM delegates**: Credential management, session storage, MFA, OAuth flows → Ory Kratos.
 Social profile creation → `social::` (via `FamilyCreated` event). Methodology validation →
@@ -72,10 +77,8 @@ provide defense-in-depth for family-scoped isolation. `[ARCH §5.2]`
 -- Migration: YYYYMMDD_000001_create_iam_tables.rs
 -- =============================================================================
 
--- Enable required extensions (idempotent)
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "postgis";
+-- PostgreSQL extensions (uuid-ossp, pgcrypto, postgis, pg_trgm) are installed
+-- by the bootstrap migration (00-core §9.4). They are available to all domains.
 
 -- COPPA consent status enum [S§17.2, ARCH §6.3]
 CREATE TYPE iam_coppa_consent_enum AS ENUM (
@@ -1233,106 +1236,63 @@ Primary parent only. `[S§3.4, S§16.3]`
 
 ## §11 Middleware & Extractors
 
-All IAM-owned extractors that other domains consume. Defined across `src/shared/` and
-`src/iam/`. `[ARCH §6.2, §6.5]`
+The shared types and extractors that IAM depends on and populates are defined in
+**00-core §7** (types), **00-core §8** (FamilyScope), and **00-core §13** (middleware
+and extractors). This section documents IAM-specific behavior only.
 
-### §11.1 `AuthContext`
+### §11.1 AuthContext Population
 
-**Location**: `src/shared/types.rs` (type) + `src/middleware/auth.rs` (extraction)
+IAM owns the *population* of `AuthContext` (type defined in 00-core §7.2). The auth
+middleware (`src/middleware/auth.rs`, defined in 00-core §13.1) calls IAM's
+`KratosAdapter::validate_session()` and queries IAM repositories to build the `AuthContext`.
 
-Extracted from every authenticated request. The auth middleware validates the Kratos session
-cookie, looks up the parent in the local database, and inserts `AuthContext` into request
-extensions.
+**Population flow**:
 
-```rust
-#[derive(Clone, Debug)]
-pub struct AuthContext {
-    pub parent_id: Uuid,
-    pub family_id: Uuid,
-    pub kratos_identity_id: Uuid,
-    pub is_primary_parent: bool,
-    pub subscription_tier: SubscriptionTier,
-    pub email: String,  // NOT logged [CODING §5.2]
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SubscriptionTier {
-    Free,
-    Premium,
-}
-```
+1. Auth middleware extracts session cookie from request
+2. Calls `KratosAdapter::validate_session()` (§7) → returns `kratos_identity_id`
+3. Calls `ParentRepository::find_by_kratos_id()` (§6) → returns parent record
+4. Calls `FamilyRepository::find_by_id()` (§6) → returns family record
+5. Constructs `AuthContext` from parent + family data:
+   - `parent_id` from parent record
+   - `family_id` from parent record
+   - `kratos_identity_id` from Kratos session
+   - `is_primary_parent` from parent record
+   - `subscription_tier` from family record
+   - `email` from parent record (NOT logged — PII)
+   - `coppa_consent_status` from family record (as String, for RequireCoppaConsent)
 
 **Behavior**: Returns 401 Unauthorized if:
 - No session cookie present
 - Kratos session is invalid or expired
 - Parent not found in local database (orphaned Kratos identity)
 
-### §11.2 `FamilyScope`
+### §11.2 COPPA Consent Check
 
-**Location**: `src/shared/family_scope.rs`
+The `RequireCoppaConsent` extractor (00-core §13.3) checks `coppa_consent_status` from
+`AuthContext`, which IAM populates from `iam_families.coppa_consent_status` during auth
+middleware execution. This avoids an extra DB query per request — the auth middleware already
+queries `iam_families` for subscription tier.
 
-Extracted from `AuthContext`. Wraps the `family_id` to enforce that all repository queries
-include a family filter. `[ARCH §1.5]`
+### §11.3 Extractor Summary
 
-```rust
-#[derive(Clone, Debug)]
-pub struct FamilyScope {
-    family_id: Uuid,  // private — accessible only via getter
-}
+All extractors are defined in 00-core §13.3. IAM provides the data they operate on:
 
-impl FamilyScope {
-    pub fn family_id(&self) -> Uuid {
-        self.family_id
-    }
-}
-```
-
-**Behavior**: Constructed from `AuthContext.family_id`. Cannot be constructed directly by
-application code — the only path is through authentication.
-
-### §11.3 `RequirePremium`
-
-**Location**: `src/middleware/` or `src/shared/`
-
-Axum extractor that wraps `AuthContext` and verifies `subscription_tier == Premium`.
-`[S§3.2, ARCH §6.5]`
-
-**Behavior**: Returns 402 Payment Required if subscription tier is `Free`.
-
-### §11.4 `RequireCreator`
-
-**Location**: `src/middleware/` or `src/shared/`
-
-Axum extractor that verifies the authenticated parent has an associated creator account in
-`mkt_creators`. `[S§3.1.4, ARCH §6.5]`
-
-**Behavior**: Returns 403 Forbidden if no creator account exists.
-
-### §11.5 `RequireCoppaConsent`
-
-**Location**: `src/middleware/`
-
-Middleware or extractor that verifies the family's COPPA consent status is `Consented` or
-`ReVerified`. Applied to routes that create or access student data. `[ARCH §6.3]`
-
-**Behavior**: Returns 403 Forbidden with error code `coppa_consent_required` if consent
-status is `Registered`, `Noticed`, or `Withdrawn`.
-
-### §11.6 `RequirePrimaryParent`
-
-**Location**: `src/middleware/`
-
-Axum extractor that wraps `AuthContext` and verifies `is_primary_parent == true`. Applied to
-co-parent management, family deletion, and COPPA withdrawal endpoints.
-
-**Behavior**: Returns 403 Forbidden if the authenticated parent is not the primary parent.
+| Extractor | Defined In | Data Source (IAM) | Behavior |
+|-----------|------------|-------------------|----------|
+| `AuthContext` | 00-core §7.2 | Auth middleware (§11.1) | 401 if unauthenticated |
+| `FamilyScope` | 00-core §8 | Derived from `AuthContext.family_id` | 401 if unauthenticated |
+| `RequirePremium` | 00-core §13.3 | `AuthContext.subscription_tier` | 402 if Free |
+| `RequireCreator` | 00-core §13.3 | `mkt_creators` lookup via parent_id | 403 if no creator account |
+| `RequireCoppaConsent` | 00-core §13.3 | `AuthContext.coppa_consent_status` | 403 if not consented |
+| `RequirePrimaryParent` | 00-core §13.3 | `AuthContext.is_primary_parent` | 403 if not primary (Phase 2) |
 
 ---
 
 ## §12 Error Types
 
-`IamError` enum defined in `src/iam/` (service-level errors). These map to `AppError` in
-handlers. `[CODING §2.2]`
+`IamError` enum defined in `src/iam/` (service-level errors). These map to `AppError`
+(defined in 00-core §6) in handlers via `From<IamError> for AppError` (see 00-core §6.4
+for the conversion pattern). `[CODING §2.2]`
 
 ```rust
 #[derive(Debug, thiserror::Error)]
@@ -1543,14 +1503,10 @@ acceptance criteria for code review and integration testing.
 - [ ] Create migration: PostGIS `location_point` column on `iam_families`
 - [ ] Regenerate SeaORM entities from migrations
 
-#### Shared Infrastructure
-- [ ] Implement `FamilyScope` type in `src/shared/family_scope.rs`
-- [ ] Implement `AuthContext` struct and auth middleware in `src/middleware/auth.rs`
-- [ ] Implement `FamilyScope` extractor (from AuthContext)
-- [ ] Implement `RequirePremium` extractor
-- [ ] Implement `RequireCreator` extractor
-- [ ] Implement `RequireCoppaConsent` middleware
-- [ ] Implement `AppError` enum with IAM variants in `src/shared/error.rs`
+#### Shared Infrastructure (prerequisite — see 00-core)
+- [ ] Verify 00-core §19 checklist is complete (AppError, AuthContext, FamilyScope,
+      extractors, middleware, DB pool, Redis pool, EventBus)
+- [ ] Implement `From<IamError> for AppError` conversion (00-core §6.4 pattern)
 
 #### Kratos Adapter
 - [ ] Implement `KratosAdapter` trait in `src/iam/ports.rs`
