@@ -223,20 +223,24 @@ Redis also serves as:
 
 **Revision trigger**: None. Kratos is open-source and self-hosted — no vendor lock-in.
 
-### 2.9 Payments: Stripe + Stripe Connect
+### 2.9 Payments: Hyperswitch + Stripe
 
 **Satisfies**: `[S§15]` billing, `[S§9.6]` marketplace payouts
 
 | Attribute | Value |
 |-----------|-------|
-| **Subscriptions** | Stripe Billing `[S§15.3]` |
-| **Marketplace** | Stripe Connect (Standard accounts) `[S§9.6]` |
-| **Sales tax** | Stripe Tax `[S§15.4]` |
-| **1099-K** | Stripe handles for Connected accounts `[S§9.6]` |
+| **Orchestration** | Hyperswitch (self-hosted Docker sidecar) |
+| **Payment processor** | Stripe (configured as a Hyperswitch connector) |
+| **Marketplace payments** | Hyperswitch split payments / sub-merchant accounts `[S§9.6]` |
+| **Subscriptions** | Hyperswitch or direct Stripe Billing — TBD in `billing::` spec `[S§15.3]` |
+| **Sales tax** | Stripe Tax (via Hyperswitch connector) `[S§15.4]` |
+| **1099-K** | Stripe handles for sub-merchant accounts `[S§9.6]` |
 
-**Rationale**: Stripe Connect Standard accounts offload creator KYC, identity verification, and 1099-K filing to Stripe. The platform never handles sensitive financial data for creators. This dramatically reduces compliance burden for a solo developer.
+**Rationale**: Hyperswitch provides processor-agnostic payment orchestration. The platform talks to Hyperswitch (self-hosted), which talks to Stripe as the underlying processor. This gives us the compliance benefits of Stripe (creator KYC, identity verification, 1099-K filing, sales tax) while adding the flexibility to swap or add processors without application code changes. Marketplace payments (split payments, creator sub-merchants, payouts) are managed through Hyperswitch's payment orchestration layer. See `specs/domains/07-mkt.md §7` for full marketplace payment details and `§18.5` for the Hyperswitch deployment architecture.
 
-**Revision trigger**: None. Stripe is the industry standard for this pattern.
+**Note**: COPPA micro-charge verification `[S§1.4]` still uses the `billing::` adapter, which wraps Hyperswitch (or direct Stripe — TBD in `billing::` spec).
+
+**Revision trigger**: Swap Stripe connector for another processor if pricing or features change — only Hyperswitch connector configuration changes, no application code impact.
 
 ### 2.10 File Storage: Cloudflare R2
 
@@ -589,18 +593,23 @@ The shared kernel is strictly limited to:
 | `shared/events.rs` | `EventBus` and `DomainEvent` trait (§4.6) |
 | `shared/error.rs` | `AppError` and error-to-HTTP mapping |
 
-**Anti-Corruption Layers (ACLs)** — External services (Stripe, Ory Kratos, S3/R2, Thorn
-Safer, Postmark) are wrapped in Adapter modules within the domain that owns the interaction.
-No raw SDK calls exist outside these adapters:
+**Anti-Corruption Layers (ACLs)** — External services (Hyperswitch, Ory Kratos, S3/R2,
+Thorn Safer, Postmark) are wrapped in Adapter modules within the domain that owns the
+interaction. No raw SDK calls exist outside these adapters:
 
 | External Service | Owning Domain | Adapter Location |
 |-----------------|---------------|-----------------|
-| Stripe + Stripe Connect | `billing::` | `src/billing/adapters/stripe.rs` |
+| Hyperswitch (payments) | `mkt::` | `src/mkt/adapters/payment.rs` |
+| Hyperswitch (billing) | `billing::` | `src/billing/adapters/payment.rs` |
 | Ory Kratos (auth) | `iam::` | `src/iam/adapters/kratos.rs` |
 | Cloudflare R2 | `media::` | `src/media/adapters/r2.rs` |
 | Thorn Safer (CSAM) | `safety::` | `src/safety/adapters/thorn.rs` |
 | AWS Rekognition | `safety::` | `src/safety/adapters/rekognition.rs` |
 | Postmark (email) | `notify::` | `src/notify/adapters/postmark.rs` |
+
+> **Note**: Both `mkt::` and `billing::` payment adapters talk to the same self-hosted
+> Hyperswitch instance but use different Hyperswitch profiles (marketplace vs. subscription
+> billing). Stripe is the underlying processor configured as a Hyperswitch connector.
 
 **What bounded contexts rule out**:
 - Domain A writing directly to domain B's prefixed tables
@@ -634,13 +643,16 @@ src/billing/
 ├── models.rs
 ├── adapters/
 │   ├── mod.rs
-│   └── stripe.rs     ← wraps Stripe SDK, returns domain types only
+│   └── payment.rs    ← wraps Hyperswitch SDK, returns domain types only
 └── entities/
 ```
 
-Services call `billing::adapters::stripe::charge_card(...)` which returns
-`Result<ChargeId, BillingError>`. If Stripe is ever replaced, only `adapters/stripe.rs`
-changes. Handlers and service logic are unaffected.
+Services call `billing::adapters::payment::create_subscription(...)` which returns
+`Result<SubscriptionId, BillingError>`. Hyperswitch already provides processor-agnostic
+flexibility — swapping the underlying payment processor (e.g., Stripe → Adyen) requires
+only a Hyperswitch connector configuration change, no application code impact. The adapter
+layer adds a second level of isolation: if Hyperswitch itself were ever replaced, only
+`adapters/payment.rs` changes.
 
 **Why this fits**: The existing split is 95% of the way there. Making external adapters
 explicit prevents the common pattern of SDK calls proliferating through service methods,
@@ -783,7 +795,7 @@ that enforce invariants structurally (not by convention):
 | `search/` | No | Indexing and retrieval, no business invariants |
 | `ai/` | No | Recommendation queries, no invariants to enforce |
 | `onboard/` | No | Workflow steps, IAM interactions |
-| `billing/` | No | Stripe delegation; subscription state machine lives in Stripe |
+| `billing/` | No | Hyperswitch delegation; subscription state machine lives in the payment processor |
 | `iam/` | No | Identity data, permissions; session state is Kratos' responsibility |
 
 **Module structure for complex domains**:
@@ -796,7 +808,7 @@ src/mkt/
 ├── repository.rs
 ├── models.rs
 ├── adapters/
-│   └── stripe.rs
+│   └── payment.rs
 ├── domain/
 │   ├── mod.rs
 │   ├── listing.rs      ← Aggregate Root: MarketplaceListing
@@ -1302,6 +1314,16 @@ CREATE INDEX idx_reading_items_family ON learn_reading_list_items(family_id);
 ```
 
 #### Marketplace `[S§9]`
+
+> **Refinement note**: This baseline schema has been superseded by `specs/domains/07-mkt.md`,
+> which introduces the following changes:
+> - `stripe_account_id` → `payment_account_id` (processor-agnostic via Hyperswitch)
+> - `stripe_payment_id` → `payment_id`
+> - Adds tables: `mkt_publishers`, `mkt_listing_files`, `mkt_listing_versions`,
+>   `mkt_cart_items`, `mkt_curated_sections`
+>
+> The SQL below is preserved as the original architectural baseline. Use 07-mkt.md for the
+> current schema definition.
 
 ```sql
 -- Creator accounts [S§9.1]
@@ -3653,18 +3675,26 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 ### ADR-007: Stripe Connect for Marketplace Payments
 
-**Status**: Accepted
+**Status**: Superseded by Hyperswitch (see `specs/domains/07-mkt.md §7`)
 
 **Context**: The marketplace requires creator identity verification, payouts, sales tax handling, and 1099-K filing `[S§9.6, S§15.4]`. Building payment infrastructure from scratch is prohibitively complex for a solo developer.
 
 **Decision**: Use Stripe Connect (Standard accounts) for marketplace payments and Stripe Billing for subscriptions.
 
-**Consequences**:
+> **Superseded**: Hyperswitch (self-hosted) replaces direct Stripe Connect integration as
+> the payment orchestration layer. Stripe remains the underlying payment processor,
+> configured as a connector in Hyperswitch. Creator KYC, 1099-K filing, and sales tax are
+> still ultimately handled by Stripe — but the platform interacts with Stripe through
+> Hyperswitch rather than directly. This provides processor-agnostic flexibility without
+> sacrificing Stripe's compliance features. See `specs/domains/07-mkt.md §7` for the
+> marketplace payment architecture and `§18.5` for Hyperswitch deployment details.
+
+**Consequences** *(original, preserved for historical context)*:
 - **Positive**: Stripe handles creator KYC/identity verification. 1099-K filing offloaded to Stripe. Sales tax automated via Stripe Tax. Stripe Connect Standard means creators manage their own Stripe accounts — reduced platform liability. Subscription management with upgrade/downgrade built in.
 - **Negative**: Stripe fees (~2.9% + 30¢ per transaction + Connect fees). Platform doesn't control the payout experience directly.
 - **Mitigation**: Stripe fees are industry standard and competitive. The alternative (custom payment infrastructure) is not viable for a solo developer.
 
-**Revision trigger**: None. Stripe is the industry standard for this exact use case.
+**Revision trigger**: ~~None. Stripe is the industry standard for this exact use case.~~ Triggered — Hyperswitch provides an orchestration layer that preserves all Stripe benefits while adding processor-agnostic flexibility. See §2.9.
 
 ### ADR-008: Family-Scoped Data Isolation
 

@@ -409,7 +409,7 @@ here is an absolute enforcement imperative.
   owns its `{prefix}_*` tables exclusively.
 - MUST NOT call another domain's `repository.rs` directly. Call its service trait instead.
   (Reinforces §2.4 with explicit bounded-context framing.)
-- MUST wrap all external SDK calls (Stripe, Kratos, R2, Thorn Safer, Postmark, Rekognition)
+- MUST wrap all external SDK calls (Hyperswitch, Kratos, R2, Thorn Safer, Postmark, Rekognition)
   in an `adapters/` file within the owning domain. No raw SDK calls in `service.rs`.
 - MUST NOT add files to `src/shared/` without explicit justification that the utility is
   needed by three or more domains. Convenience refactors do not qualify.
