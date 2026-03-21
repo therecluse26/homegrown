@@ -84,7 +84,7 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 ```sql
 -- Upload lifecycle status
 -- CHECK: status IN ('pending', 'uploaded', 'processing', 'published',
---                   'quarantined', 'flagged', 'expired', 'deleted')
+--                   'quarantined', 'rejected', 'flagged', 'expired', 'deleted')
 
 -- Upload context — determines validation rules (size limits, allowed types)
 -- CHECK: context IN ('profile_photo', 'post_attachment', 'message_attachment',
@@ -101,12 +101,15 @@ pending ──► uploaded ──► processing ──► published
    │                        │
    │                        ├──► quarantined  (CSAM detected — immediate, irreversible)
    │                        │
-   │                        └──► flagged      (moderation violation — reversible by admin)
+   │                        ├──► rejected     (auto-rejected by content policy — e.g. nudity)
+   │                        │
+   │                        └──► flagged      (moderation concern — admin review required)
    │
    └──► expired  (presigned URL expired, upload never completed — orphan cleanup)
 
 published ──► deleted  (soft-delete by owner, Phase 2)
 flagged   ──► published  (admin override after review, Phase 2)
+rejected  ──► published  (admin override via appeal, Phase 2)
 ```
 
 ### §3.2 Tables
@@ -133,7 +136,7 @@ CREATE TABLE media_uploads (
     status                TEXT NOT NULL DEFAULT 'pending'
                           CHECK (status IN (
                               'pending', 'uploaded', 'processing', 'published',
-                              'quarantined', 'flagged', 'expired', 'deleted'
+                              'quarantined', 'rejected', 'flagged', 'expired', 'deleted'
                           )),
 
     -- File metadata (provided at request time)
@@ -944,10 +947,16 @@ pub struct CsamScanResult {
 }
 
 /// Content moderation result from Rekognition.
+///
+/// `auto_reject` and `priority` are set by SafetyScanBridge (safety:: §11.2.2)
+/// based on the platform's label routing table. The RekognitionAdapter returns
+/// raw labels; the bridge applies routing decisions.
 #[derive(Debug)]
 pub struct ModerationResult {
     pub has_violations: bool,
+    pub auto_reject: bool,                    // true → status = rejected (not flagged)
     pub labels: Vec<ModerationLabel>,
+    pub priority: Option<String>,             // None for auto-reject, Some("critical"|"high"|"normal") for flagged
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1153,8 +1162,13 @@ ProcessUploadJob
     ├─ 4. Content moderation via safety:: (Rekognition)
     │      Images: full scan
     │      Video: keyframe extraction + scan
-    │      Violation detected → FLAG, store labels, skip remaining steps
-    │                           Publish UploadFlagged event
+    │      Routing is determined by ModerationResult (set by SafetyScanBridge §11.2.2):
+    │        auto_reject = true  → REJECT, store labels, skip remaining steps
+    │                               Publish UploadRejected event
+    │        has_violations = true, auto_reject = false
+    │                            → FLAG, store labels, skip remaining steps
+    │                               Publish UploadFlagged event
+    │        has_violations = false → clean, continue pipeline
     │
     ├─ 5. Compression decision
     │      Compare probe results against compression profiles (§10.2)
@@ -1253,15 +1267,40 @@ match csam_result {
 ### §10.4 Content Moderation Step
 
 Content moderation uses AWS Rekognition to detect policy violations (explicit content,
-violence, etc.). `[S§12.2]`
+violence, etc.). The `ModerationResult` returned by `SafetyScanBridge` includes routing
+decisions (see `[11-safety §11.2.2]`): `auto_reject` for nudity/explicit content, flagging
+for suggestive/violent content, and ignored categories (drugs, hate symbols, weapons) that
+are legitimate educational content on a homeschool platform. `[S§12.2]`
 
 ```rust
 // Within ProcessUploadJob pipeline (after CSAM scan passes)
 let moderation = self.safety.scan_moderation(&upload.storage_key).await;
 
 match moderation {
+    Ok(result) if result.auto_reject => {
+        // Auto-reject — content policy violation (e.g. nudity) [11-safety §11.2.1]
+        self.uploads.set_moderation_labels(
+            upload.id,
+            &serde_json::to_value(&result.labels)?,
+        ).await?;
+        self.uploads.update_status(
+            upload.id,
+            UploadStatus::Rejected,
+            UploadStatusUpdate::default(),
+        ).await?;
+
+        // Publish event for safety:: (creates content flag + user notification)
+        self.events.publish(UploadRejected {
+            upload_id: upload.id,
+            family_id: upload.family_id,
+            context: upload.context.clone(),
+            labels: result.labels,
+        }).await;
+
+        return Ok(()); // Short-circuit — no further processing
+    }
     Ok(result) if result.has_violations => {
-        // Flag — do NOT publish
+        // Flag for review — admin must assess (e.g. suggestive, violence)
         self.uploads.set_moderation_labels(
             upload.id,
             &serde_json::to_value(&result.labels)?,
@@ -1278,6 +1317,7 @@ match moderation {
             family_id: upload.family_id,
             context: upload.context.clone(),
             labels: result.labels,
+            priority: result.priority,
         }).await;
 
         return Ok(()); // Short-circuit — no further processing
@@ -1671,6 +1711,9 @@ pub enum MediaError {
     #[error("upload is quarantined")]
     UploadQuarantined,
 
+    #[error("upload was rejected by content policy")]
+    UploadRejected,
+
     #[error("upload is flagged for review")]
     UploadFlagged,
 
@@ -1707,6 +1750,7 @@ pub enum MediaError {
 | `FileTooLarge` | 422 | `file_too_large` | "File exceeds the maximum allowed size" |
 | `UploadNotConfirmed` | 409 | `upload_not_confirmed` | "Upload must be confirmed before this operation" |
 | `UploadQuarantined` | 403 | `upload_quarantined` | "This upload has been restricted" |
+| `UploadRejected` | 403 | `upload_rejected` | "This upload was not published because it violates our content guidelines" |
 | `UploadFlagged` | 403 | `upload_flagged` | "This upload is under review" |
 | `UploadExpired` | 410 | `upload_expired` | "Upload link has expired — please request a new one" |
 | `NotOwner` | 403 | `not_owner` | "You do not have permission to access this upload" |
@@ -1735,6 +1779,7 @@ pub enum MediaError {
 | `mkt::` | `MediaService::presigned_get()` | Purchased file download URLs (replaces `mkt::MediaAdapter::presigned_get`) `[ARCH §8.3]` |
 | `search::` | `UploadPublished` event | Index media metadata for search |
 | `safety::` | `UploadQuarantined` event | NCMEC report trigger, account suspension |
+| `safety::` | `UploadRejected` event | Auto-rejected content flag + user notification `[11-safety §11.2.1]` |
 | `safety::` | `UploadFlagged` event | Moderation queue entry |
 
 ### §16.2 media:: Consumes
@@ -1774,15 +1819,28 @@ pub struct UploadQuarantined {
 }
 impl DomainEvent for UploadQuarantined {}
 
-/// Published when content moderation flags an upload.
+/// Published when content moderation auto-rejects an upload (e.g. nudity).
+/// Consumed by safety:: (creates content flag + user rejection notification).
+/// [S§12.2, 11-safety §11.2.1]
+#[derive(Debug, Clone)]
+pub struct UploadRejected {
+    pub upload_id: Uuid,
+    pub family_id: Uuid,
+    pub context: UploadContext,
+    pub labels: Vec<ModerationLabel>,
+}
+impl DomainEvent for UploadRejected {}
+
+/// Published when content moderation flags an upload for admin review.
 /// Consumed by safety:: for moderation queue.
-/// [S§12.2]
+/// [S§12.2, 11-safety §11.2.2]
 #[derive(Debug, Clone)]
 pub struct UploadFlagged {
     pub upload_id: Uuid,
     pub family_id: Uuid,
     pub context: UploadContext,
     pub labels: Vec<ModerationLabel>,
+    pub priority: Option<String>,        // "critical", "high", "normal" — from label routing
 }
 impl DomainEvent for UploadFlagged {}
 ```
@@ -1823,7 +1881,7 @@ from `media::` — this spec makes the contract authoritative. Implementation in
 - **Safety**: CSAM scan (Thorn Safer), content moderation (Rekognition) — both via `safety::` adapters
 - **Compression**: FFMPEG worker for all asset types (image, video, audio)
 - **Variants**: Thumb (200x200) and medium (800x800) for images only
-- **Events**: `UploadPublished`, `UploadQuarantined`, `UploadFlagged`
+- **Events**: `UploadPublished`, `UploadQuarantined`, `UploadRejected`, `UploadFlagged`
 
 ### Phase 2
 
@@ -1867,46 +1925,49 @@ from `media::` — this spec makes the contract authoritative. Implementation in
 12. CSAM detection triggers immediate quarantine — no further processing `[S§12.1]`
 13. CSAM is reported to NCMEC via `safety::service::report_csam()` `[18 U.S.C. § 2258A]`
 14. Content moderation runs on all image/video uploads `[S§12.2]`
-15. Moderation violations flag the upload and store labels — reversible by admin review
-16. `UploadQuarantined` and `UploadFlagged` events are published for `safety::` consumption
+15. Nudity/explicit labels above threshold → upload auto-rejected (not just flagged) `[11-safety §11.2.1]`
+16. Suggestive/violence labels → upload flagged for admin review `[11-safety §11.2.2]`
+17. Drugs/tobacco/alcohol, hate symbols, weapons → ignored (legitimate educational content)
+18. Rejected uploads are appealable; quarantined (CSAM) uploads are not
+19. `UploadQuarantined`, `UploadRejected`, and `UploadFlagged` events are published for `safety::` consumption
 
 ### Signed URLs
 
-17. Upload presigned URLs expire after 1 hour
-18. Download presigned URLs expire after 1 hour (marketplace files only)
-19. Published media uses public CDN URLs (no signing required)
-20. Marketplace files always use presigned GET URLs (never public) `[ARCH §8.3]`
+20. Upload presigned URLs expire after 1 hour
+21. Download presigned URLs expire after 1 hour (marketplace files only)
+22. Published media uses public CDN URLs (no signing required)
+23. Marketplace files always use presigned GET URLs (never public) `[ARCH §8.3]`
 
 ### Orphan Cleanup
 
-21. `CleanupOrphanUploadsJob` runs daily at 4:00 AM UTC `[ARCH §12.3]`
-22. Only `pending` uploads past `expires_at` are cleaned up
-23. S3 object deletion is best-effort (object may not exist)
-24. Cleaned-up uploads transition to `expired` status
+24. `CleanupOrphanUploadsJob` runs daily at 4:00 AM UTC `[ARCH §12.3]`
+25. Only `pending` uploads past `expires_at` are cleaned up
+26. S3 object deletion is best-effort (object may not exist)
+27. Cleaned-up uploads transition to `expired` status
 
 ### Error Handling
 
-25. Zero `.unwrap()` / `.expect()` in production code `[CODING §2.2]`
-26. All errors use `MediaError` with `thiserror` `[CODING §2.2, §5.2]`
-27. Internal error details (storage errors, scan failures) are logged but never exposed
+28. Zero `.unwrap()` / `.expect()` in production code `[CODING §2.2]`
+29. All errors use `MediaError` with `thiserror` `[CODING §2.2, §5.2]`
+30. Internal error details (storage errors, scan failures) are logged but never exposed
     in API responses `[CODING §2.2, §5.2]`
-28. `ScanUnavailable` returns 503 — graceful degradation if Thorn/Rekognition is down
+31. `ScanUnavailable` returns 503 — graceful degradation if Thorn/Rekognition is down
 
 ### Privacy Invariants
 
-29. Every `media_uploads` query is family-scoped via `FamilyScope` `[CODING §2.4]`
-30. Upload owner is verified before confirm/delete operations
-31. Storage keys are namespaced by `family_id` — no cross-family access
-32. EXIF data stripped during JPEG compression (preserving orientation only)
-33. No GPS coordinates stored or exposed `[ARCH §1.5]`
+32. Every `media_uploads` query is family-scoped via `FamilyScope` `[CODING §2.4]`
+33. Upload owner is verified before confirm/delete operations
+34. Storage keys are namespaced by `family_id` — no cross-family access
+35. EXIF data stripped during JPEG compression (preserving orientation only)
+36. No GPS coordinates stored or exposed `[ARCH §1.5]`
 
 ### Cross-Domain Contracts
 
-34. `MediaService` trait is the authoritative interface — supersedes `learn::MediaAdapter` and
+37. `MediaService` trait is the authoritative interface — supersedes `learn::MediaAdapter` and
     `mkt::MediaAdapter` sketches
-35. `social::`, `learn::`, and `mkt::` inject `Arc<dyn media::MediaService>`
-36. Marketplace file downloads use `presigned_get()` with 1-hour expiry `[ARCH §8.3]`
-37. File versioning is `mkt::`'s responsibility — `media::` manages individual uploads only
+38. `social::`, `learn::`, and `mkt::` inject `Arc<dyn media::MediaService>`
+39. Marketplace file downloads use `presigned_get()` with 1-hour expiry `[ARCH §8.3]`
+40. File versioning is `mkt::`'s responsibility — `media::` manages individual uploads only
 
 ---
 

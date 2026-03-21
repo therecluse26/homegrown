@@ -60,7 +60,10 @@ Cross-references from other spec sections are included where the safety domain i
 | No notification to offending user | `[S§12.1]` | §10.5 (zero user notification) |
 | Immediate permanent suspension of CSAM-associated accounts | `[S§12.1]` | §10.6 (permanent ban), §12.2 (ban state) |
 | Zero-tolerance CSAM policy | `[S§12.1]` | §10 (entire pipeline) |
-| Automated screening of all UGC (posts, comments, messages, reviews, listings) | `[S§12.2]` | §11.1 (text scanning), §11.2 (media scanning via events) |
+| Automated screening of all UGC (posts, comments, messages, reviews, listings) | `[S§12.2]` | §11.1 (text scanning), §11.2 (media scanning via events), §11.2.1 (nudity auto-rejection), §11.2.2 (label routing) |
+| Nudity/explicit content auto-rejected on upload | `[S§12.2]` | §11.2.1 (nudity auto-rejection policy) |
+| Admin-confirmed novel CSAM triggers NCMEC pipeline | `[S§12.1]` | §11.4.1 (CSAM escalation from review queue) |
+| Rekognition label routing (auto-reject / flag / ignore) | `[S§12.2]` | §11.2.2 (label routing decision table) |
 | Community reporting system | `[S§12.3]` | §11.3 (user reporting flow) |
 | Human review of flagged/reported content | `[S§12.3]` | §11.4 (admin review queue) |
 | Moderator actions: remove, warn, suspend, ban | `[S§12.2]` | §12.1 (moderation actions) |
@@ -118,7 +121,8 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 -- Report priority values: critical, high, normal
 -- Target type values: post, comment, message, profile, group, event, listing, review
 -- Mod action type values: content_removed, warning_issued, account_suspended,
---                         account_banned, content_restored, suspension_lifted, appeal_granted
+--                         account_banned, content_restored, suspension_lifted,
+--                         appeal_granted, escalate_to_csam
 -- Account status values: active, suspended, banned
 -- Appeal status values: pending, in_review, granted, denied
 -- NCMEC report status values: pending, submitted, confirmed, failed
@@ -209,11 +213,13 @@ CREATE TABLE safety_content_flags (
     flag_type             TEXT NOT NULL
                           CHECK (flag_type IN (
                               'csam', 'explicit_content', 'violence', 'spam',
-                              'harassment', 'prohibited_content', 'text_violation'
+                              'harassment', 'prohibited_content', 'text_violation',
+                              'suspected_underage_exploitation'
                           )),
     confidence            DOUBLE PRECISION,        -- 0.0-1.0 for automated flags
     labels                JSONB,                   -- moderation labels from Rekognition or text scanner
     report_id             UUID REFERENCES safety_reports(id), -- NULL for automated, set for community reports
+    auto_rejected         BOOLEAN NOT NULL DEFAULT false,    -- true when upload was auto-rejected (§11.2.1)
 
     -- Resolution
     reviewed              BOOLEAN NOT NULL DEFAULT false,
@@ -246,7 +252,7 @@ CREATE TABLE safety_mod_actions (
                           CHECK (action_type IN (
                               'content_removed', 'warning_issued', 'account_suspended',
                               'account_banned', 'content_restored', 'suspension_lifted',
-                              'appeal_granted'
+                              'appeal_granted', 'escalate_to_csam'
                           )),
     reason                TEXT NOT NULL,            -- admin's rationale [S§12.7]
     report_id             UUID REFERENCES safety_reports(id),  -- originating report (if any)
@@ -412,7 +418,7 @@ Application-layer enforcement via `FamilyScope` extractor `[CODING §2.4, §2.5,
 | 5 | `POST` | `/v1/safety/appeals` | Required | Submit an appeal | 201, 401, 404, 409, 422 |
 | 6 | `GET` | `/v1/safety/appeals/:id` | Required | Get appeal status | 200, 401, 404 |
 
-### §4.2 Phase 1 — Admin Endpoints (14 endpoints)
+### §4.2 Phase 1 — Admin Endpoints (15 endpoints)
 
 | # | Method | Path | Auth | Description | Status Codes |
 |---|--------|------|------|-------------|-------------|
@@ -430,6 +436,7 @@ Application-layer enforcement via `FamilyScope` extractor `[CODING §2.4, §2.5,
 | A12 | `GET` | `/v1/admin/safety/appeals` | Admin | List appeals (filterable queue) | 200, 401, 403 |
 | A13 | `PATCH` | `/v1/admin/safety/appeals/:id` | Admin | Resolve appeal (grant/deny) | 200, 401, 403, 404, 422 |
 | A14 | `GET` | `/v1/admin/safety/dashboard` | Admin | Dashboard stats (counts, trends) | 200, 401, 403 |
+| A15 | `PATCH` | `/v1/admin/safety/flags/:id/escalate-csam` | Admin | Escalate flagged content to CSAM — triggers full §10 pipeline | 200, 401, 403, 404, 422 |
 
 ### §4.3 User Endpoint Details
 
@@ -812,6 +819,16 @@ pub trait SafetyService: Send + Sync {
         family_id: Uuid,
         scan_result: &CsamScanResult,
     ) -> Result<(), AppError>;
+
+    /// Escalate flagged/rejected content to CSAM (admin action). [§11.4.1]
+    /// Marks the flag as reviewed, then delegates to handle_csam_detection()
+    /// for the full §10 pipeline (evidence → NCMEC → ban → session revoke).
+    async fn admin_escalate_to_csam(
+        &self,
+        auth: &AuthContext,
+        flag_id: Uuid,
+        cmd: EscalateCsamCommand,
+    ) -> Result<(), AppError>;
 }
 ```
 
@@ -1136,11 +1153,17 @@ Adapter file: `src/safety/adapters/rekognition.rs`
 ```rust
 /// AWS Rekognition adapter for content moderation.
 ///
-/// Uses DetectModerationLabels to identify:
-/// - Explicit/suggestive content
-/// - Violence/graphic content
-/// - Drugs/tobacco/alcohol
-/// - Hate symbols
+/// Thin wrapper around DetectModerationLabels. Returns ALL raw labels from
+/// Rekognition without filtering — including categories the platform ignores
+/// (drugs, hate symbols, weapons). Label routing (which labels trigger
+/// auto-reject vs. flag vs. ignore) is handled by SafetyScanBridge (§11.2.2).
+///
+/// Rekognition returns labels for:
+/// - Explicit/suggestive content → routed by bridge (auto-reject or flag)
+/// - Violence/graphic content → routed by bridge (flag for review)
+/// - Drugs/tobacco/alcohol → ignored by bridge (educational content)
+/// - Hate symbols → ignored by bridge (educational content)
+/// - Weapons → ignored by bridge (educational content)
 ///
 /// Does NOT handle CSAM detection — that is ThornAdapter's responsibility.
 /// [ARCH §2.13, S§12.2]
@@ -1203,8 +1226,16 @@ impl SafetyScanAdapter for SafetyScanBridge {
         &self,
         storage_key: &str,
     ) -> Result<ModerationResult, ScanError> {
-        self.rekognition.detect_moderation_labels(storage_key).await
-            .map_err(|e| ScanError::Failed(e.to_string()))
+        // 1. Get raw labels from Rekognition (all categories, unfiltered)
+        let raw_result = self.rekognition.detect_moderation_labels(storage_key).await
+            .map_err(|e| ScanError::Failed(e.to_string()))?;
+
+        // 2. Apply platform's label routing table (§11.2.2)
+        //    - Nudity/explicit → auto_reject = true
+        //    - Suggestive/violence → has_violations = true, priority set
+        //    - Drugs/hate/weapons → discarded (ignored categories)
+        //    - Underage + sexual → critical priority
+        Ok(apply_label_routing(raw_result.labels, &self.config))
     }
 
     async fn report_csam(
@@ -1293,6 +1324,14 @@ pub struct ResolveAppealCommand {
     pub status: String,       // "granted" or "denied"
     #[validate(length(min = 5, max = 2000))]
     pub resolution_text: String,
+}
+
+/// Request to escalate flagged content to CSAM. [§11.4.1]
+/// Triggers the full §10 CSAM pipeline (evidence → NCMEC → ban → session revoke).
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct EscalateCsamCommand {
+    #[validate(length(min = 5, max = 2000))]
+    pub admin_notes: String,  // required justification for audit trail
 }
 ```
 
@@ -1488,6 +1527,9 @@ pub enum BotSignalType {
 /// Safety configuration.
 pub struct SafetyConfig {
     pub rekognition_min_confidence: f64,      // default: 70.0
+    pub nudity_auto_reject_labels: Vec<String>, // labels that trigger auto-rejection (§11.2.1)
+                                              // default: ["Explicit Nudity", "Nudity",
+                                              //           "Graphic Male Nudity", "Graphic Female Nudity"]
     pub bot_signal_threshold: i64,            // signals in window before auto-suspend (default: 5)
     pub bot_signal_window_minutes: u32,       // time window for signal counting (default: 60)
     pub text_scan_word_list_redis_key: String, // Redis key for keyword list
@@ -1786,8 +1828,145 @@ Media content (images, video) is scanned during the `media::ProcessUploadJob` pi
 1. **CSAM scan** (step 3) — via `ThornAdapter::scan_csam()` — see §10
 2. **Content moderation** (step 4) — via `RekognitionAdapter::detect_moderation_labels()`
 
-When `media::` publishes `UploadFlagged`, `safety::` creates a `safety_content_flags` record
-with `source = 'automated'` and the moderation labels.
+When `media::` publishes `UploadRejected` or `UploadFlagged`, `safety::` creates a
+`safety_content_flags` record with `source = 'automated'` and the moderation labels.
+
+### §11.2.1 Nudity Auto-Rejection Policy
+
+**Platform policy**: All nudity and explicit sexual content is auto-rejected on upload. This
+is a children's platform; there is no legitimate use case for nude imagery in user-generated
+content in Phase 1. `[S§12.2, V§7]`
+
+**Triggering labels**: Rekognition labels at confidence ≥ `rekognition_min_confidence`
+(default 70%):
+- `Explicit Nudity`
+- `Nudity`
+- `Graphic Male Nudity`
+- `Graphic Female Nudity`
+
+The specific label names are configurable via `SafetyConfig::nudity_auto_reject_labels`
+(see §8.4) to accommodate future Rekognition API changes without code modification.
+
+**Mechanism**: `SafetyScanBridge::scan_moderation()` reads the raw Rekognition labels,
+applies the label routing table (§11.2.2), and returns a `ModerationResult` with
+`auto_reject: bool`. When `auto_reject` is true, `media::ProcessUploadJob` sets status →
+`rejected` (instead of `flagged`) and publishes an `UploadRejected` event. `[09-media §10.4]`
+
+**User notification**: On `UploadRejected` event, `safety::` publishes a notification via
+`notify::` with a generic message: *"Your upload was not published because it violates our
+content guidelines."* The notification does NOT specify which policy was violated — this
+prevents users from gaming the detection system by iteratively testing boundary content.
+
+**Appeals**: Rejected uploads are appealable through the standard appeals flow (§12.4).
+This handles the anatomy textbook edge case: a parent can appeal, an admin reviews the
+content and context, and if it is legitimate educational material, the admin overrides the
+upload status to `published`. `[09-media §3.1: rejected → published]`
+
+**Audit trail**: When an upload is auto-rejected, `safety::` creates a `safety_content_flags`
+record with:
+- `source = 'automated'`
+- `flag_type = 'explicit_content'`
+- `auto_rejected = true` (new column — see §3.2 TABLE 2)
+- `labels` = the Rekognition labels that triggered rejection (JSONB)
+- `confidence` = highest confidence among triggering labels
+
+### §11.2.2 Rekognition Label Routing
+
+`SafetyScanBridge::scan_moderation()` applies a decision table to map raw Rekognition labels
+to upload outcomes. The routing logic lives entirely in the bridge — the `RekognitionAdapter`
+returns raw labels without filtering. `[09-media §7.2, §8.3]`
+
+**Decision table**:
+
+| Label Category | Example Labels | Confidence Threshold | Outcome |
+|---|---|---|---|
+| Nudity/Explicit | `Explicit Nudity`, `Nudity`, `Graphic Male Nudity`, `Graphic Female Nudity` | ≥ 70% | **Auto-reject** |
+| Suggestive | `Suggestive`, `Female Swimwear Or Underwear`, `Male Swimwear Or Underwear`, `Revealing Clothes` | ≥ 80% | **Flag for review** (normal priority) |
+| Violence/Graphic | `Violence`, `Graphic Violence Or Gore`, `Self-Injury` | ≥ 70% | **Flag for review** (normal priority) — age-appropriateness check, appealable |
+| Drugs/Tobacco/Alcohol | all | — | **Ignored** — legitimate educational content (science, health, history) |
+| Hate symbols | all | — | **Ignored** — legitimate educational content (history, civics, fiction) |
+| Weapons | all | — | **Ignored** — legitimate educational content (history, military studies) |
+| Suspected underage + sexual | Any nudity/suggestive label co-occurring with Rekognition's age-related indicators (e.g. `Minor` label or age range estimate) | ≥ 50% (lower threshold for child safety) | **Flag for review** (critical priority — same SLA as CSAM reports: < 24h) |
+
+> **Rationale for ignored categories**: This is a homeschooling platform. Educational resources
+> routinely contain imagery of historical atrocities (hate symbols), substance abuse education
+> (drugs/alcohol), and warfare (weapons/violence). Flagging or rejecting these would render
+> the platform unusable for history, science, and health curricula. Only content that poses
+> direct harm to children (sexual content, exploitation) warrants automated enforcement.
+
+**Routing logic** (`SafetyScanBridge::scan_moderation()`):
+
+```rust
+// Pseudocode — actual implementation follows Rust patterns
+fn apply_label_routing(
+    raw_labels: Vec<ModerationLabel>,
+    config: &SafetyConfig,
+) -> ModerationResult {
+    let mut auto_reject = false;
+    let mut has_violations = false;
+    let mut priority: Option<String> = None;
+    let mut kept_labels = Vec::new();
+
+    let has_underage_indicator = raw_labels.iter().any(|l|
+        is_underage_label(&l.name) && l.confidence >= 50.0
+    );
+
+    for label in &raw_labels {
+        if is_ignored_category(&label.name) {
+            continue; // Drugs, hate symbols, weapons — skip entirely
+        }
+
+        if config.nudity_auto_reject_labels.contains(&label.name)
+            && label.confidence >= config.rekognition_min_confidence
+        {
+            auto_reject = true;
+            has_violations = true;
+            kept_labels.push(label.clone());
+        } else if is_suggestive(&label.name)
+            && label.confidence >= 80.0
+        {
+            has_violations = true;
+            kept_labels.push(label.clone());
+            // Upgrade priority if underage indicators co-occur
+            if has_underage_indicator {
+                priority = Some("critical".into());
+            } else if priority.is_none() {
+                priority = Some("normal".into());
+            }
+        } else if is_violence(&label.name)
+            && label.confidence >= config.rekognition_min_confidence
+        {
+            has_violations = true;
+            kept_labels.push(label.clone());
+            if priority.is_none() {
+                priority = Some("normal".into());
+            }
+        }
+    }
+
+    // Underage + any nudity label → critical even if auto-rejecting
+    if has_underage_indicator && has_violations && !auto_reject {
+        priority = Some("critical".into());
+    }
+
+    ModerationResult {
+        has_violations,
+        auto_reject,
+        labels: kept_labels,
+        priority: if auto_reject { None } else { priority },
+    }
+}
+```
+
+**Critical priority routing**: When suspected underage + sexual labels co-occur (and the
+content is not auto-rejected), the resulting `safety_content_flags` record gets
+`flag_type = 'suspected_underage_exploitation'` and is routed to the top of the admin review
+queue at `critical` priority. This matches the CSAM report SLA: review within 24 hours.
+
+**Priority field on ModerationResult**: `priority: Option<String>` — `None` for auto-reject
+outcomes (rejected uploads don't enter the review queue), `Some("critical"|"high"|"normal")`
+for flagged items. The `UploadFlagged` event carries this priority through to the
+`safety_content_flags` record. `[09-media §16.3]`
 
 ### §11.3 Community Reporting Flow
 
@@ -1820,6 +1999,54 @@ The moderation queue is a prioritized list of unresolved reports and unreviewed 
 
 **Queue API**: `GET /v1/admin/safety/reports?status=pending&sort=priority` returns reports
 sorted by priority (critical first), then by creation time (oldest first within each priority).
+
+**Queue includes auto-rejected content flags**: Flags with `auto_rejected = true` appear in
+the admin queue as informational audit records. While the upload was already rejected, admins
+can review these records, and if the flag is a `suspected_underage_exploitation` type, it
+receives critical priority and must be reviewed for potential CSAM escalation (§11.4.1).
+
+### §11.4.1 CSAM Escalation from Review Queue
+
+When an admin reviewing flagged or auto-rejected content determines the content is actual
+CSAM (novel material not in PhotoDNA's hash database), they escalate it through the same
+§10 pipeline used for automated CSAM detection. This is a federal legal obligation —
+18 U.S.C. § 2258A applies regardless of whether CSAM was identified by software or a
+human reviewer. `[S§12.1]`
+
+```
+Admin confirms CSAM (PATCH /v1/admin/safety/flags/:id/escalate-csam)
+    │
+    ├─ 1. Validate: flag exists and is unreviewed
+    ├─ 2. Validate: caller is platform admin (RequireAdmin)
+    ├─ 3. Mark flag as reviewed (reviewed = true, action_taken = true)
+    ├─ 4. Create safety_mod_actions record (action_type: escalate_to_csam)
+    │     with admin_notes as reason (required audit trail justification)
+    ├─ 5. Delegate to SafetyService::handle_csam_detection()
+    │     → Same §10 pipeline: evidence preservation → NCMEC → ban → session revoke
+    │     → The CsamScanResult passed in has:
+    │       is_csam = true, hash = None (human-identified, not hash-matched),
+    │       confidence = None, matched_database = None
+    ├─ 6. media:: status changes from flagged/rejected → quarantined (irreversible)
+    └─ 7. Zero user notification (same as §10.5)
+```
+
+**Key design points**:
+- Reuses the existing `handle_csam_detection()` service method — no new pipeline needed.
+  The method already accepts `CsamScanResult` with optional hash fields.
+- The `safety_ncmec_reports` record will have `csam_hash = NULL` and
+  `matched_database = NULL` (human-identified, not hash-matched). The `confidence` field
+  is NULL. Thorn's API supports reports without a hash match (human-identified CSAM is
+  still reportable to NCMEC).
+- The `escalate_to_csam` mod action type creates a distinct audit trail entry showing
+  that a human escalated content to CSAM (vs. automated detection via §10).
+- CSAM bans from this path are equally non-appealable (same §10.6 rule).
+- The upload's status transitions to `quarantined` regardless of its previous state
+  (`flagged` or `rejected`). This is a new valid transition:
+  `flagged → quarantined` and `rejected → quarantined` (CSAM escalation only).
+
+**Endpoint**: `PATCH /v1/admin/safety/flags/:id/escalate-csam` — see §4.2 (A15).
+
+**Request type**: `EscalateCsamCommand` — see §8.1.
 
 ### §11.5 Reporter Notification
 
@@ -1863,6 +2090,7 @@ All moderation actions are **immutable audit records** in `safety_mod_actions`. 
 | `content_restored` | Previously removed content made visible again | N/A |
 | `suspension_lifted` | Suspension ended early (before expiry) | N/A |
 | `appeal_granted` | Appeal approved, reverses original action | N/A |
+| `escalate_to_csam` | Admin escalated flagged content to CSAM — triggers §10 pipeline | No (irreversible, same as automated CSAM) |
 
 ### §12.2 Account Status State Machine
 
@@ -2115,6 +2343,9 @@ pub enum SafetyError {
     #[error("invalid report status transition")]
     InvalidReportTransition,
 
+    #[error("flag already reviewed — cannot escalate")]
+    FlagAlreadyReviewed,
+
     #[error("account is suspended")]
     AccountSuspended,
 
@@ -2147,6 +2378,7 @@ pub enum SafetyError {
 | `SameAdminAppeal` | 422 | `same_admin` | "Appeal must be reviewed by a different administrator" |
 | `InvalidActionType` | 422 | `validation_error` | "Invalid action type" |
 | `InvalidReportTransition` | 422 | `validation_error` | "Invalid status transition" |
+| `FlagAlreadyReviewed` | 422 | `flag_already_reviewed` | "This flag has already been reviewed" |
 | `AccountSuspended` | 403 | `account_suspended` | "Your account has been temporarily suspended" |
 | `AccountBanned` | 403 | `account_banned` | "Your account has been permanently restricted" |
 | `ThornError` | 502 | `internal_error` | "An internal error occurred" |
@@ -2171,7 +2403,8 @@ impl From<SafetyError> for AppError {
             SafetyError::CsamBanNotAppealable
             | SafetyError::SameAdminAppeal
             | SafetyError::InvalidActionType
-            | SafetyError::InvalidReportTransition => AppError::Validation(err.to_string()),
+            | SafetyError::InvalidReportTransition
+            | SafetyError::FlagAlreadyReviewed => AppError::Validation(err.to_string()),
 
             SafetyError::AccountSuspended => AppError::AccountSuspended,
             SafetyError::AccountBanned => AppError::AccountBanned,
@@ -2214,6 +2447,7 @@ impl From<SafetyError> for AppError {
 | `iam::` | `IamService` | User/family lookup for report validation |
 | `iam::` | `KratosAdapter::revoke_sessions()` | Session revocation on ban |
 | `media::` | `UploadQuarantined` event | CSAM pipeline trigger |
+| `media::` | `UploadRejected` event | Auto-rejected content flag + user notification `[§11.2.1]` |
 | `media::` | `UploadFlagged` event | Moderation flag creation |
 
 ### §16.3 Events safety:: Publishes
@@ -2270,6 +2504,17 @@ pub struct AppealResolved {
     pub status: String,                    // "granted" or "denied"
 }
 impl DomainEvent for AppealResolved {}
+
+/// Published when an upload is auto-rejected by content policy (§11.2.1).
+/// Consumed by notify:: (generic rejection notification to uploader).
+/// Message: "Your upload was not published because it violates our content guidelines."
+/// Does NOT specify which policy was violated (prevents gaming).
+#[derive(Clone, Debug)]
+pub struct UploadAutoRejectedNotification {
+    pub family_id: Uuid,
+    pub upload_id: Uuid,
+}
+impl DomainEvent for UploadAutoRejectedNotification {}
 ```
 
 ### §16.4 Events safety:: Subscribes To
@@ -2280,6 +2525,7 @@ impl DomainEvent for AppealResolved {}
 | `MessageSent` | `social::` | `OnMessageSent` | Grooming detection (Phase 2). Note: `MessageSent` event does not include message content (PII concern). Handler retrieves text via `social::SocialService::get_message()`. |
 | `ReviewCreated` | `mkt::` | `OnReviewCreated` | Scan review text, create flag if violation found |
 | `UploadQuarantined` | `media::` | `OnUploadQuarantined` | Initiate CSAM pipeline (§10) |
+| `UploadRejected` | `media::` | `OnUploadRejected` | Create auto-rejected content flag + notify user (§11.2.1) |
 | `UploadFlagged` | `media::` | `OnUploadFlagged` | Create content flag record |
 | `MessageReported` | `social::` | `OnMessageReported` | Create report + flag from social message report |
 
@@ -2288,7 +2534,7 @@ impl DomainEvent for AppealResolved {}
 
 use crate::social::events::{PostCreated, MessageSent, MessageReported};
 use crate::mkt::events::ReviewCreated;
-use crate::media::events::{UploadQuarantined, UploadFlagged};
+use crate::media::events::{UploadQuarantined, UploadRejected, UploadFlagged};
 
 pub struct OnPostCreated {
     safety_service: Arc<dyn SafetyService>,
@@ -2326,6 +2572,42 @@ impl DomainEventHandler<UploadQuarantined> for OnUploadQuarantined {
     }
 }
 
+pub struct OnUploadRejected {
+    flag_repo: Arc<dyn ContentFlagRepository>,
+    events: Arc<EventBus>,
+}
+
+#[async_trait]
+impl DomainEventHandler<UploadRejected> for OnUploadRejected {
+    async fn handle(&self, event: &UploadRejected) -> Result<(), AppError> {
+        // Create auto-rejected content flag [§11.2.1]
+        let max_confidence = event.labels.iter()
+            .map(|l| l.confidence)
+            .fold(0.0_f64, f64::max);
+
+        self.flag_repo.create(CreateContentFlagRow {
+            source: "automated".into(),
+            target_type: "upload".into(),
+            target_id: event.upload_id,
+            target_family_id: Some(event.family_id),
+            flag_type: "explicit_content".into(),
+            confidence: Some(max_confidence),
+            labels: Some(serde_json::to_value(&event.labels)?),
+            report_id: None,
+            auto_rejected: true,
+        }).await?;
+
+        // Notify user via notify:: — generic rejection message
+        // "Your upload was not published because it violates our content guidelines."
+        self.events.publish(UploadAutoRejectedNotification {
+            family_id: event.family_id,
+            upload_id: event.upload_id,
+        }).await;
+
+        Ok(())
+    }
+}
+
 pub struct OnUploadFlagged {
     flag_repo: Arc<dyn ContentFlagRepository>,
 }
@@ -2333,16 +2615,25 @@ pub struct OnUploadFlagged {
 #[async_trait]
 impl DomainEventHandler<UploadFlagged> for OnUploadFlagged {
     async fn handle(&self, event: &UploadFlagged) -> Result<(), AppError> {
+        // Determine flag_type from labels — upgrade to suspected_underage_exploitation
+        // if priority is critical (see §11.2.2)
+        let flag_type = if event.priority.as_deref() == Some("critical") {
+            "suspected_underage_exploitation"
+        } else {
+            "explicit_content"
+        };
+
         // Create automated content flag from media moderation result
         self.flag_repo.create(CreateContentFlagRow {
             source: "automated".into(),
             target_type: "upload".into(),
             target_id: event.upload_id,
             target_family_id: Some(event.family_id),
-            flag_type: "explicit_content".into(),
+            flag_type: flag_type.into(),
             confidence: None,
             labels: Some(serde_json::to_value(&event.labels)?),
             report_id: None,
+            auto_rejected: false,
         }).await?;
         Ok(())
     }
@@ -2380,6 +2671,10 @@ impl DomainEventHandler<ReviewCreated> for OnReviewCreated {
 | `01-iam.md` | Expose `revoke_sessions()` on `KratosAdapter` | §7 |
 | `01-iam.md` | Move admin access from Phase 3 to Phase 1 | §17 |
 | `09-media.md` | Add `last_csam_scanned_at TIMESTAMPTZ` to `media_uploads` | §3.2 |
+| `09-media.md` | Add `rejected` status to upload state machine and CHECK constraint | §3.1, §3.2 |
+| `09-media.md` | Add `UploadRejected` event, update `UploadFlagged` with priority | §16.3 |
+| `09-media.md` | Add `auto_reject` and `priority` fields to `ModerationResult` | §8.3 |
+| `09-media.md` | Update `ProcessUploadJob` §10.4 for auto-reject vs. flag routing | §10.4 |
 
 ---
 
@@ -2387,21 +2682,24 @@ impl DomainEventHandler<ReviewCreated> for OnReviewCreated {
 
 ### Phase 1 (MVP)
 
-- **API**: 6 user endpoints + 14 admin endpoints = 20 endpoints
+- **API**: 6 user endpoints + 15 admin endpoints = 21 endpoints
 - **Database**: 7 tables (`safety_reports`, `safety_content_flags`, `safety_mod_actions`,
   `safety_account_status`, `safety_appeals`, `safety_ncmec_reports`, `safety_bot_signals`)
 - **Adapters**: Thorn Safer (CSAM), AWS Rekognition (moderation), SafetyScanBridge (media:: port)
-- **CSAM pipeline**: Full end-to-end (detect → quarantine → NCMEC → ban → session revoke)
+- **CSAM pipeline**: Full end-to-end (detect → quarantine → NCMEC → ban → session revoke),
+  including admin CSAM escalation from review queue (§11.4.1)
+- **Content moderation**: Nudity auto-rejection (§11.2.1), label routing table (§11.2.2),
+  flag-for-review for suggestive/violence, ignored categories (drugs/hate/weapons)
 - **Text scanning**: Keyword + regex matching (synchronous)
 - **Account enforcement**: Suspend/ban/lift with Redis-cached auth middleware check
 - **Reporting**: Full user reporting flow with priority queue
 - **Appeals**: Full appeals workflow with different-admin constraint
 - **Bot detection**: Signal recording + auto-suspend threshold
 - **Admin dashboard**: Basic stats endpoint
-- **Events published**: 4 (`ContentReported`, `ModerationActionTaken`, `AccountSuspended`,
-  `AppealResolved`)
-- **Events consumed**: 6 (`PostCreated`, `MessageSent`, `ReviewCreated`, `UploadQuarantined`,
-  `UploadFlagged`, `MessageReported`)
+- **Events published**: 5 (`ContentReported`, `ModerationActionTaken`, `AccountSuspended`,
+  `AppealResolved`, `UploadAutoRejectedNotification`)
+- **Events consumed**: 7 (`PostCreated`, `MessageSent`, `ReviewCreated`, `UploadQuarantined`,
+  `UploadRejected`, `UploadFlagged`, `MessageReported`)
 - **Jobs**: `CsamReportJob` (Critical), `CheckCsamHashUpdateJob` (Low, daily),
   `CsamRescanJob` (Low, event-driven — only when new hashes available)
 
@@ -2438,59 +2736,73 @@ impl DomainEventHandler<ReviewCreated> for OnReviewCreated {
 7. CSAM bans are not appealable
 8. `CsamRescanJob` runs only when Thorn signals new hashes are available (not on a fixed daily schedule)
 
-### Content Moderation
+### Content Moderation & Label Routing
 
 9. All user-generated text is scanned via `scan_text()` before persistence
 10. Media uploads are scanned via `SafetyScanAdapter` during `ProcessUploadJob`
-11. Community reports create both `safety_reports` and `safety_content_flags` records
-12. Report priority is set based on category (csam_child_safety → critical)
-13. Admin review queue is sorted by priority then age
-14. Reporter receives acknowledgment on submission and outcome notification on resolution
+11. Nudity labels above threshold → upload auto-rejected (not just flagged) `[§11.2.1]`
+12. Suspected underage + sexual labels → critical priority flag `[§11.2.2]`
+13. Drugs/tobacco/alcohol, hate symbols, weapons → ignored (educational content) `[§11.2.2]`
+14. Suggestive/violence labels → flagged for review at normal priority `[§11.2.2]`
+15. Auto-rejected upload generates generic user notification; CSAM quarantine does not
+16. Community reports create both `safety_reports` and `safety_content_flags` records
+17. Report priority is set based on category (csam_child_safety → critical)
+18. Admin review queue is sorted by priority then age
+19. Reporter receives acknowledgment on submission and outcome notification on resolution
 
 ### Moderation Actions
 
-15. All moderation actions create immutable `safety_mod_actions` records
-16. `safety_mod_actions` table is append-only (no UPDATE, no DELETE)
-17. Content removal, warning, suspension, and ban actions are available
-18. Account suspensions have configurable duration (1-365 days)
-19. Account bans are permanent (reversible only via appeal, except CSAM)
+20. All moderation actions create immutable `safety_mod_actions` records
+21. `safety_mod_actions` table is append-only (no UPDATE, no DELETE)
+22. Content removal, warning, suspension, ban, and CSAM escalation actions are available
+23. Account suspensions have configurable duration (1-365 days)
+24. Account bans are permanent (reversible only via appeal, except CSAM)
+
+### CSAM Escalation from Review Queue
+
+25. Admin CSAM escalation triggers full §10 pipeline (evidence → NCMEC → ban → revoke)
+26. `safety_ncmec_reports` accepts NULL `csam_hash` for human-identified CSAM
+27. Escalated content transitions to `quarantined` status (from `flagged` or `rejected`)
+28. `escalate_to_csam` action type creates distinct audit trail entry
 
 ### Account Enforcement
 
-20. Auth middleware checks account status via Redis cache (60s TTL)
-21. Cache is explicitly invalidated when account status changes
-22. Suspended accounts receive 403 with `account_suspended` code
-23. Banned accounts receive 403 with `account_banned` code
-24. Suspension expiry is handled lazily in `check_account_access()`
+29. Auth middleware checks account status via Redis cache (60s TTL)
+30. Cache is explicitly invalidated when account status changes
+31. Suspended accounts receive 403 with `account_suspended` code
+32. Banned accounts receive 403 with `account_banned` code
+33. Suspension expiry is handled lazily in `check_account_access()`
 
 ### Appeals
 
-25. Users can submit one appeal per moderation action
-26. CSAM bans are not appealable (validation enforced)
-27. Appeal reviewer MUST be different from original action admin
-28. Granted appeals reverse the original action (lift suspension, restore content)
-29. Both parties (user and admin) are notified of appeal outcome
+34. Users can submit one appeal per moderation action
+35. CSAM bans are not appealable (validation enforced)
+36. Rejected uploads are appealable; quarantined (CSAM) uploads are not
+37. Appeal reviewer MUST be different from original action admin
+38. Granted appeals reverse the original action (lift suspension, restore content)
+39. Both parties (user and admin) are notified of appeal outcome
 
 ### Bot Prevention
 
-30. CAPTCHA is required on registration (delegated to `iam::`)
-31. Bot signals are recorded from multiple domains (social, iam, core)
-32. Auto-suspend triggers when signal threshold is exceeded within time window
-33. Auto-suspensions are 24h pending manual review
+40. CAPTCHA is required on registration (delegated to `iam::`)
+41. Bot signals are recorded from multiple domains (social, iam, core)
+42. Auto-suspend triggers when signal threshold is exceeded within time window
+43. Auto-suspensions are 24h pending manual review
 
 ### Family-Scoping & Privacy
 
-34. User-facing report queries are family-scoped via `FamilyScope`
-35. Admin queries bypass family scope (documented per `[CODING §2.4]`)
-36. Internal error details are never exposed in API responses `[CODING §2.2]`
-37. PII (email, names) is never logged `[CODING §5.2]`
+44. User-facing report queries are family-scoped via `FamilyScope`
+45. Admin queries bypass family scope (documented per `[CODING §2.4]`)
+46. Internal error details are never exposed in API responses `[CODING §2.2]`
+47. PII (email, names) is never logged `[CODING §5.2]`
 
 ### Cross-Domain
 
-38. `SafetyScanAdapter` implementation correctly bridges to Thorn and Rekognition
-39. All 6 consumed events have registered handlers in `main.rs`
-40. All 4 published events have documented consumers
-41. `RequireAdmin` extractor is available in `00-core` for all admin endpoints
+48. `SafetyScanAdapter` implementation correctly bridges to Thorn and Rekognition
+49. `SafetyScanBridge` applies label routing table (§11.2.2) — not the adapter itself
+50. All 7 consumed events have registered handlers in `main.rs`
+51. All 5 published events have documented consumers
+52. `RequireAdmin` extractor is available in `00-core` for all admin endpoints
 
 ---
 
