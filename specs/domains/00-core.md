@@ -697,6 +697,12 @@ pub enum AppError {
     #[error("bad request: {0}")]
     BadRequest(String),
 
+    #[error("account suspended")]
+    AccountSuspended,
+
+    #[error("account banned")]
+    AccountBanned,
+
     #[error("internal error")]
     Internal(#[from] anyhow::Error),
 
@@ -718,6 +724,8 @@ pub enum AppError {
 | `Conflict(msg)` | 409 Conflict | `conflict` |
 | `RateLimited` | 429 Too Many Requests | `rate_limited` |
 | `BadRequest(msg)` | 400 Bad Request | `bad_request` |
+| `AccountSuspended` | 403 Forbidden | `account_suspended` |
+| `AccountBanned` | 403 Forbidden | `account_banned` |
 | `Internal(err)` | 500 Internal Server Error | `internal_error` |
 | `Database(err)` | 500 Internal Server Error | `internal_error` |
 
@@ -736,6 +744,8 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.as_str()),
             AppError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Rate limit exceeded"),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad_request", msg.as_str()),
+            AppError::AccountSuspended => (StatusCode::FORBIDDEN, "account_suspended", "Your account has been temporarily suspended"),
+            AppError::AccountBanned => (StatusCode::FORBIDDEN, "account_banned", "Your account has been permanently restricted"),
             AppError::Internal(err) => {
                 tracing::error!(error = %err, "internal server error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "An internal error occurred")
@@ -882,6 +892,7 @@ pub struct AuthContext {
     pub family_id: Uuid,
     pub kratos_identity_id: Uuid,
     pub is_primary_parent: bool,
+    pub is_platform_admin: bool,  // [S§3.1.5, 11-safety §9]
     pub subscription_tier: SubscriptionTier,
     pub email: String,  // NOT logged — PII [CODING §5.2]
 }
@@ -1488,7 +1499,11 @@ pub async fn auth_middleware(
 3. Look up the parent in the local database by `kratos_identity_id` (unscoped — FamilyScope
    does not exist yet)
 4. Look up the parent's family
-5. Build `AuthContext` from parent + family data
+5. Build `AuthContext` from parent + family data (including `is_platform_admin`)
+5.5. **[safety:: integration]** Check account access via
+   `SafetyService::check_account_access(family_id)`. Uses Redis cache (60s TTL). If the
+   account is suspended or banned, return `AccountSuspended` or `AccountBanned` error
+   immediately — do not proceed to the handler. `[11-safety §12.3]`
 6. Insert `AuthContext` into request extensions
 7. Call `next.run(req)`
 
@@ -1650,6 +1665,44 @@ where
 ```
 
 **Phase 2**: Used by co-parent management, family deletion, and COPPA withdrawal endpoints.
+
+#### `RequireAdmin`
+
+```rust
+/// Extracts AuthContext and verifies the user is a platform administrator.
+/// Returns 403 Forbidden if the user is not an admin. [S§3.1.5]
+///
+/// Backed by iam_parents.is_platform_admin column (01-iam §3.1).
+/// Phase 1: single boolean. Phase 2: granular admin roles. [11-safety §9]
+pub struct RequireAdmin(pub AuthContext);
+
+#[axum::async_trait]
+impl<S> FromRequestParts<S> for RequireAdmin
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let auth = parts
+            .extensions
+            .get::<AuthContext>()
+            .cloned()
+            .ok_or(AppError::Unauthorized)?;
+
+        if !auth.is_platform_admin {
+            return Err(AppError::Forbidden);
+        }
+
+        Ok(RequireAdmin(auth))
+    }
+}
+```
+
+**Consuming domains**: `safety::` (moderation dashboard, admin actions) `[11-safety §4.2]`
 
 ---
 

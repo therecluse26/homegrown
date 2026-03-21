@@ -135,6 +135,7 @@ CREATE TABLE iam_parents (
     display_name       TEXT NOT NULL,                          -- [S§6.2]
     email              TEXT NOT NULL,                          -- synced from Kratos traits
     is_primary         BOOLEAN NOT NULL DEFAULT false,         -- [S§3.1.1]
+    is_platform_admin  BOOLEAN NOT NULL DEFAULT false,         -- [S§3.1.5, 11-safety §9]
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -1257,6 +1258,7 @@ middleware (`src/middleware/auth.rs`, defined in 00-core §13.1) calls IAM's
    - `family_id` from parent record
    - `kratos_identity_id` from Kratos session
    - `is_primary_parent` from parent record
+   - `is_platform_admin` from parent record `[S§3.1.5, 11-safety §9]`
    - `subscription_tier` from family record
    - `email` from parent record (NOT logged — PII)
    - `coppa_consent_status` from family record (as String, for RequireCoppaConsent)
@@ -1284,6 +1286,7 @@ All extractors are defined in 00-core §13.3. IAM provides the data they operate
 | `RequirePremium` | 00-core §13.3 | `AuthContext.subscription_tier` | 402 if Free |
 | `RequireCreator` | 00-core §13.3 | `mkt_creators` lookup via parent_id | 403 if no creator account |
 | `RequireCoppaConsent` | 00-core §13.3 | `AuthContext.coppa_consent_status` | 403 if not consented |
+| `RequireAdmin` | 00-core §13.3 | `AuthContext.is_platform_admin` | 403 if not admin `[11-safety §9]` |
 | `RequirePrimaryParent` | 00-core §13.3 | `AuthContext.is_primary_parent` | 403 if not primary (Phase 2) |
 
 ---
@@ -1461,7 +1464,10 @@ on `iam_families`.
 
 ### Deferred (Phase 3+)
 
-- Platform administrator access and audit logging `[S§3.1.5]`
+- ~~Platform administrator access and audit logging `[S§3.1.5]`~~ **Moved to Phase 1** —
+  `is_platform_admin` column on `iam_parents` and `RequireAdmin` extractor are required by
+  `safety::` which is in the Phase 1 critical path. Granular admin role-based sub-permissions
+  remain Phase 2. `[11-safety §9]`
 - Supervised student views for ages 10+ `[S§3.3]`
 - GDPR compliance features (right to be forgotten, data portability) `[S§17.2]`
 

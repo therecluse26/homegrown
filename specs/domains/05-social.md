@@ -3278,7 +3278,7 @@ whether a block exists or content is being hidden. `[S§7.4]`
 | `PostCreated` event | `safety::`, `search::` | Domain event — content scan, search index |
 | `FriendRequestAccepted` event | `notify::` | Domain event — notification to requester |
 | `FriendRequestSent` event | `notify::` | Domain event — notification to target |
-| `MessageSent` event | `notify::` | Domain event — notification if recipient offline |
+| `MessageSent` event | `notify::`, `safety::` (Phase 2) | Domain event — notification if recipient offline, grooming detection `[11-safety §14.2]` |
 | `EventCancelled` event | `notify::` | Domain event — notification to RSVPed attendees |
 | `MessageReported` event | `safety::` | Domain event — moderation queue entry |
 

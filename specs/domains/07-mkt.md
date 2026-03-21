@@ -3202,6 +3202,7 @@ pub struct ReviewCreated {
     pub review_id: Uuid,
     pub listing_id: Uuid,
     pub rating: i16,
+    pub review_text: Option<String>,  // for safety:: text scanning [11-safety §11.2]
 }
 impl DomainEvent for ReviewCreated {}
 

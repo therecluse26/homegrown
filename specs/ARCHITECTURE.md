@@ -2821,7 +2821,7 @@ pub enum JobQueue {
 | **Search** | `IndexContentJob` | Default | Update search indexes on content change `[S§14]` |
 | **Marketplace** | `ProcessPayoutJob` | Default | Calculate and initiate creator payouts `[S§9.6]` |
 | **Notifications** | `CompileDigestJob` | Low | Build daily/weekly email digests `[S§13.3]` |
-| **Trust & Safety** | `PeriodicCsamRescanJob` | Low | Re-scan media against updated hash databases `[S§12.1]` |
+| **Trust & Safety** | `CheckCsamHashUpdateJob` | Low | Check for new CSAM hash databases; trigger rescan if updated `[S§12.1, 11-safety §10.7]` |
 | **Learning** | `ProgressAggregationJob` | Low | Aggregate progress metrics per student `[S§8.1.7]` |
 | **Billing** | `SubscriptionRenewalCheckJob` | Low | Check upcoming renewals, send reminders `[S§15.3]` |
 
@@ -2836,8 +2836,9 @@ pub fn register_recurring_jobs(scheduler: &mut Scheduler) {
     // Weekly on Mondays at 6:00 AM UTC — weekly digests [S§13.3]
     scheduler.add("0 6 * * 1", CompileDigestJob { digest_type: DigestType::Weekly });
 
-    // Daily at 3:00 AM UTC — CSAM hash database re-scan [S§12.1]
-    scheduler.add("0 3 * * *", PeriodicCsamRescanJob);
+    // Daily at 3:00 AM UTC — check for CSAM hash database updates [S§12.1, 11-safety §10.7]
+    // Triggers CsamRescanJob only when new hashes are available (event-driven, not blanket rescan)
+    scheduler.add("0 3 * * *", CheckCsamHashUpdateJob);
 
     // Hourly — aggregate progress metrics [S§8.1.7]
     scheduler.add("0 * * * *", ProgressAggregationJob);

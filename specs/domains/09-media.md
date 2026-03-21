@@ -157,6 +157,7 @@ CREATE TABLE media_uploads (
 
     -- Moderation (populated by safety:: scan results)
     moderation_labels     JSONB,                   -- Rekognition labels if flagged
+    last_csam_scanned_at  TIMESTAMPTZ,             -- for periodic CSAM rescan [11-safety §10.7]
 
     -- Lifecycle
     expires_at            TIMESTAMPTZ,             -- presigned URL expiry (for orphan cleanup)
@@ -186,6 +187,11 @@ CREATE INDEX idx_media_uploads_processing
 -- Published lookups (most common read path)
 CREATE INDEX idx_media_uploads_published
     ON media_uploads(status)
+    WHERE status = 'published';
+
+-- CSAM rescan: find published uploads needing periodic rescan [11-safety §10.7]
+CREATE INDEX idx_media_uploads_csam_rescan
+    ON media_uploads(last_csam_scanned_at NULLS FIRST)
     WHERE status = 'published';
 
 -- ─── media_processing_jobs ──────────────────────────────────────────────
