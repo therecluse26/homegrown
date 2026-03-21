@@ -232,13 +232,13 @@ Redis also serves as:
 | **Orchestration** | Hyperswitch (self-hosted Docker sidecar) |
 | **Payment processor** | Stripe (configured as a Hyperswitch connector) |
 | **Marketplace payments** | Hyperswitch split payments / sub-merchant accounts `[S§9.6]` |
-| **Subscriptions** | Hyperswitch or direct Stripe Billing — TBD in `billing::` spec `[S§15.3]` |
+| **Subscriptions** | Hyperswitch (native subscription engine) — resolved in `10-billing.md §7` `[S§15.3]` |
 | **Sales tax** | Stripe Tax (via Hyperswitch connector) `[S§15.4]` |
 | **1099-K** | Stripe handles for sub-merchant accounts `[S§9.6]` |
 
 **Rationale**: Hyperswitch provides processor-agnostic payment orchestration. The platform talks to Hyperswitch (self-hosted), which talks to Stripe as the underlying processor. This gives us the compliance benefits of Stripe (creator KYC, identity verification, 1099-K filing, sales tax) while adding the flexibility to swap or add processors without application code changes. Marketplace payments (split payments, creator sub-merchants, payouts) are managed through Hyperswitch's payment orchestration layer. See `specs/domains/07-mkt.md §7` for full marketplace payment details and `§18.5` for the Hyperswitch deployment architecture.
 
-**Note**: COPPA micro-charge verification `[S§1.4]` still uses the `billing::` adapter, which wraps Hyperswitch (or direct Stripe — TBD in `billing::` spec).
+**Note**: COPPA micro-charge verification `[S§1.4]` uses the `billing::` adapter, which wraps Hyperswitch for one-time payments. See `10-billing.md §13` for the full COPPA flow.
 
 **Revision trigger**: Swap Stripe connector for another processor if pricing or features change — only Hyperswitch connector configuration changes, no application code impact.
 
@@ -3515,17 +3515,17 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 ### 15.9 Billing `[S§15]`
 
-**Scope**: Free tier, marketplace transactions, payment processing, sales tax.
+**Scope**: Free tier default, COPPA micro-charge verification, Hyperswitch webhook skeleton, transaction history. Marketplace payments are owned by `mkt::` — see §15.7.
 
 | Component | Implementation |
 |-----------|---------------|
 | **Free tier** | Default `subscription_tier = 'free'` on all families `[S§15.1]` |
-| **Marketplace payments** | Stripe Checkout for marketplace purchases `[S§15.4]` |
-| **Sales tax** | Stripe Tax for automatic calculation and collection `[S§15.4]` |
+| **COPPA micro-charge** | $0.50 charge + refund via Hyperswitch one-time payment `[S§1.4, 10-billing §13]` |
+| **Webhook skeleton** | Hyperswitch billing webhook receiver with signature verification and idempotency `[10-billing §14]` |
 
-**Not in Phase 1**: Premium subscriptions, upgrade/downgrade flows.
+**Not in Phase 1**: Premium subscriptions, upgrade/downgrade flows, payment method management, invoices, creator payouts.
 
-**API Endpoints**: ~4 endpoints (create checkout session, webhook handler, purchase history).
+**API Endpoints**: ~4 endpoints (get subscription status, COPPA verify, webhook receiver, transaction history). See `10-billing.md` for full spec.
 
 ### 15.10 Notifications `[S§13]`
 

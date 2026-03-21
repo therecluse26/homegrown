@@ -1423,7 +1423,7 @@ Defined in `src/iam/events.rs`. `[CODING §8.4]`
 | `FamilyDeletionScheduled { family_id, delete_after }` | `billing::` | Cancel subscriptions |
 | | `notify::` | Send confirmation + cancellation link |
 | | All domains | Prepare for cascade deletion |
-| `PrimaryParentTransferred { family_id, old_primary, new_primary }` | `billing::` | Update Stripe customer |
+| `PrimaryParentTransferred { family_id, old_primary, new_primary }` | `billing::` | Update Hyperswitch customer `[10-billing §16.4]` |
 
 ### §13.4 Events IAM Subscribes To
 

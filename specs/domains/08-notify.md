@@ -24,7 +24,7 @@ one-click email unsubscribe, background jobs (`SendEmailJob`, `PushNotificationJ
 `CompileDigestJob`), WebSocket notification push (Redis pub/sub fan-out).
 
 **What notify:: does NOT own**: Triggering events (owned by source domains — `social::`,
-`learn::`, `mkt::`, `method::`, `onboard::`, `iam::`, `safety::`), WebSocket DM delivery
+`learn::`, `mkt::`, `method::`, `onboard::`, `iam::`, `safety::`, `billing::`), WebSocket DM delivery
 (owned by `social::`), user accounts and family membership (owned by `iam::`), WebSocket
 connection management (shared infrastructure via `social::` WebSocket server), content
 moderation decisions (owned by `safety::`), account verification and password reset emails
@@ -59,7 +59,10 @@ other spec sections are included where the notifications domain is involved.
 | Event cancellation with notification to RSVPed attendees | `[S§7.7]` | §9 (`event_cancelled` type), §17.1 (`EventCancelled` handler) |
 | Purchase receipts via email | `[S§9.4]` | §9 (`purchase_completed` type), §12 (Postmark template) |
 | Moderation action notifications | `[S§12.3]` | §9 (`content_flagged` type), §17.1 (`ContentFlagged` handler) |
-| Subscription renewal advance notice | `[S§15.3]` | §18 (Phase 3 — `billing::` event) |
+| Subscription created notification | `[S§15.3]` | §9 (`subscription_created` type), §17.1 (`SubscriptionCreated` handler) — Phase 2 |
+| Subscription plan change notification | `[S§15.3]` | §9 (`subscription_changed` type), §17.1 (`SubscriptionChanged` handler) — Phase 2 |
+| Subscription cancellation notification | `[S§15.3]` | §9 (`subscription_cancelled` type), §17.1 (`SubscriptionCancelled` handler) — Phase 2 |
+| Creator payout confirmation | `[S§15.3]` | §9 (`payout_completed` type), §17.1 (`PayoutCompleted` handler) — Phase 2 |
 
 > **Coverage note on `[S§13.1]` examples**: SPEC.md §13.1 lists illustrative notification types
 > per category using the word "Examples." This spec implements notification types for all domain
@@ -70,8 +73,10 @@ other spec sections are included where the notifications domain is involved.
 > `learn::` §19), reviews on creator content (no `ReviewCreated` subscriber for `notify::` in
 > `mkt::` §18.3 — review notification goes to `safety::` only), content updates for purchasers
 > (Phase 2 in `mkt::` §19), sale announcements (Phase 3), security alerts beyond moderation
-> (Kratos handles authentication emails directly `[ARCH §2.3]`), subscription changes (deferred
-> to `billing::` domain spec), and policy updates (admin tooling, Phase 3+). Each will be added
+> (Kratos handles authentication emails directly `[ARCH §2.3]`), subscription renewal advance
+> notice (Phase 3 — scheduled reminder before auto-renewal), and policy updates (admin tooling,
+> Phase 3+). Billing subscription lifecycle events (`SubscriptionCreated`, `SubscriptionChanged`,
+> `SubscriptionCancelled`, `PayoutCompleted`) are now covered in Phase 2. Each remaining type will be added
 > to the type registry when its source event is defined in the originating domain spec.
 
 > **Note on `CoParentInvited`**: `01-iam.md` §10.2 (line 1162) mentions a `CoParentInvited`
@@ -112,7 +117,9 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 --     onboarding_completed, activity_streak, milestone_achieved,
 --     book_completed, data_export_ready, purchase_completed,
 --     purchase_refunded, creator_onboarded, content_flagged,
---     co_parent_added, family_deletion_scheduled
+--     co_parent_added, family_deletion_scheduled,
+--     subscription_created, subscription_changed,
+--     subscription_cancelled, payout_completed
 -- Channel values: in_app, email
 -- Digest frequency values: immediate, daily, weekly, off
 ```
@@ -140,7 +147,9 @@ CREATE TABLE notify_notifications (
         'book_completed', 'data_export_ready',
         'purchase_completed', 'purchase_refunded',
         'creator_onboarded', 'content_flagged',
-        'co_parent_added', 'family_deletion_scheduled'
+        'co_parent_added', 'family_deletion_scheduled',
+        'subscription_created', 'subscription_changed',
+        'subscription_cancelled', 'payout_completed'
     )),
     category        TEXT        NOT NULL CHECK (category IN (
         'social', 'learning', 'marketplace', 'system'
@@ -189,7 +198,9 @@ CREATE TABLE notify_preferences (
         'book_completed', 'data_export_ready',
         'purchase_completed', 'purchase_refunded',
         'creator_onboarded', 'content_flagged',
-        'co_parent_added', 'family_deletion_scheduled'
+        'co_parent_added', 'family_deletion_scheduled',
+        'subscription_created', 'subscription_changed',
+        'subscription_cancelled', 'payout_completed'
     )),
     channel         TEXT        NOT NULL CHECK (channel IN ('in_app', 'email')),
     enabled         BOOLEAN     NOT NULL DEFAULT true,
@@ -455,6 +466,12 @@ pub trait NotificationService: Send + Sync {
     // iam:: events (Phase 2)
     async fn handle_co_parent_added(&self, event: &CoParentAdded) -> Result<(), AppError>;
     async fn handle_family_deletion_scheduled(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError>;
+
+    // billing:: events (Phase 2)
+    async fn handle_subscription_created(&self, event: &SubscriptionCreated) -> Result<(), AppError>;
+    async fn handle_subscription_changed(&self, event: &SubscriptionChanged) -> Result<(), AppError>;
+    async fn handle_subscription_cancelled(&self, event: &SubscriptionCancelled) -> Result<(), AppError>;
+    async fn handle_payout_completed(&self, event: &PayoutCompleted) -> Result<(), AppError>;
 
     // ─── Queries (read, no side effects) ────────────────────────────────
 
@@ -788,11 +805,17 @@ pub mod notification_types {
     pub const PURCHASE_COMPLETED: &str = "purchase_completed";
     pub const PURCHASE_REFUNDED: &str = "purchase_refunded";
     pub const CREATOR_ONBOARDED: &str = "creator_onboarded";
+    pub const PAYOUT_COMPLETED: &str = "payout_completed";
 
     // System
     pub const CONTENT_FLAGGED: &str = "content_flagged";
     pub const CO_PARENT_ADDED: &str = "co_parent_added";
     pub const FAMILY_DELETION_SCHEDULED: &str = "family_deletion_scheduled";
+
+    // Billing (Phase 2)
+    pub const SUBSCRIPTION_CREATED: &str = "subscription_created";
+    pub const SUBSCRIPTION_CHANGED: &str = "subscription_changed";
+    pub const SUBSCRIPTION_CANCELLED: &str = "subscription_cancelled";
 
     /// Types that cannot be disabled via preferences. [S§13.3]
     pub const SYSTEM_CRITICAL: &[&str] = &[
@@ -842,6 +865,10 @@ used by `create_notification`. System-critical types cannot be disabled.
 | `content_flagged` | system | `ContentFlagged` | `safety::` | "Content moderation update" | **Yes** | 1 |
 | `co_parent_added` | system | `CoParentAdded` | `iam::` | "A co-parent has been added to your family" | **Yes** | 2 |
 | `family_deletion_scheduled` | system | `FamilyDeletionScheduled` | `iam::` | "Your account is scheduled for deletion" | **Yes** | 2 |
+| `subscription_created` | system | `SubscriptionCreated` | `billing::` | "Welcome to Homegrown Premium!" | No | 2 |
+| `subscription_changed` | system | `SubscriptionChanged` | `billing::` | "Your subscription has been updated" | No | 2 |
+| `subscription_cancelled` | system | `SubscriptionCancelled` | `billing::` | "Your subscription has ended" | No | 2 |
+| `payout_completed` | marketplace | `PayoutCompleted` | `billing::` | "Your payout of {amount} has been sent" | No | 2 |
 
 ### Streak Detection Logic
 
@@ -1443,7 +1470,7 @@ No domain should import anything from `notify::`. The dependency graph is strict
 
 ### §17.3 Events notify:: Subscribes To
 
-`notify::` subscribes to 16 domain events from 6 source domains. Each event maps to a
+`notify::` subscribes to 20 domain events from 8 source domains. Each event maps to a
 handler struct in `src/notify/event_handlers.rs`. `[ARCH §4.6]`
 
 ```rust
@@ -1460,6 +1487,9 @@ use crate::learn::events::{
 use crate::mkt::events::{PurchaseCompleted, PurchaseRefunded, CreatorOnboarded};
 use crate::safety::events::ContentFlagged;
 use crate::iam::events::{CoParentAdded, FamilyDeletionScheduled};
+use crate::billing::events::{
+    SubscriptionCreated, SubscriptionChanged, SubscriptionCancelled, PayoutCompleted,
+};
 
 // ─── social:: events ─────────────────────────────────────────────────────
 
@@ -1650,6 +1680,52 @@ impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHand
         self.notification_service.handle_family_deletion_scheduled(event).await
     }
 }
+
+// ─── billing:: events (Phase 2) ─────────────────────────────────────────
+
+pub struct SubscriptionCreatedHandler {
+    notification_service: Arc<dyn NotificationService>,
+}
+
+#[async_trait]
+impl DomainEventHandler<SubscriptionCreated> for SubscriptionCreatedHandler {
+    async fn handle(&self, event: &SubscriptionCreated) -> Result<(), AppError> {
+        self.notification_service.handle_subscription_created(event).await
+    }
+}
+
+pub struct SubscriptionChangedHandler {
+    notification_service: Arc<dyn NotificationService>,
+}
+
+#[async_trait]
+impl DomainEventHandler<SubscriptionChanged> for SubscriptionChangedHandler {
+    async fn handle(&self, event: &SubscriptionChanged) -> Result<(), AppError> {
+        self.notification_service.handle_subscription_changed(event).await
+    }
+}
+
+pub struct SubscriptionCancelledHandler {
+    notification_service: Arc<dyn NotificationService>,
+}
+
+#[async_trait]
+impl DomainEventHandler<SubscriptionCancelled> for SubscriptionCancelledHandler {
+    async fn handle(&self, event: &SubscriptionCancelled) -> Result<(), AppError> {
+        self.notification_service.handle_subscription_cancelled(event).await
+    }
+}
+
+pub struct PayoutCompletedHandler {
+    notification_service: Arc<dyn NotificationService>,
+}
+
+#[async_trait]
+impl DomainEventHandler<PayoutCompleted> for PayoutCompletedHandler {
+    async fn handle(&self, event: &PayoutCompleted) -> Result<(), AppError> {
+        self.notification_service.handle_payout_completed(event).await
+    }
+}
 ```
 
 ### §17.4 Event Handler Detail
@@ -1675,6 +1751,10 @@ event payload, then call `create_notification()`. Special cases are noted below.
 | `ContentFlagged` | Content owner's `family_id` | System-critical: always delivered regardless of preferences |
 | `CoParentAdded` (Phase 2) | `family_id` | System-critical: always delivered |
 | `FamilyDeletionScheduled` (Phase 2) | `family_id` | System-critical: always delivered; includes cancellation URL |
+| `SubscriptionCreated` (Phase 2) | `family_id` | Email includes tier and billing interval |
+| `SubscriptionChanged` (Phase 2) | `family_id` | Email includes `change_type` (interval_change, renewal, reactivation) |
+| `SubscriptionCancelled` (Phase 2) | `family_id` | Email includes `effective_at` date; mentions data preservation |
+| `PayoutCompleted` (Phase 2) | Looked up via `creator_id` | Uses `iam::IamService` to resolve `creator_id → family_id`; email includes amount and currency |
 
 ---
 
@@ -1706,10 +1786,11 @@ notifications.
 - `CompileDigestJob` (daily at 6:00 AM UTC, weekly Monday 6:00 AM UTC)
 - Postmark broadcast stream for digest delivery
 - `CoParentAdded` and `FamilyDeletionScheduled` event handlers
+- `SubscriptionCreated`, `SubscriptionChanged`, `SubscriptionCancelled`, `PayoutCompleted` event handlers (`billing::` events)
 - Digest frequency preferences become functional (daily/weekly actually batch)
 - Notification retention purge (delete notifications older than 90 days)
 - Digest preview endpoint
-- **1 additional endpoint, 2 additional event handlers**
+- **1 additional endpoint, 6 additional event handlers**
 
 ### Phase 3+ — Scale `[S§19]`
 
@@ -1717,7 +1798,7 @@ notifications.
 - Mobile push notifications (APNs/FCM) via `PushNotificationJob`
 - Rich HTML email templates (Phase 1 uses simple Postmark templates)
 - Notification grouping/collapsing (e.g., "3 new messages" instead of 3 separate notifications)
-- `billing::` subscription renewal notifications (when billing domain ships)
+- `billing::` subscription renewal advance notice (scheduled reminder before auto-renewal)
 
 ---
 
@@ -1795,7 +1876,7 @@ src/notify/
 ├── ports.rs                  # NotificationService trait, all repository
 │                             # traits, EmailAdapter trait
 ├── errors.rs                 # NotifyError thiserror enum
-├── event_handlers.rs         # 16 DomainEventHandler structs (one per
+├── event_handlers.rs         # 20 DomainEventHandler structs (one per
 │                             # subscribed event type) [ARCH §4.6]
 ├── jobs.rs                   # SendEmailJob, PushNotificationJob (Phase 2),
 │                             # CompileDigestJob (Phase 2) [ARCH §12]
