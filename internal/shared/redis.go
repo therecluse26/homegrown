@@ -2,7 +2,6 @@ package shared
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -10,8 +9,9 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// CreateRedisClient creates a Redis client and validates connectivity via PING. [§10.1]
-func CreateRedisClient(ctx context.Context, cfg *config.AppConfig) (*redis.Client, error) {
+// CreateCache creates a Cache backed by Redis and validates connectivity via PING. [§10.1]
+// The returned Cache interface hides all Redis types — callers import only shared.Cache.
+func CreateCache(ctx context.Context, cfg *config.AppConfig) (Cache, error) {
 	opts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis URL: %w", err)
@@ -24,65 +24,60 @@ func CreateRedisClient(ctx context.Context, cfg *config.AppConfig) (*redis.Clien
 		return nil, fmt.Errorf("redis ping failed: %w", err)
 	}
 
-	return client, nil
+	return &redisCache{client: client}, nil
 }
 
-// ─── Generic Helpers ─────────────────────────────────────────────────────────
+// ─── redisCache ───────────────────────────────────────────────────────────────
+// redisCache is the unexported Redis implementation of Cache.
+// The redis package is isolated here — it MUST NOT appear in any other file
+// except cmd/server/main.go (which imports it only to call CreateCache). [ARCH §4.1]
 
-// RedisGet retrieves a JSON-serialized value from Redis.
-// Returns nil, nil if the key does not exist (cache miss).
-func RedisGet[T any](ctx context.Context, client *redis.Client, key string) (*T, error) {
-	val, err := client.Get(ctx, key).Result()
+type redisCache struct {
+	client *redis.Client
+}
+
+func (r *redisCache) Get(ctx context.Context, key string) (string, error) {
+	val, err := r.client.Get(ctx, key).Result()
 	if err == redis.Nil {
-		return nil, nil
+		// Cache miss — return empty string sentinel as documented by Cache.Get.
+		return "", nil
 	}
 	if err != nil {
-		return nil, ErrInternal(fmt.Errorf("redis get: %w", err))
+		return "", ErrInternal(fmt.Errorf("cache get: %w", err))
 	}
-
-	var result T
-	if err := json.Unmarshal([]byte(val), &result); err != nil {
-		return nil, ErrInternal(fmt.Errorf("redis unmarshal: %w", err))
-	}
-	return &result, nil
+	return val, nil
 }
 
-// RedisSet stores a JSON-serialized value in Redis with a TTL.
-func RedisSet[T any](ctx context.Context, client *redis.Client, key string, value T, ttl time.Duration) error {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return ErrInternal(fmt.Errorf("redis marshal: %w", err))
-	}
-	if err := client.Set(ctx, key, string(data), ttl).Err(); err != nil {
-		return ErrInternal(fmt.Errorf("redis set: %w", err))
+func (r *redisCache) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
+	if err := r.client.Set(ctx, key, value, ttl).Err(); err != nil {
+		return ErrInternal(fmt.Errorf("cache set: %w", err))
 	}
 	return nil
 }
 
-// RedisDelete removes a key from Redis.
-func RedisDelete(ctx context.Context, client *redis.Client, key string) error {
-	if err := client.Del(ctx, key).Err(); err != nil {
-		return ErrInternal(fmt.Errorf("redis del: %w", err))
+func (r *redisCache) Delete(ctx context.Context, key string) error {
+	if err := r.client.Del(ctx, key).Err(); err != nil {
+		return ErrInternal(fmt.Errorf("cache del: %w", err))
 	}
 	return nil
 }
 
-// ─── Rate Limiting ────────────────────────────────────────────────────────────
-
-// RedisIncrementWithExpiry increments a counter and sets expiry on first increment.
-// Returns the new counter value. Used by rate limiting middleware. [§10.3]
-func RedisIncrementWithExpiry(ctx context.Context, client *redis.Client, key string, window time.Duration) (int64, error) {
-	count, err := client.Incr(ctx, key).Result()
+func (r *redisCache) IncrementWithExpiry(ctx context.Context, key string, window time.Duration) (int64, error) {
+	count, err := r.client.Incr(ctx, key).Result()
 	if err != nil {
-		return 0, ErrInternal(fmt.Errorf("redis incr: %w", err))
+		return 0, ErrInternal(fmt.Errorf("cache incr: %w", err))
 	}
 
 	if count == 1 {
 		// First request in window — set expiry so the key self-cleans.
-		if err := client.Expire(ctx, key, window).Err(); err != nil {
-			return 0, ErrInternal(fmt.Errorf("redis expire: %w", err))
+		if err := r.client.Expire(ctx, key, window).Err(); err != nil {
+			return 0, ErrInternal(fmt.Errorf("cache expire: %w", err))
 		}
 	}
 
 	return count, nil
+}
+
+func (r *redisCache) Close() error {
+	return r.client.Close()
 }

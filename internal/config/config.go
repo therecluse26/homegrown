@@ -33,17 +33,17 @@ type AppConfig struct {
 	// Example: "redis://localhost:6379"
 	RedisURL string
 
-	// ─── Ory Kratos ─────────────────────────────────────────────────
-	// Kratos Admin API URL (internal sidecar, never public).
+	// ─── Auth Provider ───────────────────────────────────────────────
+	// Auth provider admin API URL (internal sidecar, never public).
 	// Example: "http://kratos:4434"
-	KratosAdminURL string
+	AuthAdminURL string
 
-	// Kratos Public API URL (browser-facing, session validation).
+	// Auth provider public API URL (browser-facing, session validation).
 	// Example: "http://kratos:4433"
-	KratosPublicURL string
+	AuthPublicURL string
 
-	// Shared secret for Kratos webhook signature validation.
-	KratosWebhookSecret string
+	// Shared secret for auth provider webhook signature validation.
+	AuthWebhookSecret string
 
 	// ─── CORS ───────────────────────────────────────────────────────
 	// Comma-separated list of allowed origins.
@@ -87,17 +87,17 @@ func LoadConfig() (*AppConfig, error) {
 		return nil, err
 	}
 
-	kratosAdminURL, err := requiredEnv("KRATOS_ADMIN_URL")
+	authAdminURL, err := requiredEnv("AUTH_ADMIN_URL")
 	if err != nil {
 		return nil, err
 	}
 
-	kratosPublicURL, err := requiredEnv("KRATOS_PUBLIC_URL")
+	authPublicURL, err := requiredEnv("AUTH_PUBLIC_URL")
 	if err != nil {
 		return nil, err
 	}
 
-	kratosWebhookSecret, err := requiredEnv("KRATOS_WEBHOOK_SECRET")
+	authWebhookSecret, err := requiredEnv("AUTH_WEBHOOK_SECRET")
 	if err != nil {
 		return nil, err
 	}
@@ -154,9 +154,9 @@ func LoadConfig() (*AppConfig, error) {
 		DatabaseURL:            databaseURL,
 		DatabaseMaxConnections: maxConns,
 		RedisURL:               redisURL,
-		KratosAdminURL:         kratosAdminURL,
-		KratosPublicURL:        kratosPublicURL,
-		KratosWebhookSecret:    kratosWebhookSecret,
+		AuthAdminURL:           authAdminURL,
+		AuthPublicURL:          authPublicURL,
+		AuthWebhookSecret:      authWebhookSecret,
 		CORSAllowedOrigins:     origins,
 		ServerHost:             serverHost,
 		ServerPort:             serverPort,

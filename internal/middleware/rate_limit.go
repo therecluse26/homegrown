@@ -6,17 +6,16 @@ import (
 
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
-	"github.com/redis/go-redis/v9"
 )
 
 // rateLimitDeps is the interface that AppState must satisfy for rate limiting.
 // Defined here to avoid importing app/ (which would create a circular dependency).
 type rateLimitDeps interface {
-	GetRedis() *redis.Client
+	GetCache() shared.Cache
 }
 
 // RateLimit returns a middleware that enforces per-IP or per-user request rate limits
-// using Redis atomic counters. [§13.2, ARCH §3.3]
+// using cache atomic counters. [§13.2, ARCH §3.3]
 //
 // Key format: rl:{scope}:{identifier}:{window_start_unix}
 // On exceeded limit: returns 429 with Retry-After header (seconds until window expires).
@@ -24,15 +23,13 @@ func RateLimit(deps rateLimitDeps, limit int, window time.Duration) echo.Middlew
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			ctx := c.Request().Context()
-			redisClient := deps.GetRedis()
 
 			scope, identifier := resolveRateLimitIdentity(c)
 			key := buildRateLimitKey(scope, identifier, window)
 
-			count, err := shared.RedisIncrementWithExpiry(ctx, redisClient, key, window)
+			count, err := shared.CacheIncrementWithExpiry(ctx, deps.GetCache(), key, window)
 			if err != nil {
-				// Redis failure should not block requests — degrade gracefully.
-				// The error is already logged inside RedisIncrementWithExpiry.
+				// Cache failure should not block requests — degrade gracefully.
 				return next(c)
 			}
 
@@ -70,7 +67,7 @@ func hashIP(ip string) string {
 	return fmt.Sprintf("%x", h)
 }
 
-// buildRateLimitKey constructs the Redis key for a given scope/identifier/window.
+// buildRateLimitKey constructs the cache key for a given scope/identifier/window.
 func buildRateLimitKey(scope, identifier string, window time.Duration) string {
 	// window_start is the Unix timestamp rounded down to the window boundary,
 	// creating a fixed slot so all requests in the same period share one counter.

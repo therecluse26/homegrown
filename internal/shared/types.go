@@ -87,7 +87,7 @@ func ParseSubscriptionTier(s string) SubscriptionTier {
 type AuthContext struct {
 	ParentID           uuid.UUID        `json:"parent_id"`
 	FamilyID           uuid.UUID        `json:"family_id"`
-	KratosIdentityID   uuid.UUID        `json:"kratos_identity_id"`
+	IdentityID         uuid.UUID        `json:"identity_id"`
 	IsPrimaryParent    bool             `json:"is_primary_parent"`
 	IsPlatformAdmin    bool             `json:"is_platform_admin"`  // [S§3.1.5, 11-safety §9]
 	SubscriptionTier   SubscriptionTier `json:"subscription_tier"`

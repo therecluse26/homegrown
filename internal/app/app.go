@@ -11,16 +11,18 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 // AppState holds shared infrastructure and domain service interfaces.
+// All third-party vendor types are hidden behind generic ports defined in shared/.
 // Domain service fields are uncommented as each domain is implemented. [§5.1]
 type AppState struct {
 	// ─── Infrastructure ─────────────────────────────────────────────
 	DB       *gorm.DB
-	Redis    *redis.Client
+	Cache    shared.Cache
+	Auth     shared.SessionValidator // nil until 01-iam wires KratosSessionValidator
+	Errors   shared.ErrorReporter
 	EventBus *shared.EventBus
 	Config   *config.AppConfig
 	Version  string // Set via -ldflags at build time
@@ -36,19 +38,20 @@ type AppState struct {
 // AppState satisfies the unexported interfaces defined in internal/middleware/.
 // This avoids a circular import (middleware cannot import app).
 
-// GetKratosPublicURL satisfies middleware.authDeps.
-func (s *AppState) GetKratosPublicURL() string {
-	return s.Config.KratosPublicURL
+// GetAuthValidator satisfies middleware.authDeps.
+// Returns nil until 01-iam wires a concrete KratosSessionValidator.
+func (s *AppState) GetAuthValidator() shared.SessionValidator {
+	return s.Auth
+}
+
+// GetCache satisfies middleware.rateLimitDeps.
+func (s *AppState) GetCache() shared.Cache {
+	return s.Cache
 }
 
 // GetDB satisfies any future middleware interface requiring database access.
 func (s *AppState) GetDB() *gorm.DB {
 	return s.DB
-}
-
-// GetRedis satisfies middleware.rateLimitDeps.
-func (s *AppState) GetRedis() *redis.Client {
-	return s.Redis
 }
 
 // GetConfig returns the application config (for middleware and other consumers).
@@ -167,6 +170,6 @@ func corsConfig(cfg *config.AppConfig) echomw.CORSConfig {
 			http.MethodDelete,
 		},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		AllowCredentials: true, // Required for Kratos session cookies
+		AllowCredentials: true, // Required for auth provider session cookies
 	}
 }

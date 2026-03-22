@@ -71,12 +71,27 @@ func main() {
 	}
 	slog.Info("database migrations applied")
 
-	// ── Step 5: Create Redis client ───────────────────────────────────────────────
+	// ── Step 5: Create cache ──────────────────────────────────────────────────────
 	ctx := context.Background()
-	redisClient, err := shared.CreateRedisClient(ctx, cfg)
+	cache, err := shared.CreateCache(ctx, cfg)
 	if err != nil {
-		slog.Error("failed to connect to Redis", "error", err)
+		slog.Error("failed to connect to cache", "error", err)
 		os.Exit(1)
+	}
+
+	// ── Step 5.5: Init Sentry error reporter ──────────────────────────────────────
+	var errReporter shared.ErrorReporter = shared.NoopErrorReporter{}
+	if cfg.SentryDSN != nil {
+		if initErr := sentry.Init(sentry.ClientOptions{
+			Dsn:              *cfg.SentryDSN,
+			Release:          version,
+			TracesSampleRate: 0.1,
+		}); initErr != nil {
+			slog.Error("sentry initialization failed", "error", initErr)
+			// Non-fatal: continue with noop reporter.
+		} else {
+			errReporter = sentryReporter{}
+		}
 	}
 
 	// ── Step 6: Init EventBus + register subscriptions ───────────────────────────
@@ -88,7 +103,9 @@ func main() {
 	// ── Step 7: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
-		Redis:    redisClient,
+		Cache:    cache,
+		Auth:     nil, // wired in 01-iam via KratosSessionValidator
+		Errors:   errReporter,
 		EventBus: eventBus,
 		Config:   cfg,
 		Version:  version,
@@ -108,8 +125,9 @@ func main() {
 
 	// ── Step 10: Graceful shutdown ────────────────────────────────────────────────
 	gracefulShutdown(ctx, e, func() {
-		if closeErr := redisClient.Close(); closeErr != nil {
-			slog.Error("redis close error", "error", closeErr)
+		errReporter.Flush(5 * time.Second)
+		if closeErr := cache.Close(); closeErr != nil {
+			slog.Error("cache close error", "error", closeErr)
 		}
 		if closeErr := sqlDB.Close(); closeErr != nil {
 			slog.Error("database close error", "error", closeErr)
@@ -117,6 +135,13 @@ func main() {
 		slog.Info("server stopped")
 	})
 }
+
+// sentryReporter wraps the Sentry SDK behind the shared.ErrorReporter port.
+// The sentry package is isolated here and in initSentry — it MUST NOT appear elsewhere.
+type sentryReporter struct{}
+
+func (sentryReporter) CaptureException(err error) { sentry.CaptureException(err) }
+func (sentryReporter) Flush(d time.Duration) bool  { return sentry.Flush(d) }
 
 // gracefulShutdown listens for SIGINT/SIGTERM and shuts the server down cleanly.
 // Waits up to 30 seconds for in-flight requests to complete. [§4.3]
@@ -150,17 +175,6 @@ func initLogger(cfg *config.AppConfig) {
 	}
 
 	slog.SetDefault(slog.New(handler))
-
-	// Optional Sentry integration [ARCH §2.14]
-	if cfg.SentryDSN != nil {
-		if err := sentry.Init(sentry.ClientOptions{
-			Dsn:              *cfg.SentryDSN,
-			Release:          version,
-			TracesSampleRate: 0.1,
-		}); err != nil {
-			slog.Error("sentry initialization failed", "error", err)
-		}
-	}
 }
 
 // parseLogLevel converts a string log level to slog.Level.
