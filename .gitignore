@@ -1,0 +1,44 @@
+# Environment — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Go build artifacts
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test artifacts
+*.test
+*.out
+/tmp/
+
+# OpenAPI generated output
+openapi/spec.yaml
+openapi/docs.go
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage.out
+coverage.html
+
+# Swaggo generated docs
+docs/

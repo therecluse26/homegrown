@@ -1,0 +1,94 @@
+version: v1.3.0
+
+dsn: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
+
+serve:
+  public:
+    base_url: http://localhost:4433
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:5173
+      allowed_methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Content-Type
+        - Authorization
+        - Cookie
+      exposed_headers:
+        - Set-Cookie
+      allow_credentials: true
+  admin:
+    base_url: http://localhost:4434
+
+selfservice:
+  default_browser_return_url: http://localhost:5173/
+
+  flows:
+    registration:
+      ui_url: http://localhost:5173/auth/registration
+      after:
+        password:
+          hooks:
+            - hook: web_hook
+              config:
+                url: http://host.docker.internal:3000/hooks/kratos/post-registration
+                method: POST
+                body: file:///etc/kratos/webhook-body.jsonnet
+                auth:
+                  type: api_key
+                  config:
+                    name: X-Webhook-Secret
+                    value: dev-webhook-secret-change-in-production
+                    in: header
+
+    login:
+      ui_url: http://localhost:5173/auth/login
+      after:
+        password:
+          hooks:
+            - hook: web_hook
+              config:
+                url: http://host.docker.internal:3000/hooks/kratos/post-login
+                method: POST
+                body: file:///etc/kratos/webhook-body.jsonnet
+                auth:
+                  type: api_key
+                  config:
+                    name: X-Webhook-Secret
+                    value: dev-webhook-secret-change-in-production
+                    in: header
+
+    verification:
+      enabled: true
+      ui_url: http://localhost:5173/auth/verification
+
+    recovery:
+      enabled: true
+      ui_url: http://localhost:5173/auth/recovery
+
+  methods:
+    password:
+      enabled: true
+      config:
+        min_password_length: 10
+        identifier_similarity_check_enabled: true
+
+identity:
+  default_schema_id: user
+  schemas:
+    - id: user
+      url: file:///etc/kratos/identity.schema.json
+
+session:
+  lifespan: 720h
+  cookie:
+    same_site: Lax
+
+courier:
+  smtp:
+    connection_uri: smtp://mailhog:1025/?skip_ssl_verify=true
