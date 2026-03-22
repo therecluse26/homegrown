@@ -1886,3 +1886,145 @@ src/notify/
 │                             # API, returns domain types only [ARCH §2.12]
 └── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
 ```
+
+---
+
+## §21 Addendum: Email Operations Detail `[S§13.2, ARCH §2.12]`
+
+*Added to address spec gaps in email template management, deliverability, and bounce handling.*
+
+### §21.1 Transactional Email Templates
+
+All transactional emails use Postmark message streams with server-side templates.
+Templates are managed as code (version-controlled) and synced to Postmark via CI.
+
+**Email template catalog** (Phase 1):
+
+| Template ID | Trigger | Category |
+|-------------|---------|----------|
+| `welcome` | Account creation | Account |
+| `email-verification` | Registration / email change | Account |
+| `password-reset` | Password reset request (via Kratos) | Account |
+| `coppa-consent` | COPPA consent request | Account |
+| `co-parent-invitation` | Co-parent invited to family | Account |
+| `account-deletion-confirm` | Account deletion requested | Account |
+| `account-deletion-cancelled` | Account deletion cancelled | Account |
+| `data-export-ready` | Data export completed | Account |
+| `purchase-receipt` | Marketplace purchase completed | Marketplace |
+| `creator-sale-notification` | Creator's content was purchased | Marketplace |
+| `payout-processed` | Creator payout sent | Marketplace |
+| `friend-request` | New friend request received | Social |
+| `message-received` | New direct message (if email pref enabled) | Social |
+| `event-reminder` | Upcoming event reminder | Social |
+| `quiz-completed` | Student completed a quiz | Learning |
+| `assignment-completed` | Student completed an assignment | Learning |
+| `moderation-action` | Content removed / account warned | Safety |
+| `security-alert` | Suspicious session detected | Security |
+| `session-revoked` | "Sign out everywhere" completed | Security |
+
+### §21.2 Template Management
+
+```
+frontend/emails/
+├── templates/
+│   ├── welcome.html          # Postmark template (HTML + text)
+│   ├── purchase-receipt.html
+│   └── ...
+├── layouts/
+│   └── base.html             # Shared header/footer with brand
+└── sync.ts                   # Script to sync templates to Postmark API
+```
+
+Templates follow these rules:
+- All templates MUST have both HTML and plaintext versions
+- HTML templates MUST be responsive (mobile-friendly)
+- Templates MUST NOT include tracking pixels or external image loads (privacy)
+- Template variables use Postmark's `{{variable}}` syntax
+- Templates are synced to Postmark via `npm run sync-email-templates` (CI step)
+
+### §21.3 Deliverability Monitoring
+
+| Metric | Source | Alert Threshold |
+|--------|--------|-----------------|
+| **Bounce rate** | Postmark webhook | > 5% in 24 hours |
+| **Spam complaint rate** | Postmark webhook | > 0.1% in 24 hours |
+| **Delivery rate** | Postmark dashboard | < 95% in 24 hours |
+| **Open rate** (transactional) | Postmark dashboard | < 40% (investigate subject lines) |
+
+### §21.4 Bounce & Complaint Handling
+
+Postmark sends webhooks for bounces and spam complaints. The `PostmarkEmailAdapter`
+processes these:
+
+```rust
+// Webhook handler for Postmark bounce notifications
+pub async fn handle_postmark_bounce(
+    &self,
+    bounce: PostmarkBounceWebhook,
+) -> Result<(), AppError> {
+    match bounce.bounce_type.as_str() {
+        // Hard bounce: email address is invalid
+        "HardBounce" => {
+            // Mark email as undeliverable in notify_email_status
+            self.repo.mark_email_undeliverable(&bounce.email).await?;
+            // After 3 hard bounces, suppress all emails to this address
+            let count = self.repo.count_hard_bounces(&bounce.email).await?;
+            if count >= 3 {
+                self.repo.suppress_email(&bounce.email).await?;
+                tracing::warn!(
+                    email = %bounce.email,
+                    "Email suppressed after 3 hard bounces"
+                );
+            }
+        }
+        // Spam complaint: user marked email as spam
+        "SpamComplaint" => {
+            // Immediately suppress all emails to this address (CAN-SPAM)
+            self.repo.suppress_email(&bounce.email).await?;
+            tracing::warn!(
+                email = %bounce.email,
+                "Email suppressed due to spam complaint"
+            );
+        }
+        // Soft bounce: temporary issue (mailbox full, etc.)
+        _ => {
+            // Log but don't suppress — Postmark handles retries
+            tracing::info!(
+                email = %bounce.email,
+                bounce_type = %bounce.bounce_type,
+                "Soft bounce received"
+            );
+        }
+    }
+    Ok(())
+}
+```
+
+### §21.5 CAN-SPAM Compliance
+
+- All marketing/digest emails MUST include an unsubscribe link (one-click via Postmark)
+- Transactional emails (receipts, security alerts, COPPA) are exempt from unsubscribe
+  requirements but SHOULD still include preference management links
+- Physical mailing address MUST be included in marketing emails (platform's business address)
+- Unsubscribe requests MUST be honored within 10 business days (Postmark handles immediately)
+- The email preference system (§13) provides granular opt-out per notification category
+
+### §21.6 Schema Addition
+
+```sql
+-- Track email delivery status for bounce management
+CREATE TABLE notify_email_status (
+    email           VARCHAR(255) PRIMARY KEY,
+    is_suppressed   BOOLEAN NOT NULL DEFAULT false,
+    hard_bounce_count INT NOT NULL DEFAULT 0,
+    last_bounce_at  TIMESTAMPTZ,
+    suppressed_at   TIMESTAMPTZ,
+    suppression_reason VARCHAR(30)
+                    CHECK (suppression_reason IN ('hard_bounce', 'spam_complaint', 'manual')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+Before sending any email, the `SendEmailJob` checks `notify_email_status` — if the
+email is suppressed, the job completes without sending (logged but not delivered).

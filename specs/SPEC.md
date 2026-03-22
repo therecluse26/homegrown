@@ -62,6 +62,9 @@ The platform is organized into the following logical domains. Each domain encaps
 | 12 | **Notifications** | In-app notifications, email delivery, user preferences, digest management | V§7, V§8, V§9 |
 | 13 | **Search** | Full-text search across social, learning, and marketplace content; autocomplete; faceted filtering | V§7, V§8, V§9 |
 | 14 | **Content & Media** | File uploads, image processing, media storage, content delivery | All |
+| 15 | **Data Lifecycle** | Data export, account deletion, retention policies, account recovery, portability | V§4, V§12 |
+| 16 | **Administration** | Platform admin interface, user management, content management, system health, feature flags | V§7, V§12 |
+| 17 | **Planning & Scheduling** | Calendar views, daily/weekly planning, recurring schedules, co-op coordination | V§8 |
 
 ### 2.2 Domain Boundary Rationale
 
@@ -76,6 +79,8 @@ The following concerns span all domains and MUST be addressed consistently:
 - **Rate Limiting** — All public-facing endpoints MUST enforce rate limits.
 - **Data Privacy** — All domains MUST comply with the privacy model (§17.2).
 - **Methodology Configuration** — Domains that vary behavior by methodology MUST consume configuration from the Methodology domain, not embed methodology logic.
+- **Accessibility** — All user-facing features MUST conform to WCAG 2.1 Level AA (§17.6). Accessibility is not a post-launch concern.
+- **Print Readiness** — All compliance, scheduling, and progress output MUST be printable or exportable to PDF (§17.9).
 
 ---
 
@@ -1135,15 +1140,58 @@ The platform MUST comply with the Children's Online Privacy Protection Act:
 - Planned maintenance MUST be scheduled during low-traffic periods with advance notice to users.
 - The platform MUST implement automated health monitoring and alerting.
 
-### 17.6 Accessibility
+### 17.6 Accessibility `[V§12]`
 
-- The platform MUST conform to **WCAG 2.1 Level AA** accessibility standards.
-- All interactive elements MUST be keyboard-navigable.
-- All images MUST have appropriate alt text.
-- Color MUST NOT be the sole means of conveying information.
-- The platform MUST support screen readers.
-- Form fields MUST have associated labels.
-- The platform SHOULD conduct accessibility audits before each major release.
+Homeschooling includes families with special-needs children and parents with disabilities. Accessibility is a launch requirement, not a post-launch enhancement.
+
+#### 17.6.1 Standard
+
+- The platform MUST conform to **WCAG 2.1 Level AA** accessibility standards across all user-facing pages.
+- WCAG 2.1 Level AAA SHOULD be targeted for critical learning paths (quiz-taking, content viewing, progress dashboards) where feasible.
+
+#### 17.6.2 Perceivable
+
+- All images MUST have appropriate alt text; decorative images MUST use empty `alt=""`.
+- All video content MUST support captions (marketplace creators MUST be able to upload caption files; platform-generated video MUST auto-generate captions in Phase 2).
+- Color MUST NOT be the sole means of conveying information (e.g., progress indicators MUST use shape, text, or pattern in addition to color).
+- Text content MUST maintain a minimum **4.5:1 contrast ratio** (Level AA); large text (18px+ or 14px+ bold) MUST maintain **3:1**.
+- The platform MUST be usable at up to 200% browser zoom without loss of content or functionality.
+- Dynamic content updates (notifications, feed updates, quiz feedback) MUST use ARIA live regions to announce changes to assistive technology.
+
+#### 17.6.3 Operable
+
+- All interactive elements MUST be keyboard-navigable using standard patterns (Tab, Shift+Tab, Enter, Space, Arrow keys, Escape).
+- Focus order MUST follow a logical reading sequence. Focus MUST NOT be trapped in any component (except modal dialogs, which MUST allow Escape to close).
+- Skip navigation links MUST be provided on all pages.
+- No content MAY flash more than 3 times per second.
+- Touch targets MUST be at least 44×44 CSS pixels on mobile viewports.
+- Drag-and-drop interactions (e.g., schedule planning, sequence building) MUST provide keyboard-accessible alternatives.
+
+#### 17.6.4 Understandable
+
+- Form fields MUST have visible labels (not placeholder-only). Error messages MUST be associated with their fields programmatically.
+- Form validation errors MUST be announced to screen readers and MUST identify the field in error and describe the expected input.
+- Navigation MUST be consistent across pages (same components in same relative order).
+- Interactive content (quizzes, sequences) MUST provide clear instructions before starting and clear feedback after each interaction.
+
+#### 17.6.5 Robust
+
+- All pages MUST produce valid HTML (no duplicate IDs, proper nesting, correct ARIA usage).
+- The platform MUST be tested against current versions of NVDA (Windows), VoiceOver (macOS/iOS), and TalkBack (Android).
+- Custom interactive components (date pickers, dropdowns, modals, tabs) MUST follow WAI-ARIA Authoring Practices patterns.
+
+#### 17.6.6 Testing & Compliance
+
+- Automated accessibility testing (e.g., `axe-core`) MUST be integrated into CI — zero critical or serious violations.
+- Manual accessibility testing MUST be conducted before each major release using at least one screen reader.
+- The platform SHOULD maintain a **Voluntary Product Accessibility Template (VPAT)** documenting conformance for institutional users (co-ops, umbrella schools).
+- Accessibility regression tests MUST be included for interactive learning features (quiz engine, video player, sequence navigation).
+
+#### 17.6.7 Accommodations for Learning Differences (Phase 3)
+
+- The platform SHOULD support user-configurable display preferences: font size, font family (including dyslexia-friendly options), line spacing, and reduced motion.
+- Content creators SHOULD be encouraged to provide multiple representation formats (text + audio + visual) for marketplace content.
+- The platform SHOULD support IEP/504 plan tracking as an optional learning tool (deferred to Phase 3, informed by user research).
 
 ### 17.7 Internationalization Readiness
 
@@ -1160,6 +1208,53 @@ The platform MUST comply with the Children's Online Privacy Protection Act:
 - The platform MUST be fully responsive from 320px (mobile) to 2560px (ultrawide) viewport widths. `[V§11]`
 - Touch interactions MUST be supported for tablet and mobile browsers.
 - The platform MUST NOT require browser plugins or extensions.
+
+### 17.9 Print & Physical Output
+
+Homeschool families regularly need printed materials for state compliance reviews, co-op requirements, umbrella school submissions, and personal record-keeping.
+
+- The platform MUST provide print-friendly views (via `@media print` stylesheets or dedicated print layouts) for:
+  - Daily and weekly schedules (Planning domain)
+  - Attendance records and compliance reports (Compliance domain)
+  - Progress summaries and report cards (Learning domain)
+  - Portfolio pages (Compliance domain, Phase 2)
+  - Transcripts (Compliance domain, Phase 3)
+- Print views MUST omit navigation, sidebars, and interactive controls. Content MUST reflow to standard paper sizes (US Letter 8.5"×11" and A4).
+- The platform MUST support **PDF export** for compliance reports, attendance records, and progress summaries. PDF export SHOULD be available for all printable views.
+- Marketplace content creators SHOULD be able to mark listings as "includes printable materials" and provide print-optimized PDF files for download.
+- Print output MUST include the family name, date range, and generation timestamp for audit trail purposes.
+
+### 17.10 Error Recovery & Resilience
+
+The platform MUST handle partial failures gracefully, especially for operations involving external services or multi-step workflows.
+
+- **Idempotency**: All payment operations (checkout, payout, subscription renewal) MUST be idempotent — retrying a request MUST NOT produce duplicate charges or duplicate records. Endpoints that create resources SHOULD accept an optional client-generated `idempotency_key`.
+- **Webhook resilience**: All incoming webhook handlers (Kratos, Hyperswitch, Thorn) MUST be idempotent. Duplicate webhook deliveries MUST NOT produce duplicate side effects.
+- **Upload recovery**: File uploads that fail after partial transfer SHOULD support resumable upload (Phase 2). In Phase 1, upload failure MUST surface a clear error message and MUST NOT leave orphaned storage objects.
+- **Quiz session durability**: Active quiz sessions MUST persist progress server-side. A browser crash or network interruption MUST NOT lose already-submitted answers. Students MUST be able to resume an interrupted quiz session.
+- **Background job recovery**: Failed background jobs MUST be retried with exponential backoff (maximum 3 retries for most jobs; CSAM reporting jobs MUST retry until successful or escalated to manual review). Jobs that exhaust retries MUST be moved to a dead-letter queue for manual inspection.
+- **Circuit breaker**: External service calls (Thorn, Rekognition, Hyperswitch, Postmark) MUST implement circuit breaker patterns — if an external service fails repeatedly, the circuit opens and returns a fallback response (e.g., queuing email for later delivery rather than failing the request).
+- **Graceful degradation**: If a non-critical external service is unavailable (e.g., Rekognition for content moderation), the platform SHOULD continue operating with degraded functionality (e.g., queueing content for manual review) rather than rejecting user requests entirely. Critical services (e.g., Kratos for authentication) MAY cause the platform to enter a maintenance mode.
+
+### 17.11 API Evolution & Versioning
+
+- All API endpoints MUST be versioned under a `/v1` prefix.
+- Breaking changes to existing endpoints MUST NOT be deployed to the current version prefix. A new version prefix (`/v2`) MUST be introduced for breaking changes.
+- A breaking change is defined as: removing a field, changing a field's type, changing a field from optional to required, renaming a field, or changing the semantics of an existing field value.
+- Additive changes (new optional fields in responses, new optional query parameters, new endpoints) are NOT breaking and MAY be deployed to the current version.
+- When a new API version is introduced, the prior version MUST continue to be supported for a minimum of **6 months** with deprecation notices in response headers (`Deprecation: true`, `Sunset: <date>`).
+- API consumers (including the first-party React SPA) MUST NOT rely on undocumented response fields.
+- A changelog MUST be maintained documenting all API changes (additive and breaking) with dates and migration guidance.
+
+### 17.12 Legal & Terms Framework
+
+- The platform MUST present **Terms of Service** and **Privacy Policy** to users during account creation. Users MUST explicitly accept before account creation completes.
+- Terms and policies MUST be versioned. When terms are updated, existing users MUST be notified and MUST accept updated terms on next login.
+- The **Privacy Policy** MUST comply with COPPA requirements (§17.2) and MUST clearly explain: what data is collected, how it is used, how long it is retained, and how families can request deletion or export.
+- The platform MUST define **Marketplace Creator Agreement** terms covering: content licensing (what rights the platform receives to host, deliver, and promote listed content), prohibited content, revenue share, refund policies, and dispute resolution.
+- **Content licensing**: Creators MUST retain ownership of their intellectual property. The platform receives a non-exclusive license to host, distribute, and display content to purchasers. The platform MUST NOT use creator content for AI training without explicit creator opt-in.
+- **Dispute resolution**: The platform MUST define a process for disputes between buyers and sellers (e.g., content not as described, refund requests). The process SHOULD include: automated refund window (within 7 days of purchase for digital content), escalation to platform support, and final resolution by the platform.
+- **Content takedown**: The platform MUST comply with DMCA takedown requests for copyrighted content in the marketplace. A documented process for filing and responding to takedown notices MUST be maintained.
 
 ---
 
@@ -1224,6 +1319,36 @@ This section defines the key data flows between domains. These contracts are log
 - **Data**: Quiz completion (score, pass/fail), sequence advancement, sequence completion, assignment status changes.
 - **Trigger**: On `QuizCompleted`, `SequenceAdvanced`, `SequenceCompleted`, `AssignmentCompleted` domain events.
 
+### 18.9 Planning ↔ Learning
+
+- **Contract**: The Planning domain synthesizes learning activities, compliance attendance, and social events into a unified calendar view.
+- **Direction**: Learning → Planning (activity data for calendar display); Planning → Learning (scheduled activities create activity log drafts).
+- **Data**: Activity dates and durations, attendance records, event dates and times.
+- **Trigger**: On activity creation/update, attendance log changes, or event creation.
+- **Guarantee**: Calendar views MUST reflect data changes within 1 minute.
+
+### 18.10 Planning ↔ Social
+
+- **Contract**: Social events appear on the family calendar. Co-op schedules integrate with weekly planning.
+- **Direction**: Social → Planning (event dates, group recurring schedules); Planning → Social (RSVP from calendar view).
+- **Data**: Event details (date, time, location, group), RSVP status.
+
+### 18.11 Data Lifecycle → All Domains
+
+- **Contract**: Data lifecycle orchestrates data export and deletion across all domains.
+- **Direction**: Data Lifecycle → (IAM, Learning, Social, Marketplace, Compliance, Notifications, Planning, Media)
+- **Data**: Export manifest (what data to include), deletion directive (what data to remove).
+- **Trigger**: On `DataExportRequested` or `AccountDeletionRequested` events.
+- **Guarantee**: Export MUST complete within 24 hours. Deletion MUST complete within 30 days (regulatory requirement). COPPA deletion requests MUST be processed within the timeframe required by law.
+
+### 18.12 Administration → All Domains
+
+- **Contract**: The admin domain provides cross-domain management capabilities — user lookup, content removal, configuration editing, system health monitoring.
+- **Direction**: Administration → (IAM, Safety, Marketplace, Learning, Social, Methodology, Billing)
+- **Data**: Admin action records (who did what, when), system health metrics.
+- **Trigger**: On admin actions (user suspension, content removal, config change).
+- **Guarantee**: Admin actions MUST be logged immutably. Admin configuration changes MUST take effect within 1 minute.
+
 ---
 
 ## 19. Phased Rollout & MVP Definition `[V§11]`
@@ -1247,8 +1372,11 @@ This section defines the key data flows between domains. These contracts are log
 | **Search** | Full-text search (social + marketplace), basic autocomplete |
 | **Content & Media** | Image/file upload, storage, delivery |
 | **Privacy/Compliance** | COPPA compliance, privacy policy, terms of service, data export |
+| **Data Lifecycle** | Family data export (JSON/CSV), account deletion with grace period, COPPA deletion compliance, data retention policies |
+| **Administration** | Basic admin dashboard: user lookup, content removal queue, moderation dashboard, system health overview |
+| **Planning** | Weekly/daily calendar view synthesizing activities + events, basic schedule creation |
 
-**Not in Phase 1**: Premium subscriptions, AI recommendations, compliance reporting, portfolios, transcripts, user-created groups, advanced analytics, methodology-specific advanced tools, content annotations/bookmarks, video DRM.
+**Not in Phase 1**: Premium subscriptions, AI recommendations, compliance reporting, portfolios, transcripts, user-created groups, advanced analytics, methodology-specific advanced tools, content annotations/bookmarks, video DRM, recurring schedule templates, printable schedule exports.
 
 ### Phase 2 — Premium & Depth
 
@@ -1266,6 +1394,10 @@ This section defines the key data flows between domains. These contracts are log
 | **Content annotations** | In-platform PDF bookmarks and annotations |
 | **Mentorship** | Methodology-matched mentor/mentee connections |
 | **Creator payouts** | Payout scheduling, 1099-K, advanced creator analytics |
+| **Planning (full)** | Recurring schedule templates, printable weekly plans, co-op day coordination, schedule sharing with friends |
+| **Print exports** | Print-friendly views and PDF export for schedules, attendance, progress reports |
+| **Admin (full)** | Feature flags, methodology config editing, system metrics dashboard, operational runbooks |
+| **Account recovery** | Multi-step account recovery flow, identity verification, manual support escalation |
 
 ### Phase 3 — Scale & Specialize
 
@@ -1280,6 +1412,8 @@ This section defines the key data flows between domains. These contracts are log
 | **Portfolios** | Customizable PDF portfolio generation |
 | **Mobile apps** | Native iOS and Android applications |
 | **Enhanced moderation** | Grooming detection, advanced behavioral analysis |
+| **Accessibility accommodations** | Dyslexia-friendly fonts, configurable display preferences, IEP/504 plan tracking |
+| **Resumable uploads** | Resumable file upload for large media files |
 
 ### Phase 4 — Expansion
 
@@ -1341,17 +1475,35 @@ Each question includes a recommended position based on analysis of the vision do
 
 **Recommended Position**: **None for MVP** beyond payment processing. In Phase 3, explore integrations with library systems (book data), standardized testing providers (score import), and popular calendar applications (event sync). Each integration adds maintenance burden and third-party dependency.
 
-### 20.8 Accessibility for Students with Disabilities
+### 20.8 Accessibility for Students with Disabilities — RESOLVED
 
 **Question**: How should the platform support students with learning disabilities or special needs?
 
-**Recommended Position**: **WCAG 2.1 AA baseline** (§17.6) ensures the platform is accessible. Specialized tools (e.g., IEP tracking, accommodation logging, dyslexia-friendly rendering) SHOULD be deferred to Phase 3, informed by user research with special-needs homeschooling families. The flexible, methodology-agnostic approach already supports individualized learning.
+**Resolution**: **WCAG 2.1 AA baseline** is now fully specified in §17.6 with sub-sections for perceivable, operable, understandable, and robust criteria, plus automated testing in CI. Specialized tools (IEP tracking, dyslexia-friendly rendering, configurable display preferences) are deferred to Phase 3 (§17.6.7, §19 Phase 3). The expanded §17.6 ensures the platform is usable by families with disabilities from launch. Accommodation-specific tools will be informed by user research with special-needs homeschooling families.
 
 ### 20.9 Worldview Tagging Governance
 
 **Question**: How should worldview tags on marketplace content be managed?
 
 **Recommended Position**: **Creator self-reported with community flagging for miscategorization**. Creators select applicable worldview tags when listing content `[V§12]`. Users MAY flag content they believe is miscategorized. Flagged items are reviewed by moderators. This balances creator autonomy with community trust, aligned with content neutrality `[V§12]`.
+
+### 20.10 Marketplace Content Update Policy
+
+**Question**: When a creator publishes a new version of marketplace content, what happens to existing purchasers?
+
+**Recommended Position**: **Free updates within a major version; opt-in for major version upgrades**. Creators define a major version (e.g., "v1", "v2") when publishing significant rewrites. Purchasers of v1 automatically receive minor updates (typo fixes, additional resources) but are not automatically upgraded to v2. Creators MAY offer v2 as a free upgrade or at a discounted price. Student progress on v1 quizzes/sequences MUST be preserved regardless of content updates — the quiz session references a specific version snapshot. This balances creator revenue with purchaser expectations.
+
+### 20.11 Session Concurrency Limits
+
+**Question**: Should the platform limit concurrent sessions per family account?
+
+**Recommended Position**: **No hard limit, but visibility and control required**. Families may have multiple parents and devices. The platform SHOULD display active sessions in account settings (device type, last active, approximate location). Parents MUST be able to revoke individual sessions or all sessions ("sign out everywhere"). Suspicious concurrent session patterns (e.g., sessions from geographically distant locations within minutes) SHOULD trigger a security notification but MUST NOT automatically lock the account without clear abuse evidence.
+
+### 20.12 Load Testing Strategy
+
+**Question**: How should the platform validate its performance targets (32K-52K req/sec)?
+
+**Recommended Position**: **Pre-launch load testing with synthetic traffic**. Before public launch, conduct load testing against a staging environment using tools such as `k6` or `locust`. Define per-endpoint latency targets (p50 < 50ms, p99 < 500ms for standard API calls; p99 < 2s for search and analytics queries). Establish a load testing runbook that is repeated before each major release. Application-level metrics (quiz completion rate, marketplace conversion) SHOULD be tracked via Sentry performance monitoring and CloudWatch custom metrics (Phase 2).
 
 ---
 

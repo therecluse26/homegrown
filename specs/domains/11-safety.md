@@ -3141,3 +3141,140 @@ src/safety/
 │   └── scan_bridge.rs            # SafetyScanBridge — media::SafetyScanAdapter impl
 └── entities/                     # SeaORM-generated — NEVER hand-edit [CODING §4.2]
 ```
+
+---
+
+## §21 Addendum: Extended Abuse Prevention `[S§12, S§17.10]`
+
+*Added to address spec gaps in abuse vectors beyond CSAM and content moderation.*
+
+### §21.1 Abuse Vector Catalog
+
+The safety domain owns detection and response for all abuse vectors beyond content
+moderation (§11) and CSAM (§10). This addendum catalogs the remaining vectors and
+specifies mitigation strategies.
+
+| Vector | Description | Detection | Response |
+|--------|-------------|-----------|----------|
+| **Account takeover** | Attacker gains access to a family account | Impossible travel detection (concurrent sessions from distant geolocations); password change after unusual login pattern | Security alert email; temporary session lock pending re-authentication; admin notification |
+| **Credential stuffing** | Automated login attempts with leaked credentials | Rate limiting on `/v1/auth/login` (10/min per IP, via 00-core middleware); Kratos failed login tracking | CAPTCHA escalation after 5 failures; IP-level block after 20 failures (24h cooldown) |
+| **Social spam** | Mass friend requests, message spam, group post flooding | Behavioral signals (§13.2 existing): rapid posting, mass friend requests, high message volume | Auto-suspend pending review; rate limits on social actions |
+| **Marketplace fraud** | Fake reviews, self-purchasing, price manipulation | Delegated to `mkt::` fraud signals `[07-mkt §23]` | `MktFraudSignalDetected` event → safety:: creates moderation report |
+| **Payment fraud** | Stolen card usage for marketplace purchases | Delegated to Hyperswitch/Stripe fraud detection | Chargeback webhook → auto-suspend purchasing; admin review |
+| **Group abuse** | Malicious group creation (hate groups, grooming) | Group name/description scanning via text scanner; community reports | Group takedown; creator suspension; escalation for child safety concerns |
+| **Profile abuse** | Inappropriate profile content, impersonation | Profile image scanning via Rekognition; username screening | Content removal; profile suspension |
+
+### §21.2 Account Takeover Detection
+
+```rust
+/// Impossible travel detection — flags concurrent sessions from distant geolocations
+pub struct ImpossibleTravelDetector {
+    max_speed_kmh: f64,  // ~900 km/h (commercial airline speed)
+}
+
+impl ImpossibleTravelDetector {
+    /// Check if a new session is suspicious based on the user's recent sessions.
+    /// Returns true if the new session location is impossibly distant from the
+    /// most recent session location given the time elapsed.
+    pub fn is_suspicious(
+        &self,
+        new_session: &SessionGeoInfo,
+        recent_sessions: &[SessionGeoInfo],
+    ) -> bool {
+        // Uses city-level geolocation only (no GPS) [S§7.8]
+        // City centers are approximate — allow generous margins
+        for session in recent_sessions {
+            let time_hours = (new_session.started_at - session.last_active_at)
+                .num_minutes() as f64 / 60.0;
+            let distance_km = haversine_distance(
+                session.city_lat, session.city_lon,
+                new_session.city_lat, new_session.city_lon,
+            );
+            if time_hours > 0.0 && distance_km / time_hours > self.max_speed_kmh {
+                return true;
+            }
+        }
+        false
+    }
+}
+```
+
+**Flow**: On new session creation → check against recent sessions → if suspicious →
+publish `SuspiciousSessionDetected` event → `notify::` sends security alert email →
+`admin_audit_log` records the event.
+
+Note: City-level coordinates are used ONLY for this calculation and are derived from IP
+geolocation at session creation time. They are NOT stored as user data and are NOT
+associated with the user's profile. `[S§7.8]`
+
+### §21.3 Credential Stuffing Protection
+
+Credential stuffing protection is layered:
+
+1. **Rate limiting** (00-core middleware): 10 login attempts per minute per IP `[ARCH §10.6]`
+2. **CAPTCHA escalation**: After 5 failed login attempts for an email, subsequent attempts
+   require CAPTCHA verification (delegated to `iam::` registration CAPTCHA infrastructure)
+3. **IP blocking**: After 20 failed attempts from a single IP in 24 hours, the IP is
+   temporarily blocked (24-hour cooldown via Redis)
+4. **Breach detection** (Phase 2): Integrate with Have I Been Pwned API to warn users
+   if their email appears in known breaches
+
+```rust
+/// Track failed login attempts for credential stuffing detection
+pub async fn record_failed_login(
+    redis: &RedisPool,
+    email: &str,
+    ip: &str,
+) -> Result<LoginAttemptStatus, AppError> {
+    let email_key = format!("login:fail:email:{}", email);
+    let ip_key = format!("login:fail:ip:{}", ip);
+
+    let email_count: u32 = redis.incr(&email_key, 1).await?;
+    redis.expire(&email_key, 3600).await?; // 1-hour window
+
+    let ip_count: u32 = redis.incr(&ip_key, 1).await?;
+    redis.expire(&ip_key, 86400).await?; // 24-hour window
+
+    if ip_count >= 20 {
+        return Ok(LoginAttemptStatus::IpBlocked);
+    }
+    if email_count >= 5 {
+        return Ok(LoginAttemptStatus::CaptchaRequired);
+    }
+    Ok(LoginAttemptStatus::Normal)
+}
+```
+
+### §21.4 Payment Fraud Handling
+
+Payment fraud detection is primarily handled by Hyperswitch/Stripe's built-in fraud
+detection systems. Safety domain's role is *responding* to fraud signals:
+
+- **Chargeback received** (Hyperswitch webhook): Auto-suspend purchasing for the family.
+  Admin notified. Family can appeal.
+- **Stripe Radar high-risk flag**: Payment blocked by Stripe. No platform action needed
+  (payment simply fails). Logged for monitoring.
+- **Repeated payment failures**: After 5 consecutive failures in 24 hours, flag account
+  for review (possible stolen card testing).
+
+### §21.5 Social Spam Signals
+
+Extended behavioral signals beyond §13.2:
+
+| Signal | Threshold | Action |
+|--------|-----------|--------|
+| Friend requests sent | > 20 per hour | Auto-rate-limit (1 per 5 min); flag for review |
+| Messages sent to non-friends | > 10 per hour | Block messaging; flag for review |
+| Group posts | > 10 per hour across groups | Rate-limit posting; flag for review |
+| Profile views (scraping) | > 100 per hour | IP-level rate limit; CAPTCHA on next action |
+| Event creation | > 5 per day | Block event creation; flag for review |
+
+### §21.6 Integration with Admin and Moderation
+
+All abuse signals from this addendum create entries in the existing moderation pipeline
+(§11). Admin views them in the unified moderation queue (16-admin §9). Priority
+assignment follows the existing model:
+
+- **Critical** (< 24h response): Account takeover, payment fraud, child safety
+- **High** (< 48h response): Credential stuffing attacks, social spam floods
+- **Normal** (< 72h response): Marketplace fraud signals, profile abuse, group abuse

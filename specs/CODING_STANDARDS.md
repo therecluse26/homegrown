@@ -225,6 +225,43 @@ The following patterns are **never** acceptable in committed code:
 | Hardcoded methodology name strings | Use `useMethodologyContext()` hook |
 | Hand-written API types | Use generated types from `src/api/generated/` |
 | `fetch` or `axios` in components/hooks | Use generated API client |
+| `placeholder` as only label | Placeholders disappear on input; use visible `<label>` elements |
+| `onClick` on non-interactive elements | Use `<button>` or `<a>` for click handlers; `<div onClick>` is not keyboard-accessible |
+| `tabIndex > 0` | Positive tabindex disrupts natural tab order; use 0 or -1 only |
+
+### §3.7 Accessibility `[ARCH §11.5]`
+
+Accessibility is a first-class concern, not a post-launch enhancement. Violations are bugs. `[S§17.6]`
+
+- All images MUST have `alt` attributes. Decorative images MUST use `alt=""`. Dynamic images
+  (user uploads, marketplace covers) MUST have descriptive alt text derived from metadata.
+- All form inputs MUST have an associated `<label>` element (via `htmlFor`). Placeholder text
+  is NOT a substitute for a label.
+- All interactive elements MUST be keyboard-operable. Click handlers MUST be on `<button>` or
+  `<a>` elements — not `<div>` or `<span>`. Custom interactive components MUST handle `Enter`,
+  `Space`, and `Escape` keys as appropriate per WAI-ARIA Authoring Practices.
+- Focus management: Route transitions MUST move focus to the page's main heading (`<h1>`) or
+  main content region. Modals MUST trap focus and return focus to the trigger element on close.
+- ARIA: Prefer semantic HTML (`<nav>`, `<main>`, `<aside>`, `<dialog>`) over ARIA roles.
+  When ARIA is needed, follow WAI-ARIA Authoring Practices exactly. MUST NOT use `role="button"`
+  on a `<div>` when a `<button>` element would suffice.
+- Dynamic content: Feed updates, notification toasts, and quiz feedback MUST use `aria-live`
+  regions. Polite for background updates; assertive for error messages and critical alerts.
+- Color: MUST NOT use color as the sole indicator of state. Progress bars, status badges, and
+  validation feedback MUST include text or icons in addition to color.
+- Skip links: Every page layout MUST include a visually hidden "Skip to main content" link as
+  the first focusable element.
+- Drag-and-drop: All drag-and-drop interfaces (schedule planning, sequence building) MUST
+  provide an equivalent keyboard mechanism (e.g., move-up/move-down buttons, reorder modal).
+
+### §3.8 Print Styles `[S§17.9]`
+
+- Pages designated as printable (schedules, compliance reports, progress summaries) MUST include
+  `@media print` stylesheets that hide navigation, sidebars, and interactive controls.
+- Print layouts MUST reflow content to fit US Letter (8.5"×11") and A4 page widths.
+- Print output MUST include a header with family name, date range, and generation timestamp.
+- Color output MUST NOT be required for print readability — all meaning conveyed by color MUST
+  also be conveyed by text, icons, or patterns that reproduce in grayscale.
 
 ---
 
@@ -376,7 +413,11 @@ Every code generation session MUST leave the codebase passing:
 cargo clippy -- -D warnings    # Zero warnings
 cargo test                     # All tests pass
 npm run type-check             # Zero TypeScript errors (frontend/)
+npx playwright test --project=a11y  # Zero critical/serious accessibility violations
 ```
+
+The accessibility gate (`npx playwright test --project=a11y`) runs axe-core against all page
+routes and MUST produce zero critical or serious violations. `[S§17.6.6, ARCH §11.5]`
 
 Committing code that fails any of these gates is not acceptable, even as a "WIP" commit
 on a feature branch.

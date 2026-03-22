@@ -314,15 +314,46 @@ Redis also serves as:
 
 **Revision trigger**: None. CSAM detection is a legal requirement `[S§12.1]`.
 
-### 2.14 Monitoring: Sentry + UptimeRobot
+### 2.14 Monitoring & Alerting: Sentry + UptimeRobot + CloudWatch
 
 **Satisfies**: `[S§17.5]` availability
 
 | Component | Service | Purpose |
 |-----------|---------|---------|
-| **Error tracking** | Sentry | Rust + React error capture, performance monitoring |
-| **Uptime** | UptimeRobot | External availability monitoring, alerting |
+| **Error tracking** | Sentry | Rust + React error capture, performance monitoring, release health |
+| **Uptime** | UptimeRobot | External availability monitoring, alerting (5-min interval) |
 | **Infrastructure** | CloudWatch | ECS, RDS, ElastiCache metrics, alarms, and log aggregation |
+
+**Service Level Objectives (SLOs)** — Phase 1 targets:
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| **Availability** | 99.5% monthly | UptimeRobot external checks |
+| **API latency (p50)** | < 50ms | Sentry performance monitoring |
+| **API latency (p99)** | < 500ms | Sentry performance monitoring |
+| **Error rate** | < 1% of requests | Sentry error tracking |
+| **CSAM report latency** | < 5 minutes from detection to NCMEC filing | Application logs |
+
+**CloudWatch alarm thresholds**:
+
+| Alarm | Threshold | Action |
+|-------|-----------|--------|
+| ECS CPU | > 80% for 5 min | SNS → email alert |
+| ECS Memory | > 85% for 5 min | SNS → email alert |
+| RDS CPU | > 75% for 10 min | SNS → email alert |
+| RDS free storage | < 5 GB | SNS → email alert |
+| RDS connections | > 80% of max | SNS → email alert |
+| ElastiCache memory | > 80% | SNS → email alert |
+| ALB 5xx rate | > 5% for 5 min | SNS → email alert |
+| ALB target response time | > 2s (p99) for 10 min | SNS → email alert |
+| Dead-letter queue depth | > 0 for 15 min | SNS → email alert |
+
+**Application-level metrics** (Phase 2 — via Sentry custom metrics or CloudWatch custom metrics):
+
+- Quiz completion rate and average score
+- Marketplace conversion rate (view → purchase)
+- Search latency by scope (social, marketplace, learning)
+- Background job queue depth and processing time per queue tier
 
 **Revision trigger**: CloudWatch provides sufficient infrastructure metrics for Phase 1-2. Add Grafana + Prometheus when custom application metrics or cross-service dashboards are needed (Phase 3+).
 
@@ -424,6 +455,9 @@ Pipeline stages:
                                      │  │ safety::  │  │
                                      │  │ ai::      │  │
                                      │  │ media::   │  │
+                                     │  │ lifecycle:│  │
+                                     │  │ admin::   │  │
+                                     │  │ plan::    │  │
                                      │  └───────────┘  │
                                      │                 │
                                      │  WebSocket ─────┤
@@ -463,6 +497,9 @@ Each spec domain `[S§2.1]` maps to a Rust module within the monolith:
 | Notifications | `notify::` | `[S§13]` | In-app, email, digests, preferences |
 | Search | `search::` | `[S§14]` | Full-text search, autocomplete, faceted filtering |
 | Content & Media | `media::` | `[S§2.1]` | Upload, processing, storage, delivery |
+| Data Lifecycle | `lifecycle::` | `[S§16.3]` | Data export, account deletion, retention, recovery |
+| Administration | `admin::` | `[S§3.1.5]` | Admin dashboard, user management, feature flags, system health |
+| Planning & Scheduling | `plan::` | `[S§18.9]` | Calendar views, schedule items, recurring plans |
 
 ### 3.3 Request Flow
 
@@ -2528,6 +2565,31 @@ GET    /v1/search?scope=marketplace&q=...       # Search listings
 GET    /v1/search?scope=learning&q=...          # Search own learning data
 GET    /v1/search/autocomplete?q=...            # Type-ahead suggestions
 
+# Planning [S§17]
+GET    /v1/planning/calendar                    # Get calendar view (date range, aggregated)
+POST   /v1/planning/schedule-items              # Create schedule item
+GET    /v1/planning/schedule-items              # List schedule items (filterable)
+PATCH  /v1/planning/schedule-items/:id          # Update schedule item
+DELETE /v1/planning/schedule-items/:id          # Delete schedule item
+
+# Data Lifecycle [S§16.3]
+POST   /v1/account/export                       # Request data export
+GET    /v1/account/export/:id                   # Check export status / download
+POST   /v1/account/deletion                     # Request account deletion
+DELETE /v1/account/deletion                     # Cancel pending deletion (during grace period)
+GET    /v1/account/sessions                     # List active sessions
+DELETE /v1/account/sessions/:id                 # Revoke a specific session
+DELETE /v1/account/sessions                     # Revoke all sessions ("sign out everywhere")
+
+# Administration (RequireAdmin)
+GET    /v1/admin/users                          # Search/list users
+GET    /v1/admin/users/:id                      # Get user details
+POST   /v1/admin/users/:id/suspend              # Suspend account
+GET    /v1/admin/system/health                  # System health overview
+GET    /v1/admin/system/jobs                    # Background job status & dead-letter queue
+GET    /v1/admin/flags                          # List feature flags
+PATCH  /v1/admin/flags/:key                     # Toggle feature flag
+
 # Notifications [S§13]
 GET    /v1/notifications                        # List notifications
 PATCH  /v1/notifications/:id/read               # Mark as read
@@ -2672,6 +2734,71 @@ pub struct RateLimitConfig {
     pub messaging: (u32, Duration),        // 30 req/min
 }
 ```
+
+### 10.7 API Evolution & Versioning `[S§17.11]`
+
+All endpoints are under `/v1`. The versioning strategy is designed for a monolith that will eventually serve both the first-party SPA and a mobile app (Phase 3+).
+
+**Additive (non-breaking) changes** — deploy freely to `/v1`:
+- New optional fields in response bodies
+- New optional query parameters
+- New endpoints
+- New enum variants in response fields (consumers MUST handle unknown variants gracefully)
+
+**Breaking changes** — require a new version prefix (`/v2`):
+- Removing or renaming a response field
+- Changing a field type
+- Changing a field from optional to required
+- Changing the semantics of an existing value
+
+**Deprecation workflow**:
+
+```rust
+/// Middleware that adds deprecation headers to sunset endpoints
+pub async fn deprecation_headers(
+    req: Request,
+    next: Next,
+) -> Response {
+    let mut response = next.run(req).await;
+    // Add Sunset header per RFC 8594
+    response.headers_mut().insert(
+        "Deprecation", HeaderValue::from_static("true"),
+    );
+    response.headers_mut().insert(
+        "Sunset", HeaderValue::from_static("2027-06-01"),
+    );
+    response.headers_mut().insert(
+        "Link", HeaderValue::from_static(
+            "</v2/resource>; rel=\"successor-version\""
+        ),
+    );
+    response
+}
+```
+
+**Revision trigger**: Implement `/v2` prefix routing when the first breaking change is needed (likely Phase 3 with mobile app launch).
+
+### 10.8 Idempotency `[S§17.10]`
+
+Critical state-changing operations support idempotency to ensure safe retries:
+
+```rust
+/// Idempotency key middleware for payment and creation endpoints
+/// Client sends `Idempotency-Key: <uuid>` header
+/// Server stores the response and returns the cached response on replay
+pub struct IdempotencyLayer {
+    redis: Arc<RedisPool>,
+    ttl: Duration, // 24 hours default
+}
+
+// Idempotency-protected endpoints:
+// - POST /v1/marketplace/checkout        (payment)
+// - POST /v1/billing/subscriptions       (subscription creation)
+// - POST /v1/marketplace/payouts         (creator payout)
+// - POST /v1/learning/students/:id/quiz-sessions  (quiz start)
+```
+
+The idempotency key is stored in Redis with a 24-hour TTL. If a request arrives with a key that already has a stored response, the stored response is returned without re-executing the handler. If a request is in-flight (key exists but no response yet), the server returns `409 Conflict` to prevent concurrent duplicate execution.
 
 ---
 
@@ -2958,14 +3085,57 @@ function useWebSocket() {
 
 ### 11.5 Accessibility `[S§17.6]`
 
-WCAG 2.1 Level AA compliance is enforced through:
+WCAG 2.1 Level AA compliance is enforced through design, implementation, and CI:
 
-- **Semantic HTML** — All interactive elements use proper ARIA roles and labels.
-- **Keyboard navigation** — Every interactive element is reachable via Tab, operable via Enter/Space.
-- **Focus management** — Route transitions and modals manage focus programmatically.
-- **Color contrast** — Tailwind config enforces minimum 4.5:1 contrast ratio for text.
-- **Screen reader support** — All images have alt text, dynamic content uses `aria-live` regions.
-- **Testing** — `@axe-core/react` integration for automated accessibility audits in development.
+**Design patterns**:
+
+- **Semantic HTML** — All interactive elements use proper ARIA roles and labels. Prefer native HTML elements (`<button>`, `<select>`, `<dialog>`) over custom ARIA widgets.
+- **Keyboard navigation** — Every interactive element is reachable via Tab, operable via Enter/Space. Custom components (date pickers, dropdowns, drag-and-drop) follow WAI-ARIA Authoring Practices.
+- **Focus management** — Route transitions move focus to the main content heading. Modals trap focus until dismissed via Escape. Toast notifications do NOT steal focus.
+- **Color contrast** — Tailwind config enforces minimum 4.5:1 contrast ratio for text. Design tokens include a `--color-focus-ring` variable for consistent, high-visibility focus indicators.
+- **Screen reader support** — All images have alt text; decorative images use `alt=""`. Dynamic content (feed updates, quiz feedback, notification toasts) uses `aria-live` regions with appropriate politeness levels.
+- **Skip navigation** — Every page includes a visually hidden "Skip to main content" link as the first focusable element.
+- **Touch targets** — All interactive elements have a minimum tap target of 44×44 CSS pixels on viewports under 768px.
+
+**CI enforcement**:
+
+```yaml
+# In GitHub Actions CI pipeline
+- name: Accessibility audit
+  run: |
+    # axe-core integration tests (zero critical/serious violations)
+    npx playwright test --project=a11y
+    # HTML validation (no duplicate IDs, correct ARIA usage)
+    npx html-validate dist/**/*.html
+```
+
+```typescript
+// tests/a11y/global-a11y.spec.ts
+// Every page route is tested for axe violations
+import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+
+const routes = ['/dashboard', '/learning', '/social', '/marketplace', '/settings'];
+
+for (const route of routes) {
+  test(`${route} has no a11y violations`, async ({ page }) => {
+    await page.goto(route);
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+}
+```
+
+**Screen reader test matrix** (manual, before major releases):
+
+| Screen Reader | Browser | Platform |
+|---------------|---------|----------|
+| NVDA | Chrome | Windows |
+| VoiceOver | Safari | macOS |
+| VoiceOver | Safari | iOS |
+| TalkBack | Chrome | Android |
 
 ### 11.6 Internationalization Readiness `[S§17.7]`
 
@@ -3103,6 +3273,59 @@ pub async fn get_feed(
         .collect();
 
     social::repository::find_posts_by_ids(db, &post_uuids).await
+}
+```
+
+### 12.5 Error Recovery & Resilience `[S§17.10]`
+
+**Job retry policy**:
+
+| Queue | Max Retries | Backoff | Dead-Letter |
+|-------|-------------|---------|-------------|
+| Critical (CSAM, suspensions) | Unlimited (alert after 5) | 30s, 60s, 120s, then every 5min | Never — manual escalation after alert |
+| Default (email, indexing) | 3 | 60s, 300s, 900s (exponential) | Yes — `dead_letter:{queue}` Redis list |
+| Low (digests, aggregation) | 3 | 300s, 900s, 3600s | Yes — `dead_letter:{queue}` Redis list |
+
+Dead-letter jobs are surfaced in the admin dashboard (§16-admin) for manual inspection and replay.
+
+**Circuit breaker for external services**:
+
+```rust
+/// Circuit breaker states for external service calls
+/// Tracks failure count and transitions between states
+pub struct CircuitBreaker {
+    failure_threshold: u32,   // trips after N consecutive failures
+    recovery_timeout: Duration, // how long to stay open before half-open
+    state: CircuitState,
+}
+
+pub enum CircuitState {
+    Closed,         // normal operation, requests pass through
+    Open,           // circuit tripped, requests fail fast with fallback
+    HalfOpen,       // testing recovery, one request allowed through
+}
+
+// Circuit breaker configuration per external service:
+// Thorn Safer:     threshold=5, recovery=60s, fallback=queue for manual review
+// Rekognition:     threshold=5, recovery=60s, fallback=queue for manual review
+// Hyperswitch:     threshold=3, recovery=30s, fallback=return payment error to user
+// Postmark:        threshold=5, recovery=120s, fallback=queue email for retry
+// Kratos:          threshold=3, recovery=10s, fallback=503 maintenance mode
+```
+
+**Webhook idempotency** — all incoming webhook handlers deduplicate by event ID:
+
+```rust
+/// Webhook deduplication via Redis SET with TTL
+pub async fn is_duplicate_webhook(
+    redis: &RedisPool,
+    provider: &str,     // "kratos", "hyperswitch", "thorn"
+    event_id: &str,
+) -> Result<bool, RedisError> {
+    let key = format!("webhook:seen:{}:{}", provider, event_id);
+    // SET NX returns true only if the key was newly created
+    let is_new = redis.set_nx(&key, "1", Duration::from_secs(86400 * 7)).await?;
+    Ok(!is_new)
 }
 ```
 
@@ -3255,7 +3478,18 @@ Single-AZ, 1 instance           Multi-AZ, auto-scaling            Managed + dedi
 └──────────────┘                └──────────────┘                  └──────────────┘
 ```
 
-### 13.5 Backup Strategy
+### 13.5 Backup & Disaster Recovery Strategy `[S§17.5]`
+
+#### Recovery Objectives
+
+| Metric | Phase 1 Target | Phase 2+ Target |
+|--------|---------------|-----------------|
+| **RPO** (Recovery Point Objective) | ≤ 5 minutes (RDS continuous WAL) | ≤ 1 minute (cross-region replica) |
+| **RTO** (Recovery Time Objective) | ≤ 2 hours (manual restore) | ≤ 30 minutes (automated failover) |
+
+RPO defines the maximum acceptable data loss window. RTO defines the maximum acceptable downtime. Phase 1 targets are achievable with single-AZ RDS and manual intervention. Phase 2 targets require cross-region replication and automated failover.
+
+#### Backup Components
 
 | Component | Method | Retention | Recovery |
 |-----------|--------|-----------|----------|
@@ -3263,6 +3497,7 @@ Single-AZ, 1 instance           Multi-AZ, auto-scaling            Managed + dedi
 | **Off-site backup** | Weekly `pg_dump` via ECS Scheduled Task → Cloudflare R2 | 12 weekly, 12 monthly | Full database restore from portable dump file |
 | **ElastiCache Redis** | Automatic daily snapshots | 7 days | Restore to new cache node |
 | **Redis data** | Ephemeral by design (cache, feeds, rate limits) | N/A | Feeds rebuild from PostgreSQL; cache repopulates on demand |
+| **Cloudflare R2** (media files) | Cloudflare-managed replication (11 nines durability) | Indefinite (lifecycle rules for temp uploads) | Self-healing; R2 is multi-region by default |
 
 **Off-site backup task** (ECS Scheduled Task, weekly):
 
@@ -3276,7 +3511,24 @@ pg_dump -Fc -h $RDS_ENDPOINT -U $DB_USER homegrown_academy | \
 # R2 lifecycle rules handle retention cleanup
 ```
 
-**Revision trigger**: Add cross-region RDS read replica for disaster recovery when the platform handles paying customers (Phase 2).
+#### Disaster Recovery Plan
+
+**Phase 1 (single-AZ)**:
+
+- **Database failure**: RDS automated failover restores from latest snapshot + WAL replay. Manual verification required.
+- **Application failure**: ECS redeploys from the latest container image. Stateless application — no data loss.
+- **AZ failure**: RDS PITR to a new AZ. ECS service recreated via CDK in the surviving AZ. Expected downtime: 1-2 hours.
+- **Region failure**: Restore from R2 off-site backup to a new region. Expected downtime: 4-8 hours (manual process). Acceptable risk for Phase 1 (pre-revenue, no paying customers).
+
+**Phase 2+ (multi-AZ, cross-region read replica)**:
+
+- **Database failure**: Multi-AZ RDS automated failover (< 2 min).
+- **AZ failure**: ECS runs across multiple AZs; automatic rebalancing. Zero downtime.
+- **Region failure**: Promote cross-region read replica to primary. Update DNS. Expected downtime: 15-30 minutes.
+
+**Backup verification**: The off-site backup task MUST include a `pg_restore --list` verification step that confirms the dump is valid. A failed verification MUST trigger a Sentry alert.
+
+**Revision trigger**: Add cross-region RDS read replica and multi-AZ ECS deployment when the platform handles paying customers (Phase 2).
 
 ### 13.6 CI/CD Pipeline (GitHub Actions) `[S§17.1]`
 
@@ -4020,6 +4272,45 @@ WHERE f1.requester_family_id = $1  -- current user
 - **Mitigation**: New tables follow the existing three-layer pattern (Layer 1 publisher-scoped, Layer 3 family-scoped with RLS). Assessment engine reuses the methodology-as-configuration pattern — quiz availability is driven by `method_tool_activations`, not code branches. Video transcoding is a background job in the existing `sidekiq-rs` queue. Student sessions are parent-initiated and COPPA-compliant within the existing consent framework.
 
 **Revision trigger**: None. This is a scope decision that aligns Phase 1 with the product's core value proposition.
+
+### ADR-013: Planning & Scheduling Domain
+
+**Status**: Accepted
+
+**Context**: Homeschool families plan their days and weeks around learning activities, co-op days, and social events. The existing spec has Learning (activity logging), Compliance (attendance tracking), and Social (events) as separate domains — but no unified calendar or scheduling view. Competing homeschool platforms (Homeschool Planet, Homeschool Manager) are essentially calendar-first applications. Without scheduling, the platform is a record-keeping tool, not a planning tool.
+
+**Decision**: Add a Planning domain (`plan::`, `specs/domains/17-planning.md`) that provides:
+- Unified calendar view synthesizing learning activities, compliance attendance, and social events
+- Weekly/daily schedule creation with recurring patterns
+- Co-op day coordination (link schedules to group events)
+- Phase 1 scope is read-only calendar + basic schedule creation; full scheduling (recurring templates, sharing) deferred to Phase 2
+
+**Consequences**:
+- **Positive**: Families can see their homeschool week in one view — the primary workflow for daily planning. Calendar is the highest-demand feature in homeschool forums. Integrating existing domain data (rather than duplicating) keeps the domain lightweight.
+- **Negative**: Cross-domain data aggregation requires reading from Learning, Compliance, and Social — slightly complex read model. Calendar UI components add frontend complexity.
+- **Mitigation**: Planning is a read-heavy, write-light domain. CQRS applies — the calendar read model aggregates data from other domains via their service interfaces. The domain's own write model is limited to schedule items (recurring patterns, custom entries). No new database tables for existing domain data.
+
+**Revision trigger**: None. Planning is a core homeschool workflow.
+
+### ADR-014: Data Lifecycle as an Explicit Domain
+
+**Status**: Accepted
+
+**Context**: Data export and account deletion are mentioned in SPEC.md §16.3 and required by COPPA §17.2, but no domain owns the orchestration of cross-domain data export, retention enforcement, or account deletion workflows. In practice, "delete my family account" requires coordinated action across IAM, Learning, Social, Marketplace, Compliance, Media, Notifications, and Planning — no single existing domain should own this cross-cutting workflow.
+
+**Decision**: Add a Data Lifecycle domain (`lifecycle::`, `specs/domains/15-data-lifecycle.md`) that orchestrates:
+- Family data export (all domains contribute export handlers)
+- Account deletion (grace period, confirmation, cross-domain deletion)
+- COPPA-specific deletion (regulatory timelines)
+- Data retention policy enforcement
+- Account recovery (identity verification, support escalation)
+
+**Consequences**:
+- **Positive**: Clear ownership of cross-domain deletion and export orchestration. Regulatory compliance (COPPA, state privacy laws) has a single enforcement point. Prevents "deletion missed domain X" bugs.
+- **Negative**: Lifecycle must understand what data exists in each domain — tight coupling on the data catalog. Background job orchestration adds complexity.
+- **Mitigation**: Each domain implements an `ExportHandler` and `DeletionHandler` trait. Lifecycle orchestrates but does not access other domains' data directly — it calls their service interfaces. Registration is at startup (like event bus handlers), so missing domains are caught at compile time.
+
+**Revision trigger**: None. COPPA and privacy regulation make this a legal requirement.
 
 ---
 

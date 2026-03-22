@@ -1697,3 +1697,76 @@ order — each domain depends only on domains with lower numbers.
 | 12 | Trust & Safety | `safety::` | Depends on Media + Social + Marketplace |
 | 13 | Compliance & Reporting | `comply::` | Depends on Learning + IAM |
 | 14 | AI & Recommendations | `ai::` | Depends on Learning + Marketplace + Social |
+| 15 | Data Lifecycle | `lifecycle::` | Depends on IAM + all domains (export/deletion orchestration) |
+| 16 | Administration | `admin::` | Depends on IAM + Safety + all domains (admin views) |
+| 17 | Planning & Scheduling | `plan::` | Depends on Learning + Compliance + Social |
+
+---
+
+## §17 Addendum: Session Management & Multi-Device `[S§17.1, S§17.10, S§20.11]`
+
+*Added to address spec gaps in session visibility, multi-device support, and account recovery.*
+
+### §17.1 Session Visibility
+
+IAM provides the underlying Kratos session data that `lifecycle::` exposes via
+`GET /v1/account/sessions`. IAM's responsibility is:
+
+- Wrapping Kratos Admin API to list active sessions for a parent identity
+- Enriching session data with device type parsed from User-Agent
+- Providing IP → city-level location mapping (coarse only, no GPS) `[S§7.8]`
+- Exposing `revoke_session(session_id)` and `revoke_all_sessions(identity_id)` via `KratosAdapter`
+
+### §17.2 Concurrent Session Policy
+
+- No hard limit on concurrent sessions per parent `[S§20.11]`
+- Parents can have sessions on multiple devices simultaneously (desktop + phone)
+- Each co-parent has independent sessions (they are separate Kratos identities)
+- Student supervised sessions (§8 in 01-iam) are ephemeral and do not count toward parent sessions
+
+### §17.3 Auth State Change Handling
+
+When authorization state changes mid-session (e.g., co-parent removed from family, subscription
+downgraded, account suspended):
+
+- Session revocation for removed co-parents: `FamilyMemberRemoved` event → `iam::` revokes
+  all sessions for the removed parent's Kratos identity
+- Subscription changes: Cached permission claims in Redis are invalidated on `SubscriptionChanged`
+  event. Next request re-evaluates permissions from current subscription state.
+- Account suspension: `safety::` sets a Redis flag (`suspended:{family_id}`). Auth middleware
+  checks this flag and returns 403 for any request from suspended families. Sessions are NOT
+  revoked (so the suspension can be lifted without requiring re-authentication).
+
+### §17.4 Account Recovery Integration
+
+IAM delegates account recovery orchestration to `lifecycle::` but provides the Kratos
+integration layer:
+
+```rust
+// In KratosAdapter:
+
+/// Initiate Kratos recovery flow for an email address.
+/// Returns a recovery flow ID (Kratos-managed).
+async fn initiate_recovery_flow(
+    &self,
+    email: &str,
+) -> Result<String, KratosError>;
+
+/// Admin-level password reset (for escalated recovery, called by admin::).
+/// Requires RequireAdmin context.
+async fn admin_reset_credentials(
+    &self,
+    identity_id: &str,
+) -> Result<(), KratosError>;
+```
+
+### §17.5 IAM Implementation Updates
+
+The following changes to existing IAM sections are needed:
+
+- **§7 Kratos Adapter**: Add `list_sessions()`, `revoke_session()`, `revoke_all_sessions()`,
+  `initiate_recovery_flow()`, and `admin_reset_credentials()` methods
+- **§10 Family Account Lifecycle**: Add `FamilyMemberRemoved` event handling (session revocation)
+- **§11 Middleware & Extractors**: Add suspension check via Redis flag in auth middleware
+- **§13 Cross-Domain Interactions**: Add interaction with `lifecycle::` (session data provider)
+  and `admin::` (admin-level credential reset)

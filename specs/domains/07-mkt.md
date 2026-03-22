@@ -3570,3 +3570,105 @@ src/mkt/
 │   └── errors.rs             # MktDomainError enum
 └── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
 ```
+
+---
+
+## §22 Addendum: Content Versioning & Purchase Updates `[S§20.10]`
+
+*Added to address spec gaps in how marketplace content updates affect existing purchasers.*
+
+### §22.1 Versioning Model
+
+Marketplace listings already support versioning (§9 — Listing Lifecycle). This addendum
+specifies the behavior when a creator publishes an updated version:
+
+**Minor updates** (within the same major version):
+- Typo fixes, additional resources, updated answer keys
+- Automatically available to all existing purchasers
+- Quiz/sequence items reference the listing version at purchase time; minor updates to
+  content text propagate, but structural changes (adding/removing questions) do NOT
+  affect in-progress quiz sessions
+- Publisher updates the listing in-place (status remains `published`)
+
+**Major version updates** (new major version, e.g., v1 → v2):
+- Significant rewrites, restructured sequences, new quiz questions
+- Creator publishes as a new version (creates a new `mkt_listing_versions` row)
+- Existing purchasers of v1 continue to access v1 content
+- Creator MAY offer v2 as:
+  - Free upgrade (all v1 purchasers automatically get v2 access)
+  - Discounted upgrade (v1 purchasers see a reduced price for v2)
+  - Full-price purchase (no discount — v2 treated as a separate product)
+- The upgrade policy is set per listing via a `version_upgrade_policy` field
+
+### §22.2 Schema Addition
+
+```sql
+-- Added to mkt_listing_versions (existing table from §3)
+ALTER TABLE mkt_listing_versions ADD COLUMN
+    upgrade_policy VARCHAR(20) DEFAULT 'free'
+    CHECK (upgrade_policy IN ('free', 'discounted', 'full_price'));
+
+ALTER TABLE mkt_listing_versions ADD COLUMN
+    upgrade_discount_percentage SMALLINT
+    CHECK (upgrade_discount_percentage IS NULL OR
+           (upgrade_discount_percentage > 0 AND upgrade_discount_percentage <= 100));
+```
+
+### §22.3 Quiz Session Version Pinning
+
+When a student starts a quiz session, the session records the `listing_version_id`.
+All quiz questions and answers for that session are frozen to the version at session start.
+This ensures:
+- A student's in-progress quiz is never affected by a content update
+- Completed quiz scores reference the exact question set that was presented
+- Analytics can track scores across different versions
+
+### §22.4 Sequence Progress Version Handling
+
+Lesson sequences that are in-progress when a minor update occurs:
+- New items added to the end: student sees them after completing existing items
+- Items removed from the middle: student skips them (marked as "removed by publisher")
+- Items reordered: student's position is preserved by item ID, not ordinal position
+
+For major version updates: student continues on their current version until they complete
+or a parent explicitly switches to the new version (which resets progress).
+
+---
+
+## §23 Addendum: Abuse Prevention Beyond Content Moderation `[S§12, S§17.10]`
+
+*Added to address spec gaps in marketplace-specific fraud and abuse vectors.*
+
+### §23.1 Marketplace Fraud Vectors
+
+| Vector | Description | Mitigation |
+|--------|-------------|------------|
+| **Fake reviews** | Creator creates alt accounts to leave positive reviews | Verified-purchaser requirement (already in §14); minimum account age (30 days) before reviews; statistical outlier detection on review patterns |
+| **Self-purchasing** | Creator buys own content to boost sales numbers | Revenue from self-purchases is not paid out; flagged in creator analytics |
+| **Price manipulation** | Creator rapidly changes price to exploit ranking algorithms | Price change rate limited to 2 changes per listing per 24 hours |
+| **Copyrighted content** | Creator uploads content they don't own rights to | DMCA takedown process `[S§17.12]`; creator agreement includes IP attestation |
+| **Review bombing** | Coordinated negative reviews on a competitor's listing | Review velocity limits (1 review per listing per account); automated spike detection |
+| **Refund abuse** | Buyer repeatedly purchases and refunds to access content for free | Maximum 3 refunds per account per quarter; flagged accounts reviewed by admin |
+
+### §23.2 Automated Detection
+
+The following signals are monitored by the marketplace (integrated with safety:: for action):
+
+```rust
+// Marketplace fraud signals — checked on relevant operations
+pub enum MktFraudSignal {
+    /// Same family purchased and reviewed within minutes
+    SuspiciousReviewTiming { purchase_id: Uuid, review_id: Uuid },
+    /// Creator's IP matches a purchaser's IP
+    SelfPurchaseSuspected { creator_id: Uuid, purchaser_family_id: Uuid },
+    /// Unusual spike in reviews for a listing (>5 in 24 hours)
+    ReviewSpike { listing_id: Uuid, review_count: u32 },
+    /// Excessive refund requests from one account
+    RefundAbuse { family_id: Uuid, refund_count: u32, period_days: u32 },
+    /// Price changed more than twice in 24 hours
+    PriceManipulation { listing_id: Uuid, change_count: u32 },
+}
+```
+
+Signals above threshold are published as `MktFraudSignalDetected` events →
+`safety::` creates a moderation report for admin review.
