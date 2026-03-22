@@ -23,6 +23,7 @@ type AppState struct {
 	Cache    shared.Cache
 	Auth     shared.SessionValidator // nil until 01-iam wires KratosSessionValidator
 	Errors   shared.ErrorReporter
+	Jobs     shared.JobEnqueuer // background job enqueuer (asynq-backed)
 	EventBus *shared.EventBus
 	Config   *config.AppConfig
 	Version  string // Set via -ldflags at build time
@@ -57,6 +58,11 @@ func (s *AppState) GetDB() *gorm.DB {
 // GetConfig returns the application config (for middleware and other consumers).
 func (s *AppState) GetConfig() *config.AppConfig {
 	return s.Config
+}
+
+// GetJobs returns the background job enqueuer (satisfies future middleware/domain deps interfaces).
+func (s *AppState) GetJobs() shared.JobEnqueuer {
+	return s.Jobs
 }
 
 // ─── Echo Validator ────────────────────────────────────────────────────────

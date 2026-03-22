@@ -73,6 +73,9 @@ internal/{domain}/
 - Application errors MUST map to `AppError` before reaching the handler return type.
 - Error messages returned to API clients MUST NOT expose internal details (stack traces,
   SQL errors, internal field names). `[ARCH §1.5]`
+- Adapter implementations (`adapters/*.go`) MUST convert vendor SDK errors to `shared.AppError`
+  or domain-specific `DomainError` types before returning. MUST NOT return vendor error types
+  (e.g., `*stripe.CardError`, `*redis.Error`) to callers outside the adapter file. `[ARCH §4.3]`
 
 ### §2.3 Type Safety
 
@@ -83,6 +86,9 @@ internal/{domain}/
   methodology JSONB configuration fields, which are inherently schema-free by design. `[ARCH §1.6]`
 - MUST NOT write hand-authored TypeScript API types. All frontend types come from code
   generation. `[ARCH §1.3]`
+- MUST NOT embed vendor SDK types in `models.go` structs, request/response types, or any
+  type that crosses the adapter boundary. Domain types must survive a full vendor swap
+  without touching models. `[ARCH §4.3]`
 
 ### §2.4 Database Patterns
 
@@ -392,7 +398,11 @@ Before writing a new utility, check `internal/shared/` for an existing implement
 | `internal/shared/pagination.go` | Cursor-based and offset pagination helpers |
 | `internal/shared/family_scope.go` | `FamilyScope` type for privacy-enforcing queries |
 | `internal/shared/db.go` | Database connection pool acquisition |
-| `internal/shared/redis.go` | Redis connection and caching helpers |
+| `internal/shared/cache.go` | `Cache` port + generic `CacheGet[T]`/`CacheSet[T]` helpers |
+| `internal/shared/redis.go` | Redis `Cache` implementation (`redisCache`; factory: `CreateCache`) |
+| `internal/shared/auth.go` | `SessionValidator` port for auth provider abstraction |
+| `internal/shared/error_reporter.go` | `ErrorReporter` port + `NoopErrorReporter` |
+| `internal/shared/jobs.go` | `JobEnqueuer` port + `NoopJobEnqueuer` (factory: `CreateJobEnqueuer`) |
 | `internal/shared/types.go` | Common newtypes (e.g., `FamilyID`, `UserID`) |
 | `internal/shared/events.go` | `EventBus` and `DomainEvent` interface (§8.4) |
 
@@ -511,6 +521,20 @@ rule here is an absolute enforcement imperative.
 | Domain A writing to `domain_b_*` tables | Violates domain table ownership `[ARCH §4.2]` |
 | Raw SDK call in `service.go` | Bypasses adapter isolation, blocks vendor swaps `[ARCH §4.3]` |
 | Adding to `internal/shared/` for convenience | Grows the Shared Kernel; increases coupling `[ARCH §4.2]` |
+| Adapter returning a vendor SDK type | Callers must import vendor SDK to handle the response; breaks isolation `[ARCH §4.3]` |
+| Adapter propagating a vendor SDK error | Callers must import vendor SDK to inspect errors; breaks the isolation contract `[ARCH §4.3]` |
+| Vendor SDK type in `models.go` struct | Couples the domain model to a vendor; models must survive a vendor swap `[ARCH §4.3]` |
+
+#### §8.1a Adapter Type Boundary Rules
+
+Every `adapters/*.go` file is the single permitted import site for its vendor SDK.
+The following rules MUST be followed for every adapter method:
+
+- MUST accept only domain types or Go primitives as parameters. MUST NOT accept vendor SDK types.
+- MUST return only domain types, Go primitives, or `error`. MUST NOT return vendor SDK types.
+- MUST convert vendor SDK errors to `shared.AppError` (or domain `DomainError`) before
+  returning. Callers MUST NOT need to import the vendor SDK to handle errors from adapters.
+- MUST NOT define or embed vendor SDK types in any struct used outside the adapter file itself.
 
 ### §8.2 Port Interface Rules (Inbound + Outbound)
 

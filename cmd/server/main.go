@@ -79,6 +79,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Step 5.6: Create job enqueuer ────────────────────────────────────────────
+	jobs, err := shared.CreateJobEnqueuer(cfg)
+	if err != nil {
+		slog.Error("failed to create job enqueuer", "error", err)
+		os.Exit(1)
+	}
+
 	// ── Step 5.5: Init Sentry error reporter ──────────────────────────────────────
 	var errReporter shared.ErrorReporter = shared.NoopErrorReporter{}
 	if cfg.SentryDSN != nil {
@@ -106,6 +113,7 @@ func main() {
 		Cache:    cache,
 		Auth:     nil, // wired in 01-iam via KratosSessionValidator
 		Errors:   errReporter,
+		Jobs:     jobs,
 		EventBus: eventBus,
 		Config:   cfg,
 		Version:  version,
@@ -126,6 +134,9 @@ func main() {
 	// ── Step 10: Graceful shutdown ────────────────────────────────────────────────
 	gracefulShutdown(ctx, e, func() {
 		errReporter.Flush(5 * time.Second)
+		if closeErr := jobs.Close(); closeErr != nil {
+			slog.Error("job enqueuer close error", "error", closeErr)
+		}
 		if closeErr := cache.Close(); closeErr != nil {
 			slog.Error("cache close error", "error", closeErr)
 		}

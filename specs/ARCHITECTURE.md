@@ -641,7 +641,11 @@ The shared kernel is strictly limited to:
 | `shared/family_scope.go` | `FamilyScope` type for privacy-enforcing queries |
 | `shared/types.go` | Type aliases (`FamilyID`, `UserID`, `StudentID`, etc.) |
 | `shared/db.go` | Database pool and transaction helpers |
-| `shared/redis.go` | Redis connection pool and caching helpers |
+| `shared/cache.go` | `Cache` port interface + generic `CacheGet[T]`/`CacheSet[T]` helpers |
+| `shared/redis.go` | Redis-backed `Cache` implementation (`redisCache`; factory: `CreateCache`) |
+| `shared/auth.go` | `SessionValidator` port — auth provider abstraction (Kratos wired in 01-iam) |
+| `shared/error_reporter.go` | `ErrorReporter` port + `NoopErrorReporter` |
+| `shared/jobs.go` | `JobEnqueuer` port — background job abstraction (asynq-backed; factory: `CreateJobEnqueuer`) |
 | `shared/pagination.go` | Cursor-based and offset pagination |
 | `shared/events.go` | `EventBus` and `DomainEvent` interface (§4.6) |
 | `shared/errors.go` | `AppError` and error-to-HTTP mapping |
@@ -650,19 +654,25 @@ The shared kernel is strictly limited to:
 Thorn Safer, Postmark) are wrapped in Adapter modules within the domain that owns the
 interaction. No raw SDK calls exist outside these adapters:
 
-| External Service | Owning Domain | Adapter Location |
-|-----------------|---------------|-----------------|
-| Hyperswitch (payments) | `mkt` | `internal/mkt/adapters/payment.go` |
-| Hyperswitch (billing) | `billing` | `internal/billing/adapters/payment.go` |
-| Ory Kratos (auth) | `iam` | `internal/iam/adapters/kratos.go` |
-| Cloudflare R2 | `media` | `internal/media/adapters/r2.go` |
-| Thorn Safer (CSAM) | `safety` | `internal/safety/adapters/thorn.go` |
-| AWS Rekognition | `safety` | `internal/safety/adapters/rekognition.go` |
-| Postmark (email) | `notify` | `internal/notify/adapters/postmark.go` |
+| External Service | Owning Domain | Interface (`ports.go`) | Adapter Location |
+|-----------------|---------------|------------------------|-----------------|
+| Hyperswitch (payments) | `mkt` | `PaymentProcessor` | `internal/mkt/adapters/payment.go` |
+| Hyperswitch (billing) | `billing` | `PaymentProcessor` | `internal/billing/adapters/payment.go` |
+| Ory Kratos (auth) | `iam` | `shared.SessionValidator` | `internal/iam/adapters/kratos.go` |
+| Cloudflare R2 | `media` | `ObjectStorage` | `internal/media/adapters/r2.go` |
+| Thorn Safer (CSAM) | `safety` | `CsamDetector` | `internal/safety/adapters/thorn.go` |
+| AWS Rekognition | `safety` | `ContentModerator` | `internal/safety/adapters/rekognition.go` |
+| AWS Comprehend (Phase 2) | `safety` | `TextScanner` | `internal/safety/adapters/comprehend.go` |
+| Postmark (email) | `notify` | `Mailer` | `internal/notify/adapters/postmark.go` |
+| Typesense (Phase 2) | `search` | `SearchEngine` | `internal/search/adapters/typesense.go` |
 
 > **Note**: Both `mkt` and `billing` payment adapters talk to the same self-hosted
 > Hyperswitch instance but use different Hyperswitch profiles (marketplace vs. subscription
 > billing). Stripe is the underlying processor configured as a Hyperswitch connector.
+
+> **Shared-level ACLs**: For vendor isolation at the infrastructure level (Redis/`Cache`,
+> Sentry/`ErrorReporter`, asynq/`JobEnqueuer`), the port interface lives in
+> `internal/shared/` rather than a domain `ports.go` — see the Shared Kernel table above.
 
 **What bounded contexts rule out**:
 - Domain A writing directly to domain B's prefixed tables
@@ -705,6 +715,16 @@ flexibility — swapping the underlying payment processor (e.g., Stripe → Adye
 only a Hyperswitch connector configuration change, no application code impact. The adapter
 layer adds a second level of isolation: if Hyperswitch itself were ever replaced, only
 `adapters/payment.go` changes.
+
+**Adapter type boundary rule** — Adapters MUST:
+1. Accept only domain types (or Go primitives) as input parameters. MUST NOT accept vendor SDK types.
+2. Return only domain types (or Go primitives), or `error`. MUST NOT return vendor SDK types.
+3. Convert vendor SDK errors to `shared.AppError` (or domain `DomainError`) before returning.
+   Vendor error types (e.g., `*stripe.CardError`, `*redis.Error`) MUST NOT propagate to callers.
+4. MUST NOT embed vendor SDK types in any struct used outside the adapter file itself.
+
+The adapter file is the only place in the codebase where a vendor import is permitted for
+that service. One import site = one change site on vendor swap.
 
 **Why this fits**: The existing split is 95% of the way there. Making external adapters
 explicit prevents the common pattern of SDK calls proliferating through service methods,
