@@ -27,7 +27,7 @@ for marketplace transactions (split payments, creator sub-merchant onboarding, p
 processing (owned by `media::`), content moderation and CSAM scanning (owned by `safety::`),
 notification delivery (owned by `notify::`), search indexing infrastructure (owned by `search::`),
 subject taxonomy (owned by `learn::`), methodology definitions (owned by `method::`), student
-profiles and family accounts (owned by `iam::`), AI recommendations (owned by `ai::`).
+profiles and family accounts (owned by `iam::`), recommendations (owned by `recs::`).
 
 **What mkt:: delegates**: Media upload/validation → `media::` (via adapter interface). Content
 safety scanning → `safety::` (via `ListingPublished` event). Notification delivery → `notify::`
@@ -77,7 +77,7 @@ other spec sections are included where the marketplace domain is involved.
 | Refund deductions from creator earnings | `[S§9.6]` | §3.2 (`refund_*` columns), §11 |
 | 1099-K forms for qualifying creators | `[S§9.6]` | §15 (offloaded to processor via Hyperswitch) |
 | Purchased content accessible from learning tools | `[S§9.7]` | §18 (`PurchaseCompleted` event → `learn::`) |
-| AI recommendations draw from catalog | `[S§9.7]` | §18 (`ListingPublished` event → `ai::`) |
+| AI recommendations draw from catalog | `[S§9.7]` | §18 (`ListingPublished` event → `recs::`) |
 | Content safety / moderation | `[S§3.1.4]` | §14 (`safety::` integration), §18 |
 | Marketplace search scope | `[S§14]` | §13 |
 | Free tier: marketplace browse and purchase | `[S§15.1]` | §19 |
@@ -2228,12 +2228,12 @@ LIMIT $2;
 Auto-computed sections are refreshed by a periodic background job (e.g., every hour) that
 replaces `mkt_curated_section_items` rows for `auto` sections.
 
-### Meilisearch Migration Trigger
+### Typesense Migration Trigger
 
 When PostgreSQL FTS becomes insufficient (>50k listings, complex facet combinations causing
-slow queries, or p95 search latency exceeding 500ms), migrate to Meilisearch. The contract:
+slow queries, or p95 search latency exceeding 500ms), migrate to Typesense. The contract:
 
-- `ListingRepository.Browse()` switches from SQL to Meilisearch HTTP client
+- `ListingRepository.Browse()` switches from SQL to Typesense HTTP client
 - `ListingPublished` / `ListingArchived` events trigger index updates
 - The search API response shape (`ListingBrowseResponse`) remains unchanged
 
@@ -2753,7 +2753,7 @@ flows (`learn::` Layer 1 definitions require `publisher_id`).
 | `MarketplaceService` interface methods | `learn`, `onboard` (Phase 2) | `MarketplaceService` interface via AppState |
 | `VerifyPublisherMembership()` | `learn::` | Service method — publisher ownership checks `[06-learn §18.2]` |
 | `PurchaseCompleted` event | `learn::`, `billing::`, `notify::` | Domain event — tool access grant, creator earnings, receipt email `[ARCH §4.6]` |
-| `ListingPublished` event | `search::`, `ai::` | Domain event — search index update, recommendation catalog |
+| `ListingPublished` event | `search::`, `recs::` | Domain event — search index update, recommendation catalog |
 | `ListingArchived` event | `search::` | Domain event — remove from search index |
 | `ReviewCreated` event | `safety::` | Domain event — content moderation queue |
 | `CreatorOnboarded` event | `notify::` | Domain event — welcome email to creator |
@@ -2800,7 +2800,7 @@ type PurchaseMetadata struct {
 }
 
 // ListingPublished is published when a listing transitions to Published state.
-// Consumed by search:: (index update), ai:: (recommendation catalog).
+// Consumed by search:: (index update), recs:: (recommendation catalog).
 type ListingPublished struct {
     ListingID   uuid.UUID `json:"listing_id"`
     PublisherID uuid.UUID `json:"publisher_id"`
@@ -2962,7 +2962,7 @@ endpoint.
 - Admin-moderated publish flow (1 endpoint)
 - Publisher member removal (1 endpoint)
 - Listing version history endpoint (1 endpoint)
-- Meilisearch migration (if FTS performance insufficient)
+- Typesense migration (if FTS performance insufficient)
 - Advanced analytics in creator dashboard
 - **~4 additional endpoints**
 

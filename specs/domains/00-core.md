@@ -12,7 +12,7 @@ middleware, and all shared types in place.
 | **Purpose** | Foundation for all 14 domain modules |
 | **Produces** | A `go build ./...`-able binary, passing `golangci-lint run` and `go test ./...` |
 | **Frontend** | Minimum shell passing `npm run type-check` and `npm run dev` |
-| **Prerequisite for** | Every domain spec (01-iam through 14-ai) |
+| **Prerequisite for** | Every domain spec (01-iam through 17-planning) |
 
 ### What core infrastructure owns
 
@@ -1782,7 +1782,7 @@ func RequirePremium(c echo.Context) (*shared.AuthContext, error) {
 }
 ```
 
-**Consuming domains**: `learn::`, `comply::`, `ai::` `[IAM §13.1]`
+**Consuming domains**: `learn::`, `comply::`, `recs::` `[IAM §13.1]`
 
 #### `RequireCreator`
 
@@ -2636,7 +2636,7 @@ domain requires them.
 | `RequirePrimaryParent` extractor | This spec (§13.3) | When IAM Phase 2 is implemented |
 | Background job runner (asynq) | Consuming domain | When first domain needs async jobs |
 | WebSocket infrastructure (gorilla/websocket) | `social::` | When messaging is implemented |
-| Meilisearch integration | `search::` | When PG FTS is insufficient (§2.6) |
+| Typesense integration | `search::` | When PG FTS is insufficient (§2.6) |
 | Full CQRS read models | Consuming domain | When progressive optimization requires it |
 
 ---

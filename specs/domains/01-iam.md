@@ -1271,7 +1271,7 @@ Kratos response bodies) are logged server-side only via `log/slog`. `[CODING §2
 |--------|-----------|-----------|
 | `AuthContext` | All domains | Echo context value (middleware) |
 | `FamilyScope` | All domains | Echo middleware (from AuthContext) |
-| `RequirePremium` | `learn::`, `comply::`, `ai::` | Echo middleware |
+| `RequirePremium` | `learn::`, `comply::`, `recs::` | Echo middleware |
 | `RequireCreator` | `mkt::` | Echo middleware |
 | `RequireCoppaConsent` | `learn::`, `social::` (student features) | Echo middleware |
 | `IamService` interface methods | `method::`, `onboard::`, `billing::` | Interface value via app state |
@@ -1506,7 +1506,7 @@ order — each domain depends only on domains with lower numbers.
 | 11 | Billing & Subscriptions | `billing::` | Depends on IAM + Marketplace |
 | 12 | Trust & Safety | `safety::` | Depends on Media + Social + Marketplace |
 | 13 | Compliance & Reporting | `comply::` | Depends on Learning + IAM |
-| 14 | AI & Recommendations | `ai::` | Depends on Learning + Marketplace + Social |
+| 14 | Recommendations & Signals | `recs::` | Depends on Learning + Marketplace + Social |
 | 15 | Data Lifecycle | `lifecycle::` | Depends on IAM + all domains (export/deletion orchestration) |
 | 16 | Administration | `admin::` | Depends on IAM + Safety + all domains (admin views) |
 | 17 | Planning & Scheduling | `plan::` | Depends on Learning + Compliance + Social |

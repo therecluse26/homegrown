@@ -163,6 +163,64 @@ The following patterns are **never** acceptable in committed code:
   **Integration tests** (`tests/`, real `Pg*Repository`) verify *correctness with a real
   database*. Both are required for domains with non-trivial service logic.
 
+**Table-driven test pattern** (preferred style for service-layer unit tests):
+
+```go
+func TestCreateActivity(t *testing.T) {
+    tests := []struct {
+        name    string
+        input   CreateActivityCommand
+        setupFn func(*MockLearningRepo)
+        wantErr error
+    }{
+        {
+            name:  "valid activity logged",
+            input: CreateActivityCommand{StudentID: studentID, ToolID: toolID, Duration: 30},
+            setupFn: func(m *MockLearningRepo) {
+                m.On("CreateActivity", mock.Anything, mock.Anything).Return(activityID, nil)
+            },
+            wantErr: nil,
+        },
+        {
+            name:  "student not found",
+            input: CreateActivityCommand{StudentID: unknownID, ToolID: toolID, Duration: 30},
+            setupFn: func(m *MockLearningRepo) {
+                m.On("CreateActivity", mock.Anything, mock.Anything).Return(uuid.Nil, shared.ErrNotFound)
+            },
+            wantErr: shared.ErrNotFound,
+        },
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            repo := new(MockLearningRepo)
+            tt.setupFn(repo)
+            svc := NewLearningService(repo, bus)
+            _, err := svc.CreateActivity(ctx, tt.input)
+            assert.ErrorIs(t, err, tt.wantErr)
+            repo.AssertExpectations(t)
+        })
+    }
+}
+```
+
+**Integration test setup** — use `testcontainers-go` for PostgreSQL:
+
+```go
+// internal/testutil/db.go  (shared test utility)
+func SetupTestDB(t *testing.T) *gorm.DB {
+    t.Helper()
+    // testcontainers-go spins up a throwaway PostgreSQL container.
+    // Apply all goose migrations to create schema.
+    // Returns a *gorm.DB connected to the test database.
+    // t.Cleanup tears down the container automatically.
+}
+```
+
+- Integration tests call `testutil.SetupTestDB(t)` — no manual database provisioning.
+- Test data factories SHOULD live in `internal/testutil/factories.go` to avoid duplicating
+  fixture construction across domain test files. Factories return valid domain objects
+  with sensible defaults and accept functional options for overrides.
+
 ---
 
 ## §3 TypeScript / React SPA Standards
@@ -512,7 +570,7 @@ Applies to: `learn/`, `social/`, `mkt/`, `safety/`, `comply/`, `method/`.
 
 `[ARCH §4.7]`
 
-Applies to: `social/`, `mkt/`, `learn/`, `comply/`, `search/`, `ai/`.
+Applies to: `social/`, `mkt/`, `learn/`, `comply/`, `search/`, `recs/`.
 
 - Command functions (writes) MUST return `(ID, error)` or `error`.
   MUST NOT return rich read models after a write ("return-what-you-created" pattern).

@@ -550,7 +550,7 @@ import (
     "context"
 
     "github.com/google/uuid"
-    "homegrown/internal/shared/types"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared/types"
 )
 
 // BillingService defines all use cases for the billing domain.
@@ -1447,7 +1447,7 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "homegrown/internal/shared/types"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared/types"
 )
 
 // SubscriptionCreated is published when a family's subscription becomes active for the first time.
@@ -1507,8 +1507,8 @@ package billing
 import (
     "context"
 
-    iamevents "homegrown/internal/iam/events"
-    mktevents "homegrown/internal/mkt/events"
+    iamevents "github.com/homegrown-academy/homegrown-academy/internal/iam/events"
+    mktevents "github.com/homegrown-academy/homegrown-academy/internal/mkt/events"
 )
 
 // ─── iam:: events ─────────────────────────────────────────────────────

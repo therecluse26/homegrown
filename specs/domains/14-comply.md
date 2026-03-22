@@ -871,7 +871,7 @@ import (
     "context"
 
     "github.com/google/uuid"
-    "homegrown-academy/internal/shared"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // ComplianceService defines all compliance use cases.
@@ -1072,7 +1072,7 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "homegrown-academy/internal/shared"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // ─── StateConfigRepository ──────────────────────────────────────────────
@@ -2489,9 +2489,9 @@ See §15 for full event definitions.
 import (
     "context"
 
-    "homegrown-academy/internal/learn"
-    "homegrown-academy/internal/iam"
-    "homegrown-academy/internal/billing"
+    "github.com/homegrown-academy/homegrown-academy/internal/learn"
+    "github.com/homegrown-academy/homegrown-academy/internal/iam"
+    "github.com/homegrown-academy/homegrown-academy/internal/billing"
 )
 
 // ─── learn:: events ────────────────────────────────────────────────────

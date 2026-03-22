@@ -55,7 +55,7 @@ The platform is organized into the following logical domains. Each domain encaps
 | 5 | **Social** | Profiles, timeline/feed, comments, friends, direct messaging, groups, events, location-based discovery | V§7 |
 | 6 | **Learning** | Methodology-scoped learning tools, activity logging, progress tracking, parent education content | V§8 |
 | 7 | **Marketplace** | Creator onboarding, content listings, discovery, purchase flow, ratings/reviews, revenue share, payouts | V§9 |
-| 8 | **AI & Recommendations** | Content suggestions, curriculum recommendations, methodology-constrained recommendation engine | V§8 |
+| 8 | **Recommendations & Signals** | Content suggestions, curriculum recommendations, methodology-constrained recommendation engine | V§8 |
 | 9 | **Compliance & Reporting** | State-specific compliance configuration, attendance logs, assessment records, portfolios, transcripts | V§8 |
 | 10 | **Trust & Safety** | CSAM detection, content moderation, user reporting, bot prevention, child safety | V§7 |
 | 11 | **Billing & Subscriptions** | Free/premium tier management, marketplace transactions, creator payouts, tax compliance | V§10 |
@@ -745,7 +745,7 @@ Listings MUST follow a lifecycle: **Draft** → **Submitted** → **Published** 
 
 ---
 
-## 10. AI & Recommendations `[V§8]`
+## 10. Recommendations & Signals `[V§8]`
 
 ### 10.1 Recommendation Engine
 
@@ -1290,10 +1290,10 @@ This section defines the key data flows between domains. These contracts are log
 - **Data**: Content metadata (title, methodology, subjects, content type), purchase status, and file access references.
 - **Trigger**: On purchase completion.
 
-### 18.5 All → AI
+### 18.5 All → Recs
 
-- **Contract**: Anonymized, aggregated usage data flows to AI for recommendation training and generation.
-- **Direction**: (Learning, Social, Marketplace) → AI
+- **Contract**: Anonymized, aggregated usage data flows to Recs for recommendation training and generation.
+- **Direction**: (Learning, Social, Marketplace) → Recs
 - **Data**: Activity patterns, content popularity signals, methodology correlations — all anonymized and aggregated.
 - **Privacy**: MUST NOT include PII. MUST comply with §10.4 ethical requirements.
 
@@ -1386,7 +1386,7 @@ This section defines the key data flows between domains. These contracts are log
 |----------|---------|
 | **Premium subscription** | Family-level billing, monthly/annual, upgrade/downgrade flows |
 | **Compliance reporting** | State-specific configuration, attendance logging, assessment records |
-| **AI recommendations** | Methodology-constrained content and activity recommendations |
+| **Recommendations** | Methodology-constrained content and activity recommendations |
 | **User-created groups** | Open, request-to-join, and invite-only groups |
 | **Events (full)** | Recurring events, capacity management, group-linked events |
 | **Projects** | Multi-step project tracking with milestones |
@@ -1407,7 +1407,7 @@ This section defines the key data flows between domains. These contracts are log
 |----------|---------|
 | **Methodology-specific tools** | Nature journals, trivium tracker, rhythm planner, observation logs, habit tracking, interest-led logs, handwork tracker, practical life activities |
 | **Mastery paths** | Beginner → intermediate → advanced methodology education |
-| **Advanced AI** | Improved recommendations, data collection for future tutoring |
+| **Advanced recommendations** | Improved recommendations, data collection for future tutoring |
 | **Transcripts** | Formal high school transcript generation |
 | **Portfolios** | Customizable PDF portfolio generation |
 | **Mobile apps** | Native iOS and Android applications |

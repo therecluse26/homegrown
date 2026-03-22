@@ -233,7 +233,7 @@ social and marketplace scopes via the `SearchBackend` enum (§13). The API contr
 #### `GET /v1/search/suggestions`
 
 AI-powered search suggestions based on family's methodology and past activity. Depends on
-`ai::` domain (not yet specified).
+`recs::` domain.
 
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Response**: `200 OK` → `SearchSuggestionsResponse { Suggestions []SearchSuggestion }`
@@ -1837,7 +1837,7 @@ domain depends on search results for correctness.
 
 ### Phase 3+
 
-- `GET /v1/search/suggestions` — AI-powered search suggestions (depends on `ai::` domain)
+- `GET /v1/search/suggestions` — AI-powered search suggestions (depends on `recs::` domain)
 - 5-node Typesense cluster for higher availability
 - Cross-scope search (search all scopes in a single query)
 - Search analytics (popular queries, zero-result queries)

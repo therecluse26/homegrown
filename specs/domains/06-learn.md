@@ -32,7 +32,7 @@ assessment engine** (question bank, quiz definitions, quiz sessions), **lesson s
 methodology configuration and terminology (owned by `method::`), Publisher entities and membership
 (owned by `mkt::`), file uploads and media processing (owned by `media::`), compliance reporting
 (owned by `comply::`), search indexing (owned by `search::`), notification delivery (owned by
-`notify::`), AI recommendations (owned by `ai::`), student profiles (owned by `iam::`).
+`notify::`), recommendations (owned by `recs::`), student profiles (owned by `iam::`).
 
 **What learn:: delegates**: Media upload/validation → `media::` (via adapter interface). Tool
 resolution → `method::MethodologyService` (via service dependency). Publisher ownership checks →
@@ -3199,7 +3199,7 @@ func (e *ErrDatabase) Unwrap() error {
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
 | `LearningService` interface methods | `comply::` | `LearningService` interface via AppState |
-| `ActivityLogged` event | `comply::`, `ai::`, `notify::` | Domain event — attendance tracking, recommendation signal, streak check |
+| `ActivityLogged` event | `comply::`, `recs::`, `notify::` | Domain event — attendance tracking, recommendation signal, streak check |
 | `MilestoneAchieved` event | `notify::`, `social::` | Domain event — notification, optional milestone post |
 | `BookCompleted` event | `notify::` | Domain event — streak check, reading milestone |
 | `DataExportReady` event | `notify::` | Domain event — export download notification |

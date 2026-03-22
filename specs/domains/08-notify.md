@@ -391,7 +391,7 @@ import (
     "context"
 
     "github.com/google/uuid"
-    "homegrown/internal/shared/types"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared/types"
 )
 
 // NotificationService defines all use cases exposed to handlers and event handlers.
@@ -1392,14 +1392,14 @@ import (
     "context"
     "log/slog"
 
-    socialevents "homegrown/internal/social/events"
-    methodevents "homegrown/internal/method/events"
-    onboardevents "homegrown/internal/onboard/events"
-    learnevents "homegrown/internal/learn/events"
-    mktevents "homegrown/internal/mkt/events"
-    safetyevents "homegrown/internal/safety/events"
-    iamevents "homegrown/internal/iam/events"
-    billingevents "homegrown/internal/billing/events"
+    socialevents "github.com/homegrown-academy/homegrown-academy/internal/social/events"
+    methodevents "github.com/homegrown-academy/homegrown-academy/internal/method/events"
+    onboardevents "github.com/homegrown-academy/homegrown-academy/internal/onboard/events"
+    learnevents "github.com/homegrown-academy/homegrown-academy/internal/learn/events"
+    mktevents "github.com/homegrown-academy/homegrown-academy/internal/mkt/events"
+    safetyevents "github.com/homegrown-academy/homegrown-academy/internal/safety/events"
+    iamevents "github.com/homegrown-academy/homegrown-academy/internal/iam/events"
+    billingevents "github.com/homegrown-academy/homegrown-academy/internal/billing/events"
 )
 
 // ─── social:: events ─────────────────────────────────────────────────────

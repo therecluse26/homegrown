@@ -38,7 +38,7 @@ Types flow from database schema to API response to React component. `[S§17.1]`
 
 Start simple. Add complexity only when measured load demands it. `[S§17.4]`
 
-- PostgreSQL full-text search before Meilisearch.
+- PostgreSQL full-text search before Typesense.
 - Single server before load balancer.
 - In-process background tasks before distributed job queues.
 - Reverse-chronological feed before algorithmic ranking.
@@ -173,7 +173,7 @@ Every selection references the spec requirement it satisfies, names rejected alt
 
 **Revision trigger**: Never for the primary database. Add read replicas when write throughput exceeds single-server capacity (~Phase 3).
 
-### 2.6 Search: PostgreSQL FTS → Meilisearch
+### 2.6 Search: PostgreSQL FTS → Typesense
 
 **Satisfies**: `[S§14]` search, `[S§9.3]` marketplace discovery
 
@@ -182,11 +182,11 @@ Every selection references the spec requirement it satisfies, names rejected alt
 - Marketplace search (listings by title, description, tags)
 - Learning search (family-scoped: activities, journals, reading lists)
 
-**Phase 2+**: Meilisearch for marketplace and social search.
+**Phase 2+**: Typesense for marketplace and social search.
 - Typo-tolerant, faceted filtering `[S§9.3]`, instant autocomplete `[S§14.2]`
 - PostgreSQL FTS retained for family-scoped learning search (smaller dataset, privacy-sensitive)
 
-**Revision trigger**: Migrate to Meilisearch when marketplace exceeds ~100K listings or search latency exceeds 500ms p95 `[S§17.3]`.
+**Revision trigger**: Migrate to Typesense when marketplace exceeds ~100K listings or search latency exceeds 500ms p95 `[S§17.3]`.
 
 ### 2.7 Background Jobs: Redis + asynq
 
@@ -282,7 +282,7 @@ Redis also serves as:
 **Scaling path**:
 - **Phase 1**: 1 EC2 instance, Single-AZ RDS + Redis (~$110/mo)
 - **Phase 2**: Multiple EC2 instances or migrate to Fargate launch type, Multi-AZ RDS, ECS auto-scaling (~$250/mo)
-- **Phase 3+**: Aurora PostgreSQL + read replicas, ElastiCache cluster, Meilisearch on separate ECS task (~$500-800/mo)
+- **Phase 3+**: Aurora PostgreSQL + read replicas, ElastiCache cluster, Typesense on separate ECS task (~$500-800/mo)
 
 **Upgrade path — Fargate**: If managing the EC2 instance (AMI patching, capacity planning) becomes burdensome, migrate ECS tasks from EC2 to Fargate launch type. Same task definitions, same service — only the launch type changes.
 
@@ -454,7 +454,7 @@ Pipeline stages:
                                      │  │ search    │  │
                                      │  │ comply    │  │
                                      │  │ safety    │  │
-                                     │  │ ai        │  │
+                                     │  │ recs      │  │
                                      │  │ media     │  │
                                      │  │ lifecycle │  │
                                      │  │ admin     │  │
@@ -491,7 +491,7 @@ Each spec domain `[S§2.1]` maps to a Go package within the monolith:
 | Social | `social` | `[S§7]` | Profiles, feed, friends, messaging, groups, events |
 | Learning | `learn` | `[S§8]` | Tools, activities, journals, progress tracking, interactive assessments, lesson sequences, student assignments |
 | Marketplace | `mkt` | `[S§9]` | Listings, purchases, reviews, creator dashboard |
-| AI & Recommendations | `ai` | `[S§10]` | Recommendation engine, content suggestions |
+| Recommendations & Signals | `recs` | `[S§10]` | Recommendation engine, content suggestions |
 | Compliance & Reporting | `comply` | `[S§11]` | Attendance, assessments, portfolios, transcripts |
 | Trust & Safety | `safety` | `[S§12]` | CSAM, moderation, reporting, bot prevention |
 | Billing & Subscriptions | `billing` | `[S§15]` | Subscriptions, transactions, payouts |
@@ -834,7 +834,7 @@ that enforce invariants structurally (not by convention):
 | `notify/` | No | Event-triggered dispatch, no complex invariants |
 | `media/` | No | Upload/process/store/serve, infrastructure domain |
 | `search/` | No | Indexing and retrieval, no business invariants |
-| `ai/` | No | Recommendation queries, no invariants to enforce |
+| `recs/` | No | Recommendation queries, no invariants to enforce |
 | `onboard/` | No | Workflow steps, IAM interactions |
 | `billing/` | No | Hyperswitch delegation; subscription state machine lives in the payment processor |
 | `iam/` | No | Identity data, permissions; session state is Kratos' responsibility |
@@ -964,15 +964,15 @@ func (b *EventBus) Subscribe(eventType DomainEvent, handler DomainEventHandler) 
 
 | Event (defined in) | Subscribing Domains | Effect |
 |---|---|---|
-| `ActivityLogged` (`learn/events`) | `comply`, `ai`, `notify` | Attendance tracking, recommendation signal, streak milestone check |
+| `ActivityLogged` (`learn/events`) | `comply`, `recs`, `notify` | Attendance tracking, recommendation signal, streak milestone check |
 | `PostCreated` (`social/events`) | `safety`, `search` | Content scan, search index update |
 | `PurchaseCompleted` (`mkt/events`) | `learn`, `billing`, `notify` | Tool access grant, creator earnings credit, receipt email |
 | `ContentFlagged` (`safety/events`) | `notify` | Moderation queue alert |
 | `MethodologyConfigUpdated` (`method/events`) | All domains | Config cache invalidation |
 | `MilestoneAchieved` (`learn/events`) | `notify`, `social` | In-app + email notification, optional milestone post |
-| `QuizCompleted` (`learn/events`) | `notify`, `ai` | Score notification, recommendation signal |
-| `SequenceAdvanced` (`learn/events`) | `ai` | Recommendation signal for sequence engagement |
-| `SequenceCompleted` (`learn/events`) | `notify`, `ai` | Completion notification, recommendation signal |
+| `QuizCompleted` (`learn/events`) | `notify`, `recs` | Score notification, recommendation signal |
+| `SequenceAdvanced` (`learn/events`) | `recs` | Recommendation signal for sequence engagement |
+| `SequenceCompleted` (`learn/events`) | `notify`, `recs` | Completion notification, recommendation signal |
 | `AssignmentCompleted` (`learn/events`) | `notify` | Notify parent of assignment completion |
 
 **Event ownership rule** — Event types are defined in the *emitting* domain's `events.go`
@@ -1036,7 +1036,7 @@ optimized for the UI) within the same service and repository.
 | `learn/` | Activity log, book completion | Progress trends, subject balance |
 | `comply/` | Attendance mark, assessment record | Attendance summary, threshold check |
 | `search/` | Index document, update index | Full-text search, autocomplete |
-| `ai/` | Record learning signal | Fetch pre-computed recommendations |
+| `recs/` | Record learning signal | Fetch pre-computed recommendations |
 
 **Implementation pattern** — command and query functions coexist in the same service interface
 but are clearly separated by naming and return type conventions:
@@ -1101,7 +1101,7 @@ Tables are prefixed by domain to avoid collision and provide clear ownership. `[
 | Social | `soc_` | `soc_profiles`, `soc_posts`, `soc_comments`, `soc_friendships`, `soc_messages`, `soc_groups`, `soc_events` |
 | Learning | `learn_` | `learn_activities`, `learn_journals`, `learn_reading_lists`, `learn_progress`, `learn_questions`, `learn_quiz_defs`, `learn_quiz_sessions`, `learn_sequence_defs`, `learn_sequence_progress`, `learn_student_assignments` |
 | Marketplace | `mkt_` | `mkt_creators`, `mkt_listings`, `mkt_purchases`, `mkt_reviews`, `mkt_files` |
-| AI & Recs | `ai_` | `ai_signals`, `ai_recommendations` |
+| Recommendations & Signals | `recs_` | `recs_signals`, `recs_recommendations` |
 | Compliance | `comply_` | `comply_attendance`, `comply_state_configs`, `comply_portfolios` |
 | Trust & Safety | `safety_` | `safety_reports`, `safety_mod_actions`, `safety_content_flags` |
 | Billing | `bill_` | `bill_subscriptions`, `bill_transactions`, `bill_payouts` |
@@ -2484,7 +2484,7 @@ ORDER BY sim DESC
 LIMIT 10;
 ```
 
-### 9.2 Phase 2+: Meilisearch Migration Path
+### 9.2 Phase 2+: Typesense Migration Path
 
 When marketplace exceeds ~100K listings or search latency exceeds 500ms p95:
 
@@ -2506,30 +2506,29 @@ func (b *PostgresFTSBackend) SearchMarketplace(ctx context.Context, query *Marke
     return postgresMarketplaceSearch(ctx, b.db, query)
 }
 
-// MeilisearchBackend uses Meilisearch for typo tolerance, faceted filtering,
+// TypesenseBackend uses Typesense for typo tolerance, faceted filtering,
 // and instant search at any scale. [S§14.2]
-type MeilisearchBackend struct {
-    client *meilisearch.Client
+// Built-in Raft HA — no enterprise license required.
+type TypesenseBackend struct {
+    adapter TypesenseAdapter
 }
 
-func (b *MeilisearchBackend) SearchMarketplace(ctx context.Context, query *MarketplaceSearchQuery) (SearchResults, error) {
-    results, err := b.client.Index("marketplace_listings").Search(query.Text, &meilisearch.SearchRequest{
-        Filter: buildMeilisearchFilter(query),
-        Facets: []string{"methodology_tags", "subject_tags", "content_type", "worldview_tags"},
-    })
+func (b *TypesenseBackend) SearchMarketplace(ctx context.Context, query *MarketplaceSearchQuery) (SearchResults, error) {
+    tsQuery := buildTypesenseMarketplaceQuery(query)
+    results, err := b.adapter.Search(ctx, "marketplace_listings", tsQuery)
     if err != nil {
-        return SearchResults{}, fmt.Errorf("meilisearch query failed: %w", err)
+        return SearchResults{}, fmt.Errorf("typesense query failed: %w", err)
     }
-    return convertResults(results), nil
+    return convertTypesenseToSearchResponse(results), nil
 }
 ```
 
 **Migration strategy**: Zero-downtime switchover.
-1. Index existing PostgreSQL data into Meilisearch.
+1. Index existing PostgreSQL data into Typesense.
 2. Run both backends in parallel, comparing results (shadow mode).
-3. Switch reads to Meilisearch.
+3. Switch reads to Typesense.
 4. Maintain PostgreSQL FTS indexes as fallback.
-5. Remove PostgreSQL FTS indexes only after Meilisearch has proven stable for 30+ days.
+5. Remove PostgreSQL FTS indexes only after Typesense has proven stable for 30+ days.
 
 ---
 
@@ -3531,7 +3530,7 @@ Single-AZ, 1 instance           Multi-AZ, auto-scaling            Managed + dedi
 │  RDS Single  │                │  (auto       │                  │  ElastiCache │
 │  -AZ         │                │   failover)  │                  │  cluster     │
 ├──────────────┤                ├──────────────┤                  ├──────────────┤
-│  ElastiCache │                │  ElastiCache │                  │  Meilisearch │
+│  ElastiCache │                │  ElastiCache │                  │  Typesense   │
 │  single node │                │  single node │                  │  (ECS task)  │
 └──────────────┘                └──────────────┘                  └──────────────┘
 ```
@@ -3938,10 +3937,10 @@ Key note for §15.6 Learning: Video transcoding is a background job in the exist
 
 **Consequences**:
 - **Positive**: Single database to operate, back up, and monitor. PostgreSQL's JSONB is performant enough for methodology config. PostGIS eliminates a separate geo service. FTS eliminates a search service for Phase 1. Strong consistency guarantees.
-- **Negative**: PostgreSQL FTS lacks typo tolerance and instant search capabilities that Meilisearch provides. JSONB queries are less optimized than purpose-built document stores.
-- **Mitigation**: Meilisearch migration path defined (§9.2) with specific trigger (100K listings or 500ms p95 latency). JSONB data volume is small (6 methodologies x ~10KB each).
+- **Negative**: PostgreSQL FTS lacks typo tolerance and instant search capabilities that Typesense provides. JSONB queries are less optimized than purpose-built document stores.
+- **Mitigation**: Typesense migration path defined (§9.2) with specific trigger (100K listings or 500ms p95 latency). JSONB data volume is small (6 methodologies x ~10KB each).
 
-**Revision trigger**: Add Meilisearch when search latency exceeds 500ms p95 or marketplace exceeds 100K listings.
+**Revision trigger**: Add Typesense when search latency exceeds 500ms p95 or marketplace exceeds 100K listings.
 
 ### ADR-004: Ory Kratos for Authentication
 

@@ -296,6 +296,9 @@ CREATE TABLE soc_groups (
 CREATE INDEX idx_soc_groups_type ON soc_groups(group_type);
 CREATE INDEX idx_soc_groups_methodology ON soc_groups(methodology_id)
     WHERE methodology_id IS NOT NULL;
+-- Full-text search index on groups [S§14.1]
+CREATE INDEX idx_soc_groups_search ON soc_groups
+    USING GIN(to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')));
 
 -- Group members [S§7.6]
 CREATE TABLE soc_group_members (
@@ -348,6 +351,9 @@ CREATE INDEX idx_soc_events_date ON soc_events(event_date)
     WHERE status = 'active';
 CREATE INDEX idx_soc_events_discoverable ON soc_events(visibility, event_date)
     WHERE visibility = 'discoverable' AND status = 'active';
+-- Full-text search index on events [S§14.1]
+CREATE INDEX idx_soc_events_search ON soc_events
+    USING GIN(to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '')));
 
 -- Event RSVPs [S§7.7]
 CREATE TABLE soc_event_rsvps (
@@ -2740,8 +2746,8 @@ type MessageReported struct {
 ```go
 // internal/social/event_handlers.go
 
-// import "homegrown-academy/internal/iam"
-// import "homegrown-academy/internal/learn"
+// import "github.com/homegrown-academy/homegrown-academy/internal/iam"
+// import "github.com/homegrown-academy/homegrown-academy/internal/learn"
 
 type FamilyCreatedHandler struct {
     socialService SocialService

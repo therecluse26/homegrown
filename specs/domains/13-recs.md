@@ -539,7 +539,7 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "homegrown/internal/shared/types"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared/types"
 )
 
 // RecsService is the primary service interface for the Recommendations & Signals domain.
@@ -716,7 +716,7 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "homegrown/internal/shared/types"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared/types"
 )
 
 // RecommendationListParams holds query parameters for GET /v1/recommendations.
@@ -1212,10 +1212,10 @@ import (
     "time"
 
     "github.com/google/uuid"
-    learnevents "homegrown/internal/learn/events"
-    mktevents "homegrown/internal/mkt/events"
-    iamevents "homegrown/internal/iam/events"
-    methodevents "homegrown/internal/method/events"
+    learnevents "github.com/homegrown-academy/homegrown-academy/internal/learn/events"
+    mktevents "github.com/homegrown-academy/homegrown-academy/internal/mkt/events"
+    iamevents "github.com/homegrown-academy/homegrown-academy/internal/iam/events"
+    methodevents "github.com/homegrown-academy/homegrown-academy/internal/method/events"
 )
 
 // ActivityLoggedHandler records an activity signal when a student logs a learning activity.
