@@ -427,11 +427,11 @@ on a feature branch.
 
 ---
 
-## §8 Architectural Pattern Rules
+## §8 Hexagonal Architecture Rules
 
-These rules are the enforcement layer for the pattern stack defined in `[ARCH §4]`. Do not
-read this section for rationale — read `specs/ARCHITECTURE.md §4` for that. Every rule
-here is an absolute enforcement imperative.
+These rules are the enforcement layer for the hexagonal architecture defined in `[ARCH §4]`.
+Do not read this section for rationale — read `specs/ARCHITECTURE.md §4` for that. Every
+rule here is an absolute enforcement imperative.
 
 ### §8.1 Bounded Context Rules
 

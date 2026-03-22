@@ -586,23 +586,35 @@ migrations/
 
 ---
 
-## 4. Internal Architecture Patterns
+## 4. Hexagonal Architecture (Ports & Adapters)
 
-This section defines the named, coherent pattern stack used inside the monolith. It bridges
-the gap between "we use Go + Echo + GORM" (§2) and "here are the file naming rules"
-(CODING_STANDARDS.md §2.1). Without explicit patterns, AI-assisted code generation defaults
-to whatever pattern the LLM has seen most — typically anemic domain models with god-services,
-or over-engineered hexagonal abstractions. Naming the patterns here makes intent unambiguous.
+Every domain in the monolith follows **hexagonal architecture**: the service interface
+(`ports.go`) is the core, handlers are inbound adapters, and repositories / `adapters/*.go`
+are outbound adapters.
+
+> **Dependency Direction Rule** — All dependencies point inward toward `service.go`.
+> Handlers and repositories depend on the service interface, never the reverse.
+
+This is the strategic enabler for microservice extraction (§1.2): when a domain is extracted
+to its own service, only the adapters change — the service interface is the seam. This
+section bridges "we use Go + Echo + GORM" (§2) with "here are the file naming rules"
+(CODING_STANDARDS.md §2.1).
+
+Hexagonal architecture in Go is simple — an interface in `ports.go`, a struct behind it, DI
+via constructor. Do not add adapter registries, port resolution frameworks, or abstraction
+beyond the §4.3/§4.4 examples.
 
 ### 4.1 Pattern Stack Overview
 
-The six patterns below are layered from strategic to tactical. Each is adopted because of
-specific project characteristics, not generic "best practices."
+The six patterns below are facets of the hexagonal architecture — domain isolation, port
+definition, adapter implementation, invariant enforcement, cross-domain communication, and
+read/write separation. Each is adopted because of specific project characteristics, not
+generic "best practices."
 
 | Layer | Pattern | Scope | Primary Benefit |
 |-------|---------|-------|-----------------|
 | Strategic | Modular Monolith with Bounded Contexts | Entire system | Domain isolation with extraction path |
-| Intra-domain | Application Service Layer (Ports & Adapters) | Every domain | Testable, swappable adapters |
+| Intra-domain | Hexagonal Core (handler → service ← repository) | Every domain | Testable, swappable adapters; extraction-ready seams |
 | Outbound ports | Repository Trait Pattern | Every domain | Service unit tests without DB |
 | Inbound ports | Service Interface Traits | Every domain | Extraction-ready seams, handler decoupling |
 | Complex domains | Domain Model Layer (Aggregates) | 6 domains | State machine invariant enforcement |
@@ -658,11 +670,11 @@ interaction. No raw SDK calls exist outside these adapters:
 - Raw SDK calls scattered through `service.go` files
 - Utility modules that don't belong to a domain or `shared/`
 
-### 4.3 Application Service Layer
+### 4.3 The Hexagonal Core (Handler → Service ← Repository)
 
-The `handler.go / service.go / repository.go` file split is a Ports & Adapters
-implementation. The port is the `service.go` interface; handlers and repositories are
-adapters on each side:
+The `handler.go / service.go / repository.go` file split is the hexagonal core of each
+domain. The service interface (in `ports.go`) is the port. Handlers are inbound adapters;
+repositories and `adapters/*.go` are outbound adapters:
 
 ```
 HTTP Request  →  handler.go       (Inbound Adapter)
@@ -698,10 +710,11 @@ layer adds a second level of isolation: if Hyperswitch itself were ever replaced
 explicit prevents the common pattern of SDK calls proliferating through service methods,
 which makes testing and future vendor swaps painful.
 
-### 4.4 Ports & Adapters (Full — Service and Repository Interfaces)
+### 4.4 Port Definitions (ports.go — All Interfaces)
 
-Every domain service and every repository MUST be defined as a Go interface before the
-implementation. This makes both inbound and outbound ports explicit and enforced by the type system.
+Every domain service and every repository MUST be defined as a Go interface in `ports.go`
+before the implementation. These interfaces are the hexagonal ports — the contracts that
+make microservice extraction (§1.2) possible without changing callers.
 
 #### Inbound Ports — Service Interfaces
 
