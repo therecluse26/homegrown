@@ -34,8 +34,8 @@ middleware, and all shared types in place.
 
 - Domain logic (each domain spec owns its own logic)
 - Auth middleware *implementation* — the auth middleware signature and behavior are defined
-  here; the actual Kratos integration is implemented by IAM (01-iam) via the `KratosAdapter`
-  port
+  here; the actual Kratos integration is implemented by IAM (01-iam) via the `SessionValidator`
+  port (`shared/auth.go`), with `KratosAdapter` as the concrete implementation
 - CI/CD pipeline `[ARCH §2.15]`
 - Dockerfile `[ARCH §2.11]`
 - CDK infrastructure `[ARCH §2.17]`
@@ -138,7 +138,11 @@ homegrown-academy/
 │   │   ├── types.go                        (core) §7
 │   │   ├── family_scope.go                 (core) §8
 │   │   ├── db.go                           (core) §9
-│   │   ├── redis.go                        (core) §10
+│   │   ├── cache.go                        (core) §10 — Cache port interface + helpers
+│   │   ├── redis.go                        (core) §10 — Cache implementation (Redis)
+│   │   ├── auth.go                         (core) §13 — SessionValidator port interface
+│   │   ├── error_reporter.go               (core) §14 — ErrorReporter port + NoopErrorReporter
+│   │   ├── jobs.go                         (core) §14 — JobEnqueuer port + NoopJobEnqueuer
 │   │   ├── events.go                       (core) §11
 │   │   └── pagination.go                   (core) §12
 │   ├── middleware/
@@ -564,11 +568,13 @@ previous step.
 |------|--------|------------|------------------|
 | 1 | `initLogger(cfg)` | None (uses defaults until config loaded) | Fatal — exit |
 | 2 | `config.LoadConfig()` | — | Fatal — exit with missing-env message |
-| 3 | `db.CreatePool(cfg)` | Config | Fatal — exit |
+| 3 | `shared.CreatePool(cfg)` | Config | Fatal — exit |
 | 4 | `goose.Up(db, migrationsDir)` | DB pool | Fatal — exit with migration error |
-| 5 | `redis.NewClient(cfg)` | Config | Fatal — exit |
+| 5 | `shared.CreateCache(ctx, cfg)` | Config | Fatal — exit |
+| 5.5 | `shared.CreateJobEnqueuer(cfg)` | Config | Fatal — exit |
+| 5.6 | Init `ErrorReporter` (Sentry if `ErrorReportingDSN` set, else Noop) | Config | Non-fatal — continue with NoopErrorReporter |
 | 6 | `events.NewEventBus()` + subscription registration | Services | Fatal — exit |
-| 7 | `app.NewAppState(db, redis, eventBus, services...)` | All above | Infallible |
+| 7 | Build `AppState{DB, Cache, Jobs, Errors, EventBus, Config, Version}` | All above | Infallible |
 | 8 | `app.NewApp(state)` | AppState | Infallible |
 | 9 | `e.Start(addr)` | Config | Fatal — exit |
 | 10 | Graceful shutdown via `os.Signal` listener | All above | Runs until signal |
@@ -1712,7 +1718,7 @@ func Auth(state *app.AppState) echo.MiddlewareFunc {
 **Behavior**:
 
 1. Extract session cookie from the `Cookie` header
-2. Call Kratos public API to validate the session (via `KratosAdapter` port from IAM)
+2. Call auth provider to validate the session (via `SessionValidator` port, `shared/auth.go`)
 3. Look up the parent in the local database by `identity_id` (unscoped — FamilyScope
    does not exist yet)
 4. Look up the parent's family
@@ -1730,13 +1736,14 @@ func Auth(state *app.AppState) echo.MiddlewareFunc {
 - Parent not found in local DB (orphaned Kratos identity) → 401 Unauthorized
 
 **Implementation ownership**: The auth middleware *function* lives in `internal/middleware/auth.go`
-(core infrastructure). It calls `KratosAdapter.ValidateSession()` which is an interface defined
-in `internal/iam/ports.go` and implemented in `internal/iam/adapters/kratos.go`. The middleware depends
-on IAM's adapter at runtime but does not import IAM's service layer.
+(core infrastructure). It calls `SessionValidator.ValidateSession()` — an interface defined
+in `internal/shared/auth.go` and implemented by `KratosAdapter` in `internal/iam/adapters/kratos.go`.
+The middleware depends on the `SessionValidator` port at runtime but does not import IAM's
+service layer.
 
-**Dependency note**: Because auth middleware depends on `KratosAdapter`, the IAM domain's
-adapter must be available before the middleware can function. The `AppState` provides the
-adapter as a `KratosAdapter` interface value.
+**Dependency note**: Because auth middleware depends on `SessionValidator`, the IAM domain's
+adapter must be available before the middleware can function. The `AppState.Auth` field holds
+the `SessionValidator` interface value (nil until 01-iam wires it).
 
 ### §13.2 Rate Limiting (`rate_limit.go`)
 
@@ -2569,6 +2576,11 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 - [ ] Implement generic `CacheGet`, `CacheSet`, `CacheDelete` helpers (§10.2)
 - [ ] Implement `CacheIncrementWithExpiry` (§10.3)
 
+#### Infrastructure Ports
+- [ ] Implement `SessionValidator` interface in `shared/auth.go` [CODING §8.1b]
+- [ ] Implement `ErrorReporter` interface + `NoopErrorReporter` in `shared/error_reporter.go` [CODING §8.1b]
+- [ ] Implement `JobEnqueuer` interface + `NoopJobEnqueuer` + `CreateJobEnqueuer()` in `shared/jobs.go` [CODING §8.1b]
+
 #### Event Bus
 - [ ] Implement `DomainEvent` and `DomainEventHandler` interfaces (§11.1)
 - [ ] Implement `EventBus` with `reflect.Type` dispatch (§11.2)
@@ -2580,7 +2592,7 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 - [ ] Implement cursor encode/decode (§12.3)
 
 #### Middleware
-- [ ] Implement auth middleware function (§13.1) — stub until IAM provides KratosAdapter
+- [ ] Implement auth middleware function (§13.1) — stub until IAM provides SessionValidator
 - [ ] Implement rate limiting middleware (§13.2)
 - [ ] Implement `RequirePremium` extractor (§13.3)
 - [ ] Implement `RequireCoppaConsent` extractor (§13.3)
@@ -2636,7 +2648,7 @@ domain requires them.
 | Item | Owned By | When |
 |------|----------|------|
 | `RequirePrimaryParent` extractor | This spec (§13.3) | When IAM Phase 2 is implemented |
-| Background job runner (asynq) | Consuming domain | When first domain needs async jobs |
+| Background job runner (asynq server via `JobEnqueuer`) | Consuming domain | When first domain needs async jobs |
 | WebSocket infrastructure (gorilla/websocket) | `social::` | When messaging is implemented |
 | Typesense integration | `search::` | When PG FTS is insufficient (§2.6) |
 | Full CQRS read models | Consuming domain | When progressive optimization requires it |
@@ -2677,8 +2689,8 @@ bootstrap migration:
 **Change**: Update to clarify ownership split:
 
 > **What IAM owns**: Family accounts, parent users, student profiles, COPPA consent tracking,
-> co-parent invitations, Kratos webhook handlers, auth middleware *implementation*
-> (calls `KratosAdapter`), `AuthContext` *population* logic.
+> co-parent invitations, Kratos webhook handlers, `SessionValidator` *implementation*
+> (via `KratosAdapter`), `AuthContext` *population* logic.
 >
 > **Shared infrastructure** (defined in 00-core, consumed by IAM and all other domains):
 > `AuthContext` type (00-core §7.2), `FamilyScope` type (00-core §8), `AppError` base
@@ -2702,12 +2714,12 @@ behavioral documentation (what IAM populates), remove shared type definitions:
 > #### §11.1 AuthContext Population
 >
 > IAM owns the *population* of `AuthContext` (type defined in 00-core §7.2). The auth
-> middleware (`internal/middleware/auth.go`, defined in 00-core §13.1) calls IAM's
-> `KratosAdapter.ValidateSession()` and queries IAM repositories to build the
+> middleware (`internal/middleware/auth.go`, defined in 00-core §13.1) calls
+> `SessionValidator.ValidateSession()` (implemented by IAM's `KratosAdapter`) and queries IAM repositories to build the
 > `AuthContext`. The flow is:
 >
 > 1. Auth middleware extracts session cookie
-> 2. Calls `KratosAdapter.ValidateSession()` (IAM §7)
+> 2. Calls `SessionValidator.ValidateSession()` (IAM §7 — implemented by `KratosAdapter`)
 > 3. Calls `ParentRepository.FindByKratosID()` (IAM §6)
 > 4. Calls `FamilyRepository.FindByID()` (IAM §6)
 > 5. Constructs `AuthContext` from parent + family data
