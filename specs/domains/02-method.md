@@ -232,6 +232,14 @@ VALUES
     ('field-trip-log',      'Field Trip Log',          'Document field trips with location, subjects covered, photos, and reflections',       'free'),
     ('lesson-planner',      'Lesson Planner',          'Weekly/daily lesson planning with subject scheduling and resource linking',           'free');
 
+-- Interactive learning tools [S§8.1.9-8.1.12] (Phase 1)
+INSERT INTO method_tools (slug, display_name, description, tier)
+VALUES
+    ('assessment-engine',   'Assessment Engine',       'Take quizzes and tests online with auto-scoring and parent-scored short answers',      'free'),
+    ('content-viewer',      'Content Viewer',          'View PDFs and documents in-platform with page tracking and progress',                 'free'),
+    ('video-player',        'Video Player',            'Watch video lessons with adaptive streaming, resume, and completion tracking',          'free'),
+    ('lesson-sequences',    'Lesson Sequences',        'Follow structured lesson paths combining readings, videos, quizzes, and activities',   'free');
+
 -- =============================================================================
 -- Tool activation mappings [S§4.2]
 -- config_overrides carry methodology-specific labels, guidance text, and entry types
@@ -459,22 +467,106 @@ FROM method_definitions md
 CROSS JOIN method_tools mt
 WHERE mt.slug = 'video-lessons'
   AND md.is_active = true;
+
+-- =============================================================================
+-- Interactive learning tool activations [S§8.1.9-8.1.12]
+-- =============================================================================
+
+-- Content Viewer — activated for ALL methodologies [S§8.1.10]
+-- Every methodology benefits from in-platform document viewing.
+INSERT INTO method_tool_activations (methodology_id, tool_id, config_overrides, sort_order)
+SELECT md.id, mt.id, '{"label": "Content Viewer"}', 100
+FROM method_definitions md
+CROSS JOIN method_tools mt
+WHERE mt.slug = 'content-viewer'
+  AND md.is_active = true;
+
+-- Video Player — activated for ALL methodologies [S§8.1.11]
+-- In-platform video player with adaptive streaming. Distinct from video-lessons
+-- (which is the marketplace integration layer); the player is the rendering tool.
+INSERT INTO method_tool_activations (methodology_id, tool_id, config_overrides, sort_order)
+SELECT md.id, mt.id, '{"label": "Video Player"}', 101
+FROM method_definitions md
+CROSS JOIN method_tools mt
+WHERE mt.slug = 'video-player'
+  AND md.is_active = true;
+
+-- Assessment Engine — methodology-selective [S§8.1.9]
+-- Traditional: Yes (core tool)
+-- Classical: Yes (core tool)
+-- Montessori: Optional (observation-based assessment is primary, quizzes are supplemental)
+-- Charlotte Mason: No (narration-based assessment, not quiz-based)
+-- Waldorf: No (developmental assessment, not test-based)
+-- Unschooling: No (no imposed assessment)
+INSERT INTO method_tool_activations (methodology_id, tool_id, config_overrides, sort_order)
+VALUES
+    ((SELECT id FROM method_definitions WHERE slug = 'traditional'),
+     (SELECT id FROM method_tools WHERE slug = 'assessment-engine'),
+     '{"label": "Online Quizzes", "guidance": "Create and administer quizzes online. Students take tests on the platform with auto-scoring for objective questions. Scores flow directly into grade tracking."}',
+     10),
+    ((SELECT id FROM method_definitions WHERE slug = 'classical'),
+     (SELECT id FROM method_tools WHERE slug = 'assessment-engine'),
+     '{"label": "Assessments", "guidance": "Grammar stage: fact recall quizzes. Logic stage: analytical questions and matching exercises. Rhetoric stage: short-answer assessments scored by parent."}',
+     10),
+    ((SELECT id FROM method_definitions WHERE slug = 'montessori'),
+     (SELECT id FROM method_tools WHERE slug = 'assessment-engine'),
+     '{"label": "Knowledge Checks", "guidance": "Montessori primarily uses observation-based assessment. Online quizzes are an optional supplement — use sparingly and focus on self-assessment rather than grading.", "optional": true}',
+     10);
+
+-- Lesson Sequences — methodology-selective [S§8.1.12]
+-- Most methodologies use sequences, but with different labels and guidance.
+-- Unschooling: No (child-directed, no imposed lesson order)
+INSERT INTO method_tool_activations (methodology_id, tool_id, config_overrides, sort_order)
+VALUES
+    ((SELECT id FROM method_definitions WHERE slug = 'charlotte-mason'),
+     (SELECT id FROM method_tools WHERE slug = 'lesson-sequences'),
+     '{"label": "Lesson Paths", "guidance": "Gentle, living-books-based lesson sequences. Follow the sequence at the child''s pace — short lessons with full attention, then move on."}',
+     11),
+    ((SELECT id FROM method_definitions WHERE slug = 'traditional'),
+     (SELECT id FROM method_tools WHERE slug = 'lesson-sequences'),
+     '{"label": "Lesson Sequences", "guidance": "Structured lesson paths following curriculum order. Students complete each step before advancing to the next."}',
+     11),
+    ((SELECT id FROM method_definitions WHERE slug = 'classical'),
+     (SELECT id FROM method_tools WHERE slug = 'lesson-sequences'),
+     '{"label": "Lesson Sequences", "guidance": "Structured lesson paths aligned to Trivium stages. Sequences may include reading, discussion prompts, memory work, and assessments."}',
+     11),
+    ((SELECT id FROM method_definitions WHERE slug = 'waldorf'),
+     (SELECT id FROM method_tools WHERE slug = 'lesson-sequences'),
+     '{"label": "Block Sequences", "guidance": "Main lesson block sequences following Waldorf rhythmic structure. Each block dives deep into one subject over 3-4 weeks."}',
+     11),
+    ((SELECT id FROM method_definitions WHERE slug = 'montessori'),
+     (SELECT id FROM method_tools WHERE slug = 'lesson-sequences'),
+     '{"label": "Guided Paths", "guidance": "Suggested work sequences that follow the Montessori scope and sequence. The child may choose to follow or diverge based on their interests."}',
+     11);
 ```
 
 ### §3.4 Seed Data Summary
 
 | Methodology | Activated Tools |
 |-------------|----------------|
-| **Charlotte Mason** | Activities, Reading Lists, Journaling, Nature Journals, Habit Tracking, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons |
-| **Traditional** | Activities, Tests & Grades, Reading Lists, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons |
-| **Classical** | Activities, Tests & Grades, Reading Lists, Journaling, Trivium Tracker, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons |
-| **Waldorf** | Activities, Journaling, Projects, Rhythm Planner, Handwork Tracker, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons |
-| **Montessori** | Activities, Projects, Observation Logs, Practical Life, Progress Tracking, Unit Studies, Field Trip Log, Video Lessons |
-| **Unschooling** | Activities, Journaling, Projects, Interest-Led Logs, Progress Tracking, Field Trip Log, Video Lessons |
+| **Charlotte Mason** | Activities, Reading Lists, Journaling, Nature Journals, Habit Tracking, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons, Content Viewer, Video Player, Lesson Sequences |
+| **Traditional** | Activities, Tests & Grades, Reading Lists, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons, Content Viewer, Video Player, Assessment Engine, Lesson Sequences |
+| **Classical** | Activities, Tests & Grades, Reading Lists, Journaling, Trivium Tracker, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons, Content Viewer, Video Player, Assessment Engine, Lesson Sequences |
+| **Waldorf** | Activities, Journaling, Projects, Rhythm Planner, Handwork Tracker, Progress Tracking, Unit Studies, Field Trip Log, Lesson Planner, Video Lessons, Content Viewer, Video Player, Lesson Sequences |
+| **Montessori** | Activities, Projects, Observation Logs, Practical Life, Progress Tracking, Unit Studies, Field Trip Log, Video Lessons, Content Viewer, Video Player, Assessment Engine (optional), Lesson Sequences |
+| **Unschooling** | Activities, Journaling, Projects, Interest-Led Logs, Progress Tracking, Field Trip Log, Video Lessons, Content Viewer, Video Player |
 
-**Tool coverage**: 18 tools in master catalog. Activities, Progress Tracking, Field Trip Log,
-and Video Lessons are activated for all 6 methodologies. Video Lessons is activated universally
-because it surfaces marketplace-purchased content regardless of methodology `[S§8.1.6]`.
+**Interactive tool activation matrix** `[S§8.1.9-8.1.12]`:
+
+| Tool | CM | Traditional | Classical | Waldorf | Montessori | Unschooling |
+|------|:--:|:-----------:|:---------:|:-------:|:----------:|:-----------:|
+| **Assessment Engine** | — | ✓ | ✓ | — | Optional | — |
+| **Content Viewer** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Video Player** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Lesson Sequences** | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+
+**Tool coverage**: 22 tools in master catalog. Activities, Progress Tracking, Field Trip Log,
+Video Lessons, Content Viewer, and Video Player are activated for all 6 methodologies.
+Video Lessons and Content Viewer are activated universally because they surface
+marketplace-purchased content regardless of methodology `[S§8.1.6, S§8.1.10]`.
+Assessment Engine is intentionally omitted from Charlotte Mason (narration-based, not
+quiz-based), Waldorf (developmental assessment), and Unschooling (no imposed assessment).
+Lesson Sequences are omitted from Unschooling (child-directed, no imposed sequence order).
 Every methodology-specific tool (`[S§8.1.8]`) is activated for exactly the methodology it
 was designed for. Lesson Planner is intentionally omitted from Montessori (child-directed
 3-hour work cycles are not pre-planned) and Unschooling (no imposed schedule).

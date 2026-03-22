@@ -128,7 +128,7 @@ A Creator Account enables an individual or organization to sell content through 
 
 ### 3.2 Permission Matrix
 
-| Capability | Unauthenticated | Free Parent | Premium Parent | Student (via Parent) | Creator | Admin |
+| Capability | Unauthenticated | Free Parent | Premium Parent | Student (supervised) | Creator | Admin |
 |-----------|:-:|:-:|:-:|:-:|:-:|:-:|
 | View public discovery content | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | Take methodology quiz | ✓ | ✓ | ✓ | — | ✓ | ✓ |
@@ -137,6 +137,11 @@ A Creator Account enables an individual or organization to sell content through 
 | Select methodologies | — | ✓ | ✓ | — | — | — |
 | Use basic learning tools | — | ✓ | ✓ | ✓ | — | — |
 | Use advanced learning tools | — | — | ✓ | ✓** | — | — |
+| Take quizzes / assessments | — | ✓ | ✓ | ✓ | — | — |
+| Watch video lessons | — | ✓ | ✓ | ✓ | — | — |
+| View in-platform content | — | ✓ | ✓ | ✓ | — | — |
+| Progress through sequences | — | ✓ | ✓ | ✓ | — | — |
+| View assigned content | — | — | — | ✓ | — | — |
 | View basic progress tracking | — | ✓ | ✓ | — | — | — |
 | View advanced analytics | — | — | ✓ | — | — | — |
 | Access compliance reporting | — | — | ✓ | — | — | — |
@@ -149,12 +154,15 @@ A Creator Account enables an individual or organization to sell content through 
 | Browse marketplace | — | ✓ | ✓ | — | ✓ | ✓ |
 | Purchase marketplace content | — | ✓ | ✓ | — | — | — |
 | List/manage marketplace content | — | — | — | — | ✓ | ✓* |
+| Use authoring tools (quiz/sequence builder) | — | — | — | — | ✓ | ✓* |
 | Receive payouts | — | — | — | — | ✓ | — |
 | Moderate content | — | — | — | — | — | ✓ |
 | Manage users/accounts | — | — | — | — | — | ✓ |
 
 *Admin access is for support/moderation purposes with audit logging.
 **Student access to advanced tools requires parent's family to have premium subscription.
+
+> **Student (supervised)** — Students aged 10+ with a parent-initiated supervised session. They can view and interact with assigned content (quizzes, videos, readings, sequences) but have no access to social features, marketplace, messaging, or account settings. See §8.6.
 
 ### 3.3 Parent-Mediated Access Model `[V§7]`
 
@@ -212,9 +220,9 @@ The learning tool system follows a two-level registry:
 3. **Family's Active Tool Set** — When a family selects one or more methodologies, the union of all activated tools across selected methodologies becomes the family's available tool set.
 
 **Example:**
-- Charlotte Mason activates: Activities, Reading Lists, Journaling & Narration, Nature Journals, Progress Tracking
-- Traditional activates: Activities, Tests & Grades, Progress Tracking
-- A family selecting both Charlotte Mason + Traditional sees the union: Activities, Reading Lists, Journaling & Narration, Nature Journals, Tests & Grades, Progress Tracking
+- Charlotte Mason activates: Activities, Reading Lists, Journaling & Narration, Nature Journals, Content Viewer, Video Player, Lesson Sequences, Progress Tracking
+- Traditional activates: Activities, Tests & Grades, Assessment Engine, Content Viewer, Video Player, Lesson Sequences, Progress Tracking
+- A family selecting both Charlotte Mason + Traditional sees the union: Activities, Reading Lists, Journaling & Narration, Nature Journals, Tests & Grades, Assessment Engine, Content Viewer, Video Player, Lesson Sequences, Progress Tracking
 
 ### 4.3 Multi-Methodology (Eclectic) Support `[V§5]`
 
@@ -524,6 +532,47 @@ The following tools are activated only for specific methodologies:
 - All methodology-specific tools MUST follow the same data patterns as core tools (taggable, searchable, exportable, per-student).
 - **Tier**: MVP methodology-specific tools are Free (basic); advanced features are Premium.
 
+#### 8.1.9 Interactive Assessment Engine (Traditional, Classical, Montessori-optional) `[V§8]`
+
+- Creators MUST be able to create questions using platform authoring tools. Supported question types: **multiple-choice**, **fill-in-the-blank**, **true/false**, **matching**, **ordering**, and **short answer** (parent-scored).
+- Creators MUST be able to assemble questions into quizzes with: title, description, subject/methodology tags, optional time limit, passing score threshold, and display settings (shuffle questions, show correct answers after submission).
+- Students MUST be able to take quizzes online through the supervised student view or the parent-operated learning interface.
+- The system MUST auto-score objective question types (multiple-choice, fill-in-the-blank, true/false, matching, ordering). Short answer questions MUST be flagged for parent scoring.
+- Quiz completion MUST auto-generate an assessment result record that flows to `learn_assessment_results` and progress tracking.
+- Quiz sessions MUST support save-and-resume (student can leave and return to an in-progress quiz).
+- The assessment engine MUST be methodology-scoped: available to **Traditional** and **Classical** by default; **optional** for **Montessori** (observation-based assessment alternative); **NOT activated** for Charlotte Mason, Unschooling, or Waldorf.
+- **Tier**: Free (basic quiz-taking), Premium (advanced quiz analytics)
+
+#### 8.1.10 In-Platform Content Viewer `[V§8, V§9]`
+
+- Purchased marketplace content (PDFs, documents) MUST be viewable in-platform without requiring download.
+- The content viewer MUST support PDF rendering with page navigation, zoom, and scroll.
+- Download MUST remain available as a fallback for all viewable content.
+- The system MUST track viewing progress (current page, percentage viewed) per student.
+- Annotations and bookmarks are **deferred to Phase 2**.
+- **Tier**: Free (marketplace purchase required)
+
+#### 8.1.11 Video Player `[V§8, V§9]`
+
+- The platform MUST support two video delivery modes:
+  - **Self-hosted**: Creator uploads video → platform transcodes to HLS adaptive bitrate streaming (480p, 720p, 1080p). Served via signed URLs through CDN.
+  - **External embeds**: YouTube/Vimeo videos embedded with JS API integration for progress tracking.
+- The video player MUST track: watch position (resume from where left off), total watched time, and completion percentage per student.
+- Video watch sessions MUST auto-log as learning activities with metadata (title, duration watched, completion status).
+- Self-hosted video content MUST use signed URLs for access control (no DRM in v1).
+- **Tier**: Free (marketplace purchase required for premium content; free creator content available)
+
+#### 8.1.12 Lesson Sequences `[V§8, V§9]`
+
+- Creators MUST be able to define ordered content paths (sequences) composed of any combination of: activity definitions, reading items, quiz definitions, and video definitions.
+- Each sequence item MUST specify: content type, content reference, sort order, whether it is required, and whether it unlocks only after the previous item is completed.
+- Sequences MUST support both **linear** (must complete in order) and **recommended-order** (can skip ahead) modes.
+- Students MUST be able to progress through sequences; the platform MUST track their current position and per-item completion status.
+- Parents MUST be able to override sequence order, skip items, or unlock items ahead of the normal progression for their students.
+- Sequences MUST be methodology-tagged and subject-tagged.
+- Sequence completion MUST generate a domain event for notifications and recommendations.
+- **Tier**: Free (marketplace purchase required for premium sequences)
+
 ### 8.2 Per-Student Tool Assignment
 
 - When a family has multiple methodologies selected, parents MUST be able to assign specific tools to specific students (e.g., one child uses Charlotte Mason tools, another uses Traditional tools).
@@ -552,6 +601,50 @@ The following tools are activated only for specific methodologies:
 - Export MUST be available at any time, regardless of subscription tier.
 - Data export MUST be completable within a reasonable timeframe (SHOULD be available for download within 24 hours of request).
 
+### 8.6 Supervised Student Views `[V§7, V§8]`
+
+Students aged 10 and above MAY access a supervised, simplified interface to interact with assigned learning content directly. This is a **Phase 1** feature.
+
+#### 8.6.1 Session Model
+
+- Parents MUST initiate student sessions from their own authenticated account — students MUST NOT have independent login credentials.
+- A student session MUST be scoped to a specific student within the family, carrying limited permissions.
+- Session tokens MUST include: student_id, family_id, and a restricted set of allowed tool slugs.
+- Parents MUST be able to configure session expiry (e.g., 2 hours, 4 hours, end of day).
+- Parents MUST be able to revoke any active student session immediately.
+
+#### 8.6.2 Student Permissions
+
+The supervised student view MUST grant access to:
+- View and interact with assigned content (quizzes, videos, readings, sequences)
+- Take quizzes and submit answers
+- Watch video lessons with progress tracking
+- View documents in the content viewer
+- Progress through assigned lesson sequences
+- View their own assignment list and completion status
+
+The supervised student view MUST NOT grant access to:
+- Social features (timeline, posts, comments, groups, events)
+- Marketplace browsing or purchasing
+- Direct messaging
+- Account settings or family profile
+- Other students' data within the family
+- Any administrative or parent-level functionality
+
+#### 8.6.3 Parent Controls
+
+- Parents MUST have full visibility into all activity performed during a student session.
+- Parents MUST be able to assign specific content to specific students (quizzes, videos, sequences, readings).
+- Parents MUST be able to set due dates on assignments (optional).
+- Parents MUST be able to view, update, or remove any student assignment.
+
+#### 8.6.4 COPPA Compliance
+
+- Supervised student sessions MUST NOT collect any new PII beyond what is already in the student profile.
+- All student activity MUST be logged under the parent's family account.
+- Student sessions operate entirely within the existing parent account — no independent student accounts are created.
+- The age gate (10+) MUST be enforced based on the student's `birth_year` in `iam_students`.
+
 ---
 
 ## 9. Curriculum Marketplace `[V§9]`
@@ -562,6 +655,9 @@ The following tools are activated only for specific methodologies:
 - Before receiving payouts, creators MUST complete identity verification and provide tax information (SSN/EIN for US 1099-K compliance).
 - Creators MUST set up a store profile: display name, bio, and optional logo/banner.
 - The onboarding process MUST clearly communicate the revenue share model, payout schedule, and content policies.
+- Creators MUST have access to platform authoring tools for building interactive content: **quiz builder** (create questions, assemble quizzes) and **sequence builder** (arrange content into structured lesson paths). `[V§9]`
+- Authoring tools MUST require publisher membership — creators must belong to at least one publisher organization.
+- Content created via authoring tools MUST pass through the `safety::` content moderation pipeline before publication. `[S§12.2]`
 
 ### 9.2 Content Listings
 
@@ -575,7 +671,7 @@ The following tools are activated only for specific methodologies:
 | Methodology tags | ✓ | One or more applicable methodologies |
 | Subject tags | ✓ | One or more subjects from the platform taxonomy |
 | Grade/age range | ✓ | Target audience age or grade range |
-| Content type | ✓ | Category (curriculum package, worksheet, unit study, video, etc.) |
+| Content type | ✓ | Category (curriculum package, worksheet, unit study, video, interactive quiz, lesson sequence, etc.) |
 | Worldview tags | | Creator self-reported worldview categorization (e.g., secular, Christian, Jewish, Islamic, neutral) `[V§12]` |
 | Preview content | | Free preview or sample pages |
 | Thumbnail image | | Display image for search results |
@@ -637,6 +733,9 @@ Listings MUST follow a lifecycle: **Draft** → **Submitted** → **Published** 
 
 - Purchased curriculum content MUST be accessible from within the family's learning tools.
 - When a family purchases content tagged with a methodology they use, the platform SHOULD prompt integration with relevant tools (e.g., adding books to reading lists, adding activities to the planner).
+- Purchased **interactive content** (quizzes, lesson sequences) MUST grant the purchasing family access to take quizzes and progress through sequences — not just download files.
+- Purchased **video content** MUST be streamable in-platform via the video player, not just downloadable.
+- Purchased **document content** (PDFs) MUST be viewable in-platform via the content viewer.
 - AI recommendations MUST draw from the marketplace catalog. `[V§8]`
 
 ---
@@ -1110,6 +1209,21 @@ This section defines the key data flows between domains. These contracts are log
 - **Data**: Quiz result identifier, methodology scores, and recommendations.
 - **Trigger**: User creates account and opts to import quiz results.
 
+### 18.7 Learning ↔ Marketplace (Interactive Content)
+
+- **Contract**: When a family purchases interactive marketplace content (quizzes, sequences, video lessons), the learning domain grants the family access to interact with that content (take quizzes, progress through sequences, stream videos).
+- **Direction**: Marketplace → Learning (on purchase); Learning → Marketplace (progress/completion data for creator analytics)
+- **Data**: Purchase grant (family_id, content_type, content_id, access_start), quiz completion events, sequence progress events, video watch events.
+- **Trigger**: On `PurchaseCompleted` event for interactive content types.
+- **Guarantee**: Interactive content access MUST be available within 30 seconds of purchase completion.
+
+### 18.8 Learning → Notifications (Interactive Events)
+
+- **Contract**: Interactive learning events generate notifications for parents and optional student-facing indicators.
+- **Direction**: Learning → Notifications
+- **Data**: Quiz completion (score, pass/fail), sequence advancement, sequence completion, assignment status changes.
+- **Trigger**: On `QuizCompleted`, `SequenceAdvanced`, `SequenceCompleted`, `AssignmentCompleted` domain events.
+
 ---
 
 ## 19. Phased Rollout & MVP Definition `[V§11]`
@@ -1125,7 +1239,7 @@ This section defines the key data flows between domains. These contracts are log
 | **Discovery** | Methodology quiz, methodology explorer pages, state legal guides (all 51), Homeschooling 101, advocacy content |
 | **Onboarding** | Full onboarding flow: account creation, family setup, methodology wizard, getting-started roadmaps, starter recommendations, community connections |
 | **Social** | Profiles, timeline/feed (reverse-chronological), comments (threaded), friend system, direct messaging (friends-only), platform-managed methodology groups, events (basic), location-based discovery (opt-in) |
-| **Learning** | Activities, Reading Lists, Journaling & Narration, basic Progress Tracking |
+| **Learning** | Activities, Reading Lists, Journaling & Narration, basic Progress Tracking, Interactive Assessment Engine, In-Platform Content Viewer, Video Player, Lesson Sequences, Student Assignments, Supervised Student Views (ages 10+) |
 | **Marketplace** | Creator onboarding, content listings, browse/search/filter, purchase flow (cart + checkout), ratings & reviews (verified-purchaser), basic creator dashboard |
 | **Trust & Safety** | CSAM detection (PhotoDNA/NCMEC), automated content screening, user reporting system, bot prevention (CAPTCHA + rate limiting), community guidelines, basic moderation dashboard |
 | **Billing** | Free tier, marketplace transactions, payment processing, sales tax |
@@ -1134,7 +1248,7 @@ This section defines the key data flows between domains. These contracts are log
 | **Content & Media** | Image/file upload, storage, delivery |
 | **Privacy/Compliance** | COPPA compliance, privacy policy, terms of service, data export |
 
-**Not in Phase 1**: Premium subscriptions, AI recommendations, compliance reporting, portfolios, transcripts, user-created groups, advanced analytics, methodology-specific advanced tools.
+**Not in Phase 1**: Premium subscriptions, AI recommendations, compliance reporting, portfolios, transcripts, user-created groups, advanced analytics, methodology-specific advanced tools, content annotations/bookmarks, video DRM.
 
 ### Phase 2 — Premium & Depth
 
@@ -1147,9 +1261,9 @@ This section defines the key data flows between domains. These contracts are log
 | **AI recommendations** | Methodology-constrained content and activity recommendations |
 | **User-created groups** | Open, request-to-join, and invite-only groups |
 | **Events (full)** | Recurring events, capacity management, group-linked events |
-| **Tests & Grades** | Assessment recording, grading scales, running averages |
 | **Projects** | Multi-step project tracking with milestones |
 | **Advanced analytics** | Trend visualization, subject balance, progress reports |
+| **Content annotations** | In-platform PDF bookmarks and annotations |
 | **Mentorship** | Methodology-matched mentor/mentee connections |
 | **Creator payouts** | Payout scheduling, 1099-K, advanced creator analytics |
 
@@ -1203,11 +1317,11 @@ Each question includes a recommended position based on analysis of the vision do
 
 **Recommended Position**: **Family-level primary/secondary with per-student overrides**. This reduces onboarding complexity for the majority case (family uses one approach) while accommodating families with children at different stages (e.g., one child doing Classical, another doing Montessori). Specified in §4.6.
 
-### 20.4 Student-Facing Views
+### 20.4 Student-Facing Views — RESOLVED
 
 **Question**: Should students have their own views into the platform?
 
-**Recommended Position**: **MVP is parent-only**. Post-MVP (Phase 2-3), add supervised student views for ages 10+. The parent-mediated model `[V§7]` is the priority; student views add complexity around COPPA compliance, content filtering, and access controls that are better addressed after the core platform stabilizes.
+**Resolution**: **Supervised student views are Phase 1**. Students aged 10+ get a simplified, parent-initiated interface for interacting with assigned content (quizzes, videos, readings, sequences). No independent login — sessions are created by parents within their own account. No social features, marketplace, or messaging access. Full specification in §8.6. COPPA compliance maintained by operating within the parent account (no new PII collection, all activity logged under family). This decision was driven by the interactive learning engine (§8.1.9-8.1.12) — online quiz-taking and video watching require a student-facing interface to deliver their core value.
 
 ### 20.5 Content Moderation Operational Model
 

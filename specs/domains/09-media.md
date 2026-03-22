@@ -91,7 +91,7 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 --                    'activity_attachment', 'journal_image', 'nature_journal_image',
 --                    'project_attachment', 'reading_cover', 'marketplace_file',
 --                    'listing_preview', 'listing_thumbnail', 'creator_logo',
---                    'data_export', 'audio_attachment')
+--                    'data_export', 'audio_attachment', 'video_lesson')
 ```
 
 **Status state machine**:
@@ -131,7 +131,7 @@ CREATE TABLE media_uploads (
                               'activity_attachment', 'journal_image', 'nature_journal_image',
                               'project_attachment', 'reading_cover', 'marketplace_file',
                               'listing_preview', 'listing_thumbnail', 'creator_logo',
-                              'data_export', 'audio_attachment'
+                              'data_export', 'audio_attachment', 'video_lesson'
                           )),
     status                TEXT NOT NULL DEFAULT 'pending'
                           CHECK (status IN (
@@ -205,7 +205,8 @@ CREATE TABLE media_processing_jobs (
     upload_id             UUID NOT NULL REFERENCES media_uploads(id),
     job_type              TEXT NOT NULL
                           CHECK (job_type IN (
-                              'process_upload', 'compress_asset', 'cleanup_orphans'
+                              'process_upload', 'compress_asset', 'cleanup_orphans',
+                              'transcode_video'
                           )),
     status                TEXT NOT NULL DEFAULT 'queued'
                           CHECK (status IN ('queued', 'running', 'completed', 'failed')),
@@ -223,6 +224,30 @@ CREATE INDEX idx_media_processing_jobs_upload
 CREATE INDEX idx_media_processing_jobs_queued
     ON media_processing_jobs(status)
     WHERE status IN ('queued', 'running');
+
+-- ─── media_transcode_jobs ─────────────────────────────────────────────
+-- Video transcoding pipeline for HLS adaptive bitrate streaming.
+-- Creator uploads video → raw stored in R2 → transcode job generates
+-- HLS playlist + segments at multiple quality levels. [S§8.1.11]
+CREATE TABLE media_transcode_jobs (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    upload_id             UUID NOT NULL REFERENCES media_uploads(id) ON DELETE CASCADE,
+    status                TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    input_key             TEXT NOT NULL,                  -- S3 key of raw uploaded video
+    output_keys           JSONB,                          -- {master_playlist, variants: [{resolution, playlist_key, segment_prefix}]}
+    resolutions           JSONB NOT NULL DEFAULT '["480p", "720p", "1080p"]',
+    duration_seconds      INTEGER,                        -- detected from ffprobe
+    error_message         TEXT,
+    started_at            TIMESTAMPTZ,
+    completed_at          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_media_transcode_jobs_upload ON media_transcode_jobs(upload_id);
+CREATE INDEX idx_media_transcode_jobs_status ON media_transcode_jobs(status)
+    WHERE status IN ('pending', 'processing');
 ```
 
 ### §3.3 RLS Policies
@@ -912,6 +937,7 @@ pub enum UploadContext {
     CreatorLogo,
     DataExport,
     AudioAttachment,
+    VideoLesson,
 }
 
 /// Upload status — maps to CHECK constraint on media_uploads.status.
@@ -1021,6 +1047,7 @@ Each upload context has specific size limits and allowed content types:
 | `creator_logo` | 2 MB | `image/jpeg`, `image/png`, `image/webp` |
 | `data_export` | 1 GB | `application/zip`, `application/json` |
 | `audio_attachment` | 50 MB | `audio/mpeg`, `audio/mp4`, `audio/wav`, `audio/flac`, `audio/aiff` |
+| `video_lesson` | 5 GB | `video/mp4`, `video/quicktime`, `video/x-msvideo`, `video/webm` |
 
 > **Note**: These rules are enforced at **request time** (before generating the presigned URL)
 > as a pre-flight check. The presigned URL also includes a `Content-Length` constraint that
@@ -1199,6 +1226,10 @@ ProcessUploadJob
 - CSAM detected at step 3 → quarantine immediately, skip steps 4-8
 - Moderation violation at step 4 → flag, skip steps 5-8
 - Not an image at step 7 → skip variant generation (no variants for PDFs, audio, etc.)
+
+For `video_lesson` context uploads, an additional `TranscodeVideoJob` step runs after the
+standard processing pipeline completes. This job converts the raw video to HLS format
+(see §10.8 Video Transcoding Pipeline).
 
 **Key separation of concerns**:
 - `CompressAssetJob` = **conditional**, heavy, external worker (FFMPEG). Only for oversized assets.
@@ -1437,6 +1468,56 @@ if upload.content_type.starts_with("image/") {
 - Non-image assets (video, audio, PDF): no variants generated in Phase 1
 - Video variants (lower-resolution streams for adaptive playback): Phase 2+
 
+### §10.8 Video Transcoding Pipeline (Phase 1) `[S§8.1.11]`
+
+The video transcoding pipeline converts uploaded video files into HLS (HTTP Live Streaming)
+format for adaptive bitrate delivery.
+
+#### Upload Flow
+
+1. Creator initiates video upload via `POST /v1/media/uploads` with context `video_lesson`
+2. `media::` generates presigned upload URL, creator uploads raw video to R2
+3. On upload confirmation, `ProcessUploadJob` runs standard pipeline (magic byte validation,
+   ffprobe analysis, CSAM scan)
+4. After passing safety checks, a `TranscodeVideoJob` is enqueued
+
+#### Transcode Job
+
+1. FFmpeg reads raw video from R2
+2. Generates HLS segments at 2-3 quality levels:
+   - **480p** (baseline): ~1 Mbps, suitable for mobile/slow connections
+   - **720p** (standard): ~2.5 Mbps, good balance of quality and bandwidth
+   - **1080p** (high): ~5 Mbps, full quality (only if source ≥ 1080p)
+3. Generates master HLS playlist (`master.m3u8`) referencing quality variants
+4. Uploads all segments and playlists to R2 under structured keys:
+   `media/video/{upload_id}/master.m3u8`
+   `media/video/{upload_id}/480p/segment_{n}.ts`
+   `media/video/{upload_id}/720p/segment_{n}.ts`
+   `media/video/{upload_id}/1080p/segment_{n}.ts`
+5. Updates `media_transcode_jobs` with output keys and duration
+
+#### Delivery
+
+- Video player requests signed URL for `master.m3u8`
+- Player automatically selects quality variant based on bandwidth
+- CDN caches segments for subsequent viewers
+- Signed URLs expire after configurable duration (default: 4 hours)
+
+#### External Video Support
+
+- YouTube/Vimeo videos store the external URL and metadata only — no transcoding
+- `learn_video_defs.video_source` distinguishes `self_hosted` from `youtube`/`vimeo`
+- External video progress tracked via JS API integration (YouTube IFrame API, Vimeo Player SDK)
+
+#### Context Validation Rules for `video_lesson`
+
+| Attribute | Value |
+|-----------|-------|
+| **Max file size** | 5 GB |
+| **Allowed MIME types** | `video/mp4`, `video/quicktime`, `video/x-msvideo`, `video/webm` |
+| **Magic byte validation** | Required — validate video container signatures |
+| **Processing pipeline** | Standard + TranscodeVideoJob |
+
 ---
 
 ## §11 Magic Byte Validation (Deep-Dive 3)
@@ -1457,6 +1538,8 @@ the file signature matches.
 | GIF | `47 49 46 38` | 0 |
 | PDF | `25 50 44 46` | 0 |
 | MP4 | `66 74 79 70` (ftyp) | 4 |
+| MOV/QuickTime | `66 74 79 70` (ftyp, same container as MP4) | 4 |
+| AVI | `52 49 46 46 ... 41 56 49 20` | 0 (RIFF at 0, AVI\x20 at 8) |
 | WebM | `1A 45 DF A3` (EBML header) | 0 |
 | MP3 | `FF FB` or `FF F3` or `FF F2` or `49 44 33` (ID3) | 0 |
 | AAC/M4A | `66 74 79 70` (ftyp, same as MP4) | 4 |
@@ -1555,10 +1638,18 @@ fn detect_file_type(header: &[u8]) -> Option<&'static str> {
         return Some("video/webm");
     }
 
-    // MP4/M4A: ftyp box at offset 4
+    // MP4/M4A/MOV: ftyp box at offset 4
+    // Covers video/mp4, video/quicktime, and audio/mp4 — all share ftyp container
     if header.len() >= 8 && header[4..8] == [0x66, 0x74, 0x79, 0x70] {
-        // Could be video/mp4 or audio/mp4 — both have ftyp
         return Some("video/mp4");
+    }
+
+    // AVI: RIFF....AVI\x20
+    if header.len() >= 12
+        && header[0..4] == [0x52, 0x49, 0x46, 0x46]
+        && header[8..12] == [0x41, 0x56, 0x49, 0x20]
+    {
+        return Some("video/x-msvideo");
     }
 
     // ZIP: PK\x03\x04
@@ -1676,6 +1767,7 @@ Cache-Control: public, max-age=31536000, immutable
 |-----|-------|---------|-------------|
 | `ProcessUploadJob` | Default | Upload confirmation (`confirm_upload`) | Orchestrator: magic bytes → ffprobe → CSAM → moderation → compression decision → variant generation → publish `[ARCH §12.2]` |
 | `CompressAssetJob` | Default | Dispatched by `ProcessUploadJob` **only if thresholds exceeded** | Sent to FFMPEG worker: compress asset per profile, write back to S3. Does NOT generate variants. |
+| `TranscodeVideoJob` | Default | Dispatched by `ProcessUploadJob` for `video_lesson` context uploads after safety checks pass | Converts raw video to HLS adaptive bitrate format (480p/720p/1080p segments + master playlist). See §10.8. |
 | `CleanupOrphanUploadsJob` | Low | Daily at 4:00 AM UTC | Expire pending uploads past presigned URL expiry `[ARCH §12.3]` |
 
 > **Note**: Variant generation (thumb + medium) is NOT a separate job — it runs in-process

@@ -190,6 +190,26 @@ CREATE TABLE iam_coppa_audit_log (
 );
 
 CREATE INDEX idx_iam_coppa_audit_family ON iam_coppa_audit_log(family_id);
+
+-- Supervised student sessions [S§8.6.1]
+-- Parent-initiated sessions that grant students limited platform access.
+-- Students do NOT have independent credentials — sessions are created by parents.
+CREATE TABLE iam_student_sessions (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
+    student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
+    created_by            UUID NOT NULL REFERENCES iam_parents(id),
+    token_hash            TEXT NOT NULL UNIQUE,            -- bcrypt hash of session token
+    expires_at            TIMESTAMPTZ NOT NULL,
+    is_active             BOOLEAN NOT NULL DEFAULT true,
+    permissions           JSONB NOT NULL DEFAULT '[]',     -- allowed tool slugs
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_iam_student_sessions_family ON iam_student_sessions(family_id);
+CREATE INDEX idx_iam_student_sessions_student ON iam_student_sessions(student_id);
+CREATE INDEX idx_iam_student_sessions_active ON iam_student_sessions(is_active, expires_at)
+    WHERE is_active = true;
 ```
 
 ### §3.2 Row-Level Security Policies
@@ -208,6 +228,7 @@ ALTER TABLE iam_parents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE iam_students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE iam_co_parent_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE iam_coppa_audit_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE iam_student_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Application role used by the Rust API (not the superuser)
 -- The app sets `SET LOCAL app.current_family_id = '<uuid>'` per transaction
@@ -225,6 +246,9 @@ CREATE POLICY iam_invites_isolation ON iam_co_parent_invites
 
 CREATE POLICY iam_coppa_audit_isolation ON iam_coppa_audit_log
     USING (family_id = current_setting('app.current_family_id', true)::uuid);
+
+CREATE POLICY iam_student_sessions_family_policy ON iam_student_sessions
+    USING (family_id = current_setting('app.current_family_id')::uuid);
 
 -- The superuser/migration role bypasses RLS (PostgreSQL default).
 -- The application role MUST NOT be a superuser.
@@ -367,6 +391,38 @@ Called by Kratos after successful login. Syncs Kratos traits (email, name) to lo
 
 - **Auth**: Webhook shared secret
 - **Body**: `KratosWebhookPayload`
+
+#### Student Sessions `[S§8.6.1]`
+
+##### `POST /v1/families/students/:student_id/sessions`
+
+Creates a supervised student session. Parent auth required.
+
+- **Auth**: Required (`FamilyScope`, parent only)
+- **Body**: `CreateStudentSessionCommand` (`expires_in_hours?`: default 2, `allowed_tool_slugs?`: defaults to student's resolved tool set)
+- **Validation**: Student must belong to family; student's `birth_year` must indicate age 10+; parent must have COPPA consent
+- **Response**: `StudentSessionResponse` (201 Created) — includes the session token (only returned once, on creation)
+
+##### `GET /v1/families/students/:student_id/sessions`
+
+Lists active sessions for a student. Parent auth required.
+
+- **Auth**: Required (`FamilyScope`, parent only)
+- **Response**: `Vec<StudentSessionSummaryResponse>` (200 OK)
+
+##### `DELETE /v1/families/students/:student_id/sessions/:id`
+
+Revokes a student session immediately. Parent auth required.
+
+- **Auth**: Required (`FamilyScope`, parent only)
+- **Response**: 204 No Content
+
+##### `GET /v1/student-session/me`
+
+Returns the current student session's identity and permissions. Used by the student view frontend.
+
+- **Auth**: Student session token (in cookie or Authorization header)
+- **Response**: `StudentSessionIdentityResponse` (200 OK) — includes student_id, family_id, allowed_tool_slugs, expires_at
 
 ---
 
@@ -1123,6 +1179,10 @@ considers a valid method of verifiable parental consent.
 7. All student profiles and associated learning data are permanently deleted
 8. The family account itself remains active (parents can still use social features)
 
+### §9.5 Student Sessions and COPPA
+
+**Student Sessions and COPPA**: Supervised student sessions (§8.6) do not create independent accounts or collect new PII. All student session activity is logged under the parent's family account. The age gate (10+) is enforced based on `iam_students.birth_year`. Session tokens are scoped to the family and carry no PII. This approach maintains COPPA compliance by operating entirely within the parent-controlled account structure.
+
 ---
 
 ## §10 Family Account Lifecycle
@@ -1288,6 +1348,10 @@ All extractors are defined in 00-core §13.3. IAM provides the data they operate
 | `RequireCoppaConsent` | 00-core §13.3 | `AuthContext.coppa_consent_status` | 403 if not consented |
 | `RequireAdmin` | 00-core §13.3 | `AuthContext.is_platform_admin` | 403 if not admin `[11-safety §9]` |
 | `RequirePrimaryParent` | 00-core §13.3 | `AuthContext.is_primary_parent` | 403 if not primary (Phase 2) |
+
+### §11.4 Student Session Permissions
+
+**Student session permissions**: A student session token carries a limited set of permissions defined by the parent at session creation time. The default permission set matches the student's resolved tool set from `method::`. Student sessions can only access: assigned content viewing, quiz-taking, video watching, sequence progression, and assignment status viewing. They cannot access: social features, marketplace, messaging, account settings, other students' data, or parent-level functionality.
 
 ---
 

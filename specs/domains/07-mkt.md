@@ -116,7 +116,7 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 -- Listing status values: draft, submitted, published, archived
 -- Content type values: curriculum, worksheet, unit_study, video, book_list,
 --                      assessment, lesson_plan, printable, project_guide,
---                      reading_guide, course
+--                      reading_guide, course, interactive_quiz, lesson_sequence
 -- Creator onboarding status: pending, onboarding, active, suspended
 -- Publisher role values: owner, admin, member
 -- Review moderation status: pending, approved, rejected
@@ -226,8 +226,9 @@ CREATE TABLE mkt_listings (
                               'curriculum', 'worksheet', 'unit_study',
                               'video', 'book_list', 'assessment',
                               'lesson_plan', 'printable', 'project_guide',
-                              'reading_guide', 'course'
-                          )),                            -- [S§9.2.1]
+                              'reading_guide', 'course',
+                              'interactive_quiz', 'lesson_sequence'
+                          )),                            -- [S§9.2.1, S§8.1.9, S§8.1.12]
     worldview_tags        TEXT[] DEFAULT '{}',           -- [S§9.2.1, V§12]
     preview_url           TEXT,
     thumbnail_url         TEXT,
@@ -2524,6 +2525,26 @@ async fn get_download_url(
 }
 ```
 
+### Interactive Content Access `[S§9.7, S§18.7]`
+
+Purchased interactive content grants the family access beyond file downloads:
+
+| Content Type | Access Granted |
+|-------------|---------------|
+| `interactive_quiz` | Family can create `learn_quiz_sessions` against the quiz definition |
+| `lesson_sequence` | Family can create `learn_sequence_progress` against the sequence definition |
+| `video` | Family can stream video via signed HLS URLs; progress tracked in `learn_video_progress` |
+
+Access is granted by the `PurchaseCompleted` event handler in `learn::`. The learning domain
+checks for active purchases when a student attempts to start a quiz session, begin a sequence,
+or stream a video. No separate "license" table — purchase records in `mkt_purchases` serve
+as the access grant.
+
+**Access check flow:**
+1. Student (or parent) requests to start quiz/sequence/video
+2. `learn::` service checks `mkt::PurchaseRepository::get_by_family_and_listing(family_id, listing_id)`
+3. If purchase exists, access is granted; if not, return `content_not_purchased` (403)
+
 ### File Versioning
 
 When a creator updates files on a published listing: `[S§9.2.3]`
@@ -3111,6 +3132,60 @@ pub enum MktError {
 | `PayoutThresholdNotMet` | `400 Bad Request` | `payout_threshold_not_met` |
 | `DatabaseError` | `500 Internal` | `internal_error` (no details exposed) |
 | `CacheError` | `500 Internal` | `internal_error` (no details exposed) |
+
+---
+
+## §17b Creator Authoring Tools `[S§9.1, V§9]`
+
+Creators build interactive content using platform-provided authoring tools. These tools
+create content in the `learn::` domain via `learn::` APIs, but the authoring workflow
+is owned by `mkt::` as part of the creator content management experience.
+
+### Quiz Builder
+
+The quiz builder is a creator-facing UI for building questions and assembling quizzes:
+
+1. **Question creation**: Creator writes question text, defines answer data by type
+   (multiple-choice options, fill-in-the-blank answers, matching pairs, etc.), adds
+   optional media attachments, and tags with subject/methodology
+2. **Quiz assembly**: Creator selects questions from their publisher's question bank,
+   sets quiz metadata (title, passing score, time limit, shuffle settings), and orders questions
+3. **Preview**: Creator can preview how the quiz appears to students
+4. **Publication**: Quiz follows same Draft → Submitted → Published lifecycle as other listings
+
+**API flow**: Quiz builder frontend calls `learn::` endpoints (`POST /v1/learning/questions`,
+`POST /v1/learning/quizzes`) with the creator's publisher credentials. The listing is
+created in `mkt::` with `content_type = 'interactive_quiz'` and references the
+`learn_quiz_defs.id` via the listing's content metadata.
+
+### Sequence Builder
+
+The sequence builder is a creator-facing UI for ordering content into lesson paths:
+
+1. **Content selection**: Creator browses their publisher's content definitions
+   (activity defs, reading items, video defs, quiz defs) and adds them to the sequence
+2. **Ordering**: Creator arranges items in order, sets required/optional flags and
+   unlock-after-previous settings
+3. **Mode selection**: Creator chooses linear (strict order) or recommended-order mode
+4. **Publication**: Sequence follows same listing lifecycle
+
+**API flow**: Sequence builder frontend calls `learn::` endpoints
+(`POST /v1/learning/sequences`) with publisher credentials. The listing is created
+in `mkt::` with `content_type = 'lesson_sequence'`.
+
+### Content Moderation
+
+All creator-authored interactive content passes through `safety::` content moderation:
+- Question text and answer text are screened via text scanning
+- Media attachments follow standard image/video moderation pipeline
+- Content that fails moderation is blocked from publication
+- Screening runs on the `ListingPublished` event for marketplace-distributed content
+
+### Publisher Requirement
+
+Authoring tools require publisher membership — creators must belong to at least one
+`mkt_publishers` organization. This is consistent with all other content creation
+flows (`learn::` Layer 1 definitions require `publisher_id`).
 
 ---
 

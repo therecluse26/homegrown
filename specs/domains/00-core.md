@@ -2276,6 +2276,57 @@ export async function apiClient<T>(
 **Note**: This is a minimal client. When domain specs add generated types from
 `src/api/generated/`, hooks will use typed wrappers around `apiClient`. `[CODING §3.4]`
 
+### §18.6 Student View Architecture `[S§8.6]`
+
+#### Frontend Routing
+
+The student view operates as a separate route tree, isolated from parent features:
+
+```
+/student                        — Student session root (redirect to /student/dashboard)
+/student/dashboard              — Assignment list, due items, recent activity
+/student/assignments            — Full assignment list with status filters
+/student/quiz/:session_id       — Quiz-taking interface
+/student/video/:video_def_id    — Video player interface
+/student/read/:content_id       — Content viewer (PDF)
+/student/sequence/:progress_id  — Sequence progression interface
+```
+
+The `/student` route tree uses a simplified layout:
+- No navigation to social features, marketplace, messaging, groups, or events
+- No access to account settings or family profile
+- Shows only the current student's assigned content and progress
+- Includes a "Return to Parent" button that ends the student session
+
+#### Auth Context
+
+The student view uses a `StudentSessionContext` alongside the existing `AuthContext`:
+
+- `AuthContext` — populated from parent JWT/session (for parent routes)
+- `StudentSessionContext` — populated from student session token (for `/student` routes)
+  - Contains: `student_id`, `family_id`, `allowed_tool_slugs`, `expires_at`
+  - Automatically redirects to parent login when session expires
+
+Both contexts are provided at the app root level. Route guards check the appropriate context:
+- `/student/*` routes require `StudentSessionContext`
+- All other routes require `AuthContext`
+
+#### Component Architecture
+
+Student view components are a **constrained subset** of parent components:
+- Quiz-taking component: reuses quiz rendering but omits admin/scoring UI
+- Video player component: reuses player but omits creator/publisher controls
+- Content viewer component: reuses PDF viewer with progress tracking
+- Sequence view component: shows current position, completed items, and next item
+- Assignment list component: simplified view of assigned content with status
+
+Student components MUST NOT import or render:
+- Social components (timeline, posts, comments, friends, groups, events)
+- Marketplace components (browse, cart, checkout, reviews)
+- Messaging components (DMs, conversations)
+- Account/settings components
+- Other students' data components
+
 ---
 
 ## §19 Implementation Checklist

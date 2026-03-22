@@ -3,8 +3,10 @@
 ## §1 Overview
 
 The Learning domain is the **heart of the platform** — it implements all methodology-scoped
-learning tools, activity logging, progress tracking, and parent education content. It owns
-a three-layer data model: published content definitions (owned by Publishers), artifact links
+learning tools including **interactive student-facing features**: online quiz-taking, in-platform
+content viewing, video playback with progress tracking, and structured lesson sequences. Beyond
+tracking what happens offline, students engage with content directly on the platform. The domain
+owns a three-layer data model: published content definitions (owned by Publishers), artifact links
 between content, and per-student family tracking data. Tool behavior is resolved via `method::`
 config lookup — never methodology branching. `[S§8, V§5, V§8]`
 
@@ -17,11 +19,14 @@ config lookup — never methodology branching. `[S§8, V§5, V§8]`
 | **External adapter** | None (media uploads delegated to `media::`) |
 | **Key constraint** | Tool behavior resolved via `method::` config lookup, never methodology branching `[S§4.2, CODING §4.1]` |
 
-**What learn:: owns**: Activity definitions and logs, assessment definitions and results (Phase 2),
+**What learn:: owns**: Activity definitions and logs, assessment definitions and results,
 reading item definitions and progress, journal entries, project definitions and progress (Phase 2),
-video lesson progress (Phase 2), reading lists, subject taxonomy (platform-managed), custom
+video lesson definitions and progress, reading lists, subject taxonomy (platform-managed), custom
 subjects (family-scoped), progress tracking and analytics, artifact links between published
-content, data export, and methodology-specific tool implementations (Phase 3).
+content, data export, methodology-specific tool implementations (Phase 3), **interactive
+assessment engine** (question bank, quiz definitions, quiz sessions), **lesson sequence engine**
+(sequence definitions, sequence items, sequence progress), and **student assignment system**
+(content assignment, status tracking).
 
 **What learn:: does NOT own**: Tool registry and tool activation mappings (owned by `method::`),
 methodology configuration and terminology (owned by `method::`), Publisher entities and membership
@@ -97,6 +102,20 @@ other spec sections are included where the learning domain is involved.
 | Learning → Social milestone events | `[S§18.3]` | §17 |
 | Marketplace → Learning content integration | `[S§18.4]` | §17 |
 | Learning → AI anonymized signals | `[S§18.5]` | §17 |
+| Interactive assessment engine: question types, quiz building, auto-scoring | `[S§8.1.9]` | §3.2 (`learn_questions`, `learn_quiz_defs`, `learn_quiz_questions`, `learn_quiz_sessions`), §4.1, §5 |
+| Students take quizzes online; scores auto-flow to assessment results | `[S§8.1.9]` | §3.2 (`learn_quiz_sessions`), §5 |
+| Assessment engine methodology-scoped (Traditional, Classical; optional Montessori) | `[S§8.1.9]` | §10 (tool resolution via `method::`) |
+| In-platform content viewer for purchased PDFs/documents | `[S§8.1.10]` | §8 (frontend-only — no new DB tables; viewing progress tracked in `learn_video_progress` or activity logs) |
+| Video player: self-hosted HLS + external embeds | `[S§8.1.11]` | §3.2 (`learn_video_defs` extended), §4.1, §5 |
+| Video watch position, completion %, auto-log as activity | `[S§8.1.11]` | §3.2 (`learn_video_progress`), §5 |
+| Lesson sequences: ordered content paths | `[S§8.1.12]` | §3.2 (`learn_sequence_defs`, `learn_sequence_items`, `learn_sequence_progress`), §4.1, §5 |
+| Sequences: linear vs recommended-order modes | `[S§8.1.12]` | §3.2 (`is_linear` on `learn_sequence_defs`) |
+| Parent can override sequence order, skip, unlock ahead | `[S§8.1.12]` | §4.1, §5 |
+| Supervised student views for assigned content | `[S§8.6]` | §4.1 (assignment endpoints), §17 (delegates session management to `iam::`) |
+| Student assignments: assign, track, complete content | `[S§8.6.3]` | §3.2 (`learn_student_assignments`), §4.1, §5 |
+| Quiz completion auto-generates assessment result | `[S§8.1.9]` | §5 (`score_quiz_session`) |
+| Interactive content purchase grants quiz/sequence access | `[S§18.7]` | §17 (`PurchaseCompleted` handler) |
+| QuizCompleted, SequenceAdvanced, SequenceCompleted events | `[S§18.8]` | §17 |
 
 ---
 
@@ -238,23 +257,161 @@ CREATE TABLE learn_project_defs (
 
 CREATE INDEX idx_learn_project_defs_publisher ON learn_project_defs(publisher_id);
 
--- Video lesson definitions [S§8.1.6] (Phase 2)
+-- Video lesson definitions [S§8.1.6, S§8.1.11]
 -- Marketplace integration — metadata for purchased video content.
+-- Supports both self-hosted (HLS) and external (YouTube/Vimeo) video.
 CREATE TABLE learn_video_defs (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
+    methodology_id        UUID REFERENCES method_definitions(id),
     duration_seconds      INTEGER,
     thumbnail_url         TEXT,
-    video_url             TEXT NOT NULL,                  -- media:: managed URL
+    video_url             TEXT NOT NULL,                  -- HLS playlist URL (self-hosted) or external URL
+    video_source          TEXT NOT NULL DEFAULT 'self_hosted'
+                          CHECK (video_source IN ('self_hosted', 'youtube', 'vimeo')),
+    external_video_id     TEXT,                           -- YouTube/Vimeo video ID (NULL for self-hosted)
+    transcode_job_id      UUID,                           -- references media_transcode_jobs (NULL for external)
     is_active             BOOLEAN NOT NULL DEFAULT true,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_learn_video_defs_publisher ON learn_video_defs(publisher_id);
+CREATE INDEX idx_learn_video_defs_methodology ON learn_video_defs(methodology_id)
+    WHERE methodology_id IS NOT NULL;
+
+-- Question bank [S§8.1.9]
+-- Individual questions created by publishers via authoring tools.
+CREATE TABLE learn_questions (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    question_type         TEXT NOT NULL
+                          CHECK (question_type IN (
+                              'multiple_choice', 'fill_in_blank', 'true_false',
+                              'matching', 'ordering', 'short_answer'
+                          )),
+    content               TEXT NOT NULL,                  -- question text (markdown supported)
+    media_attachments     JSONB NOT NULL DEFAULT '[]',    -- array of media references
+    answer_data           JSONB NOT NULL,                 -- type-specific answer structure:
+                          -- multiple_choice: {choices: [{text, is_correct}], allow_multiple: bool}
+                          -- fill_in_blank: {acceptable_answers: [string], case_sensitive: bool}
+                          -- true_false: {correct_answer: bool}
+                          -- matching: {pairs: [{left, right}]}
+                          -- ordering: {correct_order: [string]}
+                          -- short_answer: {rubric: string} (parent-scored, no auto answer)
+    subject_tags          TEXT[] NOT NULL DEFAULT '{}',
+    methodology_id        UUID REFERENCES method_definitions(id),
+    difficulty_level      SMALLINT CHECK (difficulty_level BETWEEN 1 AND 5),
+    auto_scorable         BOOLEAN NOT NULL DEFAULT true,  -- false for short_answer
+    points                NUMERIC NOT NULL DEFAULT 1,
+    is_active             BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_learn_questions_publisher ON learn_questions(publisher_id);
+CREATE INDEX idx_learn_questions_type ON learn_questions(question_type);
+CREATE INDEX idx_learn_questions_subject ON learn_questions USING GIN(subject_tags);
+CREATE INDEX idx_learn_questions_methodology ON learn_questions(methodology_id)
+    WHERE methodology_id IS NOT NULL;
+
+-- Full-text search on questions
+ALTER TABLE learn_questions ADD COLUMN search_vector tsvector
+    GENERATED ALWAYS AS (
+        to_tsvector('english', coalesce(content, ''))
+    ) STORED;
+CREATE INDEX idx_learn_questions_search ON learn_questions USING GIN(search_vector);
+
+-- Quiz definitions [S§8.1.9]
+-- Assembled from questions by publishers via quiz builder authoring tools.
+CREATE TABLE learn_quiz_defs (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    title                 TEXT NOT NULL,
+    description           TEXT,
+    subject_tags          TEXT[] NOT NULL DEFAULT '{}',
+    methodology_id        UUID REFERENCES method_definitions(id),
+    time_limit_minutes    SMALLINT,                       -- NULL = no time limit
+    passing_score_percent SMALLINT NOT NULL DEFAULT 70,
+    shuffle_questions     BOOLEAN NOT NULL DEFAULT false,
+    show_correct_after    BOOLEAN NOT NULL DEFAULT true,  -- show correct answers after submission
+    question_count        SMALLINT NOT NULL DEFAULT 0,    -- denormalized from join table
+    is_active             BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_learn_quiz_defs_publisher ON learn_quiz_defs(publisher_id);
+CREATE INDEX idx_learn_quiz_defs_subject ON learn_quiz_defs USING GIN(subject_tags);
+CREATE INDEX idx_learn_quiz_defs_methodology ON learn_quiz_defs(methodology_id)
+    WHERE methodology_id IS NOT NULL;
+
+-- Full-text search on quiz definitions
+ALTER TABLE learn_quiz_defs ADD COLUMN search_vector tsvector
+    GENERATED ALWAYS AS (
+        to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))
+    ) STORED;
+CREATE INDEX idx_learn_quiz_defs_search ON learn_quiz_defs USING GIN(search_vector);
+
+-- Quiz-question join table [S§8.1.9]
+CREATE TABLE learn_quiz_questions (
+    quiz_def_id           UUID NOT NULL REFERENCES learn_quiz_defs(id) ON DELETE CASCADE,
+    question_id           UUID NOT NULL REFERENCES learn_questions(id) ON DELETE CASCADE,
+    sort_order            SMALLINT NOT NULL DEFAULT 0,
+    points_override       NUMERIC,                        -- NULL = use question's default points
+    PRIMARY KEY (quiz_def_id, question_id)
+);
+
+CREATE INDEX idx_learn_quiz_questions_question ON learn_quiz_questions(question_id);
+
+-- Sequence definitions [S§8.1.12]
+-- Ordered content paths created by publishers via sequence builder.
+CREATE TABLE learn_sequence_defs (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    title                 TEXT NOT NULL,
+    description           TEXT,
+    subject_tags          TEXT[] NOT NULL DEFAULT '{}',
+    methodology_id        UUID REFERENCES method_definitions(id),
+    is_linear             BOOLEAN NOT NULL DEFAULT true,  -- true = must complete in order; false = recommended order
+    is_active             BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_learn_sequence_defs_publisher ON learn_sequence_defs(publisher_id);
+CREATE INDEX idx_learn_sequence_defs_subject ON learn_sequence_defs USING GIN(subject_tags);
+CREATE INDEX idx_learn_sequence_defs_methodology ON learn_sequence_defs(methodology_id)
+    WHERE methodology_id IS NOT NULL;
+
+-- Full-text search on sequence definitions
+ALTER TABLE learn_sequence_defs ADD COLUMN search_vector tsvector
+    GENERATED ALWAYS AS (
+        to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))
+    ) STORED;
+CREATE INDEX idx_learn_sequence_defs_search ON learn_sequence_defs USING GIN(search_vector);
+
+-- Sequence items [S§8.1.12]
+-- Individual content steps within a sequence.
+CREATE TABLE learn_sequence_items (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sequence_def_id       UUID NOT NULL REFERENCES learn_sequence_defs(id) ON DELETE CASCADE,
+    sort_order            SMALLINT NOT NULL,
+    content_type          TEXT NOT NULL
+                          CHECK (content_type IN (
+                              'activity_def', 'assessment_def', 'reading_item',
+                              'video_def', 'quiz_def'
+                          )),
+    content_id            UUID NOT NULL,                  -- references the appropriate _defs table
+    is_required           BOOLEAN NOT NULL DEFAULT true,
+    unlock_after_previous BOOLEAN NOT NULL DEFAULT false, -- only enforced when sequence is_linear = true
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_learn_sequence_items_sequence ON learn_sequence_items(sequence_def_id, sort_order);
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- LAYER 2: Artifact Links (NOT family-scoped)
@@ -266,12 +423,12 @@ CREATE TABLE learn_artifact_links (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_type           TEXT NOT NULL CHECK (source_type IN (
                               'activity_def', 'assessment_def', 'reading_item',
-                              'project_def', 'video_def'
+                              'project_def', 'video_def', 'quiz_def', 'sequence_def'
                           )),
     source_id             UUID NOT NULL,
     target_type           TEXT NOT NULL CHECK (target_type IN (
                               'activity_def', 'assessment_def', 'reading_item',
-                              'project_def', 'video_def'
+                              'project_def', 'video_def', 'quiz_def', 'sequence_def'
                           )),
     target_id             UUID NOT NULL,
     relationship          TEXT NOT NULL DEFAULT 'about'
@@ -454,6 +611,86 @@ CREATE TABLE learn_video_progress (
 CREATE INDEX idx_learn_video_progress_family_student
     ON learn_video_progress(family_id, student_id);
 
+-- Quiz sessions [S§8.1.9] (family-scoped)
+-- Per-student quiz-taking sessions. Tracks in-progress and completed quiz attempts.
+CREATE TABLE learn_quiz_sessions (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
+    student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
+    quiz_def_id           UUID NOT NULL REFERENCES learn_quiz_defs(id) ON DELETE CASCADE,
+    status                TEXT NOT NULL DEFAULT 'not_started'
+                          CHECK (status IN ('not_started', 'in_progress', 'submitted', 'scored')),
+    started_at            TIMESTAMPTZ,
+    submitted_at          TIMESTAMPTZ,
+    scored_at             TIMESTAMPTZ,
+    score                 NUMERIC,                        -- total points earned
+    max_score             NUMERIC,                        -- total possible points
+    passed                BOOLEAN,                        -- NULL until scored
+    answers               JSONB NOT NULL DEFAULT '[]',    -- [{question_id, response, is_correct, points_awarded}]
+    scored_by             UUID REFERENCES iam_parents(id), -- NULL = auto-scored, parent_id = parent-scored
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_learn_quiz_sessions_family_student
+    ON learn_quiz_sessions(family_id, student_id, created_at DESC);
+CREATE INDEX idx_learn_quiz_sessions_quiz
+    ON learn_quiz_sessions(quiz_def_id);
+CREATE INDEX idx_learn_quiz_sessions_status
+    ON learn_quiz_sessions(family_id, status)
+    WHERE status IN ('not_started', 'in_progress');
+
+-- Sequence progress [S§8.1.12] (family-scoped)
+-- Per-student progress through a lesson sequence.
+CREATE TABLE learn_sequence_progress (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
+    student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
+    sequence_def_id       UUID NOT NULL REFERENCES learn_sequence_defs(id) ON DELETE CASCADE,
+    current_item_index    SMALLINT NOT NULL DEFAULT 0,
+    status                TEXT NOT NULL DEFAULT 'not_started'
+                          CHECK (status IN ('not_started', 'in_progress', 'completed')),
+    item_completions      JSONB NOT NULL DEFAULT '[]',    -- [{item_id, completed_at, score?}]
+    started_at            TIMESTAMPTZ,
+    completed_at          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_sequence_progress UNIQUE (family_id, student_id, sequence_def_id)
+);
+
+CREATE INDEX idx_learn_sequence_progress_family_student
+    ON learn_sequence_progress(family_id, student_id, status);
+CREATE INDEX idx_learn_sequence_progress_sequence
+    ON learn_sequence_progress(sequence_def_id);
+
+-- Student assignments [S§8.6.3] (family-scoped)
+-- Parent-assigned content for supervised student sessions.
+CREATE TABLE learn_student_assignments (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
+    student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
+    assigned_by           UUID NOT NULL REFERENCES iam_parents(id),
+    content_type          TEXT NOT NULL
+                          CHECK (content_type IN (
+                              'activity_def', 'reading_item', 'video_def',
+                              'quiz_def', 'sequence_def'
+                          )),
+    content_id            UUID NOT NULL,
+    due_date              DATE,                            -- optional
+    status                TEXT NOT NULL DEFAULT 'assigned'
+                          CHECK (status IN ('assigned', 'in_progress', 'completed', 'skipped')),
+    assigned_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_learn_assignments_family_student
+    ON learn_student_assignments(family_id, student_id, status);
+CREATE INDEX idx_learn_assignments_due
+    ON learn_student_assignments(family_id, due_date)
+    WHERE due_date IS NOT NULL AND status IN ('assigned', 'in_progress');
+
 -- ─── Supporting tables ────────────────────────────────────────────────────────
 
 -- Subject taxonomy [S§8.3]
@@ -595,11 +832,25 @@ ALTER TABLE learn_export_requests ENABLE ROW LEVEL SECURITY;
 CREATE POLICY learn_export_requests_family_policy ON learn_export_requests
     USING (family_id = current_setting('app.current_family_id')::uuid);
 
+ALTER TABLE learn_quiz_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY learn_quiz_sessions_family_policy ON learn_quiz_sessions
+    USING (family_id = current_setting('app.current_family_id')::uuid);
+
+ALTER TABLE learn_sequence_progress ENABLE ROW LEVEL SECURITY;
+CREATE POLICY learn_sequence_progress_family_policy ON learn_sequence_progress
+    USING (family_id = current_setting('app.current_family_id')::uuid);
+
+ALTER TABLE learn_student_assignments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY learn_student_assignments_family_policy ON learn_student_assignments
+    USING (family_id = current_setting('app.current_family_id')::uuid);
+
 -- ═══ Layer 1: Published Content — NO family-scoped RLS ═══════════════════════
 -- Access control is publisher-based for writes and public for reads.
 -- Publisher membership checks happen at application level via mkt:: service.
 -- No RLS on: learn_activity_defs, learn_assessment_defs, learn_reading_items,
---            learn_project_defs, learn_video_defs
+--            learn_project_defs, learn_video_defs, learn_questions,
+--            learn_quiz_defs, learn_quiz_questions, learn_sequence_defs,
+--            learn_sequence_items
 
 -- ═══ Layer 2: Artifact Links — NO RLS ════════════════════════════════════════
 -- Links between published content are shared. No family_id column.
@@ -876,6 +1127,189 @@ Deletes a reading list (does not delete reading items or progress).
 - **Auth**: Required (`FamilyScope`)
 - **Response**: 204 No Content
 
+#### Questions (Layer 1 — publisher-scoped) `[S§8.1.9]`
+
+##### `POST /v1/learning/questions`
+
+Creates a question. Caller must be a member of the specified publisher.
+
+- **Auth**: Required (publisher membership check)
+- **Body**: `CreateQuestionCommand` (`publisher_id`, `question_type`, `content`, `media_attachments`, `answer_data`, `subject_tags`, `methodology_id?`, `difficulty_level?`, `points?`)
+- **Validation**: `question_type` must be valid; `answer_data` must match question type schema; `subject_tags` must exist in taxonomy
+- **Response**: `QuestionResponse` (201 Created)
+
+##### `GET /v1/learning/questions`
+
+Browse/search questions for quiz building.
+
+- **Auth**: Required (publisher membership check for write context; any auth for read)
+- **Query**: `?publisher_id=<uuid>&question_type=<type>&subject=<slug>&methodology_id=<uuid>&q=<search>&cursor=<uuid>&limit=20`
+- **Response**: `PaginatedResponse<QuestionSummaryResponse>` (200 OK)
+
+##### `PATCH /v1/learning/questions/:id`
+
+Updates a question. Publisher member only.
+
+- **Auth**: Required (publisher membership check)
+- **Body**: `UpdateQuestionCommand` (partial fields)
+- **Response**: `QuestionResponse` (200 OK)
+
+#### Quiz Definitions (Layer 1 — publisher-scoped) `[S§8.1.9]`
+
+##### `POST /v1/learning/quizzes`
+
+Creates a quiz from existing questions. Publisher member only.
+
+- **Auth**: Required (publisher membership check)
+- **Body**: `CreateQuizDefCommand` (`publisher_id`, `title`, `description?`, `subject_tags`, `methodology_id?`, `time_limit_minutes?`, `passing_score_percent?`, `shuffle_questions?`, `show_correct_after?`, `question_ids: [{question_id, sort_order, points_override?}]`)
+- **Validation**: All question IDs must exist and belong to same publisher; at least 1 question
+- **Response**: `QuizDefResponse` (201 Created)
+
+##### `GET /v1/learning/quizzes/:id`
+
+Returns a quiz definition with questions (without answers if requested by student session).
+
+- **Auth**: Required
+- **Query**: `?include_answers=false` (for student view — omit correct answers)
+- **Response**: `QuizDefDetailResponse` (200 OK)
+
+##### `PATCH /v1/learning/quizzes/:id`
+
+Updates a quiz definition. Publisher member only.
+
+- **Auth**: Required (publisher membership check)
+- **Body**: `UpdateQuizDefCommand` (partial fields, including question list updates)
+- **Response**: `QuizDefResponse` (200 OK)
+
+#### Quiz Sessions (Layer 3 — family-scoped) `[S§8.1.9]`
+
+##### `POST /v1/learning/students/:student_id/quiz-sessions`
+
+Starts a quiz session for a student.
+
+- **Auth**: Required (`FamilyScope`)
+- **Body**: `StartQuizSessionCommand` (`quiz_def_id`)
+- **Validation**: Student must belong to family; quiz must be active; assessment-engine tool must be in student's resolved tools
+- **Response**: `QuizSessionResponse` (201 Created)
+- **Note**: Returns quiz questions (without correct answers) in the response
+
+##### `PATCH /v1/learning/students/:student_id/quiz-sessions/:id`
+
+Saves progress or submits a quiz session.
+
+- **Auth**: Required (`FamilyScope`)
+- **Body**: `UpdateQuizSessionCommand` (`answers?`, `submit?: bool`)
+- **Validation**: Session must be in `not_started` or `in_progress` status; cannot modify after submission
+- **Response**: `QuizSessionResponse` (200 OK)
+- **Side effects**: On submit: auto-scores objective questions, sets status to `submitted` (if has short_answer) or `scored` (if all auto-scorable), generates `learn_assessment_results` entry
+- **Events**: `QuizCompleted` (when fully scored)
+
+##### `GET /v1/learning/students/:student_id/quiz-sessions/:id`
+
+Returns quiz session state (for resume or review).
+
+- **Auth**: Required (`FamilyScope`)
+- **Response**: `QuizSessionResponse` (200 OK) — includes answers and scores if submitted
+
+##### `POST /v1/learning/students/:student_id/quiz-sessions/:id/score`
+
+Parent scores open-ended (short_answer) questions on a submitted quiz.
+
+- **Auth**: Required (`FamilyScope` — must be parent, not student session)
+- **Body**: `ScoreQuizCommand` (`scores: [{question_id, points_awarded, feedback?}]`)
+- **Validation**: Session must be in `submitted` status; only short_answer questions can be manually scored
+- **Response**: `QuizSessionResponse` (200 OK)
+- **Events**: `QuizCompleted`
+
+#### Sequence Definitions (Layer 1 — publisher-scoped) `[S§8.1.12]`
+
+##### `POST /v1/learning/sequences`
+
+Creates a lesson sequence. Publisher member only.
+
+- **Auth**: Required (publisher membership check)
+- **Body**: `CreateSequenceDefCommand` (`publisher_id`, `title`, `description?`, `subject_tags`, `methodology_id?`, `is_linear?`, `items: [{content_type, content_id, sort_order, is_required?, unlock_after_previous?}]`)
+- **Validation**: All content IDs must exist; at least 1 item
+- **Response**: `SequenceDefResponse` (201 Created)
+
+##### `GET /v1/learning/sequences/:id`
+
+Returns a sequence definition with items.
+
+- **Auth**: Required
+- **Response**: `SequenceDefDetailResponse` (200 OK) — includes items with content summaries
+
+##### `PATCH /v1/learning/sequences/:id`
+
+Updates a sequence definition. Publisher member only.
+
+- **Auth**: Required (publisher membership check)
+- **Body**: `UpdateSequenceDefCommand` (partial fields, including item list updates)
+- **Response**: `SequenceDefResponse` (200 OK)
+
+#### Sequence Progress (Layer 3 — family-scoped) `[S§8.1.12]`
+
+##### `POST /v1/learning/students/:student_id/sequence-progress`
+
+Starts a sequence for a student.
+
+- **Auth**: Required (`FamilyScope`)
+- **Body**: `StartSequenceCommand` (`sequence_def_id`)
+- **Validation**: Student must belong to family; sequence must be active; lesson-sequences tool must be in student's resolved tools
+- **Response**: `SequenceProgressResponse` (201 Created)
+
+##### `GET /v1/learning/students/:student_id/sequence-progress/:id`
+
+Returns sequence progress with per-item completion status.
+
+- **Auth**: Required (`FamilyScope`)
+- **Response**: `SequenceProgressResponse` (200 OK)
+
+##### `PATCH /v1/learning/students/:student_id/sequence-progress/:id`
+
+Advances, skips, or unlocks items in a sequence.
+
+- **Auth**: Required (`FamilyScope`)
+- **Body**: `UpdateSequenceProgressCommand` (`complete_item_id?`, `skip_item_id?`, `unlock_item_id?`)
+- **Validation**: If linear sequence, cannot skip required items (unless parent override); if unlocking, must be parent (not student session)
+- **Response**: `SequenceProgressResponse` (200 OK)
+- **Events**: `SequenceAdvanced` (on item completion), `SequenceCompleted` (when all required items done)
+
+#### Student Assignments (Layer 3 — family-scoped) `[S§8.6.3]`
+
+##### `POST /v1/learning/students/:student_id/assignments`
+
+Assigns content to a student. Parent auth required.
+
+- **Auth**: Required (`FamilyScope` — must be parent, not student session)
+- **Body**: `CreateAssignmentCommand` (`content_type`, `content_id`, `due_date?`)
+- **Validation**: Student must belong to family; content must exist and be active
+- **Response**: `AssignmentResponse` (201 Created)
+
+##### `GET /v1/learning/students/:student_id/assignments`
+
+Lists assignments for a student. Accessible by both parent and student sessions.
+
+- **Auth**: Required (`FamilyScope` or student session)
+- **Query**: `?status=<status>&due_before=<date>&cursor=<uuid>&limit=20`
+- **Response**: `PaginatedResponse<AssignmentResponse>` (200 OK)
+
+##### `PATCH /v1/learning/students/:student_id/assignments/:id`
+
+Updates assignment status (e.g., mark in-progress or completed).
+
+- **Auth**: Required (`FamilyScope` or student session for status updates only)
+- **Body**: `UpdateAssignmentCommand` (`status?`, `due_date?`)
+- **Response**: `AssignmentResponse` (200 OK)
+- **Events**: `AssignmentCompleted` (when status → completed)
+
+##### `DELETE /v1/learning/students/:student_id/assignments/:id`
+
+Removes an assignment. Parent auth required.
+
+- **Auth**: Required (`FamilyScope` — must be parent, not student session)
+- **Response**: 204 No Content
+
 ### §4.2 Cross-Cutting Endpoints
 
 #### Progress
@@ -963,27 +1397,25 @@ Downloads a completed export or checks status.
 
 ### §4.3 Phase 2 Endpoints
 
-- Assessment definition CRUD (5 endpoints — same pattern as activity defs)
-- Assessment result CRUD per student (5 endpoints)
-- Project definition CRUD (5 endpoints)
+- Project definition CRUD (5 endpoints — same pattern as activity defs)
 - Project progress CRUD per student (5 endpoints)
-- Video definition CRUD (4 endpoints)
-- Video progress tracking per student (3 endpoints)
 - Grading scale CRUD per family (4 endpoints)
 - Advanced analytics endpoints (3 endpoints)
 - Reading list sharing (2 endpoints)
 - ISBN book search/import (1 endpoint)
+- Content annotations/bookmarks (3 endpoints)
 
 ### §4.4 Phase 3 Endpoints
 
 - Methodology-specific tool definition + instance endpoints (per tool — see §15)
 
-**Phase 1 total**: ~42 endpoints (Definitions: 12, Activity Logs: 5, Journals: 5,
+**Phase 1 total**: ~72 endpoints (Definitions: 12, Activity Logs: 5, Journals: 5,
 Reading Progress: 3, Reading Lists: 5, Progress: 3, Tools: 2, Taxonomy: 2,
-Export: 2, Links: 3).
+Export: 2, Links: 3, **Questions: 3, Quizzes: 3, Quiz Sessions: 4,
+Sequences: 3, Sequence Progress: 3, Assignments: 4**).
 
-**Phase 2 total**: ~37 endpoints (Assessments: 10, Projects: 10, Videos: 7,
-Grading: 4, Advanced analytics: 3, Sharing: 2, Import: 1).
+**Phase 2 total**: ~23 endpoints (Projects: 10, Grading: 4, Advanced analytics: 3,
+Sharing: 2, Import: 1, Annotations: 3).
 
 **Phase 3 total**: ~24 endpoints (8 methodology-specific tools × ~3 endpoints each).
 
@@ -1177,7 +1609,7 @@ pub trait LearningService: Send + Sync {
         family_id: FamilyId,
     ) -> Result<(), AppError>;
 
-    /// Handles PurchaseCompleted — integrate purchased content.
+    /// Handles PurchaseCompleted — integrate purchased content (including interactive content).
     async fn handle_purchase_completed(
         &self,
         family_id: FamilyId,
@@ -1187,6 +1619,119 @@ pub trait LearningService: Send + Sync {
     /// Handles MethodologyConfigUpdated — invalidate tool cache.
     async fn handle_methodology_config_updated(
         &self,
+    ) -> Result<(), AppError>;
+
+    // ─── Assessment Engine Commands (Layer 1 + Layer 3) ───────────── [S§8.1.9]
+
+    /// Creates a question. Publisher membership required.
+    async fn create_question(
+        &self,
+        cmd: CreateQuestionCommand,
+    ) -> Result<QuestionResponse, AppError>;
+
+    /// Updates a question. Publisher membership required.
+    async fn update_question(
+        &self,
+        question_id: Uuid,
+        cmd: UpdateQuestionCommand,
+    ) -> Result<QuestionResponse, AppError>;
+
+    /// Creates a quiz definition from questions. Publisher membership required.
+    async fn create_quiz_def(
+        &self,
+        cmd: CreateQuizDefCommand,
+    ) -> Result<QuizDefResponse, AppError>;
+
+    /// Updates a quiz definition. Publisher membership required.
+    async fn update_quiz_def(
+        &self,
+        quiz_def_id: Uuid,
+        cmd: UpdateQuizDefCommand,
+    ) -> Result<QuizDefResponse, AppError>;
+
+    /// Starts a quiz session for a student.
+    async fn start_quiz_session(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        cmd: StartQuizSessionCommand,
+    ) -> Result<QuizSessionResponse, AppError>;
+
+    /// Saves progress or submits a quiz session.
+    async fn update_quiz_session(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        session_id: Uuid,
+        cmd: UpdateQuizSessionCommand,
+    ) -> Result<QuizSessionResponse, AppError>;
+
+    /// Parent scores short-answer questions on a submitted quiz.
+    async fn score_quiz_session(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        session_id: Uuid,
+        cmd: ScoreQuizCommand,
+    ) -> Result<QuizSessionResponse, AppError>;
+
+    // ─── Sequence Engine Commands (Layer 1 + Layer 3) ─────────────── [S§8.1.12]
+
+    /// Creates a lesson sequence. Publisher membership required.
+    async fn create_sequence_def(
+        &self,
+        cmd: CreateSequenceDefCommand,
+    ) -> Result<SequenceDefResponse, AppError>;
+
+    /// Updates a sequence definition. Publisher membership required.
+    async fn update_sequence_def(
+        &self,
+        sequence_def_id: Uuid,
+        cmd: UpdateSequenceDefCommand,
+    ) -> Result<SequenceDefResponse, AppError>;
+
+    /// Starts a sequence for a student.
+    async fn start_sequence(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        cmd: StartSequenceCommand,
+    ) -> Result<SequenceProgressResponse, AppError>;
+
+    /// Advances, skips, or unlocks items in a sequence.
+    async fn update_sequence_progress(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        progress_id: Uuid,
+        cmd: UpdateSequenceProgressCommand,
+    ) -> Result<SequenceProgressResponse, AppError>;
+
+    // ─── Assignment Commands (Layer 3) ────────────────────────────── [S§8.6.3]
+
+    /// Assigns content to a student. Parent auth required.
+    async fn create_assignment(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        cmd: CreateAssignmentCommand,
+    ) -> Result<AssignmentResponse, AppError>;
+
+    /// Updates assignment status.
+    async fn update_assignment(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        assignment_id: Uuid,
+        cmd: UpdateAssignmentCommand,
+    ) -> Result<AssignmentResponse, AppError>;
+
+    /// Removes an assignment. Parent auth required.
+    async fn delete_assignment(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        assignment_id: Uuid,
     ) -> Result<(), AppError>;
 
     // ═══ QUERY SIDE (reads, no side effects) ════════════════════════
@@ -1330,6 +1875,55 @@ pub trait LearningService: Send + Sync {
         scope: &FamilyScope,
         export_id: Uuid,
     ) -> Result<ExportRequestResponse, AppError>;
+
+    // ─── Assessment Engine Queries ────────────────────────────────── [S§8.1.9]
+
+    /// Lists questions with filtering (for quiz building).
+    async fn list_questions(
+        &self,
+        query: QuestionQuery,
+    ) -> Result<PaginatedResponse<QuestionSummaryResponse>, AppError>;
+
+    /// Returns a quiz definition with questions.
+    async fn get_quiz_def(
+        &self,
+        quiz_def_id: Uuid,
+        include_answers: bool,
+    ) -> Result<QuizDefDetailResponse, AppError>;
+
+    /// Returns a quiz session (for resume or review).
+    async fn get_quiz_session(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        session_id: Uuid,
+    ) -> Result<QuizSessionResponse, AppError>;
+
+    // ─── Sequence Engine Queries ──────────────────────────────────── [S§8.1.12]
+
+    /// Returns a sequence definition with items.
+    async fn get_sequence_def(
+        &self,
+        sequence_def_id: Uuid,
+    ) -> Result<SequenceDefDetailResponse, AppError>;
+
+    /// Returns sequence progress with per-item completion status.
+    async fn get_sequence_progress(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        progress_id: Uuid,
+    ) -> Result<SequenceProgressResponse, AppError>;
+
+    // ─── Assignment Queries ───────────────────────────────────────── [S§8.6.3]
+
+    /// Lists assignments for a student.
+    async fn list_assignments(
+        &self,
+        scope: &FamilyScope,
+        student_id: Uuid,
+        query: AssignmentQuery,
+    ) -> Result<PaginatedResponse<AssignmentResponse>, AppError>;
 }
 ```
 
@@ -1344,6 +1938,12 @@ pub trait LearningService: Send + Sync {
 - `Arc<dyn ProgressRepository>`
 - `Arc<dyn SubjectTaxonomyRepository>`
 - `Arc<dyn ExportRepository>`
+- `Arc<dyn QuestionRepository>` (assessment engine)
+- `Arc<dyn QuizDefRepository>` (assessment engine)
+- `Arc<dyn QuizSessionRepository>` (assessment engine)
+- `Arc<dyn SequenceDefRepository>` (sequence engine)
+- `Arc<dyn SequenceProgressRepository>` (sequence engine)
+- `Arc<dyn AssignmentRepository>` (student assignments)
 - `Arc<dyn MethodologyService>` (for tool resolution)
 - `Arc<dyn IamService>` (for student/family data lookup)
 - `Arc<EventBus>`
@@ -2663,9 +3263,13 @@ learn:: maps slugs to handler modules:
 | `reading-lists` | `src/learn/handlers.rs` (reading list endpoints) | 1 |
 | `journaling` | `src/learn/handlers.rs` (journal entry endpoints) | 1 |
 | `progress-tracking` | `src/learn/handlers.rs` (progress endpoints) | 1 |
-| `tests-grades` | `src/learn/handlers.rs` (assessment endpoints) | 2 |
+| `assessment-engine` | `src/learn/handlers.rs` (quiz/question endpoints) | 1 |
+| `content-viewer` | Frontend-only (no backend handler — uses `media::` signed URLs) | 1 |
+| `video-player` | `src/learn/handlers.rs` (video progress endpoints) | 1 |
+| `lesson-sequences` | `src/learn/handlers.rs` (sequence endpoints) | 1 |
+| `tests-grades` | `src/learn/handlers.rs` (assessment result endpoints) | 1* |
 | `projects` | `src/learn/handlers.rs` (project endpoints) | 2 |
-| `video-lessons` | `src/learn/handlers.rs` (video endpoints) | 2 |
+| `video-lessons` | `src/learn/handlers.rs` (marketplace video integration) | 1* |
 | `nature-journals` | Phase 3 | 3 |
 | `trivium-tracker` | Phase 3 | 3 |
 | `rhythm-planner` | Phase 3 | 3 |
@@ -2674,6 +3278,8 @@ learn:: maps slugs to handler modules:
 | `interest-led-logs` | Phase 3 | 3 |
 | `handwork-tracker` | Phase 3 | 3 |
 | `practical-life` | Phase 3 | 3 |
+
+*`tests-grades` retains existing score recording (Phase 1) but advanced analytics remain Phase 2. `video-lessons` is now Phase 1 with the video player infrastructure.
 
 ---
 
@@ -2926,9 +3532,14 @@ The service checks `iam_families.subscription_tier` before allowing premium oper
 | Reading Lists | ✓ | ✓ |
 | Journaling & Narration | ✓ (basic) | ✓ (enhanced storage) |
 | Basic Progress Tracking | ✓ | ✓ |
+| Assessment Engine | ✓ | ✓ |
+| Content Viewer | ✓ (purchase required) | ✓ |
+| Video Player | ✓ (purchase required) | ✓ |
+| Lesson Sequences | ✓ (purchase required) | ✓ |
+| Student Assignments | ✓ | ✓ |
 | Tests & Grades (Phase 2) | ✓ (basic) | ✓ (advanced analytics) |
 | Projects (Phase 2) | ✓ (basic) | ✓ (portfolio integration) |
-| Video Lessons (Phase 2) | ✓ (purchase required) | ✓ |
+| Content Annotations (Phase 2) | ✗ | ✓ |
 | Advanced Analytics (Phase 2) | ✗ | ✓ |
 | Compliance Reporting (Phase 2) | ✗ | ✓ |
 | Methodology-Specific Tools (Phase 3) | ✓ (basic) | ✓ (advanced) |
@@ -3095,6 +3706,10 @@ pub enum LearningError {
 | `MilestoneAchieved` event | `notify::`, `social::` | Domain event — notification, optional milestone post |
 | `BookCompleted` event | `notify::` | Domain event — streak check, reading milestone |
 | `DataExportReady` event | `notify::` | Domain event — export download notification |
+| `QuizCompleted` event | `notify::`, `recs::` | Domain event — notify parent of quiz score, recommendation signal |
+| `SequenceAdvanced` event | `recs::` | Domain event — recommendation signal for sequence engagement |
+| `SequenceCompleted` event | `notify::`, `recs::` | Domain event — notify parent of sequence completion, recommendation signal |
+| `AssignmentCompleted` event | `notify::` | Domain event — notify parent of assignment completion |
 
 ### §18.2 learn:: Consumes
 
@@ -3152,6 +3767,49 @@ pub struct DataExportReady {
     pub expires_at: DateTime<Utc>,
 }
 impl DomainEvent for DataExportReady {}
+
+// ─── Interactive Learning Events ─────────────────────────────── [S§8.1.9, S§8.1.12, S§8.6]
+
+#[derive(Clone, Debug)]
+pub struct QuizCompleted {
+    pub family_id: FamilyId,
+    pub student_id: Uuid,
+    pub quiz_def_id: Uuid,
+    pub quiz_session_id: Uuid,
+    pub score: f64,
+    pub max_score: f64,
+    pub passed: bool,
+}
+impl DomainEvent for QuizCompleted {}
+
+#[derive(Clone, Debug)]
+pub struct SequenceAdvanced {
+    pub family_id: FamilyId,
+    pub student_id: Uuid,
+    pub sequence_def_id: Uuid,
+    pub item_index: i16,
+    pub item_content_type: String,
+    pub item_content_id: Uuid,
+}
+impl DomainEvent for SequenceAdvanced {}
+
+#[derive(Clone, Debug)]
+pub struct SequenceCompleted {
+    pub family_id: FamilyId,
+    pub student_id: Uuid,
+    pub sequence_def_id: Uuid,
+}
+impl DomainEvent for SequenceCompleted {}
+
+#[derive(Clone, Debug)]
+pub struct AssignmentCompleted {
+    pub family_id: FamilyId,
+    pub student_id: Uuid,
+    pub assignment_id: Uuid,
+    pub content_type: String,
+    pub content_id: Uuid,
+}
+impl DomainEvent for AssignmentCompleted {}
 ```
 
 ### §18.4 Events learn:: Subscribes To
@@ -3243,11 +3901,15 @@ impl DomainEventHandler<MethodologyConfigUpdated> for MethodologyConfigUpdatedHa
 ### Phase 1 — Foundation `[S§19]`
 
 **In scope**:
-- Layer 1 tables: `learn_activity_defs`, `learn_reading_items` (2 definition tables)
+- Layer 1 tables: `learn_activity_defs`, `learn_reading_items`, `learn_questions`,
+  `learn_quiz_defs`, `learn_quiz_questions`, `learn_sequence_defs`,
+  `learn_sequence_items`, `learn_video_defs` (8 definition tables)
 - Layer 2 table: `learn_artifact_links` (1 link table)
 - Layer 3 tables: `learn_activity_logs`, `learn_journal_entries`, `learn_reading_progress`,
   `learn_progress_snapshots`, `learn_reading_lists`, `learn_reading_list_items`,
-  `learn_custom_subjects`, `learn_export_requests` (8 tracking tables)
+  `learn_custom_subjects`, `learn_export_requests`, `learn_quiz_sessions`,
+  `learn_sequence_progress`, `learn_student_assignments`,
+  `learn_video_progress` (12 tracking tables)
 - Platform table: `learn_subject_taxonomy` (1 taxonomy table, seeded)
 - RLS policies for all Layer 3 tables
 - Activity log CRUD with validation (invariants enforced)
@@ -3257,17 +3919,22 @@ impl DomainEventHandler<MethodologyConfigUpdated> for MethodologyConfigUpdatedHa
 - Reading list management (create, add/remove items, delete)
 - Artifact links (create, query, delete)
 - Basic progress tracking (activity counts, hours by subject, reading completion)
+- Interactive assessment engine (question bank, quiz builder, quiz sessions, auto-scoring)
+- In-platform content viewer (PDF rendering, page tracking)
+- Video player (self-hosted HLS + external embeds, progress tracking)
+- Lesson sequences (ordered content paths, progression tracking)
+- Student assignments (parent assigns content, due dates, status tracking)
 - Tool resolution (delegates to `method::`)
 - Subject taxonomy (platform + family custom)
 - Data export (async, JSON/CSV)
-- ~42 Phase 1 endpoints
+- ~72 Phase 1 endpoints
 - `LearningService` trait + `LearningServiceImpl`
-- 10 repository traits + PostgreSQL implementations
+- 16 repository traits + PostgreSQL implementations
 - `MediaAdapter` trait
 - Domain `domain/` subdirectory: activity.rs, journal.rs, reading_list.rs, progress.rs,
-  taxonomy.rs, errors.rs
+  taxonomy.rs, quiz_session.rs, sequence.rs, assignment.rs, errors.rs
 - `LearningError` enum + HTTP mapping
-- Domain events: `ActivityLogged`, `MilestoneAchieved`, `BookCompleted`, `DataExportReady`
+- Domain events: `ActivityLogged`, `MilestoneAchieved`, `BookCompleted`, `DataExportReady`, `QuizCompleted`, `SequenceAdvanced`, `SequenceCompleted`, `AssignmentCompleted`
 - Event handlers: `StudentCreatedHandler`, `StudentDeletedHandler`,
   `FamilyDeletionScheduledHandler`, `PurchaseCompletedHandler`,
   `MethodologyConfigUpdatedHandler`
@@ -3277,14 +3944,14 @@ impl DomainEventHandler<MethodologyConfigUpdated> for MethodologyConfigUpdatedHa
 ### Phase 2 — Depth
 
 **In scope**:
-- Tests & Grades: `learn_assessment_defs`, `learn_assessment_results`, `learn_grading_scales`
+- Tests & Grades (compliance-focused): `learn_assessment_defs`, `learn_assessment_results`, `learn_grading_scales`
 - Projects: `learn_project_defs`, `learn_project_progress`
-- Video Lessons: `learn_video_defs`, `learn_video_progress`
+- Content annotations/bookmarks (in-platform content viewer enhancement)
 - Advanced analytics (trend visualization, subject balance, methodology benchmarks)
 - ISBN book search/import
 - Reading list sharing (to friends/groups via `social::`)
 - Per-student manual tool activation/deactivation
-- ~37 Phase 2 endpoints
+- ~30 Phase 2 endpoints
 
 ### Phase 3 — Specialize
 
@@ -3405,7 +4072,7 @@ src/learn/
 ├── models.rs                 # Request/response types, internal types, query params
 ├── ports.rs                  # LearningService trait, all repository traits,
 │                             # MediaAdapter trait
-├── events.rs                 # ActivityLogged, MilestoneAchieved, BookCompleted,
+├── events.rs                 # ActivityLogged, MilestoneAchieved, BookCompleted, QuizCompleted, SequenceAdvanced, SequenceCompleted, AssignmentCompleted,
 │                             # DataExportReady
 ├── event_handlers.rs         # StudentCreatedHandler, StudentDeletedHandler,
 │                             # FamilyDeletionScheduledHandler,

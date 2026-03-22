@@ -454,7 +454,7 @@ Each spec domain `[S§2.1]` maps to a Rust module within the monolith:
 | Discovery | `discover::` | `[S§5]` | Quiz engine, explorer content, state guides |
 | Onboarding | `onboard::` | `[S§6]` | Account setup wizard, roadmaps, recommendations |
 | Social | `social::` | `[S§7]` | Profiles, feed, friends, messaging, groups, events |
-| Learning | `learn::` | `[S§8]` | Tools, activities, journals, progress tracking |
+| Learning | `learn::` | `[S§8]` | Tools, activities, journals, progress tracking, interactive assessments, lesson sequences, student assignments |
 | Marketplace | `mkt::` | `[S§9]` | Listings, purchases, reviews, creator dashboard |
 | AI & Recommendations | `ai::` | `[S§10]` | Recommendation engine, content suggestions |
 | Compliance & Reporting | `comply::` | `[S§11]` | Attendance, assessments, portfolios, transcripts |
@@ -783,7 +783,7 @@ that enforce invariants structurally (not by convention):
 
 | Domain | Complex? | Reason |
 |--------|----------|--------|
-| `learn/` | **Yes** | Activity logging invariants, tool lifecycles, multi-student assignment, progress state |
+| `learn/` | **Yes** | Activity logging invariants, tool lifecycles, multi-student assignment, progress state, quiz session lifecycle (not_started→in_progress→submitted→scored), lesson sequence progression, student assignment state machine |
 | `social/` | **Yes** | Friend system invariants, visibility rules, blocking logic |
 | `mkt/` | **Yes** | Listing lifecycle state machine (Draft → Review → Published → Archived), purchase invariants |
 | `safety/` | **Yes** | Moderation state machine, CSAM handling pipeline |
@@ -934,6 +934,10 @@ impl EventBus {
 | `ContentFlagged` (`safety::events`) | `notify::` | Moderation queue alert |
 | `MethodologyConfigUpdated` (`method::events`) | All domains | Config cache invalidation |
 | `MilestoneAchieved` (`learn::events`) | `notify::`, `social::` | In-app + email notification, optional milestone post |
+| `QuizCompleted` (`learn::events`) | `notify::`, `ai::` | Score notification, recommendation signal |
+| `SequenceAdvanced` (`learn::events`) | `ai::` | Recommendation signal for sequence engagement |
+| `SequenceCompleted` (`learn::events`) | `notify::`, `ai::` | Completion notification, recommendation signal |
+| `AssignmentCompleted` (`learn::events`) | `notify::` | Notify parent of assignment completion |
 
 **Event ownership rule** — Event types are defined in the *emitting* domain's `events.rs`
 file. The consuming domain imports the event type, never the emitting domain's service:
@@ -1073,7 +1077,7 @@ Tables are prefixed by domain to avoid collision and provide clear ownership. `[
 | Discovery | `disc_` | `disc_quiz_definitions`, `disc_quiz_results`, `disc_state_guides` |
 | Onboarding | `onb_` | `onb_roadmaps`, `onb_wizard_progress` |
 | Social | `soc_` | `soc_profiles`, `soc_posts`, `soc_comments`, `soc_friendships`, `soc_messages`, `soc_groups`, `soc_events` |
-| Learning | `learn_` | `learn_activities`, `learn_assessments`, `learn_journals`, `learn_projects`, `learn_reading_lists`, `learn_progress` |
+| Learning | `learn_` | `learn_activities`, `learn_journals`, `learn_reading_lists`, `learn_progress`, `learn_questions`, `learn_quiz_defs`, `learn_quiz_sessions`, `learn_sequence_defs`, `learn_sequence_progress`, `learn_student_assignments` |
 | Marketplace | `mkt_` | `mkt_creators`, `mkt_listings`, `mkt_purchases`, `mkt_reviews`, `mkt_files` |
 | AI & Recs | `ai_` | `ai_signals`, `ai_recommendations` |
 | Compliance | `comply_` | `comply_attendance`, `comply_state_configs`, `comply_portfolios` |
@@ -1311,6 +1315,108 @@ CREATE TABLE learn_reading_list_items (
 
 CREATE INDEX idx_reading_items_list ON learn_reading_list_items(list_id);
 CREATE INDEX idx_reading_items_family ON learn_reading_list_items(family_id);
+
+-- Interactive Assessment Engine [S§8.1.9]
+-- Layer 1: Publisher-scoped content definitions (no RLS)
+CREATE TABLE learn_questions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    publisher_id    UUID NOT NULL,                  -- references mkt_publishers
+    question_type   TEXT NOT NULL CHECK (question_type IN (
+                        'multiple_choice', 'fill_in_blank', 'true_false',
+                        'matching', 'ordering', 'short_answer'
+                    )),
+    content         TEXT NOT NULL,                  -- question text (markdown)
+    answer_data     JSONB NOT NULL,                 -- type-specific: choices[], correct_answer, match_pairs[], etc.
+    subject_tags    TEXT[] NOT NULL DEFAULT '{}',
+    methodology_id  UUID REFERENCES method_definitions(id),
+    difficulty_level TEXT CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
+    auto_scorable   BOOLEAN NOT NULL DEFAULT true,
+    points          SMALLINT NOT NULL DEFAULT 1,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE learn_quiz_defs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    publisher_id    UUID NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    subject_tags    TEXT[] NOT NULL DEFAULT '{}',
+    methodology_id  UUID REFERENCES method_definitions(id),
+    time_limit_minutes SMALLINT,                    -- NULL = no time limit
+    passing_score_percent SMALLINT NOT NULL DEFAULT 70,
+    shuffle_questions BOOLEAN NOT NULL DEFAULT false,
+    show_correct_after BOOLEAN NOT NULL DEFAULT true,
+    question_count  SMALLINT NOT NULL DEFAULT 0,    -- denormalized
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Layer 3: Family-scoped quiz taking (RLS-protected)
+CREATE TABLE learn_quiz_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id       UUID NOT NULL REFERENCES iam_families(id),
+    student_id      UUID NOT NULL REFERENCES iam_students(id),
+    quiz_def_id     UUID NOT NULL REFERENCES learn_quiz_defs(id),
+    status          TEXT NOT NULL DEFAULT 'not_started'
+                    CHECK (status IN ('not_started', 'in_progress', 'submitted', 'scored')),
+    started_at      TIMESTAMPTZ,
+    submitted_at    TIMESTAMPTZ,
+    scored_at       TIMESTAMPTZ,
+    score           SMALLINT,
+    max_score       SMALLINT,
+    passed          BOOLEAN,
+    answers         JSONB DEFAULT '[]',             -- [{question_id, response, is_correct, points_awarded}]
+    scored_by       UUID REFERENCES iam_parents(id) -- NULL = auto-scored
+);
+
+CREATE INDEX idx_quiz_sessions_family ON learn_quiz_sessions(family_id, student_id);
+
+-- Lesson Sequences [S§8.1.12]
+CREATE TABLE learn_sequence_defs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    publisher_id    UUID NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    subject_tags    TEXT[] NOT NULL DEFAULT '{}',
+    methodology_id  UUID REFERENCES method_definitions(id),
+    is_linear       BOOLEAN NOT NULL DEFAULT true,  -- must complete in order
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE learn_sequence_progress (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id       UUID NOT NULL REFERENCES iam_families(id),
+    student_id      UUID NOT NULL REFERENCES iam_students(id),
+    sequence_def_id UUID NOT NULL REFERENCES learn_sequence_defs(id),
+    current_item_index SMALLINT NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'not_started'
+                    CHECK (status IN ('not_started', 'in_progress', 'completed')),
+    item_completions JSONB DEFAULT '[]',
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    UNIQUE (family_id, student_id, sequence_def_id)
+);
+
+CREATE INDEX idx_sequence_progress_family ON learn_sequence_progress(family_id, student_id);
+
+-- Student Assignments [S§8.6]
+CREATE TABLE learn_student_assignments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id       UUID NOT NULL REFERENCES iam_families(id),
+    student_id      UUID NOT NULL REFERENCES iam_students(id),
+    assigned_by     UUID NOT NULL REFERENCES iam_parents(id),
+    content_type    TEXT NOT NULL,                   -- quiz_def, sequence_def, video_def, etc.
+    content_id      UUID NOT NULL,
+    due_date        DATE,
+    status          TEXT NOT NULL DEFAULT 'assigned'
+                    CHECK (status IN ('assigned', 'in_progress', 'completed', 'skipped')),
+    assigned_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at    TIMESTAMPTZ
+);
+
+CREATE INDEX idx_assignments_family ON learn_student_assignments(family_id, student_id);
 ```
 
 #### Marketplace `[S§9]`
@@ -1472,7 +1578,18 @@ iam_families ──┬── 1:N ── iam_parents ──── 0:1 ── mkt_
                │
                ├── 1:N ── learn_reading_lists
                │
+               ├── 1:N ── learn_quiz_sessions ──── N:1 ── learn_quiz_defs
+               │                                              │
+               ├── 1:N ── learn_sequence_progress ── N:1 ── learn_sequence_defs
+               │
+               ├── 1:N ── learn_student_assignments
+               │
+               ├── 1:N ── iam_student_sessions     -- supervised student views [S§8.6]
+               │
                └── N:M ── soc_groups (via soc_group_members)
+
+learn_quiz_defs ── N:M ── learn_questions (via learn_quiz_questions)
+learn_sequence_defs ── 1:N ── learn_sequence_items
 
 method_definitions ── N:M ── method_tools (via method_tool_activations)
 ```
@@ -2108,7 +2225,39 @@ pub async fn process_image(upload_id: Uuid, state: &AppState) -> Result<(), JobE
 }
 ```
 
-### 8.3 Marketplace File Delivery `[S§9.4]`
+### 8.3 Video Transcoding Pipeline `[S§8.1.11]`
+
+Creator-uploaded videos are processed into HLS adaptive bitrate streams for in-platform playback:
+
+```
+Creator Upload                  media::                          R2 Storage
+  │                               │                                │
+  │  1. Upload raw video          │                                │
+  │  (via presigned PUT)          │                                │
+  │  ──────────────────────────────────────────────────────────────►│
+  │                               │                                │
+  │  2. Confirm upload            │                                │
+  │  ──────────────────────────►  │                                │
+  │                               │  3. Enqueue TranscodeVideoJob  │
+  │                               │  ──────────────────────────►   │
+  │                               │                                │
+  │                               │  4. FFmpeg: generate HLS       │
+  │                               │     480p / 720p / 1080p        │
+  │                               │     + master.m3u8 playlist     │
+  │                               │  ──────────────────────────►   │
+  │                               │                                │
+  │                               │  5. Store segments + playlist  │
+  │                               │  ──────────────────────────►   │
+```
+
+**Key details**:
+- Raw video stored in R2 (up to 5 GB); transcoded to HLS segments at 480p/720p/1080p
+- `media_transcode_jobs` table tracks job status, input/output keys, resolutions, duration
+- Delivery via signed HLS URLs (4-hour expiry), CDN-served segments
+- External videos (YouTube/Vimeo) stored as metadata only — JS API integration for progress tracking
+- See `specs/domains/09-media.md §10.8` for full pipeline specification
+
+### 8.4 Marketplace File Delivery `[S§9.4]`
 
 Purchased marketplace files are delivered via time-limited signed URLs:
 
@@ -2351,6 +2500,20 @@ GET    /v1/learning/reading-lists               # List reading lists
 POST   /v1/learning/reading-lists               # Create reading list
 GET    /v1/learning/progress/:student_id        # Get progress summary
 
+# Interactive Learning [S§8.1.9-8.1.12]
+POST   /v1/learning/questions                   # Create question (publisher)
+GET    /v1/learning/questions                   # List/filter questions
+POST   /v1/learning/quizzes                     # Create quiz definition (publisher)
+GET    /v1/learning/quizzes/:id                 # Get quiz definition
+POST   /v1/learning/students/:id/quiz-sessions  # Start quiz session (family-scoped)
+PATCH  /v1/learning/students/:id/quiz-sessions/:sid  # Save progress / submit
+POST   /v1/learning/sequences                   # Create sequence (publisher)
+GET    /v1/learning/sequences/:id               # Get sequence with items
+POST   /v1/learning/students/:id/sequence-progress  # Start sequence
+PATCH  /v1/learning/students/:id/sequence-progress/:pid  # Advance/skip
+POST   /v1/learning/students/:id/assignments    # Assign content (parent)
+GET    /v1/learning/students/:id/assignments    # List assignments
+
 # Marketplace [S§9]
 GET    /v1/marketplace/listings                 # Search/browse listings
 GET    /v1/marketplace/listings/:id             # Get listing details
@@ -2548,7 +2711,11 @@ frontend/
 │   │   │   ├── ActivityLog.tsx
 │   │   │   ├── JournalEditor.tsx
 │   │   │   ├── ReadingList.tsx
-│   │   │   └── ProgressView.tsx
+│   │   │   ├── ProgressView.tsx
+│   │   │   ├── QuizPlayer.tsx         # Interactive quiz taking [S§8.1.9]
+│   │   │   ├── VideoPlayer.tsx        # HLS + external video [S§8.1.11]
+│   │   │   ├── ContentViewer.tsx      # In-platform PDF/document viewer [S§8.1.10]
+│   │   │   └── SequenceView.tsx       # Lesson sequence progression [S§8.1.12]
 │   │   ├── marketplace/           # Browse, listings, cart, purchases [S§9]
 │   │   │   ├── Browse.tsx
 │   │   │   ├── ListingDetail.tsx
@@ -2559,13 +2726,20 @@ frontend/
 │   │   │   ├── FamilySettings.tsx
 │   │   │   ├── NotificationPrefs.tsx
 │   │   │   └── Subscription.tsx
-│   │   └── search/                # Global search [S§14]
-│   │       └── SearchResults.tsx
+│   │   ├── search/                # Global search [S§14]
+│   │   │   └── SearchResults.tsx
+│   │   └── student/               # Supervised student views [S§8.6]
+│   │       ├── StudentDashboard.tsx
+│   │       ├── StudentQuiz.tsx
+│   │       ├── StudentVideo.tsx
+│   │       ├── StudentReader.tsx
+│   │       └── StudentSequence.tsx
 │   ├── hooks/
 │   │   ├── useAuth.ts             # AuthContext consumer
 │   │   ├── useFamily.ts           # Family data + methodology context
 │   │   ├── useWebSocket.ts        # Real-time connection
-│   │   └── useMethodologyTools.ts # Active tools for current family
+│   │   ├── useMethodologyTools.ts # Active tools for current family
+│   │   └── useStudentSession.ts  # Student session context [S§8.6]
 │   ├── lib/
 │   │   ├── queryClient.ts         # TanStack Query configuration
 │   │   └── websocket.ts           # WebSocket connection manager
@@ -2686,6 +2860,10 @@ export const router = createBrowserRouter([
       { path: 'learning/journals/new', element: <JournalEditor /> },
       { path: 'learning/reading-lists', element: <ReadingLists /> },
       { path: 'learning/progress/:studentId', element: <ProgressView /> },
+      { path: 'learning/quiz/:sessionId', element: <QuizPlayer /> },
+      { path: 'learning/video/:videoId', element: <VideoPlayer /> },
+      { path: 'learning/read/:contentId', element: <ContentViewer /> },
+      { path: 'learning/sequence/:progressId', element: <SequenceView /> },
 
       // Marketplace [S§9]
       { path: 'marketplace', element: <MarketplaceBrowse /> },
@@ -2697,6 +2875,10 @@ export const router = createBrowserRouter([
       { path: 'creator', element: <CreatorDashboard /> },
       { path: 'creator/listings/new', element: <CreateListing /> },
       { path: 'creator/listings/:id/edit', element: <EditListing /> },
+      { path: 'creator/quiz-builder', element: <QuizBuilder /> },
+      { path: 'creator/quiz-builder/:id', element: <QuizBuilder /> },
+      { path: 'creator/sequence-builder', element: <SequenceBuilder /> },
+      { path: 'creator/sequence-builder/:id', element: <SequenceBuilder /> },
 
       // Settings
       { path: 'settings', element: <FamilySettings /> },
@@ -2718,6 +2900,20 @@ export const router = createBrowserRouter([
 
   // Onboarding [S§6]
   { path: '/onboarding', element: <OnboardingWizard /> },
+
+  // Supervised Student Views [S§8.6]
+  // Simplified layout — no social, marketplace, or messaging access
+  {
+    path: '/student',
+    element: <StudentShell />,
+    children: [
+      { index: true, element: <StudentDashboard /> },
+      { path: 'quiz/:sessionId', element: <StudentQuiz /> },
+      { path: 'video/:videoId', element: <StudentVideo /> },
+      { path: 'read/:contentId', element: <StudentReader /> },
+      { path: 'sequence/:progressId', element: <StudentSequence /> },
+    ],
+  },
 ]);
 ```
 
@@ -2817,6 +3013,7 @@ pub enum JobQueue {
 | **Notifications** | `PushNotificationJob` | Default | Deliver in-app notification `[S§13.1]` |
 | **Social** | `FanOutPostJob` | Default | Fan-out new post to friends' feeds `[S§7.2]` |
 | **Media** | `ProcessImageJob` | Default | Resize images, generate thumbnails `[§8.2]` |
+| **Media** | `TranscodeVideoJob` | Default | Convert raw video to HLS adaptive bitrate (480p/720p/1080p) `[S§8.1.11]` |
 | **Media** | `CsamScanJob` | Default | Scan uploaded media via Thorn Safer `[S§12.1]` |
 | **Search** | `IndexContentJob` | Default | Update search indexes on content change `[S§14]` |
 | **Marketplace** | `ProcessPayoutJob` | Default | Calculate and initiate creator payouts `[S§9.6]` |
@@ -3466,7 +3663,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 ### 15.6 Learning `[S§8]`
 
-**Scope**: Activities, Reading Lists, Journaling & Narration, basic Progress Tracking.
+**Scope**: Activities, Reading Lists, Journaling & Narration, Progress Tracking, Interactive Assessment Engine, In-Platform Content Viewer, Video Player, Lesson Sequences, Supervised Student Views.
 
 | Component | Implementation |
 |-----------|---------------|
@@ -3474,16 +3671,22 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 | **Reading Lists** | `learn_reading_lists` + `learn_reading_list_items` tables `[S§8.1.3]` |
 | **Journals** | `learn_journals` table (freeform, narration, reflection types) `[S§8.1.4]` |
 | **Progress** | Basic tracking: activity counts, reading completion, hours per subject `[S§8.1.7]` |
+| **Assessment Engine** | `learn_questions`, `learn_quiz_defs`, `learn_quiz_sessions` — question bank, quiz builder, auto-scoring `[S§8.1.9]` |
+| **Content Viewer** | In-platform PDF/document viewer with page tracking, download fallback `[S§8.1.10]` |
+| **Video Player** | Self-hosted HLS (via media:: transcode pipeline) + YouTube/Vimeo embeds, progress tracking `[S§8.1.11]` |
+| **Lesson Sequences** | `learn_sequence_defs`, `learn_sequence_progress` — ordered content paths with linear/recommended modes `[S§8.1.12]` |
+| **Student Assignments** | `learn_student_assignments` — parent assigns content to students with due dates `[S§8.6]` |
+| **Supervised Student Views** | Simplified student-facing interface via `iam_student_sessions` — no social/marketplace access `[S§8.6]` |
 
-**Not in Phase 1**: Tests & Grades, Projects, methodology-specific tools (Nature Journals, Trivium Tracker, etc.), advanced analytics.
+**Not in Phase 1**: Projects, methodology-specific tools (Nature Journals, Trivium Tracker, etc.), advanced analytics, content annotations/bookmarks.
 
-**API Endpoints**: ~12 endpoints (CRUD for each tool + progress summary).
+**API Endpoints**: ~72 endpoints (CRUD for each tool, assessment engine, sequences, assignments, student sessions).
 
-**React Components**: `LearningDashboard`, `ActivityLog`, `JournalEditor`, `ReadingList`, `ProgressView`.
+**React Components**: `LearningDashboard`, `ActivityLog`, `JournalEditor`, `ReadingList`, `ProgressView`, `QuizPlayer`, `VideoPlayer`, `ContentViewer`, `SequenceView`, `StudentDashboard`, `StudentQuiz`, `StudentVideo`, `StudentReader`, `StudentSequence`.
 
 ### 15.7 Marketplace `[S§9]`
 
-**Scope**: Creator onboarding, content listings, browse/search/filter, purchase flow, ratings & reviews (verified-purchaser), basic creator dashboard.
+**Scope**: Creator onboarding, content listings (including interactive quizzes and lesson sequences), browse/search/filter, purchase flow, ratings & reviews (verified-purchaser), basic creator dashboard, authoring tools (quiz builder, sequence builder).
 
 | Component | Implementation |
 |-----------|---------------|
@@ -3562,8 +3765,8 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 | Component | Implementation |
 |-----------|---------------|
 | **Upload** | Presigned URL upload to R2 `[§8.1]` |
-| **Processing** | Background image resize, CSAM scan `[§8.2]` |
-| **Delivery** | Cloudflare CDN via R2 `[§8.3]` |
+| **Processing** | Background image resize, CSAM scan `[§8.2]`, video transcoding to HLS `[§8.3]` |
+| **Delivery** | Cloudflare CDN via R2; signed HLS URLs for video `[§8.3, §8.4]` |
 
 **API Endpoints**: 3 endpoints (request upload, confirm upload, download).
 
@@ -3796,6 +3999,27 @@ WHERE f1.requester_family_id = $1  -- current user
 - **Mitigation**: Application code is cloud-agnostic (ADR-010) — standard PostgreSQL wire protocol, standard Redis protocol, standard HTTP. Only IaC is AWS-specific. If multi-cloud is needed, Terraform migration is straightforward — construct boundaries map cleanly to Terraform modules.
 
 **Revision trigger**: Evaluate Terraform if the project moves multi-cloud or if a DevOps hire prefers HCL.
+
+### ADR-012: Interactive Learning Engine in Phase 1
+
+**Status**: Accepted
+
+**Context**: The original plan deferred interactive student-facing features (quizzes, in-platform content viewing, video playback, lesson sequences) to Phase 2. However, without these features the platform is a parent-operated tracking/logging system — parents record what happened offline. The core value proposition ("functionality modules scoped by methodology") requires students to engage with content directly on the platform. Deferring interactive learning to Phase 2 leaves Phase 1 without its primary differentiator.
+
+**Decision**: Move the full interactive learning engine to Phase 1:
+- **Assessment Engine** — Question bank with 6 question types, quiz builder, auto-scoring for objective types, parent-scored short answers `[S§8.1.9]`
+- **In-Platform Content Viewer** — PDF rendering with page tracking `[S§8.1.10]`
+- **Video Player** — Self-hosted HLS adaptive bitrate streaming + YouTube/Vimeo embed integration `[S§8.1.11]`
+- **Lesson Sequences** — Ordered content paths (reading → quiz → video → activity) with progression tracking `[S§8.1.12]`
+- **Supervised Student Views** — Students 10+ get a simplified, parent-controlled interface `[S§8.6]`
+- **Creator Authoring Tools** — Quiz builder and sequence builder in the marketplace creator dashboard `[S§9.1]`
+
+**Consequences**:
+- **Positive**: Phase 1 delivers the platform's core value from launch — methodology-scoped interactive learning, not just logging. Marketplace content is consumable in-platform, not just downloadable. Supervised student views create a genuine student-facing product.
+- **Negative**: Phase 1 scope increases significantly (~72 learn:: endpoints vs ~12 previously). Video transcoding pipeline requires FFmpeg integration in the media:: domain. Student sessions add an auth pathway (scoped JWT) alongside the existing Kratos parent auth.
+- **Mitigation**: New tables follow the existing three-layer pattern (Layer 1 publisher-scoped, Layer 3 family-scoped with RLS). Assessment engine reuses the methodology-as-configuration pattern — quiz availability is driven by `method_tool_activations`, not code branches. Video transcoding is a background job in the existing `sidekiq-rs` queue. Student sessions are parent-initiated and COPPA-compliant within the existing consent framework.
+
+**Revision trigger**: None. This is a scope decision that aligns Phase 1 with the product's core value proposition.
 
 ---
 

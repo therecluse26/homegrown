@@ -174,17 +174,22 @@ Public-facing discovery content (methodology guides, state legal guides, the met
 
 ## 8. Learning Layer
 
-The learning layer provides methodology-scoped tools for planning, executing, and tracking a family's homeschool education.
+The learning layer provides methodology-scoped **interactive learning tools** for planning, executing, tracking, and directly engaging with a family's homeschool education. Students don't just have their progress logged — they actively use the platform to take quizzes, watch video lessons, read content, and progress through structured lesson sequences. Parents plan and assign; students (ages 10+, supervised) interact with content directly on the platform.
 
 ### Methodology-Scoped Learning Tools
-The available tools vary based on the family's selected methodology(ies). Examples include:
+The available tools vary based on the family's selected methodology(ies). The platform provides both **tracking tools** (parent-operated logging) and **interactive tools** (student-facing engagement):
 - **Activities** — Logging and tracking daily learning activities
-- **Tests & grades** — Traditional assessment tools (primarily Traditional, Classical methodologies)
-- **Reading lists** — Curated and custom book lists (primarily Charlotte Mason, Classical)
+- **Tests & grades** — Traditional assessment tools including **online quiz-taking with auto-scoring** (primarily Traditional, Classical methodologies)
+- **Reading lists** — Curated and custom book lists with **in-platform reading for purchased content** (primarily Charlotte Mason, Classical)
 - **Journaling** — Student journals, nature journals, narration records
 - **Projects** — Multi-step project tracking and documentation
-- **Video lessons** — Integration with video-based curriculum content
+- **Video lessons** — **In-platform video player** with adaptive streaming, progress tracking, and completion logging (self-hosted HLS + YouTube/Vimeo embeds)
+- **Lesson sequences** — **Structured content paths** (lesson → reading → quiz → video) that students progress through, with parent override controls
+- **Content viewer** — **In-platform PDF/document viewer** for purchased marketplace content
 - **Progress tracking & analytics** — Visualize student progress over time across subjects and skills
+
+### Supervised Student Views
+Students aged 10 and above can access a **simplified, supervised interface** configured by their parent. The student view shows assigned content — quizzes to take, videos to watch, readings to complete, sequences to follow — without access to social features, the marketplace, or messaging. Parents have full visibility and administrative control over the student experience. This is not an independent account — it operates entirely within the parent's account, maintaining COPPA compliance.
 
 ### Parent Education
 Tool-adjacent tips and methodology-specific guidance integrated directly into the learning tools — for example, "how to use narration effectively" surfaced within the narration tool, or "choosing living books" guidance within the reading list feature. Deeper methodology education and parental growth content lives in the Discovery & Onboarding section (§6, Ongoing Parental Growth).
@@ -205,7 +210,7 @@ AI serves as an **important enhancement** to the platform, not the core differen
 
 ## 9. Curriculum Marketplace
 
-An open marketplace where independent creators sell digital curriculum and educational content directly to homeschool families.
+An open marketplace where independent creators sell digital curriculum and educational content directly to homeschool families. Purchased content is **consumable in-platform** — families view documents, watch videos, take quizzes, and progress through lesson sequences without leaving the platform. Downloads remain available as a fallback.
 
 ### Marketplace Model
 - **Open listing** — Any creator can list content after basic onboarding. There is no heavy vetting gate.
@@ -220,10 +225,18 @@ An open marketplace where independent creators sell digital curriculum and educa
 - Book lists and reading guides
 - Video lessons and course content
 - Assessment materials
+- **Interactive quizzes** — Auto-scored assessments students take online
+- **Lesson sequences** — Structured content paths combining readings, videos, quizzes, and activities
+
+### Creator Authoring Tools
+Creators build interactive content using platform-provided authoring tools:
+- **Quiz builder** — Create question banks and assemble quizzes with multiple question types (multiple-choice, fill-in-the-blank, true/false, matching, ordering, short answer)
+- **Sequence builder** — Arrange content items into structured lesson paths that students progress through
 
 ### Integration with Platform
 The marketplace is not a standalone storefront — it is deeply integrated with the rest of the platform:
 - Purchased content connects to the family's planning and tracking tools
+- **Purchased interactive content is playable in-platform** — quizzes are taken, videos are watched, sequences are followed, all within the learning tools
 - AI recommendations draw from the marketplace catalog
 - Community reviews and ratings inform discovery
 - Methodology tagging ensures content appears in the right context

@@ -60,7 +60,7 @@ Cross-references from other spec sections are included where the safety domain i
 | No notification to offending user | `[S§12.1]` | §10.5 (zero user notification) |
 | Immediate permanent suspension of CSAM-associated accounts | `[S§12.1]` | §10.6 (permanent ban), §12.2 (ban state) |
 | Zero-tolerance CSAM policy | `[S§12.1]` | §10 (entire pipeline) |
-| Automated screening of all UGC (posts, comments, messages, reviews, listings) | `[S§12.2]` | §11.1 (text scanning), §11.2 (media scanning via events), §11.2.1 (nudity auto-rejection), §11.2.2 (label routing) |
+| Automated screening of all UGC (posts, comments, messages, reviews, listings, questions, quizzes, sequences) | `[S§12.2]` | §11.1 (text scanning), §11.2 (media scanning via events), §11.2.1 (nudity auto-rejection), §11.2.2 (label routing), §11.2.3 (creator-authored interactive content) |
 | Nudity/explicit content auto-rejected on upload | `[S§12.2]` | §11.2.1 (nudity auto-rejection policy) |
 | Admin-confirmed novel CSAM triggers NCMEC pipeline | `[S§12.1]` | §11.4.1 (CSAM escalation from review queue) |
 | Rekognition label routing (auto-reject / flag / ignore) | `[S§12.2]` | §11.2.2 (label routing decision table) |
@@ -68,7 +68,7 @@ Cross-references from other spec sections are included where the safety domain i
 | Human review of flagged/reported content | `[S§12.3]` | §11.4 (admin review queue) |
 | Moderator actions: remove, warn, suspend, ban | `[S§12.2]` | §12.1 (moderation actions) |
 | Appeals mechanism reviewed by different moderator | `[S§12.2]` | §12.4 (appeals process) |
-| Reportable content types: posts, comments, messages, profiles, groups, events, listings, reviews | `[S§12.3]` | §3.2 (`safety_reports.target_type` CHECK constraint) |
+| Reportable content types: posts, comments, messages, profiles, groups, events, listings, reviews, questions, quizzes, sequences | `[S§12.3]` | §3.2 (`safety_reports.target_type` CHECK constraint) |
 | Report categories: inappropriate, harassment, spam, misinformation, CSAM/child safety, other | `[S§12.3]` | §3.2 (`safety_reports.category` CHECK constraint) |
 | Report triage by priority (child safety < 24h, other < 72h) | `[S§12.3]` | §11.4 (priority queue), §3.2 (`priority` column) |
 | Reporter acknowledgment and outcome notification | `[S§12.3]` | §11.5 (reporter notification via `notify::`) |
@@ -119,7 +119,8 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 -- Report category values: inappropriate_content, harassment, spam, misinformation,
 --                         csam_child_safety, methodology_hostility, other
 -- Report priority values: critical, high, normal
--- Target type values: post, comment, message, profile, group, event, listing, review
+-- Target type values: post, comment, message, profile, group, event, listing, review,
+--                     question, quiz, sequence
 -- Mod action type values: content_removed, warning_issued, account_suspended,
 --                         account_banned, content_restored, suspension_lifted,
 --                         appeal_granted, escalate_to_csam
@@ -147,7 +148,8 @@ CREATE TABLE safety_reports (
     target_type           TEXT NOT NULL
                           CHECK (target_type IN (
                               'post', 'comment', 'message', 'profile',
-                              'group', 'event', 'listing', 'review'
+                              'group', 'event', 'listing', 'review',
+                              'question', 'quiz', 'sequence'
                           )),
     target_id             UUID NOT NULL,           -- ID of the reported entity
     target_family_id      UUID,                    -- family that owns the reported content (NULL for groups/events)
@@ -204,7 +206,8 @@ CREATE TABLE safety_content_flags (
     target_type           TEXT NOT NULL
                           CHECK (target_type IN (
                               'post', 'comment', 'message', 'profile',
-                              'group', 'event', 'listing', 'review', 'upload'
+                              'group', 'event', 'listing', 'review', 'upload',
+                              'question', 'quiz', 'sequence'
                           )),
     target_id             UUID NOT NULL,
     target_family_id      UUID REFERENCES iam_families(id) ON DELETE CASCADE,
@@ -793,7 +796,7 @@ pub trait SafetyService: Send + Sync {
     ) -> Result<(), AppError>;
 
     /// Scan text content for policy violations.
-    /// Called synchronously by social:: and mkt:: before persisting content.
+    /// Called synchronously by social::, mkt::, and learn:: before persisting content.
     /// Phase 1: keyword + regex matching. Phase 2: ML (AWS Comprehend).
     async fn scan_text(
         &self,
@@ -1786,8 +1789,9 @@ Phase 1 uses keyword + regex matching for synchronous text screening. This avoid
 API call latency while providing basic protection. `[S§12.2]`
 
 ```rust
-/// Synchronous text scanner. Called by social:: and mkt:: before persisting
-/// user-generated text content (posts, comments, messages, reviews).
+/// Synchronous text scanner. Called by social::, mkt::, and learn:: before persisting
+/// user-generated text content (posts, comments, messages, reviews, question text,
+/// answer text, quiz titles/descriptions, sequence titles/descriptions).
 ///
 /// Phase 1: Redis-cached keyword list + regex patterns.
 /// Phase 2: AWS Comprehend for ML-based detection.
@@ -1967,6 +1971,35 @@ queue at `critical` priority. This matches the CSAM report SLA: review within 24
 outcomes (rejected uploads don't enter the review queue), `Some("critical"|"high"|"normal")`
 for flagged items. The `UploadFlagged` event carries this priority through to the
 `safety_content_flags` record. `[09-media §16.3]`
+
+### §11.2.3 Creator-Authored Interactive Content
+
+**Creator-Authored Interactive Content**: Questions, quizzes, and lesson sequences created via
+the platform's authoring tools (`learn::` domain, triggered by `mkt::` creator workflows) MUST
+pass through the same content moderation pipeline as other UGC. Specifically:
+
+- Question text and answer text are screened for inappropriate content via text scanning
+  (`SafetyService::scan_text()`)
+- Media attachments on questions follow the standard image/video moderation pipeline (CSAM scan
+  + content moderation labels) via the `media::ProcessUploadJob` → `SafetyScanAdapter` path
+- Quiz and sequence titles/descriptions are screened as text content via
+  `SafetyService::scan_text()`
+- Content that fails moderation is blocked from publication (same Draft → Submitted → Published
+  lifecycle as marketplace listings)
+- Screening occurs on the `ListingPublished` event for marketplace-distributed content, or on
+  creation for platform-internal content
+
+The content types screened by the moderation pipeline now include:
+
+| Content Type | Source Domain | Table | Text Fields Scanned | Media Fields Scanned |
+|---|---|---|---|---|
+| Posts, comments | `social::` | `social_posts`, `social_comments` | Body text | Attached uploads |
+| Messages | `social::` | `social_messages` | Message text | Attached uploads |
+| Reviews | `mkt::` | `mkt_reviews` | Review text | — |
+| Listings | `mkt::` | `mkt_listings` | Title, description | Attached uploads |
+| **Questions** | `learn::` | `learn_questions` | Question text, answer text | Media attachments |
+| **Quizzes** | `learn::` | `learn_quiz_defs` | Title, description | — |
+| **Sequences** | `learn::` | `learn_sequence_defs` | Title, description | — |
 
 ### §11.3 Community Reporting Flow
 
@@ -2434,6 +2467,7 @@ impl From<SafetyError> for AppError {
 | `media::` | `SafetyScanAdapter` impl (`SafetyScanBridge`) | CSAM + moderation scanning during ProcessUploadJob `[09-media §7.2]` |
 | `social::` | `SafetyService::scan_text()` | Text screening before persisting posts/comments/messages |
 | `mkt::` | `SafetyService::scan_text()` | Text screening before persisting reviews/listings |
+| `learn::` | `SafetyService::scan_text()` | Text screening before persisting question text, answer text, quiz/sequence titles and descriptions |
 | `social::` | `SafetyService::record_bot_signal()` | Behavioral bot detection signals |
 | `00-core` | `SafetyService::check_account_access()` | Auth middleware account status check |
 | `00-core` | `RequireAdmin` extractor | Admin-only endpoint gating |
@@ -2738,8 +2772,8 @@ impl DomainEventHandler<ReviewCreated> for OnReviewCreated {
 
 ### Content Moderation & Label Routing
 
-9. All user-generated text is scanned via `scan_text()` before persistence
-10. Media uploads are scanned via `SafetyScanAdapter` during `ProcessUploadJob`
+9. All user-generated text is scanned via `scan_text()` before persistence (including creator-authored question text, answer text, quiz/sequence titles and descriptions)
+10. Media uploads are scanned via `SafetyScanAdapter` during `ProcessUploadJob` (including media attachments on `learn_questions`)
 11. Nudity labels above threshold → upload auto-rejected (not just flagged) `[§11.2.1]`
 12. Suspected underage + sexual labels → critical priority flag `[§11.2.2]`
 13. Drugs/tobacco/alcohol, hate symbols, weapons → ignored (educational content) `[§11.2.2]`
