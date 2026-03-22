@@ -10,18 +10,18 @@ CAN-SPAM compliance for all email, and streak detection for learning milestones.
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/notify/` |
+| **Module path** | `internal/notify/` |
 | **DB prefix** | `notify_` |
 | **Complexity class** | Simple (no `domain/` subdirectory) — event-triggered dispatch, no complex invariants `[ARCH §4.5]` |
 | **CQRS** | No — read and write paths are straightforward; no separated query model needed |
-| **External adapter** | `src/notify/adapters/postmark.rs` (Postmark — transactional + broadcast email) `[ARCH §2.12]` |
+| **External adapter** | `internal/notify/adapters/postmark.go` (Postmark — transactional + broadcast email) `[ARCH §2.12]` |
 | **Key constraint** | System-critical notifications (security alerts, moderation actions) MUST NOT be disableable; all emails MUST comply with CAN-SPAM `[S§13.3]` |
 
 **What notify:: owns**: In-app notification records (persistence, read tracking), notification
 preferences (per-type, per-channel), streak detection (Redis counters, milestone thresholds),
 Postmark email adapter (transactional and broadcast streams), digest compilation (Phase 2),
-one-click email unsubscribe, background jobs (`SendEmailJob`, `PushNotificationJob`,
-`CompileDigestJob`), WebSocket notification push (Redis pub/sub fan-out).
+one-click email unsubscribe, background tasks (`SendEmailTask`, `PushNotificationTask`,
+`CompileDigestTask`), WebSocket notification push (Redis pub/sub fan-out).
 
 **What notify:: does NOT own**: Triggering events (owned by source domains — `social::`,
 `learn::`, `mkt::`, `method::`, `onboard::`, `iam::`, `safety::`, `billing::`), WebSocket DM delivery
@@ -31,8 +31,8 @@ moderation decisions (owned by `safety::`), account verification and password re
 (owned by `iam::` via Ory Kratos built-in email templates `[ARCH §2.3]`).
 
 **What notify:: delegates**: User/family email lookup → `iam::IamService`. Redis pub/sub
-for WebSocket distribution → shared infrastructure `[ARCH §2.16]`. Background job
-scheduling → sidekiq-rs `[ARCH §12]`. Email template rendering → Postmark server-side
+for WebSocket distribution → shared infrastructure `[ARCH §2.16]`. Background task
+scheduling → asynq `[ARCH §12]`. Email template rendering → Postmark server-side
 templates `[ARCH §2.12]`.
 
 ---
@@ -49,8 +49,8 @@ other spec sections are included where the notifications domain is involved.
 | Marketplace notification types: purchase confirmations, reviews, content updates | `[S§13.1]` | §9 (type registry), §17.1 (marketplace events) |
 | System notification types: security alerts, moderation actions, policy updates | `[S§13.1]` | §9 (type registry, system-critical flag) |
 | In-app delivery: notification center for all types | `[S§13.2]` | §3 (`notify_notifications`), §4.1, §10, §11 |
-| Email delivery: social, marketplace, system notifications configurable | `[S§13.2]` | §7 (`EmailAdapter`), §12 (Postmark), §14 (`SendEmailJob`) |
-| Push notifications: architected for future channels without redesign | `[S§13.2]` | §7 (`EmailAdapter` trait), §20 (module structure) |
+| Email delivery: social, marketplace, system notifications configurable | `[S§13.2]` | §7 (`EmailAdapter`), §12 (Postmark), §14 (`SendEmailTask`) |
+| Push notifications: architected for future channels without redesign | `[S§13.2]` | §7 (`EmailAdapter` interface), §20 (module structure) |
 | Per-type per-channel notification preferences | `[S§13.3]` | §3 (`notify_preferences`), §4.1, §13 |
 | Opt out of all non-essential email | `[S§13.3]` | §13 (batch opt-out operation) |
 | Email digest options: immediate, daily, weekly, off | `[S§13.3]` | §3 (`digest_frequency` CHECK), §13, §15 |
@@ -279,7 +279,7 @@ CREATE POLICY notify_preferences_system_insert
     ON notify_preferences FOR INSERT
     WITH CHECK (current_setting('app.role') = 'system');
 
--- Digests: system role only (background job creates and marks sent).
+-- Digests: system role only (background task creates and marks sent).
 ALTER TABLE notify_digests ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY notify_digests_system_all
@@ -304,8 +304,8 @@ data access. `[CODING §2.1]`
 List notifications for the current family with unread count.
 
 - **Auth**: `AuthContext` + `FamilyScope`
-- **Query**: `NotificationListParams { cursor?, limit? (default 20, max 100), category?: String, unread_only?: bool }`
-- **Response**: `200 OK` → `NotificationListResponse { notifications: Vec<NotificationResponse>, unread_count: i64, next_cursor? }`
+- **Query**: `NotificationListParams { cursor?, limit? (default 20, max 100), category?: string, unread_only?: bool }`
+- **Response**: `200 OK` → `NotificationListResponse { Notifications: []NotificationResponse, UnreadCount: int64, NextCursor? }`
 - **Pagination**: Cursor-based on `(created_at, id)` for stable ordering
 - **Error codes**: `401` (unauthenticated), `400` (invalid params)
 
@@ -324,8 +324,8 @@ Mark a single notification as read. Idempotent — marking an already-read notif
 Bulk mark all notifications as read, optionally filtered by category.
 
 - **Auth**: `AuthContext` + `FamilyScope`
-- **Body**: `{ category?: String }`
-- **Response**: `200 OK` → `{ updated_count: i64 }`
+- **Body**: `{ category?: string }`
+- **Response**: `200 OK` → `{ updated_count: int64 }`
 - **Side effects**: Sets `is_read = true` on all matching unread notifications for the family.
 - **Error codes**: `422` (invalid category)
 
@@ -333,10 +333,10 @@ Bulk mark all notifications as read, optionally filtered by category.
 
 ##### `GET /v1/notifications/preferences`
 
-Return the full type × channel preference matrix with defaults applied.
+Return the full type x channel preference matrix with defaults applied.
 
 - **Auth**: `AuthContext` + `FamilyScope`
-- **Response**: `200 OK` → `Vec<PreferenceResponse>`
+- **Response**: `200 OK` → `[]PreferenceResponse`
 - **Semantics**: Returns one entry per (notification_type, channel) pair. Missing rows are returned as `enabled: true, digest_frequency: "immediate"` (default-enabled). System-critical types include `system_critical: true` flag.
 - **Error codes**: `401`
 
@@ -345,9 +345,9 @@ Return the full type × channel preference matrix with defaults applied.
 Batch upsert notification preferences.
 
 - **Auth**: `AuthContext` + `FamilyScope`
-- **Body**: `UpdatePreferencesCommand { preferences: Vec<PreferenceUpdate> }`
+- **Body**: `UpdatePreferencesCommand { Preferences: []PreferenceUpdate }`
 - **Validation**: Rejects disabling system-critical types (`content_flagged`, `co_parent_added`, `family_deletion_scheduled`) — returns `422 CannotDisableSystemCritical`.
-- **Response**: `200 OK` → `Vec<PreferenceResponse>`
+- **Response**: `200 OK` → `[]PreferenceResponse`
 - **Side effects**: Upserts `notify_preferences` rows. No event published.
 - **Error codes**: `422` (invalid type/channel, system-critical disable attempt)
 
@@ -378,131 +378,112 @@ the signed token proves ownership. `[S§13.3]`
 
 ## §5 Service Interface
 
-The `NotificationService` trait defines all use cases exposed to handlers and event handler
+The `NotificationService` interface defines all use cases exposed to handlers and event handler
 structs. No CQRS separation needed — this is a simple domain with straightforward
 read/write paths. `[CODING §8.2]`
 
-```rust
-// src/notify/ports.rs
+```go
+// internal/notify/ports.go
 
-use crate::shared::types::{FamilyId, FamilyScope};
-use crate::shared::error::AppError;
+package notify
 
-#[async_trait]
-pub trait NotificationService: Send + Sync {
+import (
+    "context"
+
+    "github.com/google/uuid"
+    "homegrown/internal/shared/types"
+)
+
+// NotificationService defines all use cases exposed to handlers and event handlers.
+type NotificationService interface {
     // ─── Commands (write, has side effects) ─────────────────────────────
 
-    /// Create an in-app notification and fan out via WebSocket + email.
-    /// Called by event handlers, not by HTTP handlers directly.
-    async fn create_notification(
-        &self,
-        cmd: CreateNotificationCommand,
-    ) -> Result<(), AppError>;
+    // CreateNotification creates an in-app notification and fans out via WebSocket + email.
+    // Called by event handlers, not by HTTP handlers directly.
+    CreateNotification(ctx context.Context, cmd CreateNotificationCommand) error
 
-    /// Mark a single notification as read. Idempotent.
-    async fn mark_read(
-        &self,
-        notification_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // MarkRead marks a single notification as read. Idempotent.
+    MarkRead(ctx context.Context, notificationID uuid.UUID, scope types.FamilyScope) error
 
-    /// Bulk mark all (optionally category-filtered) notifications as read.
-    async fn mark_all_read(
-        &self,
-        scope: FamilyScope,
-        category: Option<String>,
-    ) -> Result<i64, AppError>;
+    // MarkAllRead bulk marks all (optionally category-filtered) notifications as read.
+    MarkAllRead(ctx context.Context, scope types.FamilyScope, category *string) (int64, error)
 
-    /// Batch upsert notification preferences. Validates system-critical constraints.
-    async fn update_preferences(
-        &self,
-        cmd: UpdatePreferencesCommand,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // UpdatePreferences batch upserts notification preferences. Validates system-critical constraints.
+    UpdatePreferences(ctx context.Context, cmd UpdatePreferencesCommand, scope types.FamilyScope) error
 
-    /// Enqueue a transactional email via Postmark.
-    async fn send_email(
-        &self,
-        cmd: SendEmailCommand,
-    ) -> Result<(), AppError>;
+    // SendEmail enqueues a transactional email via Postmark.
+    SendEmail(ctx context.Context, cmd SendEmailCommand) error
 
-    /// Process a signed unsubscribe token and disable the preference.
-    async fn process_unsubscribe(
-        &self,
-        token: &str,
-    ) -> Result<(), AppError>;
+    // ProcessUnsubscribe processes a signed unsubscribe token and disables the preference.
+    ProcessUnsubscribe(ctx context.Context, token string) error
 
     // ─── Event handlers (one per subscribed event type) ─────────────────
     // Each method is called by its corresponding DomainEventHandler struct
-    // in event_handlers.rs. Failures are logged but do not propagate to
+    // in event_handlers.go. Failures are logged but do not propagate to
     // the source domain. [ARCH §4.6]
 
     // social:: events
-    async fn handle_friend_request_sent(&self, event: &FriendRequestSent) -> Result<(), AppError>;
-    async fn handle_friend_request_accepted(&self, event: &FriendRequestAccepted) -> Result<(), AppError>;
-    async fn handle_message_sent(&self, event: &MessageSent) -> Result<(), AppError>;
-    async fn handle_event_cancelled(&self, event: &EventCancelled) -> Result<(), AppError>;
+    HandleFriendRequestSent(ctx context.Context, event *FriendRequestSent) error
+    HandleFriendRequestAccepted(ctx context.Context, event *FriendRequestAccepted) error
+    HandleMessageSent(ctx context.Context, event *MessageSent) error
+    HandleEventCancelled(ctx context.Context, event *EventCancelled) error
 
     // method:: events
-    async fn handle_family_methodology_changed(&self, event: &FamilyMethodologyChanged) -> Result<(), AppError>;
+    HandleFamilyMethodologyChanged(ctx context.Context, event *FamilyMethodologyChanged) error
 
     // onboard:: events
-    async fn handle_onboarding_completed(&self, event: &OnboardingCompleted) -> Result<(), AppError>;
+    HandleOnboardingCompleted(ctx context.Context, event *OnboardingCompleted) error
 
     // learn:: events
-    async fn handle_activity_logged(&self, event: &ActivityLogged) -> Result<(), AppError>;
-    async fn handle_milestone_achieved(&self, event: &MilestoneAchieved) -> Result<(), AppError>;
-    async fn handle_book_completed(&self, event: &BookCompleted) -> Result<(), AppError>;
-    async fn handle_data_export_ready(&self, event: &DataExportReady) -> Result<(), AppError>;
+    HandleActivityLogged(ctx context.Context, event *ActivityLogged) error
+    HandleMilestoneAchieved(ctx context.Context, event *MilestoneAchieved) error
+    HandleBookCompleted(ctx context.Context, event *BookCompleted) error
+    HandleDataExportReady(ctx context.Context, event *DataExportReady) error
 
     // mkt:: events
-    async fn handle_purchase_completed(&self, event: &PurchaseCompleted) -> Result<(), AppError>;
-    async fn handle_purchase_refunded(&self, event: &PurchaseRefunded) -> Result<(), AppError>;
-    async fn handle_creator_onboarded(&self, event: &CreatorOnboarded) -> Result<(), AppError>;
+    HandlePurchaseCompleted(ctx context.Context, event *PurchaseCompleted) error
+    HandlePurchaseRefunded(ctx context.Context, event *PurchaseRefunded) error
+    HandleCreatorOnboarded(ctx context.Context, event *CreatorOnboarded) error
 
     // safety:: events
-    async fn handle_content_flagged(&self, event: &ContentFlagged) -> Result<(), AppError>;
+    HandleContentFlagged(ctx context.Context, event *ContentFlagged) error
 
     // iam:: events (Phase 2)
-    async fn handle_co_parent_added(&self, event: &CoParentAdded) -> Result<(), AppError>;
-    async fn handle_family_deletion_scheduled(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError>;
+    HandleCoParentAdded(ctx context.Context, event *CoParentAdded) error
+    HandleFamilyDeletionScheduled(ctx context.Context, event *FamilyDeletionScheduled) error
 
     // billing:: events (Phase 2)
-    async fn handle_subscription_created(&self, event: &SubscriptionCreated) -> Result<(), AppError>;
-    async fn handle_subscription_changed(&self, event: &SubscriptionChanged) -> Result<(), AppError>;
-    async fn handle_subscription_cancelled(&self, event: &SubscriptionCancelled) -> Result<(), AppError>;
-    async fn handle_payout_completed(&self, event: &PayoutCompleted) -> Result<(), AppError>;
+    HandleSubscriptionCreated(ctx context.Context, event *SubscriptionCreated) error
+    HandleSubscriptionChanged(ctx context.Context, event *SubscriptionChanged) error
+    HandleSubscriptionCancelled(ctx context.Context, event *SubscriptionCancelled) error
+    HandlePayoutCompleted(ctx context.Context, event *PayoutCompleted) error
 
     // ─── Queries (read, no side effects) ────────────────────────────────
 
-    /// Paginated notification list with unread count.
-    async fn list_notifications(
-        &self,
-        params: NotificationListParams,
-        scope: FamilyScope,
-    ) -> Result<NotificationListResponse, AppError>;
+    // ListNotifications returns a paginated notification list with unread count.
+    ListNotifications(ctx context.Context, params NotificationListParams, scope types.FamilyScope) (*NotificationListResponse, error)
 
-    /// Full type × channel preference matrix with defaults applied.
-    async fn get_preferences(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Vec<PreferenceResponse>, AppError>;
+    // GetPreferences returns the full type x channel preference matrix with defaults applied.
+    GetPreferences(ctx context.Context, scope types.FamilyScope) ([]PreferenceResponse, error)
 }
 ```
 
 ### `NotificationServiceImpl`
 
-```rust
-// src/notify/service.rs
+```go
+// internal/notify/service.go
 
-pub struct NotificationServiceImpl {
-    notification_repo: Arc<dyn NotificationRepository>,
-    preference_repo: Arc<dyn PreferenceRepository>,
-    digest_repo: Arc<dyn DigestRepository>,      // Phase 2
-    email_adapter: Arc<dyn EmailAdapter>,
-    iam_service: Arc<dyn IamService>,            // Email lookup
-    redis: Arc<RedisPool>,                        // WebSocket pub/sub + streak counters
-    job_queue: Arc<dyn JobQueue>,                 // sidekiq-rs
+package notify
+
+// NotificationServiceImpl implements NotificationService.
+type NotificationServiceImpl struct {
+    notificationRepo NotificationRepository
+    preferenceRepo   PreferenceRepository
+    digestRepo       DigestRepository        // Phase 2
+    emailAdapter     EmailAdapter
+    iamService       IamService              // Email lookup
+    redis            *RedisPool              // WebSocket pub/sub + streak counters
+    taskClient       *asynq.Client           // asynq
 }
 ```
 
@@ -511,115 +492,58 @@ pub struct NotificationServiceImpl {
 ## §6 Repository Interfaces
 
 All notification and preference repositories are family-scoped via `FamilyScope` parameter.
-Digest repository is system-scoped (background job access). `[CODING §8.2]`
+Digest repository is system-scoped (background task access). `[CODING §8.2]`
 
-```rust
-// src/notify/ports.rs (continued)
+```go
+// internal/notify/ports.go (continued)
 
 // ─── NotificationRepository ────────────────────────────────────────────
 // Family-scoped — all reads and writes are per-family. [00-core §8]
-#[async_trait]
-pub trait NotificationRepository: Send + Sync {
-    async fn create(
-        &self,
-        cmd: CreateNotification,
-    ) -> Result<NotifyNotification, AppError>;
+type NotificationRepository interface {
+    Create(ctx context.Context, cmd CreateNotification) (*NotifyNotification, error)
 
-    async fn get_by_id(
-        &self,
-        notification_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Option<NotifyNotification>, AppError>;
+    GetByID(ctx context.Context, notificationID uuid.UUID, scope types.FamilyScope) (*NotifyNotification, error)
 
-    async fn list(
-        &self,
-        params: &NotificationListParams,
-        scope: FamilyScope,
-    ) -> Result<Vec<NotifyNotification>, AppError>;
+    List(ctx context.Context, params *NotificationListParams, scope types.FamilyScope) ([]NotifyNotification, error)
 
-    async fn count_unread(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<i64, AppError>;
+    CountUnread(ctx context.Context, scope types.FamilyScope) (int64, error)
 
-    async fn mark_read(
-        &self,
-        notification_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<bool, AppError>;
+    MarkRead(ctx context.Context, notificationID uuid.UUID, scope types.FamilyScope) (bool, error)
 
-    async fn mark_all_read(
-        &self,
-        scope: FamilyScope,
-        category: Option<&str>,
-    ) -> Result<i64, AppError>;
+    MarkAllRead(ctx context.Context, scope types.FamilyScope, category *string) (int64, error)
 
-    /// Check idempotency: does a notification with this source_event_id already exist?
-    async fn exists_by_source_event(
-        &self,
-        family_id: FamilyId,
-        notification_type: &str,
-        source_event_id: &str,
-    ) -> Result<bool, AppError>;
+    // ExistsBySourceEvent checks idempotency: does a notification with this source_event_id already exist?
+    ExistsBySourceEvent(ctx context.Context, familyID types.FamilyID, notificationType string, sourceEventID string) (bool, error)
 
-    /// Cascade delete for family deletion.
-    async fn delete_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+    // DeleteByFamily performs cascade delete for family deletion.
+    DeleteByFamily(ctx context.Context, familyID types.FamilyID) error
 }
 
 // ─── PreferenceRepository ──────────────────────────────────────────────
 // Family-scoped. Default-enabled semantics: missing row = enabled.
-#[async_trait]
-pub trait PreferenceRepository: Send + Sync {
-    /// Get all explicit preference overrides for a family.
-    async fn get_all(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Vec<NotifyPreference>, AppError>;
+type PreferenceRepository interface {
+    // GetAll returns all explicit preference overrides for a family.
+    GetAll(ctx context.Context, scope types.FamilyScope) ([]NotifyPreference, error)
 
-    /// Batch upsert preferences (INSERT ON CONFLICT UPDATE).
-    async fn upsert_batch(
-        &self,
-        scope: FamilyScope,
-        updates: Vec<PreferenceUpsert>,
-    ) -> Result<(), AppError>;
+    // UpsertBatch batch upserts preferences (INSERT ON CONFLICT UPDATE).
+    UpsertBatch(ctx context.Context, scope types.FamilyScope, updates []PreferenceUpsert) error
 
-    /// Check if a specific type+channel is enabled for a family.
-    /// Returns true if no row exists (default-enabled).
-    async fn is_enabled(
-        &self,
-        family_id: FamilyId,
-        notification_type: &str,
-        channel: &str,
-    ) -> Result<bool, AppError>;
+    // IsEnabled checks if a specific type+channel is enabled for a family.
+    // Returns true if no row exists (default-enabled).
+    IsEnabled(ctx context.Context, familyID types.FamilyID, notificationType string, channel string) (bool, error)
 
-    /// Cascade delete for family deletion.
-    async fn delete_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+    // DeleteByFamily performs cascade delete for family deletion.
+    DeleteByFamily(ctx context.Context, familyID types.FamilyID) error
 }
 
 // ─── DigestRepository (Phase 2) ────────────────────────────────────────
-// System-scoped — background job creates and processes digests.
-#[async_trait]
-pub trait DigestRepository: Send + Sync {
-    async fn create(
-        &self,
-        cmd: CreateDigest,
-    ) -> Result<NotifyDigest, AppError>;
+// System-scoped — background task creates and processes digests.
+type DigestRepository interface {
+    Create(ctx context.Context, cmd CreateDigest) (*NotifyDigest, error)
 
-    async fn get_unsent(
-        &self,
-        limit: i64,
-    ) -> Result<Vec<NotifyDigest>, AppError>;
+    GetUnsent(ctx context.Context, limit int64) ([]NotifyDigest, error)
 
-    async fn mark_sent(
-        &self,
-        digest_id: Uuid,
-    ) -> Result<(), AppError>;
+    MarkSent(ctx context.Context, digestID uuid.UUID) error
 }
 ```
 
@@ -629,53 +553,39 @@ pub trait DigestRepository: Send + Sync {
 
 ### EmailAdapter (Postmark)
 
-The `EmailAdapter` trait wraps email delivery. It is provider-agnostic by name — the only
-implementation is `PostmarkEmailAdapter`, but the trait boundary allows testing with a mock
+The `EmailAdapter` interface wraps email delivery. It is provider-agnostic by name — the only
+implementation is `PostmarkEmailAdapter`, but the interface boundary allows testing with a mock
 and swapping providers if needed. `[ARCH §2.12]`
 
-```rust
-// src/notify/ports.rs (continued)
+```go
+// internal/notify/ports.go (continued)
 
-/// Provider-agnostic email delivery trait.
-/// Phase 1: PostmarkEmailAdapter (transactional stream).
-/// Phase 2: Adds broadcast stream for digests.
-#[async_trait]
-pub trait EmailAdapter: Send + Sync {
-    /// Send a single transactional email using a Postmark template.
-    ///
-    /// `template_alias` maps to a Postmark template (e.g., "purchase-receipt").
-    /// `template_model` is a JSON object of template variables.
-    async fn send_transactional(
-        &self,
-        to: &str,
-        template_alias: &str,
-        template_model: serde_json::Value,
-    ) -> Result<(), AppError>;
+// EmailAdapter is a provider-agnostic email delivery interface.
+// Phase 1: PostmarkEmailAdapter (transactional stream).
+// Phase 2: Adds broadcast stream for digests.
+type EmailAdapter interface {
+    // SendTransactional sends a single transactional email using a Postmark template.
+    //
+    // templateAlias maps to a Postmark template (e.g., "purchase-receipt").
+    // templateModel is a JSON object of template variables.
+    SendTransactional(ctx context.Context, to string, templateAlias string, templateModel map[string]any) error
 
-    /// Send up to 500 emails in a single Postmark batch API call.
-    /// Used when a single event triggers notifications to multiple families
-    /// (e.g., EventCancelled with many RSVPs).
-    async fn send_batch(
-        &self,
-        messages: Vec<BatchEmailMessage>,
-    ) -> Result<(), AppError>;
+    // SendBatch sends up to 500 emails in a single Postmark batch API call.
+    // Used when a single event triggers notifications to multiple families
+    // (e.g., EventCancelled with many RSVPs).
+    SendBatch(ctx context.Context, messages []BatchEmailMessage) error
 
-    /// Send a broadcast email (Phase 2 — digest stream).
-    /// Uses Postmark's broadcast message stream to protect transactional
-    /// deliverability from digest volume. [ARCH §2.12]
-    async fn send_broadcast(
-        &self,
-        to: &str,
-        template_alias: &str,
-        template_model: serde_json::Value,
-    ) -> Result<(), AppError>;
+    // SendBroadcast sends a broadcast email (Phase 2 — digest stream).
+    // Uses Postmark's broadcast message stream to protect transactional
+    // deliverability from digest volume. [ARCH §2.12]
+    SendBroadcast(ctx context.Context, to string, templateAlias string, templateModel map[string]any) error
 }
 
-/// A single message in a batch send.
-pub struct BatchEmailMessage {
-    pub to: String,
-    pub template_alias: String,
-    pub template_model: serde_json::Value,
+// BatchEmailMessage represents a single message in a batch send.
+type BatchEmailMessage struct {
+    To             string         `json:"to"`
+    TemplateAlias  string         `json:"template_alias"`
+    TemplateModel  map[string]any `json:"template_model"`
 }
 ```
 
@@ -685,144 +595,133 @@ pub struct BatchEmailMessage {
 
 ### §8.1 Request Types
 
-```rust
-// src/notify/models.rs
+```go
+// internal/notify/models.go
 
-use serde::Deserialize;
+package notify
 
-/// Query parameters for GET /v1/notifications
-#[derive(Debug, Deserialize)]
-pub struct NotificationListParams {
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,          // Default 20, max 100
-    pub category: Option<String>,   // Filter by category
-    pub unread_only: Option<bool>,
+// NotificationListParams holds query parameters for GET /v1/notifications.
+type NotificationListParams struct {
+    Cursor    *string `query:"cursor"`
+    Limit     *uint8  `query:"limit"`          // Default 20, max 100
+    Category  *string `query:"category"`       // Filter by category
+    UnreadOnly *bool  `query:"unread_only"`
 }
 
-/// Body for PATCH /v1/notifications/preferences
-#[derive(Debug, Deserialize)]
-pub struct UpdatePreferencesCommand {
-    pub preferences: Vec<PreferenceUpdate>,
+// UpdatePreferencesCommand holds the body for PATCH /v1/notifications/preferences.
+type UpdatePreferencesCommand struct {
+    Preferences []PreferenceUpdate `json:"preferences" validate:"required,dive"`
 }
 
-/// A single preference change within a batch update.
-#[derive(Debug, Deserialize)]
-pub struct PreferenceUpdate {
-    pub notification_type: String,
-    pub channel: String,              // "in_app" | "email"
-    pub enabled: bool,
-    pub digest_frequency: Option<String>,  // "immediate" | "daily" | "weekly" | "off"
+// PreferenceUpdate represents a single preference change within a batch update.
+type PreferenceUpdate struct {
+    NotificationType string  `json:"notification_type" validate:"required"`
+    Channel          string  `json:"channel" validate:"required"`            // "in_app" | "email"
+    Enabled          bool    `json:"enabled"`
+    DigestFrequency  *string `json:"digest_frequency,omitempty"`            // "immediate" | "daily" | "weekly" | "off"
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-use serde::Serialize;
-
-/// A single notification in the feed.
-#[derive(Debug, Serialize)]
-pub struct NotificationResponse {
-    pub id: Uuid,
-    pub notification_type: String,
-    pub category: String,
-    pub title: String,
-    pub body: String,
-    pub action_url: Option<String>,
-    pub is_read: bool,
-    pub created_at: DateTime<Utc>,
+```go
+// NotificationResponse represents a single notification in the feed.
+type NotificationResponse struct {
+    ID               uuid.UUID `json:"id"`
+    NotificationType string    `json:"notification_type"`
+    Category         string    `json:"category"`
+    Title            string    `json:"title"`
+    Body             string    `json:"body"`
+    ActionURL        *string   `json:"action_url,omitempty"`
+    IsRead           bool      `json:"is_read"`
+    CreatedAt        time.Time `json:"created_at"`
 }
 
-/// Paginated notification list with unread badge count.
-#[derive(Debug, Serialize)]
-pub struct NotificationListResponse {
-    pub notifications: Vec<NotificationResponse>,
-    pub unread_count: i64,
-    pub next_cursor: Option<String>,
+// NotificationListResponse is a paginated notification list with unread badge count.
+type NotificationListResponse struct {
+    Notifications []NotificationResponse `json:"notifications"`
+    UnreadCount   int64                  `json:"unread_count"`
+    NextCursor    *string                `json:"next_cursor,omitempty"`
 }
 
-/// A single entry in the preference matrix.
-#[derive(Debug, Serialize)]
-pub struct PreferenceResponse {
-    pub notification_type: String,
-    pub channel: String,
-    pub enabled: bool,
-    pub digest_frequency: String,
-    pub system_critical: bool,        // true = cannot be disabled
+// PreferenceResponse represents a single entry in the preference matrix.
+type PreferenceResponse struct {
+    NotificationType string `json:"notification_type"`
+    Channel          string `json:"channel"`
+    Enabled          bool   `json:"enabled"`
+    DigestFrequency  string `json:"digest_frequency"`
+    SystemCritical   bool   `json:"system_critical"`      // true = cannot be disabled
 }
 ```
 
 ### §8.3 Internal Types
 
-```rust
-/// Internal command to create a notification (used by event handlers).
-/// Not exposed via API — event handlers construct this.
-#[derive(Debug, Clone)]
-pub struct CreateNotificationCommand {
-    pub family_id: FamilyId,
-    pub notification_type: String,
-    pub category: String,
-    pub title: String,
-    pub body: String,
-    pub action_url: Option<String>,
-    pub metadata: serde_json::Value,   // Must contain "source_event_id"
+```go
+// CreateNotificationCommand is an internal command to create a notification (used by event handlers).
+// Not exposed via API — event handlers construct this.
+type CreateNotificationCommand struct {
+    FamilyID         types.FamilyID
+    NotificationType string
+    Category         string
+    Title            string
+    Body             string
+    ActionURL        *string
+    Metadata         map[string]any   // Must contain "source_event_id"
 }
 
-/// Internal command to send an email (enqueued as SendEmailJob).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SendEmailCommand {
-    pub to: String,
-    pub template_alias: String,
-    pub template_model: serde_json::Value,
+// SendEmailCommand is an internal command to send an email (enqueued as SendEmailTask).
+type SendEmailCommand struct {
+    To             string         `json:"to"`
+    TemplateAlias  string         `json:"template_alias"`
+    TemplateModel  map[string]any `json:"template_model"`
 }
 
-/// WebSocket frame pushed to connected clients.
-#[derive(Debug, Serialize)]
-pub struct WebSocketFrame {
-    pub msg_type: String,              // "notification"
-    pub data: NotificationResponse,
+// WebSocketFrame is the frame pushed to connected clients.
+type WebSocketFrame struct {
+    MsgType string               `json:"msg_type"`     // "notification"
+    Data    NotificationResponse `json:"data"`
 }
 
-/// All registered notification types.
-/// Defined as constants rather than an enum to allow easy iteration and
-/// lookup without match exhaustiveness overhead in a simple domain.
-pub mod notification_types {
+// notification_types contains all registered notification types.
+// Defined as constants rather than an enum to allow easy iteration and
+// lookup without switch exhaustiveness overhead in a simple domain.
+const (
     // Social
-    pub const FRIEND_REQUEST_SENT: &str = "friend_request_sent";
-    pub const FRIEND_REQUEST_ACCEPTED: &str = "friend_request_accepted";
-    pub const MESSAGE_RECEIVED: &str = "message_received";
-    pub const EVENT_CANCELLED: &str = "event_cancelled";
+    TypeFriendRequestSent     = "friend_request_sent"
+    TypeFriendRequestAccepted = "friend_request_accepted"
+    TypeMessageReceived       = "message_received"
+    TypeEventCancelled        = "event_cancelled"
 
     // Learning
-    pub const METHODOLOGY_CHANGED: &str = "methodology_changed";
-    pub const ONBOARDING_COMPLETED: &str = "onboarding_completed";
-    pub const ACTIVITY_STREAK: &str = "activity_streak";
-    pub const MILESTONE_ACHIEVED: &str = "milestone_achieved";
-    pub const BOOK_COMPLETED: &str = "book_completed";
-    pub const DATA_EXPORT_READY: &str = "data_export_ready";
+    TypeMethodologyChanged  = "methodology_changed"
+    TypeOnboardingCompleted = "onboarding_completed"
+    TypeActivityStreak      = "activity_streak"
+    TypeMilestoneAchieved   = "milestone_achieved"
+    TypeBookCompleted       = "book_completed"
+    TypeDataExportReady     = "data_export_ready"
 
     // Marketplace
-    pub const PURCHASE_COMPLETED: &str = "purchase_completed";
-    pub const PURCHASE_REFUNDED: &str = "purchase_refunded";
-    pub const CREATOR_ONBOARDED: &str = "creator_onboarded";
-    pub const PAYOUT_COMPLETED: &str = "payout_completed";
+    TypePurchaseCompleted = "purchase_completed"
+    TypePurchaseRefunded  = "purchase_refunded"
+    TypeCreatorOnboarded  = "creator_onboarded"
+    TypePayoutCompleted   = "payout_completed"
 
     // System
-    pub const CONTENT_FLAGGED: &str = "content_flagged";
-    pub const CO_PARENT_ADDED: &str = "co_parent_added";
-    pub const FAMILY_DELETION_SCHEDULED: &str = "family_deletion_scheduled";
+    TypeContentFlagged          = "content_flagged"
+    TypeCoParentAdded           = "co_parent_added"
+    TypeFamilyDeletionScheduled = "family_deletion_scheduled"
 
     // Billing (Phase 2)
-    pub const SUBSCRIPTION_CREATED: &str = "subscription_created";
-    pub const SUBSCRIPTION_CHANGED: &str = "subscription_changed";
-    pub const SUBSCRIPTION_CANCELLED: &str = "subscription_cancelled";
+    TypeSubscriptionCreated   = "subscription_created"
+    TypeSubscriptionChanged   = "subscription_changed"
+    TypeSubscriptionCancelled = "subscription_cancelled"
+)
 
-    /// Types that cannot be disabled via preferences. [S§13.3]
-    pub const SYSTEM_CRITICAL: &[&str] = &[
-        CONTENT_FLAGGED,
-        CO_PARENT_ADDED,
-        FAMILY_DELETION_SCHEDULED,
-    ];
+// SystemCriticalTypes are types that cannot be disabled via preferences. [S§13.3]
+var SystemCriticalTypes = []string{
+    TypeContentFlagged,
+    TypeCoParentAdded,
+    TypeFamilyDeletionScheduled,
 }
 ```
 
@@ -845,7 +744,7 @@ default email behavior and provide a coarse filter for the notification feed.
 ### Complete Type Registry
 
 Each notification type maps to a source event, belongs to a category, and has a title template
-used by `create_notification`. System-critical types cannot be disabled.
+used by `CreateNotification`. System-critical types cannot be disabled.
 
 | Type | Category | Source Event | Source Domain | Title Template | System-Critical | Phase |
 |------|----------|-------------|---------------|----------------|:---------------:|-------|
@@ -872,16 +771,16 @@ used by `create_notification`. System-critical types cannot be disabled.
 
 ### Streak Detection Logic
 
-Activity streaks are detected by the `handle_activity_logged` event handler using Redis
+Activity streaks are detected by the `HandleActivityLogged` event handler using Redis
 counters — not computed from the database.
 
 ```
 ActivityLogged event received
-  → INCR notify:streak:{student_id}:{activity_date}  (SET with NX, expire 48h)
-  → Check consecutive days via Redis: get keys for last N days
-  → If streak count ∈ {7, 14, 30, 60, 100}:
-      → create_notification(activity_streak) with streak days in metadata
-      → Publish MilestoneAchieved event (delegated to learn:: to decide)
+  -> INCR notify:streak:{student_id}:{activity_date}  (SET with NX, expire 48h)
+  -> Check consecutive days via Redis: get keys for last N days
+  -> If streak count in {7, 14, 30, 60, 100}:
+      -> CreateNotification(activity_streak) with streak days in metadata
+      -> Publish MilestoneAchieved event (delegated to learn:: to decide)
 ```
 
 **Redis key pattern**: `notify:streak:{student_id}:{YYYY-MM-DD}` with 48-hour TTL.
@@ -892,12 +791,12 @@ don't break streaks.
 
 Adding a new notification type requires:
 1. Add the type string to the CHECK constraint (append-only migration)
-2. Add constant to `notification_types` module
+2. Add constant to notification type constants
 3. Add to type registry table (category, title template, system-critical flag)
-4. Implement the event handler in `event_handlers.rs`
+4. Implement the event handler in `event_handlers.go`
 5. Add Postmark template alias if email delivery is needed
 
-No existing code needs modification — the dispatch is type-string-driven, not match-arm-driven.
+No existing code needs modification — the dispatch is type-string-driven, not switch-arm-driven.
 
 ---
 
@@ -906,49 +805,49 @@ No existing code needs modification — the dispatch is type-string-driven, not 
 ### Event-to-Notification Flow
 
 ```
-┌──────────────┐
-│ Source Domain │
-│ publishes     │
-│ DomainEvent   │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────────────────────────────────────────────────┐
-│ notify::event_handlers.rs                                 │
-│                                                           │
-│  DomainEventHandler<E>::handle()                          │
-│    → notification_service.handle_<event_type>()           │
-└──────────────────────┬───────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────┐
-│ notify::service.rs — handle_<event_type>() impl           │
-│                                                           │
-│  1. Build CreateNotificationCommand from event payload    │
-│  2. Check idempotency (source_event_id)                   │
-│  3. Call create_notification(cmd)                          │
-└──────────────────────┬───────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────┐
-│ create_notification(cmd)                                  │
-│                                                           │
-│  ┌─ In-App Path ──────────────────────────────────────┐  │
-│  │ 1. Check preference: is_enabled(type, "in_app")?    │  │
-│  │ 2. INSERT into notify_notifications                  │  │
-│  │ 3. Redis PUBLISH notifications:{family_id}           │  │
-│  │    → WebSocket push to connected clients             │  │
-│  └─────────────────────────────────────────────────────┘  │
-│                                                           │
-│  ┌─ Email Path ───────────────────────────────────────┐  │
-│  │ 1. Check preference: is_enabled(type, "email")?     │  │
-│  │ 2. If digest_frequency == "immediate":               │  │
-│  │    → Look up family email via iam::IamService        │  │
-│  │    → Enqueue SendEmailJob to sidekiq-rs              │  │
-│  │ 3. If digest_frequency ∈ {"daily", "weekly"}:        │  │
-│  │    → Skip (CompileDigestJob handles it — Phase 2)    │  │
-│  └─────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
++--------------+
+| Source Domain |
+| publishes     |
+| DomainEvent   |
++------+-------+
+       |
+       v
++----------------------------------------------------------+
+| internal/notify/event_handlers.go                          |
+|                                                            |
+|  DomainEventHandler.Handle()                               |
+|    -> notificationService.Handle<EventType>()              |
++----------------------+-----------------------------------+
+                       |
+                       v
++----------------------------------------------------------+
+| internal/notify/service.go -- Handle<EventType>() impl     |
+|                                                            |
+|  1. Build CreateNotificationCommand from event payload     |
+|  2. Check idempotency (source_event_id)                    |
+|  3. Call CreateNotification(cmd)                           |
++----------------------+-----------------------------------+
+                       |
+                       v
++----------------------------------------------------------+
+| CreateNotification(cmd)                                    |
+|                                                            |
+|  +- In-App Path ------------------------------------------+
+|  | 1. Check preference: IsEnabled(type, "in_app")?         |
+|  | 2. INSERT into notify_notifications                     |
+|  | 3. Redis PUBLISH notifications:{family_id}              |
+|  |    -> WebSocket push to connected clients               |
+|  +--------------------------------------------------------+
+|                                                            |
+|  +- Email Path -------------------------------------------+
+|  | 1. Check preference: IsEnabled(type, "email")?          |
+|  | 2. If digest_frequency == "immediate":                  |
+|  |    -> Look up family email via iam::IamService          |
+|  |    -> Enqueue SendEmailTask to asynq                    |
+|  | 3. If digest_frequency in {"daily", "weekly"}:          |
+|  |    -> Skip (CompileDigestTask handles it -- Phase 2)    |
+|  +--------------------------------------------------------+
++----------------------------------------------------------+
 ```
 
 ### Key Pipeline Properties
@@ -957,12 +856,12 @@ No existing code needs modification — the dispatch is type-string-driven, not 
 notification creation. Both paths check preferences independently — a family can have email
 disabled but in-app enabled for a given type.
 
-**Idempotency**: Every `CreateNotificationCommand` includes `metadata.source_event_id` (typically
+**Idempotency**: Every `CreateNotificationCommand` includes `Metadata["source_event_id"]` (typically
 the source entity's UUID). The unique index on `(family_id, notification_type, source_event_id)`
-prevents duplicate notifications. If a duplicate is detected, `create_notification` returns `Ok(())`
+prevents duplicate notifications. If a duplicate is detected, `CreateNotification` returns `nil`
 silently.
 
-**Error isolation**: Event handler failures are logged at `error!` level but do not propagate to
+**Error isolation**: Event handler failures are logged at `slog.Error` level but do not propagate to
 the source domain operation. The source event is not retried — notification delivery is
 best-effort from the source domain's perspective. `[ARCH §4.6]`
 
@@ -979,13 +878,13 @@ WebSocket notification push shares the same WebSocket infrastructure established
 for direct messages. `[ARCH §2.16, 05-social §11]`
 
 ```
-┌──────────────┐      ┌──────────────┐      ┌──────────────────────────┐
-│ notify::      │      │ Redis        │      │ WebSocket Server         │
-│ service.rs    │─────▶│ PUBLISH      │─────▶│ (shared with social::)   │
-│               │      │ channel:     │      │                          │
-│ create_       │      │ notifications│      │ Delivers to all          │
-│ notification  │      │ :{family_id} │      │ connections for family   │
-└──────────────┘      └──────────────┘      └──────────────────────────┘
++--------------+      +--------------+      +--------------------------+
+| notify::      |      | Redis        |      | WebSocket Server         |
+| service.go    |----->| PUBLISH      |----->| (shared with social::)   |
+|               |      | channel:     |      |                          |
+| Create        |      | notifications|      | Delivers to all          |
+| Notification  |      | :{family_id} |      | connections for family   |
++--------------+      +--------------+      +--------------------------+
 ```
 
 ### Redis Pub/Sub Channel
@@ -1018,8 +917,8 @@ for direct messages. `[ARCH §2.16, 05-social §11]`
 // Pseudocode — actual implementation in social:: WebSocket infrastructure
 
 // The shared useWebSocket() hook dispatches on msg_type:
-// - "message" → social:: DM handling
-// - "notification" → invalidate notification queries
+// - "message" -> social:: DM handling
+// - "notification" -> invalidate notification queries
 
 const { lastMessage } = useWebSocket();
 
@@ -1085,36 +984,36 @@ Notification event handlers call `iam::IamService` to look up the primary parent
 address and display name for the target family. The lookup is:
 
 ```
-iam_service.get_family_primary_email(family_id) -> Result<(String, String), AppError>
-//                                                         email   display_name
+iamService.GetFamilyPrimaryEmail(ctx, familyID) -> (email string, displayName string, err error)
 ```
 
 This is the only cross-domain service call notify:: makes. All other interactions are via
 domain events.
 
-### SendEmailJob Structure
+### SendEmailTask Structure
 
-```rust
-/// Background job payload for transactional email delivery. [ARCH §12]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SendEmailJob {
-    pub to: String,
-    pub template_alias: String,
-    pub template_model: serde_json::Value,
-    /// For deduplication: Postmark ignores duplicate sends with same MessageStream
-    /// + Tag within a short window. We also use this for logging correlation.
-    pub idempotency_key: String,
+```go
+// internal/notify/tasks.go
+
+// SendEmailTask is a background task payload for transactional email delivery. [ARCH §12]
+type SendEmailTask struct {
+    To             string         `json:"to"`
+    TemplateAlias  string         `json:"template_alias"`
+    TemplateModel  map[string]any `json:"template_model"`
+    // For deduplication: Postmark ignores duplicate sends with same MessageStream
+    // + Tag within a short window. We also use this for logging correlation.
+    IdempotencyKey string         `json:"idempotency_key"`
 }
 ```
 
 **Queue**: Default (process within 5 minutes) `[ARCH §12]`
 
 **Retry policy**: 3 retries with exponential backoff (30s, 2m, 10m). After 3 failures,
-the job moves to the dead letter queue for manual inspection.
+the task moves to the dead letter queue for manual inspection.
 
-**Failure handling**: Email delivery failures are logged at `error!` level with the
+**Failure handling**: Email delivery failures are logged at `slog.Error` level with the
 idempotency key and template alias. The in-app notification is unaffected — it was already
-created before the job was enqueued.
+created before the task was enqueued.
 
 ### CAN-SPAM Compliance
 
@@ -1131,31 +1030,31 @@ Every transactional email includes: `[S§13.3]`
 
 ### Preference Matrix
 
-The full matrix has `16 notification types × 2 channels = 32 cells`. The GET preferences
+The full matrix has `16 notification types x 2 channels = 32 cells`. The GET preferences
 endpoint returns all 32 entries with defaults applied (missing row = enabled).
 
 ```
                           in_app    email
-                         ──────── ────────
- friend_request_sent     │  ✓   │   ✓   │
- friend_request_accepted │  ✓   │   ✓   │
- message_received        │  ✓   │   ✓   │
- event_cancelled         │  ✓   │   ✓   │
- methodology_changed     │  ✓   │   ✓   │
- onboarding_completed    │  ✓   │   ✓   │
- activity_streak         │  ✓   │   ✓   │
- milestone_achieved      │  ✓   │   ✓   │
- book_completed          │  ✓   │   ✓   │
- data_export_ready       │  ✓   │   ✓   │
- purchase_completed      │  ✓   │   ✓   │
- purchase_refunded       │  ✓   │   ✓   │
- creator_onboarded       │  ✓   │   ✓   │
- content_flagged         │  🔒  │   🔒  │  ← system-critical
- co_parent_added         │  🔒  │   🔒  │  ← system-critical
- family_deletion_sched.  │  🔒  │   🔒  │  ← system-critical
+                         -------- --------
+ friend_request_sent     |  Y   |   Y   |
+ friend_request_accepted |  Y   |   Y   |
+ message_received        |  Y   |   Y   |
+ event_cancelled         |  Y   |   Y   |
+ methodology_changed     |  Y   |   Y   |
+ onboarding_completed    |  Y   |   Y   |
+ activity_streak         |  Y   |   Y   |
+ milestone_achieved      |  Y   |   Y   |
+ book_completed          |  Y   |   Y   |
+ data_export_ready       |  Y   |   Y   |
+ purchase_completed      |  Y   |   Y   |
+ purchase_refunded       |  Y   |   Y   |
+ creator_onboarded       |  Y   |   Y   |
+ content_flagged         |  L   |   L   |  <- system-critical
+ co_parent_added         |  L   |   L   |  <- system-critical
+ family_deletion_sched.  |  L   |   L   |  <- system-critical
 
- ✓ = enabled (default), toggleable
- 🔒 = always enabled, cannot be disabled
+ Y = enabled (default), toggleable
+ L = always enabled, cannot be disabled
 ```
 
 ### Default-Enabled Semantics
@@ -1164,25 +1063,25 @@ The `notify_preferences` table only stores **deviations** from the default. A fa
 has never changed any preferences has zero rows in this table, and all notifications are
 delivered. This means:
 
-- `is_enabled(family_id, type, channel)` → `SELECT enabled FROM notify_preferences WHERE family_id = $1 AND notification_type = $2 AND channel = $3` → if no row, return `true`
+- `IsEnabled(familyID, type, channel)` → `SELECT enabled FROM notify_preferences WHERE family_id = $1 AND notification_type = $2 AND channel = $3` → if no row, return `true`
 - New notification types are automatically enabled for all families without migration
 
 ### System-Critical Override
 
-Three notification types are hardcoded as system-critical in `notification_types::SYSTEM_CRITICAL`:
+Three notification types are hardcoded as system-critical in `SystemCriticalTypes`:
 
-```rust
-pub const SYSTEM_CRITICAL: &[&str] = &[
-    CONTENT_FLAGGED,
-    CO_PARENT_ADDED,
-    FAMILY_DELETION_SCHEDULED,
-];
+```go
+var SystemCriticalTypes = []string{
+    TypeContentFlagged,
+    TypeCoParentAdded,
+    TypeFamilyDeletionScheduled,
+}
 ```
 
 **Enforcement points**:
-1. `update_preferences()` — returns `NotifyError::CannotDisableSystemCritical` (HTTP 422) if any preference update attempts to set `enabled = false` for a system-critical type
-2. `process_unsubscribe()` — returns an error page for system-critical types
-3. `create_notification()` — skips preference check entirely for system-critical types (always delivers both in-app and email)
+1. `UpdatePreferences()` — returns `ErrCannotDisableSystemCritical` (HTTP 422) if any preference update attempts to set `enabled = false` for a system-critical type
+2. `ProcessUnsubscribe()` — returns an error page for system-critical types
+3. `CreateNotification()` — skips preference check entirely for system-critical types (always delivers both in-app and email)
 
 ### Batch Opt-Out
 
@@ -1207,13 +1106,13 @@ System-critical types are excluded from the batch — attempting to include them
 
 | Value | Phase | Behavior |
 |-------|-------|----------|
-| `immediate` | 1 | Email sent immediately via `SendEmailJob` |
+| `immediate` | 1 | Email sent immediately via `SendEmailTask` |
 | `off` | 1 | Email suppressed entirely |
-| `daily` | 2 | Notification accumulated; `CompileDigestJob` sends at 6:00 AM UTC |
-| `weekly` | 2 | Notification accumulated; `CompileDigestJob` sends Monday 6:00 AM UTC |
+| `daily` | 2 | Notification accumulated; `CompileDigestTask` sends at 6:00 AM UTC |
+| `weekly` | 2 | Notification accumulated; `CompileDigestTask` sends Monday 6:00 AM UTC |
 
 In Phase 1, `daily` and `weekly` values are accepted and stored in preferences but behave
-identically to `immediate` (no digest compilation job exists yet). This ensures preferences
+identically to `immediate` (no digest compilation task exists yet). This ensures preferences
 set in Phase 1 become functional when Phase 2 ships without requiring migration.
 
 ### One-Click Unsubscribe
@@ -1235,86 +1134,113 @@ The `GET /v1/notifications/unsubscribe` endpoint:
 
 ---
 
-## §14 Background Jobs (Domain Deep-Dive 6)
+## §14 Background Tasks (Domain Deep-Dive 6)
 
-### SendEmailJob (Default Queue, Phase 1)
+### SendEmailTask (Default Queue, Phase 1)
 
 | Property | Value |
 |----------|-------|
 | **Queue** | `default` (process within 5 minutes) `[ARCH §12]` |
-| **Payload** | `SendEmailJob { to, template_alias, template_model, idempotency_key }` |
-| **Retry policy** | 3 retries, exponential backoff: 30s → 2m → 10m |
-| **Dead letter** | After 3 failures, job moves to dead letter queue |
-| **Idempotency** | Postmark deduplicates by `MessageStream` + `Tag` within a window; `idempotency_key` is set as the Postmark `Tag` header |
+| **Payload** | `SendEmailTask { To, TemplateAlias, TemplateModel, IdempotencyKey }` |
+| **Retry policy** | 3 retries, exponential backoff: 30s -> 2m -> 10m |
+| **Dead letter** | After 3 failures, task moves to dead letter queue |
+| **Idempotency** | Postmark deduplicates by `MessageStream` + `Tag` within a window; `IdempotencyKey` is set as the Postmark `Tag` header |
 
-```rust
-// src/notify/jobs.rs
+```go
+// internal/notify/tasks.go
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SendEmailJob {
-    pub to: String,
-    pub template_alias: String,
-    pub template_model: serde_json::Value,
-    pub idempotency_key: String,
+package notify
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "log/slog"
+
+    "github.com/hibiken/asynq"
+)
+
+const (
+    TypeSendEmail    = "notify:send_email"
+    TypeCompileDigest = "notify:compile_digest"
+)
+
+// NewSendEmailTask creates a new asynq task for email delivery.
+func NewSendEmailTask(payload SendEmailTask) (*asynq.Task, error) {
+    data, err := json.Marshal(payload)
+    if err != nil {
+        return nil, fmt.Errorf("marshalling send email task: %w", err)
+    }
+    return asynq.NewTask(TypeSendEmail, data,
+        asynq.MaxRetry(3),
+        asynq.Queue("default"),
+    ), nil
 }
 
-#[async_trait]
-impl Job for SendEmailJob {
-    const QUEUE: &'static str = "default";
-    const MAX_RETRIES: u32 = 3;
-
-    async fn perform(&self, ctx: &JobContext) -> Result<(), JobError> {
-        let adapter = ctx.get::<Arc<dyn EmailAdapter>>()?;
-        adapter.send_transactional(
-            &self.to,
-            &self.template_alias,
-            self.template_model.clone(),
-        ).await.map_err(|e| {
-            tracing::error!(
-                idempotency_key = %self.idempotency_key,
-                template = %self.template_alias,
-                "Email delivery failed: {e}"
-            );
-            JobError::Retryable(e.to_string())
-        })
+// HandleSendEmailTask processes a send email task.
+func HandleSendEmailTask(adapter EmailAdapter) asynq.HandlerFunc {
+    return func(ctx context.Context, t *asynq.Task) error {
+        var payload SendEmailTask
+        if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+            return fmt.Errorf("unmarshalling send email task: %w", err)
+        }
+        if err := adapter.SendTransactional(ctx, payload.To, payload.TemplateAlias, payload.TemplateModel); err != nil {
+            slog.Error("Email delivery failed",
+                "idempotency_key", payload.IdempotencyKey,
+                "template", payload.TemplateAlias,
+                "error", err,
+            )
+            return err // asynq retries automatically
+        }
+        return nil
     }
 }
 ```
 
-### PushNotificationJob (Default Queue, Phase 1 inline → Phase 2 as job)
+### PushNotificationTask (Default Queue, Phase 1 inline -> Phase 2 as task)
 
-In Phase 1, WebSocket push is performed inline within `create_notification()` (Redis PUBLISH
+In Phase 1, WebSocket push is performed inline within `CreateNotification()` (Redis PUBLISH
 is fast and non-blocking). In Phase 2, if push notification delivery to mobile devices is
-added, this becomes a proper background job.
+added, this becomes a proper background task.
 
 | Property | Value |
 |----------|-------|
 | **Queue** | `default` |
-| **Phase 1** | Inline Redis PUBLISH (not a background job) |
-| **Phase 2+** | Background job for mobile push delivery (APNs/FCM) |
+| **Phase 1** | Inline Redis PUBLISH (not a background task) |
+| **Phase 2+** | Background task for mobile push delivery (APNs/FCM) |
 
-### CompileDigestJob (Low Queue, Phase 2)
+### CompileDigestTask (Low Queue, Phase 2)
 
 | Property | Value |
 |----------|-------|
 | **Queue** | `low` (process within 1 hour) `[ARCH §12]` |
 | **Schedule** | Daily at 6:00 AM UTC, weekly on Mondays at 6:00 AM UTC `[ARCH §12]` |
-| **Payload** | `CompileDigestJob { digest_type: "daily" | "weekly" }` |
+| **Payload** | `CompileDigestTask { DigestType: "daily" | "weekly" }` |
 
-```rust
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CompileDigestJob {
-    pub digest_type: String,  // "daily" | "weekly"
+```go
+// CompileDigestPayload is the payload for the compile digest task.
+type CompileDigestPayload struct {
+    DigestType string `json:"digest_type"` // "daily" | "weekly"
 }
 
-#[async_trait]
-impl Job for CompileDigestJob {
-    const QUEUE: &'static str = "low";
-    const MAX_RETRIES: u32 = 2;
+// NewCompileDigestTask creates a new asynq task for digest compilation.
+func NewCompileDigestTask(payload CompileDigestPayload) (*asynq.Task, error) {
+    data, err := json.Marshal(payload)
+    if err != nil {
+        return nil, fmt.Errorf("marshalling compile digest task: %w", err)
+    }
+    return asynq.NewTask(TypeCompileDigest, data,
+        asynq.MaxRetry(2),
+        asynq.Queue("low"),
+    ), nil
+}
 
-    async fn perform(&self, ctx: &JobContext) -> Result<(), JobError> {
+// HandleCompileDigestTask processes a compile digest task.
+func HandleCompileDigestTask( /* deps */ ) asynq.HandlerFunc {
+    return func(ctx context.Context, t *asynq.Task) error {
         // See §15 for compilation algorithm
-        todo!("Phase 2 implementation")
+        // Phase 2 implementation
+        return nil
     }
 }
 ```
@@ -1333,30 +1259,30 @@ impl Job for CompileDigestJob {
 ### Compilation Algorithm
 
 ```
-CompileDigestJob::perform(digest_type):
-  1. period = calculate_period(digest_type)
+CompileDigestTask.Handle(digestType):
+  1. period = calculatePeriod(digestType)
        daily:  (yesterday 6:00 AM UTC, today 6:00 AM UTC)
        weekly: (last Monday 6:00 AM UTC, this Monday 6:00 AM UTC)
 
-  2. families = preference_repo.get_families_with_digest(digest_type)
-       → SELECT DISTINCT family_id FROM notify_preferences
+  2. families = preferenceRepo.GetFamiliesWithDigest(digestType)
+       -> SELECT DISTINCT family_id FROM notify_preferences
          WHERE digest_frequency = $1 AND channel = 'email' AND enabled = true
 
-  3. FOR EACH family_id IN families (batched, 100 at a time):
-       a. notifications = notification_repo.list_in_period(family_id, period)
-       b. IF notifications.is_empty() → SKIP (empty digest suppression)
-       c. content_json = compile_digest_content(notifications)
-            → Group by category, sort by created_at DESC within each group
-       d. digest_repo.create({ family_id, digest_type, period, content_json })
-       e. email = iam_service.get_family_primary_email(family_id)
-       f. job_queue.enqueue(SendEmailJob {
-              to: email,
-              template_alias: format!("{digest_type}-digest"),
-              template_model: content_json,
-              idempotency_key: format!("digest:{family_id}:{period_start}"),
-          })
-            → Uses BROADCAST stream (not transactional)
-       g. digest_repo.mark_sent(digest_id)
+  3. FOR EACH familyID IN families (batched, 100 at a time):
+       a. notifications = notificationRepo.ListInPeriod(familyID, period)
+       b. IF len(notifications) == 0 -> SKIP (empty digest suppression)
+       c. contentJSON = compileDigestContent(notifications)
+            -> Group by category, sort by created_at DESC within each group
+       d. digestRepo.Create({ familyID, digestType, period, contentJSON })
+       e. email, _ = iamService.GetFamilyPrimaryEmail(familyID)
+       f. taskClient.Enqueue(NewSendEmailTask(SendEmailTask{
+              To:             email,
+              TemplateAlias:  fmt.Sprintf("%s-digest", digestType),
+              TemplateModel:  contentJSON,
+              IdempotencyKey: fmt.Sprintf("digest:%s:%s", familyID, periodStart),
+          }))
+            -> Uses BROADCAST stream (not transactional)
+       g. digestRepo.MarkSent(digestID)
 ```
 
 ### Empty Digest Suppression
@@ -1374,73 +1300,57 @@ the deliverability reputation of transactional emails (purchase receipts, securi
 
 ## §16 Error Types
 
-All notification errors use `thiserror` and map to HTTP status codes via `AppError`. Internal
-details are logged but never exposed in API responses. `[CODING §5.2, S§18]`
+All notification errors use custom error types with `errors.Is`/`errors.As` and map to HTTP status
+codes via `AppError`. Internal details are logged but never exposed in API responses. `[CODING §5.2, S§18]`
 
-```rust
-// src/notify/errors.rs
+```go
+// internal/notify/errors.go
 
-use thiserror::Error;
+package notify
 
-#[derive(Debug, Error)]
-pub enum NotifyError {
+import "errors"
+
+var (
     // ─── Notification Errors ─────────────────────────────────────────────
-    #[error("Notification not found")]
-    NotificationNotFound,
-
-    #[error("Notification not owned by this family")]
-    NotificationNotOwned,
+    ErrNotificationNotFound = errors.New("notification not found")
+    ErrNotificationNotOwned = errors.New("notification not owned by this family")
 
     // ─── Preference Errors ───────────────────────────────────────────────
-    #[error("Cannot disable system-critical notification type")]
-    CannotDisableSystemCritical,
-
-    #[error("Invalid notification type")]
-    InvalidNotificationType,
-
-    #[error("Invalid delivery channel")]
-    InvalidChannel,
-
-    #[error("Invalid digest frequency")]
-    InvalidDigestFrequency,
+    ErrCannotDisableSystemCritical = errors.New("cannot disable system-critical notification type")
+    ErrInvalidNotificationType     = errors.New("invalid notification type")
+    ErrInvalidChannel              = errors.New("invalid delivery channel")
+    ErrInvalidDigestFrequency      = errors.New("invalid digest frequency")
 
     // ─── Unsubscribe Errors ──────────────────────────────────────────────
-    #[error("Invalid or expired unsubscribe token")]
-    InvalidUnsubscribeToken,
+    ErrInvalidUnsubscribeToken = errors.New("invalid or expired unsubscribe token")
 
     // ─── Adapter Errors ──────────────────────────────────────────────────
-    #[error("Email delivery failed")]
-    EmailDeliveryFailed,
+    ErrEmailDeliveryFailed = errors.New("email delivery failed")
+    ErrEmailAdapterError   = errors.New("email adapter error")
 
     // ─── Infrastructure ──────────────────────────────────────────────────
-    #[error("Database error")]
-    DatabaseError(#[from] sea_orm::DbErr),
-
-    #[error("Redis error")]
-    RedisError(String),
-
-    #[error("Email adapter error")]
-    EmailAdapterError(String),
-}
+    ErrDatabaseError = errors.New("database error")
+    ErrRedisError    = errors.New("redis error")
+)
 ```
 
 ### Error-to-HTTP Mapping
 
 | Error Variant | HTTP Status | Response Code |
 |--------------|-------------|---------------|
-| `NotificationNotFound` | `404 Not Found` | `notification_not_found` |
-| `NotificationNotOwned` | `404 Not Found` | `notification_not_found` (never reveal existence) |
-| `CannotDisableSystemCritical` | `422 Unprocessable` | `cannot_disable_system_critical` |
-| `InvalidNotificationType` | `422 Unprocessable` | `invalid_notification_type` |
-| `InvalidChannel` | `422 Unprocessable` | `invalid_channel` |
-| `InvalidDigestFrequency` | `422 Unprocessable` | `invalid_digest_frequency` |
-| `InvalidUnsubscribeToken` | `400 Bad Request` | `invalid_unsubscribe_token` |
-| `EmailDeliveryFailed` | `502 Bad Gateway` | `email_delivery_failed` |
-| `DatabaseError` | `500 Internal` | `internal_error` (no details exposed) |
-| `RedisError` | `500 Internal` | `internal_error` (no details exposed) |
-| `EmailAdapterError` | `500 Internal` | `internal_error` (no details exposed) |
+| `ErrNotificationNotFound` | `404 Not Found` | `notification_not_found` |
+| `ErrNotificationNotOwned` | `404 Not Found` | `notification_not_found` (never reveal existence) |
+| `ErrCannotDisableSystemCritical` | `422 Unprocessable` | `cannot_disable_system_critical` |
+| `ErrInvalidNotificationType` | `422 Unprocessable` | `invalid_notification_type` |
+| `ErrInvalidChannel` | `422 Unprocessable` | `invalid_channel` |
+| `ErrInvalidDigestFrequency` | `422 Unprocessable` | `invalid_digest_frequency` |
+| `ErrInvalidUnsubscribeToken` | `400 Bad Request` | `invalid_unsubscribe_token` |
+| `ErrEmailDeliveryFailed` | `502 Bad Gateway` | `email_delivery_failed` |
+| `ErrDatabaseError` | `500 Internal` | `internal_error` (no details exposed) |
+| `ErrRedisError` | `500 Internal` | `internal_error` (no details exposed) |
+| `ErrEmailAdapterError` | `500 Internal` | `internal_error` (no details exposed) |
 
-**Security note**: `NotificationNotOwned` maps to `404` (not `403`) to prevent enumeration.
+**Security note**: `ErrNotificationNotOwned` maps to `404` (not `403`) to prevent enumeration.
 Callers cannot distinguish "does not exist" from "exists but belongs to another family".
 `[S§18]`
 
@@ -1451,7 +1361,7 @@ Callers cannot distinguish "does not exist" from "exists but belongs to another 
 ### §17.1 notify:: Provides (consumed by other domains)
 
 **Nothing.** `notify::` is a **pure consumer / terminal domain**. It subscribes to events
-from other domains but publishes no events and exposes no service trait for other domains
+from other domains but publishes no events and exposes no service interface for other domains
 to call. This is by design — notification delivery is a side effect, not a dependency.
 
 No domain should import anything from `notify::`. The dependency graph is strictly one-way.
@@ -1462,283 +1372,224 @@ No domain should import anything from `notify::`. The dependency graph is strict
 |-----------|--------|---------|
 | `AuthContext` | `iam::` middleware | User identity on every request `[00-core §7.2]` |
 | `FamilyScope` | `iam::` middleware | Family-scoped data access `[00-core §8]` |
-| `IamService::get_family_primary_email()` | `iam::` | Email address lookup for transactional email personalization |
+| `IamService.GetFamilyPrimaryEmail()` | `iam::` | Email address lookup for transactional email personalization |
 | `EmailAdapter` | Postmark (self-hosted adapter) | Transactional + broadcast email delivery `[ARCH §2.12]` |
 | Redis pub/sub | shared infrastructure | WebSocket notification push `[ARCH §2.16]` |
 | Redis counters | shared infrastructure | Streak detection counters |
-| sidekiq-rs | shared infrastructure | Background job scheduling `[ARCH §12]` |
+| asynq | shared infrastructure | Background task scheduling `[ARCH §12]` |
 
 ### §17.3 Events notify:: Subscribes To
 
 `notify::` subscribes to 20 domain events from 8 source domains. Each event maps to a
-handler struct in `src/notify/event_handlers.rs`. `[ARCH §4.6]`
+handler struct in `internal/notify/event_handlers.go`. `[ARCH §4.6]`
 
-```rust
-// src/notify/event_handlers.rs
+```go
+// internal/notify/event_handlers.go
 
-use crate::social::events::{
-    FriendRequestSent, FriendRequestAccepted, MessageSent, EventCancelled,
-};
-use crate::method::events::FamilyMethodologyChanged;
-use crate::onboard::events::OnboardingCompleted;
-use crate::learn::events::{
-    ActivityLogged, MilestoneAchieved, BookCompleted, DataExportReady,
-};
-use crate::mkt::events::{PurchaseCompleted, PurchaseRefunded, CreatorOnboarded};
-use crate::safety::events::ContentFlagged;
-use crate::iam::events::{CoParentAdded, FamilyDeletionScheduled};
-use crate::billing::events::{
-    SubscriptionCreated, SubscriptionChanged, SubscriptionCancelled, PayoutCompleted,
-};
+package notify
+
+import (
+    "context"
+    "log/slog"
+
+    socialevents "homegrown/internal/social/events"
+    methodevents "homegrown/internal/method/events"
+    onboardevents "homegrown/internal/onboard/events"
+    learnevents "homegrown/internal/learn/events"
+    mktevents "homegrown/internal/mkt/events"
+    safetyevents "homegrown/internal/safety/events"
+    iamevents "homegrown/internal/iam/events"
+    billingevents "homegrown/internal/billing/events"
+)
 
 // ─── social:: events ─────────────────────────────────────────────────────
 
-pub struct FriendRequestSentHandler {
-    notification_service: Arc<dyn NotificationService>,
+type FriendRequestSentHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<FriendRequestSent> for FriendRequestSentHandler {
-    async fn handle(&self, event: &FriendRequestSent) -> Result<(), AppError> {
-        self.notification_service.handle_friend_request_sent(event).await
-    }
+func (h *FriendRequestSentHandler) Handle(ctx context.Context, event *socialevents.FriendRequestSent) error {
+    return h.NotificationService.HandleFriendRequestSent(ctx, event)
 }
 
-pub struct FriendRequestAcceptedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type FriendRequestAcceptedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<FriendRequestAccepted> for FriendRequestAcceptedHandler {
-    async fn handle(&self, event: &FriendRequestAccepted) -> Result<(), AppError> {
-        self.notification_service.handle_friend_request_accepted(event).await
-    }
+func (h *FriendRequestAcceptedHandler) Handle(ctx context.Context, event *socialevents.FriendRequestAccepted) error {
+    return h.NotificationService.HandleFriendRequestAccepted(ctx, event)
 }
 
-pub struct MessageSentHandler {
-    notification_service: Arc<dyn NotificationService>,
+type MessageSentHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<MessageSent> for MessageSentHandler {
-    async fn handle(&self, event: &MessageSent) -> Result<(), AppError> {
-        self.notification_service.handle_message_sent(event).await
-    }
+func (h *MessageSentHandler) Handle(ctx context.Context, event *socialevents.MessageSent) error {
+    return h.NotificationService.HandleMessageSent(ctx, event)
 }
 
-pub struct EventCancelledHandler {
-    notification_service: Arc<dyn NotificationService>,
+type EventCancelledHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<EventCancelled> for EventCancelledHandler {
-    async fn handle(&self, event: &EventCancelled) -> Result<(), AppError> {
-        self.notification_service.handle_event_cancelled(event).await
-    }
+func (h *EventCancelledHandler) Handle(ctx context.Context, event *socialevents.EventCancelled) error {
+    return h.NotificationService.HandleEventCancelled(ctx, event)
 }
 
 // ─── method:: events ─────────────────────────────────────────────────────
 
-pub struct FamilyMethodologyChangedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type FamilyMethodologyChangedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyMethodologyChanged> for FamilyMethodologyChangedHandler {
-    async fn handle(&self, event: &FamilyMethodologyChanged) -> Result<(), AppError> {
-        self.notification_service.handle_family_methodology_changed(event).await
-    }
+func (h *FamilyMethodologyChangedHandler) Handle(ctx context.Context, event *methodevents.FamilyMethodologyChanged) error {
+    return h.NotificationService.HandleFamilyMethodologyChanged(ctx, event)
 }
 
 // ─── onboard:: events ────────────────────────────────────────────────────
 
-pub struct OnboardingCompletedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type OnboardingCompletedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<OnboardingCompleted> for OnboardingCompletedHandler {
-    async fn handle(&self, event: &OnboardingCompleted) -> Result<(), AppError> {
-        self.notification_service.handle_onboarding_completed(event).await
-    }
+func (h *OnboardingCompletedHandler) Handle(ctx context.Context, event *onboardevents.OnboardingCompleted) error {
+    return h.NotificationService.HandleOnboardingCompleted(ctx, event)
 }
 
 // ─── learn:: events ──────────────────────────────────────────────────────
 
-pub struct ActivityLoggedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type ActivityLoggedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<ActivityLogged> for ActivityLoggedHandler {
-    async fn handle(&self, event: &ActivityLogged) -> Result<(), AppError> {
-        self.notification_service.handle_activity_logged(event).await
-    }
+func (h *ActivityLoggedHandler) Handle(ctx context.Context, event *learnevents.ActivityLogged) error {
+    return h.NotificationService.HandleActivityLogged(ctx, event)
 }
 
-pub struct MilestoneAchievedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type MilestoneAchievedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<MilestoneAchieved> for MilestoneAchievedHandler {
-    async fn handle(&self, event: &MilestoneAchieved) -> Result<(), AppError> {
-        self.notification_service.handle_milestone_achieved(event).await
-    }
+func (h *MilestoneAchievedHandler) Handle(ctx context.Context, event *learnevents.MilestoneAchieved) error {
+    return h.NotificationService.HandleMilestoneAchieved(ctx, event)
 }
 
-pub struct BookCompletedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type BookCompletedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<BookCompleted> for BookCompletedHandler {
-    async fn handle(&self, event: &BookCompleted) -> Result<(), AppError> {
-        self.notification_service.handle_book_completed(event).await
-    }
+func (h *BookCompletedHandler) Handle(ctx context.Context, event *learnevents.BookCompleted) error {
+    return h.NotificationService.HandleBookCompleted(ctx, event)
 }
 
-pub struct DataExportReadyHandler {
-    notification_service: Arc<dyn NotificationService>,
+type DataExportReadyHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<DataExportReady> for DataExportReadyHandler {
-    async fn handle(&self, event: &DataExportReady) -> Result<(), AppError> {
-        self.notification_service.handle_data_export_ready(event).await
-    }
+func (h *DataExportReadyHandler) Handle(ctx context.Context, event *learnevents.DataExportReady) error {
+    return h.NotificationService.HandleDataExportReady(ctx, event)
 }
 
 // ─── mkt:: events ────────────────────────────────────────────────────────
 
-pub struct PurchaseCompletedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type PurchaseCompletedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<PurchaseCompleted> for PurchaseCompletedHandler {
-    async fn handle(&self, event: &PurchaseCompleted) -> Result<(), AppError> {
-        self.notification_service.handle_purchase_completed(event).await
-    }
+func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event *mktevents.PurchaseCompleted) error {
+    return h.NotificationService.HandlePurchaseCompleted(ctx, event)
 }
 
-pub struct PurchaseRefundedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type PurchaseRefundedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<PurchaseRefunded> for PurchaseRefundedHandler {
-    async fn handle(&self, event: &PurchaseRefunded) -> Result<(), AppError> {
-        self.notification_service.handle_purchase_refunded(event).await
-    }
+func (h *PurchaseRefundedHandler) Handle(ctx context.Context, event *mktevents.PurchaseRefunded) error {
+    return h.NotificationService.HandlePurchaseRefunded(ctx, event)
 }
 
-pub struct CreatorOnboardedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type CreatorOnboardedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<CreatorOnboarded> for CreatorOnboardedHandler {
-    async fn handle(&self, event: &CreatorOnboarded) -> Result<(), AppError> {
-        self.notification_service.handle_creator_onboarded(event).await
-    }
+func (h *CreatorOnboardedHandler) Handle(ctx context.Context, event *mktevents.CreatorOnboarded) error {
+    return h.NotificationService.HandleCreatorOnboarded(ctx, event)
 }
 
 // ─── safety:: events ─────────────────────────────────────────────────────
 
-pub struct ContentFlaggedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type ContentFlaggedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<ContentFlagged> for ContentFlaggedHandler {
-    async fn handle(&self, event: &ContentFlagged) -> Result<(), AppError> {
-        self.notification_service.handle_content_flagged(event).await
-    }
+func (h *ContentFlaggedHandler) Handle(ctx context.Context, event *safetyevents.ContentFlagged) error {
+    return h.NotificationService.HandleContentFlagged(ctx, event)
 }
 
 // ─── iam:: events (Phase 2) ──────────────────────────────────────────────
 
-pub struct CoParentAddedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type CoParentAddedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<CoParentAdded> for CoParentAddedHandler {
-    async fn handle(&self, event: &CoParentAdded) -> Result<(), AppError> {
-        self.notification_service.handle_co_parent_added(event).await
-    }
+func (h *CoParentAddedHandler) Handle(ctx context.Context, event *iamevents.CoParentAdded) error {
+    return h.NotificationService.HandleCoParentAdded(ctx, event)
 }
 
-pub struct FamilyDeletionScheduledHandler {
-    notification_service: Arc<dyn NotificationService>,
+type FamilyDeletionScheduledHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.notification_service.handle_family_deletion_scheduled(event).await
-    }
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *iamevents.FamilyDeletionScheduled) error {
+    return h.NotificationService.HandleFamilyDeletionScheduled(ctx, event)
 }
 
 // ─── billing:: events (Phase 2) ─────────────────────────────────────────
 
-pub struct SubscriptionCreatedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type SubscriptionCreatedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<SubscriptionCreated> for SubscriptionCreatedHandler {
-    async fn handle(&self, event: &SubscriptionCreated) -> Result<(), AppError> {
-        self.notification_service.handle_subscription_created(event).await
-    }
+func (h *SubscriptionCreatedHandler) Handle(ctx context.Context, event *billingevents.SubscriptionCreated) error {
+    return h.NotificationService.HandleSubscriptionCreated(ctx, event)
 }
 
-pub struct SubscriptionChangedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type SubscriptionChangedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<SubscriptionChanged> for SubscriptionChangedHandler {
-    async fn handle(&self, event: &SubscriptionChanged) -> Result<(), AppError> {
-        self.notification_service.handle_subscription_changed(event).await
-    }
+func (h *SubscriptionChangedHandler) Handle(ctx context.Context, event *billingevents.SubscriptionChanged) error {
+    return h.NotificationService.HandleSubscriptionChanged(ctx, event)
 }
 
-pub struct SubscriptionCancelledHandler {
-    notification_service: Arc<dyn NotificationService>,
+type SubscriptionCancelledHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<SubscriptionCancelled> for SubscriptionCancelledHandler {
-    async fn handle(&self, event: &SubscriptionCancelled) -> Result<(), AppError> {
-        self.notification_service.handle_subscription_cancelled(event).await
-    }
+func (h *SubscriptionCancelledHandler) Handle(ctx context.Context, event *billingevents.SubscriptionCancelled) error {
+    return h.NotificationService.HandleSubscriptionCancelled(ctx, event)
 }
 
-pub struct PayoutCompletedHandler {
-    notification_service: Arc<dyn NotificationService>,
+type PayoutCompletedHandler struct {
+    NotificationService NotificationService
 }
 
-#[async_trait]
-impl DomainEventHandler<PayoutCompleted> for PayoutCompletedHandler {
-    async fn handle(&self, event: &PayoutCompleted) -> Result<(), AppError> {
-        self.notification_service.handle_payout_completed(event).await
-    }
+func (h *PayoutCompletedHandler) Handle(ctx context.Context, event *billingevents.PayoutCompleted) error {
+    return h.NotificationService.HandlePayoutCompleted(ctx, event)
 }
 ```
 
 ### §17.4 Event Handler Detail
 
 Each event handler follows the same pattern: build a `CreateNotificationCommand` from the
-event payload, then call `create_notification()`. Special cases are noted below.
+event payload, then call `CreateNotification()`. Special cases are noted below.
 
 | Event | Target Family | Special Behavior |
 |-------|--------------|------------------|
 | `FriendRequestSent` | `target_family_id` | — |
 | `FriendRequestAccepted` | `requester_family_id` | — |
 | `MessageSent` | `recipient_family_id` | Only if recipient has no active WebSocket (offline check via Redis) |
-| `EventCancelled` | Each `going_family_ids[i]` | Batch: one notification per RSVP'd family; batch email via `send_batch()` |
+| `EventCancelled` | Each `going_family_ids[i]` | Batch: one notification per RSVP'd family; batch email via `SendBatch()` |
 | `FamilyMethodologyChanged` | `family_id` | — |
 | `OnboardingCompleted` | `family_id` | Skip if `skipped == true` (no welcome email for skipped onboarding) |
 | `ActivityLogged` | `family_id` | No in-app notification created directly; only triggers streak check (§9) |
@@ -1747,14 +1598,14 @@ event payload, then call `create_notification()`. Special cases are noted below.
 | `DataExportReady` | `family_id` | Email includes signed download URL with expiration |
 | `PurchaseCompleted` | `family_id` | Email includes purchase receipt details from `content_metadata` |
 | `PurchaseRefunded` | `family_id` | — |
-| `CreatorOnboarded` | Looked up via `parent_id` | Uses `iam::IamService` to resolve `parent_id → family_id` |
+| `CreatorOnboarded` | Looked up via `parent_id` | Uses `iam::IamService` to resolve `parent_id -> family_id` |
 | `ContentFlagged` | Content owner's `family_id` | System-critical: always delivered regardless of preferences |
 | `CoParentAdded` (Phase 2) | `family_id` | System-critical: always delivered |
 | `FamilyDeletionScheduled` (Phase 2) | `family_id` | System-critical: always delivered; includes cancellation URL |
 | `SubscriptionCreated` (Phase 2) | `family_id` | Email includes tier and billing interval |
 | `SubscriptionChanged` (Phase 2) | `family_id` | Email includes `change_type` (interval_change, renewal, reactivation) |
 | `SubscriptionCancelled` (Phase 2) | `family_id` | Email includes `effective_at` date; mentions data preservation |
-| `PayoutCompleted` (Phase 2) | Looked up via `creator_id` | Uses `iam::IamService` to resolve `creator_id → family_id`; email includes amount and currency |
+| `PayoutCompleted` (Phase 2) | Looked up via `creator_id` | Uses `iam::IamService` to resolve `creator_id -> family_id`; email includes amount and currency |
 
 ---
 
@@ -1769,7 +1620,7 @@ event payload, then call `create_notification()`. Special cases are noted below.
 - 14 event handlers (all except `CoParentAdded`, `FamilyDeletionScheduled`)
 - In-app notification creation with WebSocket push via Redis pub/sub
 - Postmark transactional email stream with template-based delivery
-- `SendEmailJob` background job with retry policy
+- `SendEmailTask` background task with retry policy
 - Streak detection via Redis counters (7/14/30/60/100-day milestones)
 - User preference enforcement with default-enabled semantics
 - System-critical notification override (cannot disable `content_flagged`)
@@ -1783,7 +1634,7 @@ notifications.
 ### Phase 2 — Digests & Depth `[S§19]`
 
 **In scope**:
-- `CompileDigestJob` (daily at 6:00 AM UTC, weekly Monday 6:00 AM UTC)
+- `CompileDigestTask` (daily at 6:00 AM UTC, weekly Monday 6:00 AM UTC)
 - Postmark broadcast stream for digest delivery
 - `CoParentAdded` and `FamilyDeletionScheduled` event handlers
 - `SubscriptionCreated`, `SubscriptionChanged`, `SubscriptionCancelled`, `PayoutCompleted` event handlers (`billing::` events)
@@ -1795,7 +1646,7 @@ notifications.
 ### Phase 3+ — Scale `[S§19]`
 
 **In scope**:
-- Mobile push notifications (APNs/FCM) via `PushNotificationJob`
+- Mobile push notifications (APNs/FCM) via `PushNotificationTask`
 - Rich HTML email templates (Phase 1 uses simple Postmark templates)
 - Notification grouping/collapsing (e.g., "3 new messages" instead of 3 separate notifications)
 - `billing::` subscription renewal advance notice (scheduled reminder before auto-renewal)
@@ -1821,7 +1672,7 @@ Each item is a testable assertion. Implementation is not complete until all asse
 
 ### Preference Enforcement
 
-11. `GET /v1/notifications/preferences` returns all 32 cells (16 types × 2 channels)
+11. `GET /v1/notifications/preferences` returns all 32 cells (16 types x 2 channels)
 12. Missing preference rows are returned as `enabled: true, digest_frequency: "immediate"`
 13. System-critical types are returned with `system_critical: true`
 14. `PATCH /v1/notifications/preferences` upserts preference rows
@@ -1841,13 +1692,13 @@ Each item is a testable assertion. Implementation is not complete until all asse
 
 ### WebSocket Push
 
-25. `create_notification()` publishes to `notifications:{family_id}` Redis channel
+25. `CreateNotification()` publishes to `notifications:{family_id}` Redis channel
 26. WebSocket frame format matches `{ msg_type: "notification", data: NotificationResponse }`
 27. Multiple connected clients for the same family all receive the push
 
 ### Email Delivery
 
-28. `SendEmailJob` calls `email_adapter.send_transactional()` with correct template alias and variables
+28. `SendEmailTask` calls `emailAdapter.SendTransactional()` with correct template alias and variables
 29. Failed email delivery retries 3 times with exponential backoff
 30. Email includes `List-Unsubscribe` header with signed token URL
 31. `GET /v1/notifications/unsubscribe?token=` with valid token disables the preference
@@ -1857,34 +1708,32 @@ Each item is a testable assertion. Implementation is not complete until all asse
 
 33. Internal errors (DB, Redis, email adapter) return `500` with generic message — no details exposed
 34. Email delivery failures return `502 Bad Gateway`
-35. All `NotifyError` variants map to documented HTTP status codes
+35. All error types map to documented HTTP status codes
 
 ---
 
 ## §20 Module Structure
 
 ```
-src/notify/
-├── mod.rs                    # Re-exports, domain-level doc comments
-├── handlers.rs               # 5 Axum route handlers (thin layer only)
-├── service.rs                # NotificationServiceImpl — event handling,
-│                             # preference checks, delivery orchestration
-├── repository.rs             # PgNotificationRepo, PgPreferenceRepo,
-│                             # PgDigestRepo (Phase 2)
-├── models.rs                 # Request/response types, notification_types
-│                             # constants, WebSocketFrame
-├── ports.rs                  # NotificationService trait, all repository
-│                             # traits, EmailAdapter trait
-├── errors.rs                 # NotifyError thiserror enum
-├── event_handlers.rs         # 20 DomainEventHandler structs (one per
-│                             # subscribed event type) [ARCH §4.6]
-├── jobs.rs                   # SendEmailJob, PushNotificationJob (Phase 2),
-│                             # CompileDigestJob (Phase 2) [ARCH §12]
-├── adapters/
-│   ├── mod.rs
-│   └── postmark.rs           # PostmarkEmailAdapter — wraps Postmark HTTP
-│                             # API, returns domain types only [ARCH §2.12]
-└── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
+internal/notify/
++-- handlers.go              # 5 Echo route handlers (thin layer only)
++-- service.go               # NotificationServiceImpl — event handling,
+|                            # preference checks, delivery orchestration
++-- repository.go            # PgNotificationRepo, PgPreferenceRepo,
+|                            # PgDigestRepo (Phase 2)
+|                            # (GORM models defined in models.go)
++-- models.go                # Request/response types, notification type
+|                            # constants, WebSocketFrame, GORM models
++-- ports.go                 # NotificationService interface, all repository
+|                            # interfaces, EmailAdapter interface
++-- errors.go                # Sentinel error variables
++-- event_handlers.go        # 20 DomainEventHandler structs (one per
+|                            # subscribed event type) [ARCH §4.6]
++-- tasks.go                 # SendEmailTask, PushNotificationTask (Phase 2),
+|                            # CompileDigestTask (Phase 2) [ARCH §12]
++-- adapters/
+    +-- postmark.go          # PostmarkEmailAdapter — wraps Postmark HTTP
+                             # API, returns domain types only [ARCH §2.12]
 ```
 
 ---
@@ -1926,13 +1775,13 @@ Templates are managed as code (version-controlled) and synced to Postmark via CI
 
 ```
 frontend/emails/
-├── templates/
-│   ├── welcome.html          # Postmark template (HTML + text)
-│   ├── purchase-receipt.html
-│   └── ...
-├── layouts/
-│   └── base.html             # Shared header/footer with brand
-└── sync.ts                   # Script to sync templates to Postmark API
++-- templates/
+|   +-- welcome.html          # Postmark template (HTML + text)
+|   +-- purchase-receipt.html
+|   +-- ...
++-- layouts/
+|   +-- base.html             # Shared header/footer with brand
++-- sync.ts                   # Script to sync templates to Postmark API
 ```
 
 Templates follow these rules:
@@ -1956,47 +1805,49 @@ Templates follow these rules:
 Postmark sends webhooks for bounces and spam complaints. The `PostmarkEmailAdapter`
 processes these:
 
-```rust
-// Webhook handler for Postmark bounce notifications
-pub async fn handle_postmark_bounce(
-    &self,
-    bounce: PostmarkBounceWebhook,
-) -> Result<(), AppError> {
-    match bounce.bounce_type.as_str() {
+```go
+// internal/notify/adapters/postmark.go
+
+// HandlePostmarkBounce processes webhook notifications for bounces.
+func (a *PostmarkEmailAdapter) HandlePostmarkBounce(ctx context.Context, bounce PostmarkBounceWebhook) error {
+    switch bounce.BounceType {
+    case "HardBounce":
         // Hard bounce: email address is invalid
-        "HardBounce" => {
-            // Mark email as undeliverable in notify_email_status
-            self.repo.mark_email_undeliverable(&bounce.email).await?;
-            // After 3 hard bounces, suppress all emails to this address
-            let count = self.repo.count_hard_bounces(&bounce.email).await?;
-            if count >= 3 {
-                self.repo.suppress_email(&bounce.email).await?;
-                tracing::warn!(
-                    email = %bounce.email,
-                    "Email suppressed after 3 hard bounces"
-                );
+        // Mark email as undeliverable in notify_email_status
+        if err := a.repo.MarkEmailUndeliverable(ctx, bounce.Email); err != nil {
+            return fmt.Errorf("marking email undeliverable: %w", err)
+        }
+        // After 3 hard bounces, suppress all emails to this address
+        count, err := a.repo.CountHardBounces(ctx, bounce.Email)
+        if err != nil {
+            return fmt.Errorf("counting hard bounces: %w", err)
+        }
+        if count >= 3 {
+            if err := a.repo.SuppressEmail(ctx, bounce.Email); err != nil {
+                return fmt.Errorf("suppressing email: %w", err)
             }
+            slog.Warn("Email suppressed after 3 hard bounces",
+                "email", bounce.Email,
+            )
         }
+    case "SpamComplaint":
         // Spam complaint: user marked email as spam
-        "SpamComplaint" => {
-            // Immediately suppress all emails to this address (CAN-SPAM)
-            self.repo.suppress_email(&bounce.email).await?;
-            tracing::warn!(
-                email = %bounce.email,
-                "Email suppressed due to spam complaint"
-            );
+        // Immediately suppress all emails to this address (CAN-SPAM)
+        if err := a.repo.SuppressEmail(ctx, bounce.Email); err != nil {
+            return fmt.Errorf("suppressing email: %w", err)
         }
+        slog.Warn("Email suppressed due to spam complaint",
+            "email", bounce.Email,
+        )
+    default:
         // Soft bounce: temporary issue (mailbox full, etc.)
-        _ => {
-            // Log but don't suppress — Postmark handles retries
-            tracing::info!(
-                email = %bounce.email,
-                bounce_type = %bounce.bounce_type,
-                "Soft bounce received"
-            );
-        }
+        // Log but don't suppress — Postmark handles retries
+        slog.Info("Soft bounce received",
+            "email", bounce.Email,
+            "bounce_type", bounce.BounceType,
+        )
     }
-    Ok(())
+    return nil
 }
 ```
 
@@ -2026,5 +1877,5 @@ CREATE TABLE notify_email_status (
 );
 ```
 
-Before sending any email, the `SendEmailJob` checks `notify_email_status` — if the
-email is suppressed, the job completes without sending (logged but not delivered).
+Before sending any email, the `SendEmailTask` checks `notify_email_status` — if the
+email is suppressed, the task completes without sending (logged but not delivered).

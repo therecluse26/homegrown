@@ -16,7 +16,7 @@ Cross-references to ARCHITECTURE.md use `[ARCH §n]` notation.
 
 ---
 
-## §2 Rust Backend Standards
+## §2 Go Backend Standards
 
 ### §2.1 Module Structure
 
@@ -27,76 +27,70 @@ when the domain needs them; do not create them as placeholders.
 **Base files (all domains):**
 
 ```
-src/{domain}/
-├── mod.rs              # Re-exports, domain-level doc comments
-├── handlers.rs         # Axum route handlers (thin layer only)
-├── service.rs          # Business logic
-├── repository.rs       # Database access (all queries live here)
-├── models.rs           # Request/response types, DTOs
-├── ports.rs            # Service + repository trait definitions [§8.2]
-└── entities/           # SeaORM-generated entity files (do not hand-edit)
+internal/{domain}/
+├── handler.go          # Echo route handlers (thin layer only)
+├── service.go          # Business logic
+├── repository.go       # Database access (all queries live here)
+├── models.go           # Request/response types, DTOs, GORM models
+└── ports.go            # Service + repository interface definitions [§8.2]
 ```
 
 **Conditional files (add when the domain needs them):**
 
 ```
-src/{domain}/
-├── events.rs           # Domain event types emitted by this domain (if any) [§8.4]
-├── event_handlers.rs   # Handlers for events from other domains (if any) [§8.4]
+internal/{domain}/
+├── events.go           # Domain event types emitted by this domain (if any) [§8.4]
+├── event_handlers.go   # Handlers for events from other domains (if any) [§8.4]
 ├── adapters/           # External service wrappers (if domain calls external APIs) [§8.1]
-│   ├── mod.rs
-│   └── {service}.rs
+│   └── {service}.go
 └── domain/             # Aggregate roots + value objects (complex domains only) [§8.3]
-    ├── mod.rs
-    ├── {aggregate}.rs
-    └── errors.rs
+    ├── {aggregate}.go
+    └── errors.go
 ```
 
-> `ports.rs` is **required** for all domains (§8.2). `events.rs`, `event_handlers.rs`,
+> `ports.go` is **required** for all domains (§8.2). `events.go`, `event_handlers.go`,
 > `adapters/`, and `domain/` are conditional — only create them when the domain needs them.
 
 **Layer responsibilities** — violations are bugs:
 
 | Layer | MUST do | MUST NOT do |
 |-------|---------|-------------|
-| `handlers.rs` | Extract inputs from request, call one service method, return response | Contain business logic, call repositories, contain conditional logic beyond input validation |
-| `service.rs` | Orchestrate business rules, call repositories, enforce invariants | Execute raw SQL, call another domain's repository |
-| `repository.rs` | Execute database queries, map SeaORM results to domain types | Contain business logic, call other repositories across domain boundaries |
-| `models.rs` | Define request/response structs with serde/OpenAPI derives | Contain logic |
-| `ports.rs` | Define `{Domain}Service` and `{Entity}Repository` traits (inbound and outbound ports) | Contain implementations |
-| `adapters/*.rs` | Wrap external SDK calls; return domain types only | Contain business logic |
-| `domain/*.rs` | Enforce aggregate invariants via methods; emit domain events | Access database directly |
-| `events.rs` | Define domain event types emitted by this domain | Import other domains' services |
+| `handler.go` | Bind inputs from request (Echo binding), call one service method, return response | Contain business logic, call repositories, contain conditional logic beyond input validation |
+| `service.go` | Orchestrate business rules, call repositories, enforce invariants | Execute raw SQL, call another domain's repository |
+| `repository.go` | Execute database queries, map GORM results to domain types | Contain business logic, call other repositories across domain boundaries |
+| `models.go` | Define request/response structs with struct tags (`json`, `validate`, `swag`) and GORM model definitions | Contain logic |
+| `ports.go` | Define `{Domain}Service` and `{Entity}Repository` interfaces (inbound and outbound ports) | Contain implementations |
+| `adapters/*.go` | Wrap external SDK calls; return domain types only | Contain business logic |
+| `domain/*.go` | Enforce aggregate invariants via methods; emit domain events | Access database directly |
+| `events.go` | Define domain event types emitted by this domain | Import other domains' services |
 
 ### §2.2 Error Handling
 
-- MUST use `thiserror` for all error types. `[ARCH §3]`
-- MUST use `?` for error propagation. Do not call `.map_err(|_| ...)` when `?` suffices.
-- MUST NOT use `.unwrap()` or `.expect()` outside `#[cfg(test)]` blocks.
-- MUST NOT use `panic!()` in handler, service, or repository code.
+- MUST use custom error types with `errors.Is` and `errors.As` for error classification. `[ARCH §3]`
+- MUST check ALL error returns (`if err != nil`). Do not use `_` to ignore errors in production code.
+- MUST NOT use `panic()` in handler, service, or repository code.
+- MUST NOT use `log.Fatal()` outside of `main()`.
 - Application errors MUST map to `AppError` before reaching the handler return type.
 - Error messages returned to API clients MUST NOT expose internal details (stack traces,
   SQL errors, internal field names). `[ARCH §1.5]`
 
 ### §2.3 Type Safety
 
-- All API request and response types MUST be defined in `models.rs` for their domain.
-- All types used in API responses MUST derive `serde::Serialize`, `serde::Deserialize`,
-  and the OpenAPI schema trait (`utoipa::ToSchema` or equivalent).
-- MUST NOT use `serde_json::Value` in API-facing types, **except** for methodology JSONB
-  configuration fields, which are inherently schema-free by design. `[ARCH §1.6]`
+- All API request and response types MUST be defined in `models.go` for their domain.
+- All types used in API responses MUST include struct tags: `json:"field"` for serialization,
+  `validate:"required"` for validation, and swag comment annotations for OpenAPI.
+- MUST NOT use `map[string]interface{}` or `json.RawMessage` in API-facing types, **except** for
+  methodology JSONB configuration fields, which are inherently schema-free by design. `[ARCH §1.6]`
 - MUST NOT write hand-authored TypeScript API types. All frontend types come from code
   generation. `[ARCH §1.3]`
 
 ### §2.4 Database Patterns
 
-- ALL database queries MUST go through the domain's `repository.rs`. No exceptions.
+- ALL database queries MUST go through the domain's `repository.go`. No exceptions.
 - Repositories MUST accept a `FamilyScope` parameter on every user-data query.
-  `FamilyScope` is defined in `src/shared/family_scope.rs`. `[ARCH §1.5]`
-- MUST NOT write raw SQL strings outside of migration files. Use SeaORM query builder.
-- MUST NOT call another domain's `repository.rs` directly. Call its `service.rs` instead.
-- SeaORM entities MUST be generated from migrations before writing queries against new
-  tables. The generated files in `entities/` MUST NOT be hand-edited.
+  `FamilyScope` is defined in `internal/shared/family_scope.go`. `[ARCH §1.5]`
+- MUST NOT write raw SQL strings outside of migration files. Use GORM query builder.
+- MUST NOT call another domain's `repository.go` directly. Call its `service.go` instead.
 
 ### §2.5 Privacy Enforcement
 
@@ -111,13 +105,17 @@ src/{domain}/
 ### §2.6 API Handler Pattern
 
 - Handlers MUST have the signature:
-  ```rust
-  async fn handler_name(...extractors...) -> Result<impl IntoResponse, AppError>
+  ```go
+  func (h *Handler) HandlerName(c echo.Context) error {
+      // Bind and validate input
+      // Call service
+      // Return response
+  }
   ```
-- Input extraction MUST use Axum extractors (`Json`, `Path`, `Query`, `State`, `Extension`).
-  Do not parse `Request` manually.
-- Input validation MUST use the `validator` crate on request structs. Do not write bespoke
-  validation logic in handlers.
+- Input extraction MUST use Echo's `c.Bind()`, `c.Param()`, `c.QueryParam()`, and
+  related methods. Do not parse the raw `http.Request` manually.
+- Input validation MUST use `go-playground/validator` via Echo's built-in validator.
+  Do not write bespoke validation logic in handlers.
 - HTTP verbs and status codes MUST follow REST conventions:
   - `GET` → 200 OK (list/retrieve)
   - `POST` → 201 Created (resource creation)
@@ -132,21 +130,21 @@ The following patterns are **never** acceptable in committed code:
 
 | Pattern | Why it is forbidden |
 |---------|---------------------|
-| `.unwrap()` or `.expect()` outside `#[cfg(test)]` | Panics in production on None/Err |
-| `panic!()` in handlers, services, or repositories | Kills the request thread |
-| `unsafe { }` without a `// SAFETY:` comment and team review | Bypasses Rust's guarantees |
+| Unchecked error return (`_ = someFunc()`) outside tests | Silently ignores errors that may indicate bugs or failures |
+| `panic()` in handlers, services, or repositories | Kills the goroutine and potentially the server |
 | `if methodology == "charlotte_mason"` (branching on methodology name) | Violates Methodology-as-Configuration `[ARCH §1.6]` |
-| Calling another domain's `repository.rs` directly | Violates layering; bypasses domain invariants |
-| `todo!()` or `unimplemented!()` in committed code | Panics on invocation |
-| `serde_json::Value` in non-JSONB API types | Destroys type safety at the API boundary |
-| Raw SQL strings in application code (outside migrations) | Bypasses SeaORM type safety |
-| Raw SDK call in `service.rs` (e.g., `stripe.create_customer()`) | Bypasses adapter isolation; blocks vendor swaps and unit testing `[ARCH §4.3]` |
+| Calling another domain's `repository.go` directly | Violates layering; bypasses domain invariants |
+| `map[string]interface{}` in non-JSONB API types | Destroys type safety at the API boundary |
+| Raw SQL strings in application code (outside migrations) | Bypasses GORM type safety |
+| Raw SDK call in `service.go` (e.g., `stripe.CreateCustomer()`) | Bypasses adapter isolation; blocks vendor swaps and unit testing `[ARCH §4.3]` |
 | Logging PII, tokens, or secrets | Privacy and security violation `[ARCH §1.5]` |
+| `log.Fatal()` outside `main()` | Exits the process without cleanup; use error returns instead |
+| Exported mutable package-level variables | Creates global state that breaks testing and concurrency |
 
 ### §2.8 Testing
 
-- Unit tests MUST live in `#[cfg(test)]` blocks within the source file they test.
-- Integration tests MUST live in `tests/` and MUST use a real test database.
+- Unit tests MUST live in `_test.go` files alongside the source file they test.
+- Integration tests MUST live in `tests/` or use build tags to separate from unit tests.
 - MUST NOT mock the database in integration tests. Test against real PostgreSQL.
 - Every new public API endpoint MUST have at least one integration test covering the
   happy path and at least one covering an authorization failure.
@@ -154,12 +152,14 @@ The following patterns are **never** acceptable in committed code:
 
 **Unit vs. integration test distinction:**
 
-- Service-layer business logic SHOULD have unit tests in `#[cfg(test)]` blocks within
-  `service.rs` that inject mock `impl {Entity}Repository` types. This is enabled by the
-  port traits defined in `ports.rs` (§8.2).
-- Mock repository implementations are `#[cfg(test)]`-only and MUST be defined inline in
-  the test module — never in production code paths.
-- **Unit tests** (in-file, mock repo) verify *business logic* in isolation.
+- Service-layer business logic SHOULD have unit tests in `_test.go` files within
+  `service_test.go` that inject mock implementations of repository interfaces. This is
+  enabled by the interfaces defined in `ports.go` (§8.2). Table-driven tests are the
+  preferred style for testing multiple scenarios.
+- Mock repository implementations are test-only and MUST be defined in test files
+  (`*_test.go`) — never in production code paths. Use `testify/mock` or hand-written
+  mocks that satisfy the repository interface.
+- **Unit tests** (`_test.go`, mock repo) verify *business logic* in isolation.
   **Integration tests** (`tests/`, real `Pg*Repository`) verify *correctness with a real
   database*. Both are required for domains with non-trivial service logic.
 
@@ -258,7 +258,7 @@ Accessibility is a first-class concern, not a post-launch enhancement. Violation
 
 - Pages designated as printable (schedules, compliance reports, progress summaries) MUST include
   `@media print` stylesheets that hide navigation, sidebars, and interactive controls.
-- Print layouts MUST reflow content to fit US Letter (8.5"×11") and A4 page widths.
+- Print layouts MUST reflow content to fit US Letter (8.5"x11") and A4 page widths.
 - Print output MUST include a header with family name, date range, and generation timestamp.
 - Color output MUST NOT be required for print readability — all meaning conveyed by color MUST
   also be conveyed by text, icons, or patterns that reproduce in grayscale.
@@ -283,10 +283,10 @@ Accessibility is a first-class concern, not a post-launch enhancement. Violation
 - Every migration MUST include a reversible `down` migration. Irreversible migrations MUST
   include an explicit comment explaining why reversal is impossible.
 - Migrations MUST be idempotent where possible (use `IF NOT EXISTS`, `IF EXISTS`).
-- After running a new migration, MUST regenerate SeaORM entities before writing any query
-  against the new or modified tables.
-- Migration files MUST be named with a timestamp prefix: `YYYYMMDD_HHMMSS_description.rs`
-  (following `sea-orm-migration` conventions).
+- After running a new migration, MUST update GORM models in `models.go` before writing any
+  query against the new or modified tables.
+- Migration files MUST follow goose naming conventions: `YYYYMMDDHHMMSS_description.sql`
+  (placed in the `migrations/` directory).
 
 ### §4.3 Index Policy
 
@@ -316,8 +316,8 @@ Accessibility is a first-class concern, not a post-launch enhancement. Violation
 
 - MUST NOT log personally identifiable information (names, emails, IP addresses in
   application logs), session tokens, or secrets.
-- User-submitted HTML MUST be sanitized using the `ammonia` crate before storage or display.
-  Do not sanitize HTML in the frontend only.
+- User-submitted HTML MUST be sanitized using the `bluemonday` package before storage or
+  display. Do not sanitize HTML in the frontend only.
 - File uploads MUST validate file magic bytes (not just extension or MIME type from the
   `Content-Type` header). Extension-only validation is insufficient and exploitable.
 - MUST NOT expose internal error details (stack traces, SQL error messages, internal field
@@ -327,36 +327,36 @@ Accessibility is a first-class concern, not a post-launch enhancement. Violation
 
 ### §5.3 Shared Utilities
 
-Before writing a new utility, check `src/shared/` for an existing implementation:
+Before writing a new utility, check `internal/shared/` for an existing implementation:
 
 | File | Purpose |
 |------|---------|
-| `src/shared/pagination.rs` | Cursor-based and offset pagination helpers |
-| `src/shared/family_scope.rs` | `FamilyScope` type for privacy-enforcing queries |
-| `src/shared/db.rs` | Database connection pool acquisition |
-| `src/shared/redis.rs` | Redis connection and caching helpers |
-| `src/shared/types.rs` | Common newtypes (e.g., `FamilyId`, `UserId`) |
-| `src/shared/events.rs` | `EventBus` and `DomainEvent` trait (§8.4) |
+| `internal/shared/pagination.go` | Cursor-based and offset pagination helpers |
+| `internal/shared/family_scope.go` | `FamilyScope` type for privacy-enforcing queries |
+| `internal/shared/db.go` | Database connection pool acquisition |
+| `internal/shared/redis.go` | Redis connection and caching helpers |
+| `internal/shared/types.go` | Common newtypes (e.g., `FamilyID`, `UserID`) |
+| `internal/shared/events.go` | `EventBus` and `DomainEvent` interface (§8.4) |
 
-MUST NOT duplicate functionality already present in `src/shared/`. Extend the shared
+MUST NOT duplicate functionality already present in `internal/shared/`. Extend the shared
 module instead.
 
 ---
 
 ## §6 Code Generation Protocol
 
-Type safety flows from database → Rust → OpenAPI → TypeScript. Each step produces
+Type safety flows from database → Go → OpenAPI → TypeScript. Each step produces
 artifacts that MUST be committed to version control.
 
 ### §6.1 OpenAPI Spec Generation
 
 ```bash
-cargo run --bin openapi-gen
+swag init -g cmd/server/main.go -o docs/
 ```
 
-- Output: `openapi/spec.yaml`
-- MUST run after any change to Rust API types in `models.rs`.
-- MUST commit `openapi/spec.yaml` alongside the Rust changes in the same commit.
+- Output: `docs/swagger.json`
+- MUST run after any change to Go API types or swag annotations.
+- MUST commit `docs/swagger.json` alongside the Go changes in the same commit.
 - MUST NOT generate the spec at runtime. It is a build artifact, committed statically.
 
 ### §6.2 TypeScript Type Generation
@@ -366,28 +366,18 @@ cd frontend && npm run generate-types
 ```
 
 - Output: `frontend/src/api/generated/`
-- MUST run after `openapi/spec.yaml` changes.
+- MUST run after `docs/swagger.json` changes.
 - MUST commit generated files alongside the spec change.
 - MUST NOT hand-edit files in `src/api/generated/`. They will be overwritten on the next
   generation run.
 
-### §6.3 SeaORM Entity Generation
-
-```bash
-sea-orm-cli generate entity -o src/{domain}/entities/
-```
-
-- MUST run after every database migration.
-- Generated files in `entities/` MUST NOT be hand-edited.
-- MUST commit generated entities alongside the migration that produced them.
-
-### §6.4 Generation Order
+### §6.3 Generation Order
 
 When making a change that touches all layers:
 
-1. Write and run database migration
-2. Regenerate SeaORM entities (`§6.3`)
-3. Write/update Rust types and handlers
+1. Write and run database migration (goose)
+2. Write/update GORM models in `models.go`
+3. Write/update Go types and handlers with swag annotations
 4. Regenerate OpenAPI spec (`§6.1`)
 5. Regenerate TypeScript types (`§6.2`)
 6. Update frontend components/hooks to use new types
@@ -402,7 +392,7 @@ These rules apply when Claude (or any AI assistant) is generating or modifying c
 
 1. Read `specs/ARCHITECTURE.md` §1 (Principles), §4 (Internal Architecture Patterns), and the relevant domain section.
 2. Read `specs/SPEC.md` for the requirements in the domain being worked on.
-3. Check `src/shared/` for existing utilities before writing new ones.
+3. Check `internal/shared/` for existing utilities before writing new ones.
 4. Read the existing module files (if any) to understand current patterns before adding to them.
 
 ### §7.2 Quality Gates
@@ -410,8 +400,8 @@ These rules apply when Claude (or any AI assistant) is generating or modifying c
 Every code generation session MUST leave the codebase passing:
 
 ```bash
-cargo clippy -- -D warnings    # Zero warnings
-cargo test                     # All tests pass
+golangci-lint run              # Zero warnings
+go test ./...                  # All tests pass
 npm run type-check             # Zero TypeScript errors (frontend/)
 npx playwright test --project=a11y  # Zero critical/serious accessibility violations
 ```
@@ -427,7 +417,8 @@ on a feature branch.
 - Prefer editing existing files over creating new ones.
 - MUST NOT add `TODO` comments in committed code. If something is unfinished, the commit
   should not include it.
-- MUST NOT use `todo!()` or `unimplemented!()` as placeholders in committed code.
+- MUST NOT use placeholder statements (e.g., empty function bodies that silently succeed)
+  in committed code.
 - MUST NOT add docstrings or comments to code that was not changed in the current session,
   unless the comment directly supports understanding the new code.
 - MUST NOT refactor code that is not directly related to the current task.
@@ -448,11 +439,11 @@ here is an absolute enforcement imperative.
 
 - MUST NOT write to another domain's prefixed tables from outside that domain. Each domain
   owns its `{prefix}_*` tables exclusively.
-- MUST NOT call another domain's `repository.rs` directly. Call its service trait instead.
+- MUST NOT call another domain's `repository.go` directly. Call its service interface instead.
   (Reinforces §2.4 with explicit bounded-context framing.)
 - MUST wrap all external SDK calls (Hyperswitch, Kratos, R2, Thorn Safer, Postmark, Rekognition)
-  in an `adapters/` file within the owning domain. No raw SDK calls in `service.rs`.
-- MUST NOT add files to `src/shared/` without explicit justification that the utility is
+  in an `adapters/` file within the owning domain. No raw SDK calls in `service.go`.
+- MUST NOT add files to `internal/shared/` without explicit justification that the utility is
   needed by three or more domains. Convenience refactors do not qualify.
 
 **Forbidden patterns** (additions to the §2.7 table):
@@ -460,27 +451,29 @@ here is an absolute enforcement imperative.
 | Pattern | Why it is forbidden |
 |---------|---------------------|
 | Domain A writing to `domain_b_*` tables | Violates domain table ownership `[ARCH §4.2]` |
-| Raw SDK call in `service.rs` | Bypasses adapter isolation, blocks vendor swaps `[ARCH §4.3]` |
-| Adding to `src/shared/` for convenience | Grows the Shared Kernel; increases coupling `[ARCH §4.2]` |
+| Raw SDK call in `service.go` | Bypasses adapter isolation, blocks vendor swaps `[ARCH §4.3]` |
+| Adding to `internal/shared/` for convenience | Grows the Shared Kernel; increases coupling `[ARCH §4.2]` |
 
-### §8.2 Port Trait Rules (Inbound + Outbound)
+### §8.2 Port Interface Rules (Inbound + Outbound)
 
 `[ARCH §4.4]`
 
-- MUST define a service trait before implementing it. The trait MUST be named `{Domain}Service`
-  (e.g., `LearningService`). The implementation MUST be named `{Domain}ServiceImpl`.
-- MUST define a repository trait before implementing it. The trait MUST be named
+- MUST define a service interface before implementing it. The interface MUST be named
+  `{Domain}Service` (e.g., `LearningService`). The implementation MUST be named
+  `{Domain}ServiceImpl`.
+- MUST define a repository interface before implementing it. The interface MUST be named
   `{Entity}Repository` (e.g., `ActivityRepository`). The concrete PostgreSQL implementation
   MUST be named `Pg{Entity}Repository`.
-- Handlers MUST receive the service as `Arc<dyn DomainService>` via Axum `State`. MUST NOT
-  receive the concrete `{Domain}ServiceImpl` type.
-- Services MUST receive repositories as `Arc<dyn RepositoryTrait>`. MUST NOT construct or
-  hold a concrete `Pg*Repository` directly.
+- Handlers MUST receive the service interface via dependency injection (constructor or struct
+  field). MUST NOT receive the concrete `{Domain}ServiceImpl` type.
+- Services MUST receive repository interfaces via dependency injection (constructor or struct
+  field). MUST NOT construct or hold a concrete `Pg*Repository` directly.
 - MUST NOT construct concrete service or repository implementations inside handlers or
-  other services. Wiring happens exclusively in `app.rs` / `main.rs` at startup.
-- Trait definitions MUST live in `ports.rs` within the domain directory. For simple domains
-  where the trait is short (≤20 lines), it MAY be colocated at the top of `service.rs` or
-  `repository.rs` — but the placement MUST be consistent across all files in the domain.
+  other services. Wiring happens exclusively in `app.go` / `main.go` at startup.
+- Interface definitions MUST live in `ports.go` within the domain directory. For simple
+  domains where the interface is short (<=20 lines), it MAY be colocated at the top of
+  `service.go` or `repository.go` — but the placement MUST be consistent across all files
+  in the domain.
 
 ### §8.3 Domain Layer Rules (Complex Domains)
 
@@ -490,30 +483,30 @@ Applies to: `learn/`, `social/`, `mkt/`, `safety/`, `comply/`, `method/`.
 
 - MUST add a `domain/` subdirectory to any of the above domains before implementing
   state-machine logic or invariant enforcement.
-- Aggregate root structs MUST have all fields `private` (no `pub` fields). State transitions
-  happen exclusively via methods on the aggregate.
-- MUST NOT modify aggregate state directly in `service.rs`. The service calls aggregate
-  methods (which return `Result<DomainEvent, DomainError>`), then persists and publishes.
+- Aggregate root structs MUST have all fields unexported (lowercase field names). State
+  transitions happen exclusively via methods on the aggregate.
+- MUST NOT modify aggregate state directly in `service.go`. The service calls aggregate
+  methods (which return `(DomainEvent, error)`), then persists and publishes.
 - Domain events returned from aggregate methods MUST be published via `EventBus` (§8.4).
   MUST NOT silently discard returned domain events.
-- `DomainError` types MUST be defined in `domain/errors.rs` and MUST NOT be the same type
-  as `AppError`. Conversion from `DomainError` to `AppError` happens in `service.rs`.
+- `DomainError` types MUST be defined in `domain/errors.go` and MUST NOT be the same type
+  as `AppError`. Conversion from `DomainError` to `AppError` happens in `service.go`.
 
 ### §8.4 Event Bus Rules
 
 `[ARCH §4.6]`
 
-- MUST use `EventBus::publish` for all cross-domain reactions. MUST NOT import another
+- MUST use `EventBus.Publish()` for all cross-domain reactions. MUST NOT import another
   domain's service to call it directly in response to a domain event.
-- Event types MUST be defined in the *emitting* domain's `events.rs` file. The consuming
+- Event types MUST be defined in the *emitting* domain's `events.go` file. The consuming
   domain imports the event type, never the emitting domain's service.
 - Event handler implementations MUST live in the *consuming* domain, in a file named
-  `{event_name}_handler.rs` or grouped in `event_handlers.rs`.
+  `{event_name}_handler.go` or grouped in `event_handlers.go`.
 - Handlers that perform heavy work (image scanning, search indexing, email sending) MUST
-  enqueue a background job rather than executing the work inline. MUST NOT block the
-  request thread with expensive operations inside an event handler.
-- `EventBus` subscriptions MUST be registered at application startup (in `app.rs` or
-  `main.rs`). MUST NOT register subscriptions dynamically at runtime.
+  enqueue a background job (via asynq) rather than executing the work inline. MUST NOT
+  block the request goroutine with expensive operations inside an event handler.
+- `EventBus` subscriptions MUST be registered at application startup (in `app.go` or
+  `main.go`). MUST NOT register subscriptions dynamically at runtime.
 
 ### §8.5 CQRS Rules (Applicable Domains)
 
@@ -521,7 +514,7 @@ Applies to: `learn/`, `social/`, `mkt/`, `safety/`, `comply/`, `method/`.
 
 Applies to: `social/`, `mkt/`, `learn/`, `comply/`, `search/`, `ai/`.
 
-- Command functions (writes) MUST return `Result<Id, AppError>` or `Result<(), AppError>`.
+- Command functions (writes) MUST return `(ID, error)` or `error`.
   MUST NOT return rich read models after a write ("return-what-you-created" pattern).
 - Query functions (reads) MUST NOT have side effects. MUST NOT mutate state, emit events,
   or enqueue jobs.
@@ -529,4 +522,4 @@ Applies to: `social/`, `mkt/`, `learn/`, `comply/`, `search/`, `ai/`.
   writes and returns a rich read is a violation of this rule.
 - Read-side optimization MUST follow the progressive ladder defined in `[ARCH §4.7]`.
   MUST NOT add Redis caching or materialized views for a query before measuring that the
-  standard SeaORM query is actually insufficient.
+  standard GORM query is actually insufficient.

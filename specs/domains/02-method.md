@@ -10,7 +10,7 @@ configuration: they are created via database inserts, not user actions. `[S§4.1
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/method/` |
+| **Module path** | `internal/method/` |
 | **DB prefix** | `method_` |
 | **Complexity class** | Complex (has `domain/` subdirectory) `[ARCH §4.5]` |
 | **External adapter** | None |
@@ -26,8 +26,8 @@ tool resolution logic (family-level and student-level), methodology validation, 
 discovery/quiz content rendering (owned by `discover::`), marketplace content tagging
 (owned by `mkt::`).
 
-**What method:: delegates**: Family methodology persistence → `iam::FamilyRepository::set_methodology`.
-Student methodology override persistence → `iam::StudentRepository::update`. Email notifications
+**What method:: delegates**: Family methodology persistence → `iam::FamilyRepository::SetMethodology`.
+Student methodology override persistence → `iam::StudentRepository::Update`. Email notifications
 → `notify::` (via domain events).
 
 ---
@@ -72,7 +72,7 @@ not user data. There are no RLS policies on method_ tables. `[ARCH §5.1, ARCH �
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_method_tables.rs
+-- Migration: YYYYMMDD_000001_create_method_tables
 -- =============================================================================
 
 -- Platform-defined methodologies [S§4.1, S§4.5]
@@ -153,7 +153,7 @@ INSERT/UPDATE/DELETE is restricted to migrations and admin operations (Phase 3+)
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000002_seed_method_data.rs
+-- Migration: YYYYMMDD_000002_seed_method_data
 -- =============================================================================
 
 -- 6 initial methodologies [S§4.5]
@@ -187,7 +187,7 @@ VALUES
 -- FK migration: add foreign key from iam_families to method_definitions
 -- (Deferred from IAM migration — method_definitions must exist first)
 -- =============================================================================
--- Migration: YYYYMMDD_000003_add_method_fk_to_iam.rs
+-- Migration: YYYYMMDD_000003_add_method_fk_to_iam
 -- =============================================================================
 
 ALTER TABLE iam_families
@@ -615,14 +615,14 @@ methodology explorer, and methodology selection UI. Public — no authentication
 
 - **Extractors**: None
 - **FamilyScope**: No (public data)
-- **Response**: `Vec<MethodologySummaryResponse>`
+- **Response**: `[]MethodologySummaryResponse`
 
 #### `GET /v1/methodologies/:slug`
 
 Returns full methodology detail including philosophy module content. Used by methodology
 explorer pages and the selection wizard detail view. `[S§5.2]`
 
-- **Extractors**: `Path<String>` (slug)
+- **Extractors**: `echo.Param("slug")`
 - **FamilyScope**: No (public data)
 - **Response**: `MethodologyDetailResponse`
 
@@ -631,9 +631,9 @@ explorer pages and the selection wizard detail view. `[S§5.2]`
 Returns all tools activated for a specific methodology with their config overrides.
 Used by the methodology explorer to show "what tools come with this methodology."
 
-- **Extractors**: `Path<String>` (slug)
+- **Extractors**: `echo.Param("slug")`
 - **FamilyScope**: No (public data)
-- **Response**: `Vec<ActiveToolResponse>`
+- **Response**: `[]ActiveToolResponse`
 
 #### `GET /v1/families/tools`
 
@@ -641,7 +641,7 @@ Returns the family's resolved active tool set: the union of all tools across pri
 secondary methodologies, deduplicated. `[S§4.2]`
 
 - **Extractors**: `AuthContext`, `FamilyScope`
-- **Response**: `Vec<ActiveToolResponse>`
+- **Response**: `[]ActiveToolResponse`
 
 #### `GET /v1/families/students/:id/tools`
 
@@ -649,16 +649,16 @@ Returns a specific student's resolved tool set. If the student has a methodology
 returns tools for that override methodology. Otherwise, returns the family-level tool set.
 `[S§4.6]`
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `Path<Uuid>` (student_id)
-- **Response**: `Vec<ActiveToolResponse>`
+- **Extractors**: `AuthContext`, `FamilyScope`, `echo.Param("id")` (student_id as uuid.UUID)
+- **Response**: `[]ActiveToolResponse`
 
 #### `PATCH /v1/families/methodology`
 
 Updates the family's primary and/or secondary methodology selections. Validates that all
-methodology IDs exist and are active. Delegates persistence to `iam::FamilyRepository::set_methodology`.
+methodology IDs exist and are active. Delegates persistence to `iam::FamilyRepository.SetMethodology`.
 Publishes `FamilyMethodologyChanged` event. `[S§4.3]`
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `Json<UpdateMethodologyCommand>`
+- **Extractors**: `AuthContext`, `FamilyScope`, `echo.Bind(&UpdateMethodologyCommand{})`
 - **Validation**: All methodology IDs must reference active `method_definitions` rows
 - **Response**: `MethodologySelectionResponse`
 - **Events**: `FamilyMethodologyChanged`
@@ -675,191 +675,142 @@ summaries, resolved terminology overrides, and mastery level. `[ARCH §7.2]`
 #### `PATCH /v1/families/students/:id/methodology` (Phase 2)
 
 Sets or clears the methodology override for a specific student. Validates the methodology
-ID exists if provided. Delegates persistence to `iam::StudentRepository::update`. `[S§4.6]`
+ID exists if provided. Delegates persistence to `iam::StudentRepository.Update`. `[S§4.6]`
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `Path<Uuid>`, `Json<UpdateStudentMethodologyCommand>`
+- **Extractors**: `AuthContext`, `FamilyScope`, `echo.Param("id")`, `echo.Bind(&UpdateStudentMethodologyCommand{})`
 - **Response**: `MethodologySelectionResponse`
 
 ---
 
 ## §5 Service Interface
 
-The `MethodologyService` trait defines all use cases exposed to handlers and other domains.
-Defined in `src/method/ports.rs`. `[CODING §8.2]`
+The `MethodologyService` interface defines all use cases exposed to handlers and other domains.
+Defined in `internal/method/ports.go`. `[CODING §8.2]`
 
-```rust
-#[async_trait]
-pub trait MethodologyService: Send + Sync {
+```go
+// MethodologyService defines all use cases for methodology configuration.
+type MethodologyService interface {
     // ─── Public Queries (no auth required) ──────────────────────────────
 
-    /// Lists all active methodologies, ordered by display_order.
-    /// Used by GET /v1/methodologies and consumed by onboard:: and discover::.
-    async fn list_methodologies(&self) -> Result<Vec<MethodologySummaryResponse>, AppError>;
+    // ListMethodologies lists all active methodologies, ordered by display_order.
+    // Used by GET /v1/methodologies and consumed by onboard:: and discover::.
+    ListMethodologies(ctx context.Context) ([]MethodologySummaryResponse, error)
 
-    /// Returns full methodology detail by slug, including philosophy module.
-    /// Used by GET /v1/methodologies/:slug.
-    async fn get_methodology(
-        &self,
-        slug: &str,
-    ) -> Result<MethodologyDetailResponse, AppError>;
+    // GetMethodology returns full methodology detail by slug, including philosophy module.
+    // Used by GET /v1/methodologies/:slug.
+    GetMethodology(ctx context.Context, slug string) (*MethodologyDetailResponse, error)
 
-    /// Returns tools activated for a specific methodology.
-    /// Used by GET /v1/methodologies/:slug/tools.
-    async fn get_methodology_tools(
-        &self,
-        slug: &str,
-    ) -> Result<Vec<ActiveToolResponse>, AppError>;
+    // GetMethodologyTools returns tools activated for a specific methodology.
+    // Used by GET /v1/methodologies/:slug/tools.
+    GetMethodologyTools(ctx context.Context, slug string) ([]ActiveToolResponse, error)
 
-    /// Validates that a methodology ID exists and is active.
-    /// Used by iam:: during registration to validate default methodology.
-    async fn validate_methodology_id(&self, id: Uuid) -> Result<bool, AppError>;
+    // ValidateMethodologyID validates that a methodology ID exists and is active.
+    // Used by iam:: during registration to validate default methodology.
+    ValidateMethodologyID(ctx context.Context, id uuid.UUID) (bool, error)
 
-    /// Returns the default methodology ID (first active by display_order).
-    /// Used by iam:: during registration when no methodology is specified.
-    async fn get_default_methodology_id(&self) -> Result<Uuid, AppError>;
+    // GetDefaultMethodologyID returns the default methodology ID (first active by display_order).
+    // Used by iam:: during registration when no methodology is specified.
+    GetDefaultMethodologyID(ctx context.Context) (uuid.UUID, error)
 
     // ─── Family-Scoped Queries (auth required) ─────────────────────────
 
-    /// Resolves the family's active tool set (union of all methodology tools,
-    /// deduplicated). Used by GET /v1/families/tools and consumed by learn::.
-    /// [S§4.2]
-    async fn resolve_family_tools(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<ActiveToolResponse>, AppError>;
+    // ResolveFamilyTools resolves the family's active tool set (union of all methodology tools,
+    // deduplicated). Used by GET /v1/families/tools and consumed by learn::.
+    // [S§4.2]
+    ResolveFamilyTools(ctx context.Context, scope *FamilyScope) ([]ActiveToolResponse, error)
 
-    /// Resolves a student's active tool set, considering methodology overrides.
-    /// Used by GET /v1/families/students/:id/tools. [S§4.6]
-    async fn resolve_student_tools(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-    ) -> Result<Vec<ActiveToolResponse>, AppError>;
+    // ResolveStudentTools resolves a student's active tool set, considering methodology overrides.
+    // Used by GET /v1/families/students/:id/tools. [S§4.6]
+    ResolveStudentTools(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) ([]ActiveToolResponse, error)
 
-    /// Returns full methodology context for the family dashboard.
-    /// Used by GET /v1/families/methodology-context (Phase 2). [ARCH §7.2]
-    async fn get_methodology_context(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<MethodologyContext, AppError>;
+    // GetMethodologyContext returns full methodology context for the family dashboard.
+    // Used by GET /v1/families/methodology-context (Phase 2). [ARCH §7.2]
+    GetMethodologyContext(ctx context.Context, scope *FamilyScope) (*MethodologyContext, error)
 
     // ─── Commands ───────────────────────────────────────────────────────
 
-    /// Updates the family's methodology selection (primary + secondary).
-    /// Validates all IDs, delegates persistence to iam::FamilyRepository.
-    /// Publishes FamilyMethodologyChanged. [S§4.3]
-    async fn update_family_methodology(
-        &self,
-        scope: &FamilyScope,
-        cmd: UpdateMethodologyCommand,
-    ) -> Result<MethodologySelectionResponse, AppError>;
+    // UpdateFamilyMethodology updates the family's methodology selection (primary + secondary).
+    // Validates all IDs, delegates persistence to iam::FamilyRepository.
+    // Publishes FamilyMethodologyChanged. [S§4.3]
+    UpdateFamilyMethodology(ctx context.Context, scope *FamilyScope, cmd UpdateMethodologyCommand) (*MethodologySelectionResponse, error)
 
-    /// Sets or clears a student's methodology override.
-    /// Delegates persistence to iam::StudentRepository. [S§4.6] (Phase 2)
-    async fn update_student_methodology(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: UpdateStudentMethodologyCommand,
-    ) -> Result<MethodologySelectionResponse, AppError>;
+    // UpdateStudentMethodology sets or clears a student's methodology override.
+    // Delegates persistence to iam::StudentRepository. [S§4.6] (Phase 2)
+    UpdateStudentMethodology(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd UpdateStudentMethodologyCommand) (*MethodologySelectionResponse, error)
 }
 ```
 
-**Implementation**: `MethodologyServiceImpl` in `src/method/service.rs`. Constructor receives:
-- `Arc<dyn MethodologyDefinitionRepository>`
-- `Arc<dyn ToolRepository>`
-- `Arc<dyn ToolActivationRepository>`
-- `Arc<dyn IamService>` (for family/student data and methodology persistence)
-- `Arc<EventBus>`
-- `Arc<RedisPool>` (for caching)
+**Implementation**: `MethodologyServiceImpl` in `internal/method/service.go`. Constructor receives:
+- `MethodologyDefinitionRepository`
+- `ToolRepository`
+- `ToolActivationRepository`
+- `IamService` (for family/student data and methodology persistence)
+- `EventBus`
+- `RedisPool` (for caching)
 
 ---
 
 ## §6 Repository Interfaces
 
-Defined in `src/method/ports.rs`. All repositories are **NOT family-scoped** — method_ tables
+Defined in `internal/method/ports.go`. All repositories are **NOT family-scoped** — method_ tables
 contain global platform config, not user data. `[CODING §2.4, CODING §8.2]`
 
-```rust
-#[async_trait]
-pub trait MethodologyDefinitionRepository: Send + Sync {
-    /// Lists all active methodologies, ordered by display_order.
-    /// NOT family-scoped — global config.
-    async fn list_active(&self) -> Result<Vec<MethodologyDefinition>, AppError>;
+```go
+// MethodologyDefinitionRepository provides access to methodology definitions.
+type MethodologyDefinitionRepository interface {
+    // ListActive lists all active methodologies, ordered by display_order.
+    // NOT family-scoped — global config.
+    ListActive(ctx context.Context) ([]MethodologyDefinition, error)
 
-    /// Finds a methodology by slug. NOT family-scoped.
-    async fn find_by_slug(
-        &self,
-        slug: &str,
-    ) -> Result<Option<MethodologyDefinition>, AppError>;
+    // FindBySlug finds a methodology by slug. NOT family-scoped.
+    FindBySlug(ctx context.Context, slug string) (*MethodologyDefinition, error)
 
-    /// Finds a methodology by ID. NOT family-scoped.
-    async fn find_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<MethodologyDefinition>, AppError>;
+    // FindByID finds a methodology by ID. NOT family-scoped.
+    FindByID(ctx context.Context, id uuid.UUID) (*MethodologyDefinition, error)
 
-    /// Finds multiple methodologies by IDs. NOT family-scoped.
-    /// Used by tool resolution to batch-load primary + secondary methodologies.
-    async fn find_by_ids(
-        &self,
-        ids: &[Uuid],
-    ) -> Result<Vec<MethodologyDefinition>, AppError>;
+    // FindByIDs finds multiple methodologies by IDs. NOT family-scoped.
+    // Used by tool resolution to batch-load primary + secondary methodologies.
+    FindByIDs(ctx context.Context, ids []uuid.UUID) ([]MethodologyDefinition, error)
 
-    /// Checks that all provided IDs reference active methodology rows.
-    /// Returns true only if ALL IDs are valid and active.
-    async fn all_active(
-        &self,
-        ids: &[Uuid],
-    ) -> Result<bool, AppError>;
+    // AllActive checks that all provided IDs reference active methodology rows.
+    // Returns true only if ALL IDs are valid and active.
+    AllActive(ctx context.Context, ids []uuid.UUID) (bool, error)
 }
 
-#[async_trait]
-pub trait ToolRepository: Send + Sync {
-    /// Lists all active tools. NOT family-scoped — global catalog.
-    async fn list_active(&self) -> Result<Vec<Tool>, AppError>;
+// ToolRepository provides access to the master tool catalog.
+type ToolRepository interface {
+    // ListActive lists all active tools. NOT family-scoped — global catalog.
+    ListActive(ctx context.Context) ([]Tool, error)
 
-    /// Finds a tool by slug. NOT family-scoped.
-    async fn find_by_slug(
-        &self,
-        slug: &str,
-    ) -> Result<Option<Tool>, AppError>;
+    // FindBySlug finds a tool by slug. NOT family-scoped.
+    FindBySlug(ctx context.Context, slug string) (*Tool, error)
 
-    /// Finds a tool by ID. NOT family-scoped.
-    async fn find_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<Tool>, AppError>;
+    // FindByID finds a tool by ID. NOT family-scoped.
+    FindByID(ctx context.Context, id uuid.UUID) (*Tool, error)
 }
 
-#[async_trait]
-pub trait ToolActivationRepository: Send + Sync {
-    /// Lists all tool activations for a methodology, ordered by sort_order.
-    /// Joins with method_tools to include tool metadata. NOT family-scoped.
-    async fn list_by_methodology(
-        &self,
-        methodology_id: Uuid,
-    ) -> Result<Vec<ToolActivationWithTool>, AppError>;
+// ToolActivationRepository provides access to per-methodology tool activations.
+type ToolActivationRepository interface {
+    // ListByMethodology lists all tool activations for a methodology, ordered by sort_order.
+    // Joins with method_tools to include tool metadata. NOT family-scoped.
+    ListByMethodology(ctx context.Context, methodologyID uuid.UUID) ([]ToolActivationWithTool, error)
 
-    /// Lists all tool activations for multiple methodologies.
-    /// Used by tool resolution (union across primary + secondary). NOT family-scoped.
-    async fn list_by_methodologies(
-        &self,
-        methodology_ids: &[Uuid],
-    ) -> Result<Vec<ToolActivationWithTool>, AppError>;
+    // ListByMethodologies lists all tool activations for multiple methodologies.
+    // Used by tool resolution (union across primary + secondary). NOT family-scoped.
+    ListByMethodologies(ctx context.Context, methodologyIDs []uuid.UUID) ([]ToolActivationWithTool, error)
 }
 ```
 
 **FamilyScope exception documentation**: None of these repositories accept `FamilyScope`
 because all method_ data is global platform configuration. This is documented here and
-in repository trait doc comments. When tool resolution needs family data (which methodologies
+in repository interface doc comments. When tool resolution needs family data (which methodologies
 a family has selected), it retrieves that data through `IamService`, not by querying
 method_ tables with a family filter.
 
 **Implementations**:
-- `PgMethodologyDefinitionRepository` in `src/method/repository.rs`
-- `PgToolRepository` in `src/method/repository.rs`
-- `PgToolActivationRepository` in `src/method/repository.rs`
+- `PgMethodologyDefinitionRepository` in `internal/method/repository.go`
+- `PgToolRepository` in `internal/method/repository.go`
+- `PgToolActivationRepository` in `internal/method/repository.go`
 
 ---
 
@@ -867,147 +818,146 @@ method_ tables with a family filter.
 
 None. The methodology domain has no external third-party service dependencies. All data is
 stored in PostgreSQL and cached in Redis using shared infrastructure
-(`src/shared/redis.rs`). `[CODING §8.1]`
+(`internal/shared/redis.go`). `[CODING §8.1]`
 
 ---
 
 ## §8 Models (DTOs)
 
-All types defined in `src/method/models.rs`. API-facing types derive `serde::Serialize`,
-`serde::Deserialize`, and `utoipa::ToSchema`. Request types additionally derive
-`validator::Validate`. `[CODING §2.3]`
+All types defined in `internal/method/models.go`. API-facing types use struct tags for JSON
+serialization (`json:"field"`), swaggo annotations, and go-playground/validator tags.
+`[CODING §2.3]`
 
 ### §8.1 Request Types
 
-```rust
-/// PATCH /v1/families/methodology [S§4.3]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateMethodologyCommand {
-    /// Primary methodology ID (required). Must reference an active method_definitions row.
-    pub primary_methodology_id: Uuid,
-    /// Secondary methodology IDs (optional). Each must reference an active row. [S§4.3]
-    /// An empty vec means "no secondary methodologies."
-    #[validate(length(max = 5))]
-    pub secondary_methodology_ids: Vec<Uuid>,
+```go
+// UpdateMethodologyCommand is the request body for PATCH /v1/families/methodology [S§4.3]
+type UpdateMethodologyCommand struct {
+    // PrimaryMethodologyID is required. Must reference an active method_definitions row.
+    PrimaryMethodologyID uuid.UUID `json:"primary_methodology_id" validate:"required"`
+    // SecondaryMethodologyIDs is optional. Each must reference an active row. [S§4.3]
+    // An empty slice means "no secondary methodologies."
+    SecondaryMethodologyIDs []uuid.UUID `json:"secondary_methodology_ids" validate:"max=5"`
 }
 
-/// PATCH /v1/families/students/:id/methodology (Phase 2) [S§4.6]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateStudentMethodologyCommand {
-    /// Set to a methodology ID to override, or null/absent to clear the override
-    /// and inherit family methodology. [S§4.6]
-    pub methodology_override_id: Option<Uuid>,
+// UpdateStudentMethodologyCommand is the request body for
+// PATCH /v1/families/students/:id/methodology (Phase 2) [S§4.6]
+type UpdateStudentMethodologyCommand struct {
+    // MethodologyOverrideID set to a methodology ID to override, or nil to clear
+    // the override and inherit family methodology. [S§4.6]
+    MethodologyOverrideID *uuid.UUID `json:"methodology_override_id"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-/// GET /v1/methodologies — list item
-#[derive(Debug, Serialize, ToSchema)]
-pub struct MethodologySummaryResponse {
-    pub id: Uuid,
-    pub slug: String,
-    pub display_name: String,
-    pub short_desc: String,
-    pub icon_url: Option<String>,
+```go
+// MethodologySummaryResponse is the list item for GET /v1/methodologies
+type MethodologySummaryResponse struct {
+    ID          uuid.UUID `json:"id"`
+    Slug        string    `json:"slug"`
+    DisplayName string    `json:"display_name"`
+    ShortDesc   string    `json:"short_desc"`
+    IconURL     *string   `json:"icon_url,omitempty"`
 }
 
-/// GET /v1/methodologies/:slug — full detail
-#[derive(Debug, Serialize, ToSchema)]
-pub struct MethodologyDetailResponse {
-    pub id: Uuid,
-    pub slug: String,
-    pub display_name: String,
-    pub short_desc: String,
-    pub icon_url: Option<String>,
-    pub philosophy: serde_json::Value,         // [S§4.1] full philosophy module
-    pub onboarding_config: serde_json::Value,  // [S§6.4] consumed by onboard:: for materialization
-    pub community_config: serde_json::Value,   // [S§6.6] consumed by onboard:: for community suggestions
-    pub mastery_paths: serde_json::Value,      // [S§4.1]
-    pub terminology: serde_json::Value,        // [S§4.4]
+// MethodologyDetailResponse is the full detail for GET /v1/methodologies/:slug
+type MethodologyDetailResponse struct {
+    ID               uuid.UUID       `json:"id"`
+    Slug             string          `json:"slug"`
+    DisplayName      string          `json:"display_name"`
+    ShortDesc        string          `json:"short_desc"`
+    IconURL          *string         `json:"icon_url,omitempty"`
+    Philosophy       json.RawMessage `json:"philosophy"`         // [S§4.1] full philosophy module
+    OnboardingConfig json.RawMessage `json:"onboarding_config"`  // [S§6.4] consumed by onboard:: for materialization
+    CommunityConfig  json.RawMessage `json:"community_config"`   // [S§6.6] consumed by onboard:: for community suggestions
+    MasteryPaths     json.RawMessage `json:"mastery_paths"`      // [S§4.1]
+    Terminology      json.RawMessage `json:"terminology"`        // [S§4.4]
 }
 
-/// Tool as resolved for a family or methodology
-/// Used by GET /v1/families/tools, GET /v1/methodologies/:slug/tools
-#[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct ActiveToolResponse {
-    pub tool_id: Uuid,
-    pub slug: String,
-    pub display_name: String,          // base tool name
-    pub label: Option<String>,         // methodology-specific override label
-    pub description: Option<String>,
-    pub tier: String,                  // "free" or "premium"
-    pub guidance: Option<String>,      // methodology-specific guidance text
-    pub config_overrides: serde_json::Value,  // full override payload
-    pub sort_order: i16,
+// ActiveToolResponse is a tool as resolved for a family or methodology.
+// Used by GET /v1/families/tools, GET /v1/methodologies/:slug/tools
+type ActiveToolResponse struct {
+    ToolID          uuid.UUID       `json:"tool_id"`
+    Slug            string          `json:"slug"`
+    DisplayName     string          `json:"display_name"`      // base tool name
+    Label           *string         `json:"label,omitempty"`   // methodology-specific override label
+    Description     *string         `json:"description,omitempty"`
+    Tier            string          `json:"tier"`              // "free" or "premium"
+    Guidance        *string         `json:"guidance,omitempty"` // methodology-specific guidance text
+    ConfigOverrides json.RawMessage `json:"config_overrides"`  // full override payload
+    SortOrder       int16           `json:"sort_order"`
 }
 
-/// PATCH /v1/families/methodology response
-#[derive(Debug, Serialize, ToSchema)]
-pub struct MethodologySelectionResponse {
-    pub primary: MethodologySummaryResponse,
-    pub secondary: Vec<MethodologySummaryResponse>,
-    pub active_tool_count: usize,
+// MethodologySelectionResponse is the response for PATCH /v1/families/methodology
+type MethodologySelectionResponse struct {
+    Primary         MethodologySummaryResponse   `json:"primary"`
+    Secondary       []MethodologySummaryResponse `json:"secondary"`
+    ActiveToolCount int                          `json:"active_tool_count"`
 }
 
-/// GET /v1/families/methodology-context (Phase 2) [ARCH §7.2]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct MethodologyContext {
-    pub primary: MethodologySummaryResponse,
-    pub secondary: Vec<MethodologySummaryResponse>,
-    /// Merged terminology overrides from primary methodology.
-    /// e.g., {"activity": "Lesson", "journal": "Narration"}
-    pub terminology: serde_json::Value,
-    /// Current mastery path level, if set [S§4.1]
-    pub mastery_level: Option<String>,
+// MethodologyContext is the response for GET /v1/families/methodology-context (Phase 2) [ARCH §7.2]
+type MethodologyContext struct {
+    Primary      MethodologySummaryResponse   `json:"primary"`
+    Secondary    []MethodologySummaryResponse `json:"secondary"`
+    // Terminology contains merged terminology overrides from primary methodology.
+    // e.g., {"activity": "Lesson", "journal": "Narration"}
+    Terminology  json.RawMessage `json:"terminology"`
+    // MasteryLevel is the current mastery path level, if set [S§4.1]
+    MasteryLevel *string         `json:"mastery_level,omitempty"`
 }
 ```
 
 ### §8.3 Internal Types (not API-facing)
 
-```rust
-/// Full methodology record from database
-pub struct MethodologyDefinition {
-    pub id: Uuid,
-    pub slug: String,
-    pub display_name: String,
-    pub short_desc: String,
-    pub icon_url: Option<String>,
-    pub philosophy: serde_json::Value,
-    pub onboarding_config: serde_json::Value,
-    pub community_config: serde_json::Value,
-    pub mastery_paths: serde_json::Value,
-    pub terminology: serde_json::Value,
-    pub display_order: i16,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+```go
+// MethodologyDefinition is the full methodology record from database.
+// GORM model for method_definitions table.
+type MethodologyDefinition struct {
+    ID               uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    Slug             string          `gorm:"uniqueIndex;not null"`
+    DisplayName      string          `gorm:"not null"`
+    ShortDesc        string          `gorm:"not null"`
+    IconURL          *string
+    Philosophy       json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+    OnboardingConfig json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+    CommunityConfig  json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+    MasteryPaths     json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+    Terminology      json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+    DisplayOrder     int16           `gorm:"not null;default:0"`
+    IsActive         bool            `gorm:"not null;default:true"`
+    CreatedAt        time.Time       `gorm:"not null;default:now()"`
+    UpdatedAt        time.Time       `gorm:"not null;default:now()"`
 }
 
-/// Tool record from database
-pub struct Tool {
-    pub id: Uuid,
-    pub slug: String,
-    pub display_name: String,
-    pub description: Option<String>,
-    pub config_schema: serde_json::Value,
-    pub tier: String,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
+func (MethodologyDefinition) TableName() string { return "method_definitions" }
+
+// Tool is a tool record from database.
+// GORM model for method_tools table.
+type Tool struct {
+    ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    Slug         string          `gorm:"uniqueIndex;not null"`
+    DisplayName  string          `gorm:"not null"`
+    Description  *string
+    ConfigSchema json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+    Tier         string          `gorm:"not null;default:'free'"`
+    IsActive     bool            `gorm:"not null;default:true"`
+    CreatedAt    time.Time       `gorm:"not null;default:now()"`
 }
 
-/// Tool activation joined with tool metadata — repository return type
-pub struct ToolActivationWithTool {
-    pub methodology_id: Uuid,
-    pub tool_id: Uuid,
-    pub tool_slug: String,
-    pub tool_display_name: String,
-    pub tool_description: Option<String>,
-    pub tool_tier: String,
-    pub tool_is_active: bool,
-    pub config_overrides: serde_json::Value,
-    pub sort_order: i16,
+func (Tool) TableName() string { return "method_tools" }
+
+// ToolActivationWithTool is a tool activation joined with tool metadata — repository return type.
+type ToolActivationWithTool struct {
+    MethodologyID   uuid.UUID       `json:"methodology_id"`
+    ToolID          uuid.UUID       `json:"tool_id"`
+    ToolSlug        string          `json:"tool_slug"`
+    ToolDisplayName string          `json:"tool_display_name"`
+    ToolDescription *string         `json:"tool_description,omitempty"`
+    ToolTier        string          `json:"tool_tier"`
+    ToolIsActive    bool            `json:"tool_is_active"`
+    ConfigOverrides json.RawMessage `json:"config_overrides"`
+    SortOrder       int16           `json:"sort_order"`
 }
 ```
 
@@ -1020,13 +970,13 @@ within the method:: domain itself.
 
 ### §9.1 No Methodology Name Branching
 
-The following patterns are **forbidden** in any file under `src/method/` and in any other
+The following patterns are **forbidden** in any file under `internal/method/` and in any other
 domain that consumes methodology data:
 
-```rust
+```go
 // FORBIDDEN — branching on methodology name [CODING §5.1]
-if methodology.slug == "charlotte-mason" { ... }
-match methodology.slug.as_str() { "classical" => ..., _ => ... }
+if methodology.Slug == "charlotte-mason" { ... }
+switch methodology.Slug { case "classical": ... }
 ```
 
 All methodology-dependent behavior is resolved by reading the methodology's configuration
@@ -1056,7 +1006,7 @@ caching reduces database load for these hot paths.
 | `method:family_tools:{family_id}` | 10 min | Family's resolved tool set (JSON) | `FamilyMethodologyChanged` event |
 | `method:student_tools:{student_id}` | 10 min | Student's resolved tool set (JSON) | `FamilyMethodologyChanged` event |
 
-**Cache implementation**: Uses `src/shared/redis.rs` helpers. Cache-aside pattern:
+**Cache implementation**: Uses `internal/shared/redis.go` helpers. Cache-aside pattern:
 1. Check Redis for cached value
 2. On miss: query PostgreSQL, serialize to JSON, store in Redis with TTL
 3. On `MethodologyConfigUpdated`: delete all `method:definitions:*` and `method:tools:*` keys
@@ -1081,96 +1031,94 @@ The `ToolResolver` is a **stateless computation aggregate**. Unlike stateful agg
 (e.g., `MarketplaceListing` with a lifecycle), `ToolResolver` loads data, enforces
 invariants, and returns a computed result. It does not persist its own state.
 
-Defined in `src/method/domain/tool_resolver.rs`:
+Defined in `internal/method/domain/tool_resolver.go`:
 
-```rust
-/// Resolves the active tool set for a given set of methodology selections.
-/// Enforces: deduplication, config precedence, inactive tool filtering. [S§4.2]
-pub struct ToolResolver {
-    /// All tool activations for the selected methodologies, loaded from DB
-    activations: Vec<ToolActivationWithTool>,
-    /// The primary methodology ID — used for config precedence
-    primary_methodology_id: Uuid,
+```go
+// ToolResolver resolves the active tool set for a given set of methodology selections.
+// Enforces: deduplication, config precedence, inactive tool filtering. [S§4.2]
+type ToolResolver struct {
+    // activations holds all tool activations for the selected methodologies, loaded from DB
+    activations []ToolActivationWithTool
+    // primaryMethodologyID is used for config precedence
+    primaryMethodologyID uuid.UUID
 }
 
-impl ToolResolver {
-    /// Creates a new ToolResolver with the given activations and primary methodology.
-    pub fn new(
-        activations: Vec<ToolActivationWithTool>,
-        primary_methodology_id: Uuid,
-    ) -> Self {
-        Self {
-            activations,
-            primary_methodology_id,
-        }
-    }
-
-    /// Resolves the active tool set by applying the tool resolution algorithm:
-    ///
-    /// 1. Filter out inactive tools (tool.is_active == false)
-    /// 2. Union all tools across selected methodologies
-    /// 3. Deduplicate: if a tool appears in multiple methodologies, keep the
-    ///    activation from the PRIMARY methodology. If the tool is not activated
-    ///    by the primary, keep the first secondary activation encountered.
-    /// 4. Sort by the winning activation's sort_order
-    ///
-    /// Returns Ok(resolved_tools) or Err(MethodError) if invariants are violated.
-    pub fn resolve(&self) -> Result<Vec<ResolvedTool>, MethodError> {
-        let mut seen: HashMap<Uuid, ResolvedTool> = HashMap::new();
-
-        // First pass: insert all primary methodology activations
-        for activation in &self.activations {
-            if !activation.tool_is_active {
-                continue;
-            }
-            if activation.methodology_id == self.primary_methodology_id {
-                seen.insert(activation.tool_id, ResolvedTool::from(activation));
-            }
-        }
-
-        // Second pass: insert secondary activations only if tool not already present
-        for activation in &self.activations {
-            if !activation.tool_is_active {
-                continue;
-            }
-            if activation.methodology_id != self.primary_methodology_id {
-                seen.entry(activation.tool_id)
-                    .or_insert_with(|| ResolvedTool::from(activation));
-            }
-        }
-
-        let mut tools: Vec<ResolvedTool> = seen.into_values().collect();
-        tools.sort_by_key(|t| t.sort_order);
-        Ok(tools)
+// NewToolResolver creates a new ToolResolver with the given activations and primary methodology.
+func NewToolResolver(activations []ToolActivationWithTool, primaryMethodologyID uuid.UUID) *ToolResolver {
+    return &ToolResolver{
+        activations:          activations,
+        primaryMethodologyID: primaryMethodologyID,
     }
 }
 
-/// A tool with its resolved configuration (after dedup and precedence).
-#[derive(Debug, Clone)]
-pub struct ResolvedTool {
-    pub tool_id: Uuid,
-    pub slug: String,
-    pub display_name: String,
-    pub description: Option<String>,
-    pub tier: String,
-    pub config_overrides: serde_json::Value,
-    pub sort_order: i16,
-    /// Which methodology's activation was selected (for debugging/display)
-    pub source_methodology_id: Uuid,
+// Resolve resolves the active tool set by applying the tool resolution algorithm:
+//
+// 1. Filter out inactive tools (tool.ToolIsActive == false)
+// 2. Union all tools across selected methodologies
+// 3. Deduplicate: if a tool appears in multiple methodologies, keep the
+//    activation from the PRIMARY methodology. If the tool is not activated
+//    by the primary, keep the first secondary activation encountered.
+// 4. Sort by the winning activation's sort_order
+//
+// Returns (resolved_tools, error) if invariants are violated.
+func (r *ToolResolver) Resolve() ([]ResolvedTool, error) {
+    seen := make(map[uuid.UUID]ResolvedTool)
+
+    // First pass: insert all primary methodology activations
+    for _, activation := range r.activations {
+        if !activation.ToolIsActive {
+            continue
+        }
+        if activation.MethodologyID == r.primaryMethodologyID {
+            seen[activation.ToolID] = newResolvedTool(&activation)
+        }
+    }
+
+    // Second pass: insert secondary activations only if tool not already present
+    for _, activation := range r.activations {
+        if !activation.ToolIsActive {
+            continue
+        }
+        if activation.MethodologyID != r.primaryMethodologyID {
+            if _, exists := seen[activation.ToolID]; !exists {
+                seen[activation.ToolID] = newResolvedTool(&activation)
+            }
+        }
+    }
+
+    tools := make([]ResolvedTool, 0, len(seen))
+    for _, tool := range seen {
+        tools = append(tools, tool)
+    }
+    sort.Slice(tools, func(i, j int) bool {
+        return tools[i].SortOrder < tools[j].SortOrder
+    })
+    return tools, nil
 }
 
-impl ResolvedTool {
-    fn from(activation: &ToolActivationWithTool) -> Self {
-        Self {
-            tool_id: activation.tool_id,
-            slug: activation.tool_slug.clone(),
-            display_name: activation.tool_display_name.clone(),
-            description: activation.tool_description.clone(),
-            tier: activation.tool_tier.clone(),
-            config_overrides: activation.config_overrides.clone(),
-            sort_order: activation.sort_order,
-            source_methodology_id: activation.methodology_id,
-        }
+// ResolvedTool is a tool with its resolved configuration (after dedup and precedence).
+type ResolvedTool struct {
+    ToolID              uuid.UUID       `json:"tool_id"`
+    Slug                string          `json:"slug"`
+    DisplayName         string          `json:"display_name"`
+    Description         *string         `json:"description,omitempty"`
+    Tier                string          `json:"tier"`
+    ConfigOverrides     json.RawMessage `json:"config_overrides"`
+    SortOrder           int16           `json:"sort_order"`
+    // SourceMethodologyID indicates which methodology's activation was selected (for debugging/display)
+    SourceMethodologyID uuid.UUID       `json:"source_methodology_id"`
+}
+
+func newResolvedTool(activation *ToolActivationWithTool) ResolvedTool {
+    return ResolvedTool{
+        ToolID:              activation.ToolID,
+        Slug:                activation.ToolSlug,
+        DisplayName:         activation.ToolDisplayName,
+        Description:         activation.ToolDescription,
+        Tier:                activation.ToolTier,
+        ConfigOverrides:     activation.ConfigOverrides,
+        SortOrder:           activation.SortOrder,
+        SourceMethodologyID: activation.MethodologyID,
     }
 }
 ```
@@ -1178,71 +1126,82 @@ impl ResolvedTool {
 ### §10.2 Tool Resolution Flows
 
 **Family tool resolution** `[S§4.2]`:
-1. Load family from `iam::` → get `primary_methodology_id` + `secondary_methodology_ids`
+1. Load family from `iam::` → get `PrimaryMethodologyID` + `SecondaryMethodologyIDs`
 2. Collect all methodology IDs: `[primary, ...secondary]`
-3. Load all tool activations for those IDs from `ToolActivationRepository::list_by_methodologies`
+3. Load all tool activations for those IDs from `ToolActivationRepository.ListByMethodologies`
 4. Construct `ToolResolver` with activations and primary ID
-5. Call `resolver.resolve()` → returns deduplicated, precedence-resolved tool set
-6. Map to `Vec<ActiveToolResponse>`
+5. Call `resolver.Resolve()` → returns deduplicated, precedence-resolved tool set
+6. Map to `[]ActiveToolResponse`
 
 **Student tool resolution** `[S§4.6]`:
-1. Load student from `iam::` → check `methodology_override_id`
+1. Load student from `iam::` → check `MethodologyOverrideID`
 2. If override exists: load tool activations for override methodology only (single methodology,
    no union needed)
 3. If no override: fall through to family tool resolution (step 1-6 above)
 
-### §10.3 MethodError Enum
+### §10.3 MethodError Types
 
-Defined in `src/method/domain/errors.rs`. `[CODING §8.3]`
+Defined in `internal/method/domain/errors.go`. `[CODING §8.3]`
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum MethodError {
-    #[error("methodology not found: {slug}")]
-    MethodologyNotFound { slug: String },
+```go
+import (
+    "errors"
+    "fmt"
 
-    #[error("methodology not found by id: {id}")]
-    MethodologyNotFoundById { id: Uuid },
+    "github.com/google/uuid"
+)
 
-    #[error("methodology is not active: {slug}")]
-    MethodologyNotActive { slug: String },
+var (
+    ErrMethodologyNotFound    = errors.New("methodology not found")
+    ErrMethodologyNotActive   = errors.New("methodology is not active")
+    ErrInvalidMethodologyIDs  = errors.New("invalid methodology IDs in selection")
+    ErrPrimaryInSecondary     = errors.New("primary methodology cannot also be a secondary")
+    ErrDuplicateSecondary     = errors.New("duplicate secondary methodology IDs")
+    ErrStudentNotFound        = errors.New("student not found")
+    ErrToolNotFound           = errors.New("tool not found")
+)
 
-    #[error("invalid methodology IDs in selection: {ids:?}")]
-    InvalidMethodologyIds { ids: Vec<Uuid> },
+// MethodError wraps a method-specific error with additional context.
+type MethodError struct {
+    Err  error
+    Slug string
+    ID   uuid.UUID
+    IDs  []uuid.UUID
+}
 
-    #[error("primary methodology cannot also be a secondary")]
-    PrimaryInSecondary,
+func (e *MethodError) Error() string {
+    if e.Slug != "" {
+        return fmt.Sprintf("%s: %s", e.Err.Error(), e.Slug)
+    }
+    if e.ID != uuid.Nil {
+        return fmt.Sprintf("%s: %s", e.Err.Error(), e.ID)
+    }
+    if len(e.IDs) > 0 {
+        return fmt.Sprintf("%s: %v", e.Err.Error(), e.IDs)
+    }
+    return e.Err.Error()
+}
 
-    #[error("duplicate secondary methodology IDs")]
-    DuplicateSecondary,
-
-    #[error("student not found: {id}")]
-    StudentNotFound { id: Uuid },
-
-    #[error("tool not found: {slug}")]
-    ToolNotFound { slug: String },
-
-    #[error("database error")]
-    DatabaseError(#[from] sea_orm::DbErr),
+func (e *MethodError) Unwrap() error {
+    return e.Err
 }
 ```
 
 ### §10.4 Error-to-HTTP Mapping
 
-`MethodError` maps to `AppError` via `From<MethodError> for AppError` in the service layer
+`MethodError` maps to `AppError` via helper functions in the service layer
 (see 00-core §6.4 for the conversion pattern). `[CODING §2.2]`
 
 | MethodError Variant | HTTP Status | Error Code |
 |--------------------|-------------|------------|
-| `MethodologyNotFound` | 404 Not Found | `methodology_not_found` |
-| `MethodologyNotFoundById` | 404 Not Found | `methodology_not_found` |
-| `MethodologyNotActive` | 422 Unprocessable Entity | `methodology_not_active` |
-| `InvalidMethodologyIds` | 422 Unprocessable Entity | `invalid_methodology_ids` |
-| `PrimaryInSecondary` | 422 Unprocessable Entity | `primary_in_secondary` |
-| `DuplicateSecondary` | 422 Unprocessable Entity | `duplicate_secondary` |
-| `StudentNotFound` | 404 Not Found | `student_not_found` |
-| `ToolNotFound` | 404 Not Found | `tool_not_found` |
-| `DatabaseError` | 500 Internal Server Error | `internal_error` |
+| `ErrMethodologyNotFound` | 404 Not Found | `methodology_not_found` |
+| `ErrMethodologyNotActive` | 422 Unprocessable Entity | `methodology_not_active` |
+| `ErrInvalidMethodologyIDs` | 422 Unprocessable Entity | `invalid_methodology_ids` |
+| `ErrPrimaryInSecondary` | 422 Unprocessable Entity | `primary_in_secondary` |
+| `ErrDuplicateSecondary` | 422 Unprocessable Entity | `duplicate_secondary` |
+| `ErrStudentNotFound` | 404 Not Found | `student_not_found` |
+| `ErrToolNotFound` | 404 Not Found | `tool_not_found` |
+| Database error | 500 Internal Server Error | `internal_error` |
 
 **API error responses** MUST NOT expose internal details. The error codes above are returned
 as `{"error": "<code>", "message": "<user-friendly message>"}`. Internal details are logged
@@ -1251,20 +1210,18 @@ server-side only. `[CODING §2.2, §5.2]`
 ### §10.5 Module Structure
 
 ```
-src/method/
-├── mod.rs
-├── handlers.rs       # thin: extractors → service call → response
-├── service.rs        # MethodologyServiceImpl — orchestration + caching
-├── repository.rs     # PgMethodologyDefinitionRepository, PgToolRepository,
-│                     # PgToolActivationRepository
-├── models.rs         # request/response types, internal types
-├── ports.rs          # MethodologyService trait, repository traits
-├── events.rs         # MethodologyConfigUpdated, FamilyMethodologyChanged
-├── domain/
-│   ├── mod.rs
-│   ├── tool_resolver.rs   # ToolResolver aggregate root
-│   └── errors.rs          # MethodError enum
-└── entities/              # SeaORM-generated — never hand-edit [CODING §6.3]
+internal/method/
+├── method.go            # Package root — re-exports public types
+├── handlers.go          # Echo handlers (thin: binding → service call → response)
+├── service.go           # MethodologyServiceImpl — orchestration + caching
+├── repository.go        # PgMethodologyDefinitionRepository, PgToolRepository,
+│                        # PgToolActivationRepository
+├── models.go            # Request/response types, internal types, GORM models
+├── ports.go             # MethodologyService interface, repository interfaces
+├── events.go            # MethodologyConfigUpdated, FamilyMethodologyChanged
+└── domain/
+    ├── tool_resolver.go # ToolResolver aggregate root
+    └── errors.go        # MethodError types and sentinel errors
 ```
 
 ---
@@ -1275,14 +1232,14 @@ src/method/
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `MethodologyService` trait methods | All domains | `Arc<dyn MethodologyService>` via AppState |
-| `list_methodologies()` | `onboard::`, `discover::` | Service call — methodology selection wizard, quiz |
-| `get_methodology()` | `discover::`, `onboard::` | Service call — methodology explorer pages, onboarding materialization (onboarding_config + community_config) `[S§6.4, S§6.6]` |
-| `resolve_family_tools()` | `learn::` | Service call — determines which tools to show |
-| `resolve_student_tools()` | `learn::` | Service call — student-specific tool set |
-| `validate_methodology_id()` | `iam::` | Service call — validates during registration |
-| `get_default_methodology_id()` | `iam::` | Service call — default for new families |
-| `get_methodology_context()` | Dashboard (any domain) | Service call — terminology, mastery level |
+| `MethodologyService` interface methods | All domains | `MethodologyService` interface value via AppState |
+| `ListMethodologies()` | `onboard::`, `discover::` | Service call — methodology selection wizard, quiz |
+| `GetMethodology()` | `discover::`, `onboard::` | Service call — methodology explorer pages, onboarding materialization (onboarding_config + community_config) `[S§6.4, S§6.6]` |
+| `ResolveFamilyTools()` | `learn::` | Service call — determines which tools to show |
+| `ResolveStudentTools()` | `learn::` | Service call — student-specific tool set |
+| `ValidateMethodologyID()` | `iam::` | Service call — validates during registration |
+| `GetDefaultMethodologyID()` | `iam::` | Service call — default for new families |
+| `GetMethodologyContext()` | Dashboard (any domain) | Service call — terminology, mastery level |
 
 ### §11.2 method:: Consumes
 
@@ -1290,8 +1247,8 @@ src/method/
 |-----------|--------|---------|
 | Family data (methodology IDs) | `iam::IamService` | Retrieve family's selected methodology IDs for tool resolution |
 | Student data (override ID) | `iam::IamService` | Retrieve student's methodology override for tool resolution |
-| Family methodology persistence | `iam::FamilyRepository::set_methodology` | Persist methodology selection changes (method:: validates, iam:: persists) |
-| Student methodology persistence | `iam::StudentRepository::update` | Persist student methodology override changes |
+| Family methodology persistence | `iam::FamilyRepository.SetMethodology` | Persist methodology selection changes (method:: validates, iam:: persists) |
+| Student methodology persistence | `iam::StudentRepository.Update` | Persist student methodology override changes |
 
 **Boundary note**: method:: *validates* methodology IDs and *orchestrates* the update flow,
 but the actual `primary_methodology_id` and `secondary_methodology_ids` columns live on
@@ -1300,32 +1257,31 @@ full boundary documentation.
 
 ### §11.3 Events method:: Publishes
 
-Defined in `src/method/events.rs`. `[CODING §8.4]`
+Defined in `internal/method/events.go`. `[CODING §8.4]`
 
 | Event | Subscribers | Effect |
 |-------|------------|--------|
 | `MethodologyConfigUpdated` | All domains | Invalidate methodology config caches. Published when admin changes methodology definitions or tool activations (Phase 3+). `[ARCH §4.6]` |
-| `FamilyMethodologyChanged { family_id, primary_methodology_id, secondary_methodology_ids }` | `learn::` | Recalculate family's active tool set; archive tools no longer active |
+| `FamilyMethodologyChanged { FamilyID, PrimaryMethodologyID, SecondaryMethodologyIDs }` | `learn::` | Recalculate family's active tool set; archive tools no longer active |
 | | `social::` | Update family profile methodology display |
 | | `notify::` | Send "methodology updated" notification |
 | | `onboard::` | Update getting-started roadmap if in progress |
 
-```rust
-// src/method/events.rs
+```go
+// internal/method/events.go
 
-#[derive(Clone, Debug)]
-pub struct MethodologyConfigUpdated;
-impl DomainEvent for MethodologyConfigUpdated {}
+// MethodologyConfigUpdated is published when admin changes methodology definitions
+// or tool activations (Phase 3+).
+type MethodologyConfigUpdated struct{}
 
-#[derive(Clone, Debug)]
-pub struct FamilyMethodologyChanged {
-    pub family_id: FamilyId,
-    /// Raw Uuid — no MethodologyId newtype exists yet. When one is introduced
-    /// (likely in this domain's implementation), update these fields.
-    pub primary_methodology_id: Uuid,
-    pub secondary_methodology_ids: Vec<Uuid>,
+// FamilyMethodologyChanged is published when a family updates their methodology selection.
+type FamilyMethodologyChanged struct {
+    FamilyID               uuid.UUID   `json:"family_id"`
+    // PrimaryMethodologyID is the raw UUID. When a MethodologyID newtype is introduced
+    // (likely in this domain's implementation), update these fields.
+    PrimaryMethodologyID   uuid.UUID   `json:"primary_methodology_id"`
+    SecondaryMethodologyIDs []uuid.UUID `json:"secondary_methodology_ids"`
 }
-impl DomainEvent for FamilyMethodologyChanged {}
 ```
 
 ### §11.4 Events method:: Subscribes To
@@ -1346,10 +1302,10 @@ within method:: itself.
 - FK migration: `iam_families.primary_methodology_id` → `method_definitions`, `iam_students.methodology_override_id` → `method_definitions`
 - Public endpoints: `GET /v1/methodologies`, `GET /v1/methodologies/:slug`, `GET /v1/methodologies/:slug/tools`
 - Authenticated endpoints: `GET /v1/families/tools`, `GET /v1/families/students/:id/tools`, `PATCH /v1/families/methodology`
-- `MethodologyService` trait + `MethodologyServiceImpl`
+- `MethodologyService` interface + `MethodologyServiceImpl`
 - `ToolResolver` aggregate root
-- `MethodError` enum + HTTP mapping
-- Repository traits + PostgreSQL implementations
+- `MethodError` types + HTTP mapping
+- Repository interfaces + PostgreSQL implementations
 - Domain events: `FamilyMethodologyChanged`
 - All models (request, response, internal)
 - OpenAPI spec + TypeScript type generation
@@ -1387,11 +1343,11 @@ as acceptance criteria for code review and integration testing.
 12. Changing methodology does NOT delete any learning data (read-only archive)
 13. Student tool resolution with override returns tools for the override methodology only
 14. Student tool resolution without override returns the family-level tool set
-15. No code under `src/method/` or any consumer branches on methodology name/slug
+15. No code under `internal/method/` or any consumer branches on methodology name/slug
 16. method_ tables have NO RLS policies
 17. All API error responses return generic messages, not SQL or internal details
-18. `validate_methodology_id` returns false for inactive methodologies
-19. `get_default_methodology_id` returns the first active methodology by display_order
+18. `ValidateMethodologyID` returns false for inactive methodologies
+19. `GetDefaultMethodologyID` returns the first active methodology by display_order
 
 ---
 
@@ -1408,19 +1364,18 @@ as acceptance criteria for code review and integration testing.
 - [ ] Create seed migration: all tool activation mappings with config overrides
 - [ ] Create FK migration: `iam_families.primary_methodology_id` → `method_definitions(id)`
 - [ ] Create FK migration: `iam_students.methodology_override_id` → `method_definitions(id)`
-- [ ] Regenerate SeaORM entities from migrations
 
-#### Ports & Traits
-- [ ] Define `MethodologyService` trait in `src/method/ports.rs`
-- [ ] Define `MethodologyDefinitionRepository` trait in `src/method/ports.rs`
-- [ ] Define `ToolRepository` trait in `src/method/ports.rs`
-- [ ] Define `ToolActivationRepository` trait in `src/method/ports.rs`
+#### Interfaces
+- [ ] Define `MethodologyService` interface in `internal/method/ports.go`
+- [ ] Define `MethodologyDefinitionRepository` interface in `internal/method/ports.go`
+- [ ] Define `ToolRepository` interface in `internal/method/ports.go`
+- [ ] Define `ToolActivationRepository` interface in `internal/method/ports.go`
 
 #### Domain Layer
-- [ ] Create `src/method/domain/mod.rs`
-- [ ] Implement `ToolResolver` aggregate in `src/method/domain/tool_resolver.rs`
-- [ ] Define `MethodError` enum in `src/method/domain/errors.rs`
-- [ ] Implement `From<MethodError> for AppError` conversion
+- [ ] Create `internal/method/domain/tool_resolver.go`
+- [ ] Implement `ToolResolver` aggregate
+- [ ] Define `MethodError` types in `internal/method/domain/errors.go`
+- [ ] Implement error-to-AppError conversion
 
 #### Repository Implementations
 - [ ] Implement `PgMethodologyDefinitionRepository`
@@ -1429,7 +1384,7 @@ as acceptance criteria for code review and integration testing.
 
 #### Service Implementation
 - [ ] Implement `MethodologyServiceImpl` with all Phase 1 methods
-- [ ] Wire `MethodologyServiceImpl` in `app.rs` with `Arc<dyn MethodologyService>`
+- [ ] Wire `MethodologyServiceImpl` in `main.go` with `MethodologyService` interface
 
 #### API Endpoints
 - [ ] `GET  /v1/methodologies` — list active methodologies
@@ -1440,16 +1395,16 @@ as acceptance criteria for code review and integration testing.
 - [ ] `PATCH /v1/families/methodology` — update family methodology selection
 
 #### Models (DTOs)
-- [ ] `UpdateMethodologyCommand` with validator derives
-- [ ] `MethodologySummaryResponse` with serde + utoipa derives
-- [ ] `MethodologyDetailResponse` with serde + utoipa derives
-- [ ] `ActiveToolResponse` with serde + utoipa derives
-- [ ] `MethodologySelectionResponse` with serde + utoipa derives
-- [ ] All internal types (`MethodologyDefinition`, `Tool`, `ToolActivationWithTool`)
+- [ ] `UpdateMethodologyCommand` with validator tags
+- [ ] `MethodologySummaryResponse` with json + swaggo tags
+- [ ] `MethodologyDetailResponse` with json + swaggo tags
+- [ ] `ActiveToolResponse` with json + swaggo tags
+- [ ] `MethodologySelectionResponse` with json + swaggo tags
+- [ ] All internal types (`MethodologyDefinition`, `Tool`, `ToolActivationWithTool`) as GORM models
 
 #### Domain Events
-- [ ] Define `FamilyMethodologyChanged` event in `src/method/events.rs`
-- [ ] Register event subscriptions in `app.rs`
+- [ ] Define `FamilyMethodologyChanged` event in `internal/method/events.go`
+- [ ] Register event subscriptions in `main.go`
 
 #### Tests
 - [ ] Integration test: seed migration produces 6 methodologies and 18 tools
@@ -1462,13 +1417,13 @@ as acceptance criteria for code review and integration testing.
 - [ ] Integration test: `PATCH /v1/families/methodology` validates IDs and publishes event
 - [ ] Integration test: `PATCH /v1/families/methodology` with invalid IDs returns 422
 - [ ] Integration test: student tool resolution with/without override
-- [ ] Verify: no methodology name branching in `src/method/`
-- [ ] Verify: `cargo clippy -- -D warnings` passes
-- [ ] Verify: `cargo test` passes
+- [ ] Verify: no methodology name branching in `internal/method/`
+- [ ] Verify: `golangci-lint run ./...` passes
+- [ ] Verify: `go test ./...` passes
 
 #### Code Generation
-- [ ] Generate OpenAPI spec from Rust types
-- [ ] Generate TypeScript types from OpenAPI spec
+- [ ] Generate OpenAPI spec with swaggo (`swag init`)
+- [ ] Generate TypeScript types from OpenAPI spec (`cd frontend && npm run generate-types`)
 
 ### Phase 2 — Dashboard Context & Student Overrides
 
@@ -1513,20 +1468,20 @@ as acceptance criteria for code review and integration testing.
 
 **Family methodology change** (`PATCH /v1/families/methodology`):
 1. Request arrives at `method::handlers`
-2. Handler calls `MethodologyService::update_family_methodology`
+2. Handler calls `MethodologyService.UpdateFamilyMethodology`
 3. Service validates all methodology IDs exist and are active (queries `method_definitions`)
 4. Service validates primary is not in secondary list
-5. Service calls `IamService` → which calls `FamilyRepository::set_methodology` (IAM persists)
+5. Service calls `IamService` → which calls `FamilyRepository.SetMethodology` (IAM persists)
 6. Service publishes `FamilyMethodologyChanged` event
 7. Handler returns `MethodologySelectionResponse`
 
 **Why method:: owns the endpoint but iam:: owns the column**: method:: has the domain
 knowledge to validate methodology IDs (does it exist? is it active?). `iam::` has no
 knowledge of methodology definitions — it just stores the FK. Putting the endpoint in
-`iam::` would require `iam::` to import `method::` repository traits, creating a circular
+`iam::` would require `iam::` to import `method::` repository interfaces, creating a circular
 dependency risk. Instead, `method::` calls `iam::` service (which is already a dependency
 direction that exists — `method::` depends on `iam::`, not vice versa).
 
 **Student methodology override** (`PATCH /v1/families/students/:id/methodology`, Phase 2):
 Same pattern — `method::` validates the methodology ID, then calls
-`IamService::update_student` to persist the change on the `iam_students` row.
+`IamService.UpdateStudent` to persist the change on the `iam_students` row.

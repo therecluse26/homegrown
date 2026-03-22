@@ -10,24 +10,24 @@ middleware, and all shared types in place.
 | Attribute | Value |
 |-----------|-------|
 | **Purpose** | Foundation for all 14 domain modules |
-| **Produces** | A `cargo build`-able binary, passing `cargo clippy -- -D warnings` and `cargo test` |
+| **Produces** | A `go build ./...`-able binary, passing `golangci-lint run` and `go test ./...` |
 | **Frontend** | Minimum shell passing `npm run type-check` and `npm run dev` |
 | **Prerequisite for** | Every domain spec (01-iam through 14-ai) |
 
 ### What core infrastructure owns
 
-- Project scaffolding (`Cargo.toml`, directory skeleton, frontend `package.json`)
-- Application entrypoint (`src/main.rs`)
-- Application wiring (`src/app.rs`) — `AppState`, router composition, middleware ordering
-- Configuration (`src/config.rs`) — `AppConfig` struct, env var loading
-- Shared kernel (`src/shared/`) — error framework, types, family scope, DB/Redis helpers,
+- Project scaffolding (`go.mod`, directory skeleton, frontend `package.json`)
+- Application entrypoint (`cmd/server/main.go`)
+- Application wiring (`internal/app/app.go`) — `AppState`, router composition, middleware ordering
+- Configuration (`internal/config/config.go`) — `AppConfig` struct, env var loading
+- Shared kernel (`internal/shared/`) — error framework, types, family scope, DB/Redis helpers,
   event bus, pagination
-- Middleware stack (`src/middleware/`) — auth, rate limiting, role extractors
+- Middleware stack (`internal/middleware/`) — auth, rate limiting, role extractors
 - Health endpoint (`GET /health`)
-- OpenAPI generation binary (`src/bin/openapi_gen.rs`)
+- OpenAPI generation command (`cmd/swag-gen/main.go`)
 - Bootstrap database migration (PostgreSQL extensions)
 - Local development environment (`docker-compose.yml`, Kratos dev config)
-- Development commands (`justfile`)
+- Development commands (`Makefile`)
 - Frontend shell (`frontend/`)
 
 ### What core infrastructure does NOT own
@@ -45,94 +45,60 @@ middleware, and all shared types in place.
 
 ## §2 Project Scaffolding
 
-### §2.1 Cargo.toml
+### §2.1 go.mod
 
-Workspace-level configuration with all Phase 1 dependencies. Two binary targets.
+Module definition with all Phase 1 dependencies.
 
-```toml
-[package]
-name = "homegrown-academy"
-version = "0.1.0"
-edition = "2021"
-rust-version = "1.80"
+```go
+module github.com/homegrown-academy/homegrown-academy
 
-[[bin]]
-name = "homegrown-academy"
-path = "src/main.rs"
+go 1.23
 
-[[bin]]
-name = "openapi-gen"
-path = "src/bin/openapi_gen.rs"
+require (
+	// Web framework
+	github.com/labstack/echo/v4 v4.12.0
 
-[dependencies]
-# Web framework
-axum = { version = "0.8", features = ["macros", "ws"] }
-axum-extra = { version = "0.10", features = ["typed-header", "cookie"] }
-tokio = { version = "1", features = ["full"] }
-tower = { version = "0.5", features = ["util", "timeout"] }
-tower-http = { version = "0.6", features = ["cors", "trace", "set-header"] }
-hyper = { version = "1", features = ["full"] }
+	// Database
+	gorm.io/gorm v1.25.0
+	gorm.io/driver/postgres v1.5.0
 
-# Database
-sea-orm = { version = "1", features = [
-    "sqlx-postgres",
-    "runtime-tokio-rustls",
-    "macros",
-    "with-uuid",
-    "with-chrono",
-    "with-json",
-] }
-sea-orm-migration = { version = "1" }
+	// Migrations
+	github.com/pressly/goose/v3 v3.21.0
 
-# Serialization & validation
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-validator = { version = "0.19", features = ["derive"] }
+	// Validation
+	github.com/go-playground/validator/v10 v10.22.0
 
-# Error handling
-thiserror = "2"
-anyhow = "1"
+	// Logging (slog is stdlib Go 1.21+)
 
-# Logging & tracing
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-appender = "0.2"
+	// OpenAPI
+	github.com/swaggo/swag v1.16.0
+	github.com/swaggo/echo-swagger v1.4.0
 
-# OpenAPI
-utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }
-utoipa-axum = "0.2"
+	// Types
+	github.com/google/uuid v1.6.0
 
-# Types
-uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
+	// Redis
+	github.com/redis/go-redis/v9 v9.5.0
 
-# Redis
-redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+	// Configuration
+	github.com/joho/godotenv v1.5.0
 
-# Configuration
-dotenvy = "0.15"
+	// HTTP client (stdlib net/http)
 
-# HTTP client (for Kratos adapter)
-reqwest = { version = "0.12", features = ["json", "cookies"] }
+	// Crypto (stdlib crypto/hmac, crypto/sha256, encoding/base64)
 
-# Crypto (for invite tokens, webhook signatures)
-base64 = "0.22"
-hmac = "0.12"
-sha2 = "0.10"
-rand = "0.8"
+	// HTML sanitization [CODING §5.2]
+	github.com/microcosm-cc/bluemonday v1.0.27
 
-# Async trait support
-async-trait = "0.1"
+	// Background jobs
+	github.com/hibiken/asynq v0.24.0
 
-# HTML sanitization [CODING §5.2]
-ammonia = "4"
+	// WebSocket
+	github.com/gorilla/websocket v1.5.3
 
-# Sentry (optional error tracking) [ARCH §2.14]
-sentry = { version = "0.35", features = ["tower", "tracing"] }
-
-[dev-dependencies]
-tower = { version = "0.5", features = ["util"] }
-axum-test = "16"
+	// Sentry (optional error tracking) [ARCH §2.14]
+	github.com/getsentry/sentry-go v0.28.0
+)
 ```
 
 **Note**: Exact version numbers SHOULD be updated to latest stable at implementation time.
@@ -146,48 +112,45 @@ owning domain spec.
 
 ```
 homegrown-academy/
-├── Cargo.toml                          (core)
-├── justfile                            (core) §17
-├── .env.example                        (core) §3
-├── docker-compose.yml                  (core) §16
-├── kratos/                             (core) §16
+├── go.mod                                  (core)
+├── go.sum                                  (core)
+├── Makefile                                (core) §17
+├── .env.example                            (core) §3
+├── docker-compose.yml                      (core) §16
+├── kratos/                                 (core) §16
 │   ├── kratos.yml
 │   └── identity.schema.json
 ├── openapi/
-│   └── spec.yaml                       (generated)
-├── migration/
-│   └── src/
-│       ├── lib.rs                      (core) — migration registry
-│       ├── m000000_000000_bootstrap.rs (core) §9 — PG extensions
-│       └── m{timestamp}_*.rs           (domain) — per-domain migrations
-├── src/
-│   ├── main.rs                         (core) §4
-│   ├── app.rs                          (core) §5
-│   ├── config.rs                       (core) §3
-│   ├── lib.rs                          (core) — re-exports for integration tests
-│   ├── bin/
-│   │   └── openapi_gen.rs              (core) §15
+│   └── spec.yaml                           (generated)
+├── migrations/
+│   ├── 00000000000000_bootstrap.sql        (core) §9 — PG extensions
+│   └── {timestamp}_*.sql                   (domain) — per-domain migrations (goose format)
+├── cmd/
+│   └── server/
+│       └── main.go                         (core) §4
+├── internal/
+│   ├── app/
+│   │   └── app.go                          (core) §5
+│   ├── config/
+│   │   └── config.go                       (core) §3
 │   ├── shared/
-│   │   ├── mod.rs                      (core)
-│   │   ├── error.rs                    (core) §6
-│   │   ├── types.rs                    (core) §7
-│   │   ├── family_scope.rs             (core) §8
-│   │   ├── db.rs                       (core) §9
-│   │   ├── redis.rs                    (core) §10
-│   │   ├── events.rs                   (core) §11
-│   │   └── pagination.rs              (core) §12
+│   │   ├── error.go                        (core) §6
+│   │   ├── types.go                        (core) §7
+│   │   ├── family_scope.go                 (core) §8
+│   │   ├── db.go                           (core) §9
+│   │   ├── redis.go                        (core) §10
+│   │   ├── events.go                       (core) §11
+│   │   └── pagination.go                   (core) §12
 │   ├── middleware/
-│   │   ├── mod.rs                      (core)
-│   │   ├── auth.rs                     (core) §13
-│   │   ├── rate_limit.rs               (core) §13
-│   │   └── extractors.rs              (core) §13
-│   └── domains/                        (domain modules added incrementally)
-│       ├── mod.rs                      (core) — empty initially
-│       ├── iam/                        (01-iam)
-│       ├── method/                     (02-method)
-│       ├── media/                      (03-media)
-│       └── ...                         (04-14)
-└── frontend/                           (core) §18
+│   │   ├── auth.go                         (core) §13
+│   │   ├── rate_limit.go                   (core) §13
+│   │   └── extractors.go                   (core) §13
+│   └── domains/                            (domain modules added incrementally)
+│       ├── iam/                            (01-iam)
+│       ├── method/                         (02-method)
+│       ├── media/                          (03-media)
+│       └── ...                             (04-14)
+└── frontend/                               (core) §18
     ├── package.json
     ├── tsconfig.json
     ├── vite.config.ts
@@ -311,117 +274,206 @@ export default defineConfig({
 
 ---
 
-## §3 Configuration (`src/config.rs`)
+## §3 Configuration (`internal/config/config.go`)
 
 ### §3.1 AppConfig Struct
 
 All environment variables typed and documented. Loaded at startup, immutable thereafter.
 
-```rust
-use std::net::SocketAddr;
+```go
+package config
 
-#[derive(Debug, Clone)]
-pub struct AppConfig {
-    // ─── Database ───────────────────────────────────────────────────
-    /// PostgreSQL connection string.
-    /// Example: `postgres://user:pass@localhost:5432/homegrown`
-    pub database_url: String,
+// Environment represents the runtime environment.
+type Environment string
 
-    /// Maximum connections in the SeaORM pool. Default: 10.
-    pub database_max_connections: u32,
+const (
+	EnvironmentDevelopment Environment = "development"
+	EnvironmentStaging     Environment = "staging"
+	EnvironmentProduction  Environment = "production"
+)
 
-    // ─── Redis ──────────────────────────────────────────────────────
-    /// Redis connection string.
-    /// Example: `redis://localhost:6379`
-    pub redis_url: String,
+// AppConfig holds all application configuration loaded from environment variables.
+type AppConfig struct {
+	// ─── Database ───────────────────────────────────────────────────
+	// PostgreSQL connection string.
+	// Example: "postgres://user:pass@localhost:5432/homegrown"
+	DatabaseURL string
 
-    // ─── Ory Kratos ─────────────────────────────────────────────────
-    /// Kratos Admin API URL (internal sidecar, never public).
-    /// Example: `http://kratos:4434`
-    pub kratos_admin_url: String,
+	// Maximum connections in the GORM pool. Default: 10.
+	DatabaseMaxConnections int
 
-    /// Kratos Public API URL (browser-facing, session validation).
-    /// Example: `http://kratos:4433`
-    pub kratos_public_url: String,
+	// ─── Redis ──────────────────────────────────────────────────────
+	// Redis connection string.
+	// Example: "redis://localhost:6379"
+	RedisURL string
 
-    /// Shared secret for Kratos webhook signature validation.
-    pub kratos_webhook_secret: String,
+	// ─── Ory Kratos ─────────────────────────────────────────────────
+	// Kratos Admin API URL (internal sidecar, never public).
+	// Example: "http://kratos:4434"
+	KratosAdminURL string
 
-    // ─── CORS ───────────────────────────────────────────────────────
-    /// Comma-separated list of allowed origins.
-    /// Example: `http://localhost:5173,https://app.homegrown.academy`
-    pub cors_allowed_origins: Vec<String>,
+	// Kratos Public API URL (browser-facing, session validation).
+	// Example: "http://kratos:4433"
+	KratosPublicURL string
 
-    // ─── Server ─────────────────────────────────────────────────────
-    /// Host to bind to. Default: `0.0.0.0`.
-    pub server_host: String,
+	// Shared secret for Kratos webhook signature validation.
+	KratosWebhookSecret string
 
-    /// Port to bind to. Default: `3000`.
-    pub server_port: u16,
+	// ─── CORS ───────────────────────────────────────────────────────
+	// Comma-separated list of allowed origins.
+	// Example: "http://localhost:5173,https://app.homegrown.academy"
+	CORSAllowedOrigins []string
 
-    // ─── Logging ────────────────────────────────────────────────────
-    /// Tracing filter directive. Default: `info`.
-    /// Example: `homegrown_academy=debug,tower_http=debug,sea_orm=warn`
-    pub log_level: String,
+	// ─── Server ─────────────────────────────────────────────────────
+	// Host to bind to. Default: "0.0.0.0".
+	ServerHost string
 
-    // ─── Observability ──────────────────────────────────────────────
-    /// Sentry DSN. Optional — omit to disable Sentry. [ARCH §2.14]
-    pub sentry_dsn: Option<String>,
+	// Port to bind to. Default: 3000.
+	ServerPort int
 
-    // ─── Environment ────────────────────────────────────────────────
-    /// Runtime environment. Controls log format, debug features, etc.
-    pub environment: Environment,
-}
+	// ─── Logging ────────────────────────────────────────────────────
+	// slog log level. Default: "info".
+	// Example: "debug"
+	LogLevel string
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Environment {
-    Development,
-    Staging,
-    Production,
+	// ─── Observability ──────────────────────────────────────────────
+	// Sentry DSN. Optional — omit to disable Sentry. [ARCH §2.14]
+	SentryDSN *string
+
+	// ─── Environment ────────────────────────────────────────────────
+	// Runtime environment. Controls log format, debug features, etc.
+	Environment Environment
 }
 ```
 
 ### §3.2 Loading
 
-`AppConfig::from_env()` loads values from environment variables with `dotenvy` fallback
+`LoadConfig()` loads values from environment variables with `godotenv` fallback
 for local development.
 
-```rust
-impl AppConfig {
-    pub fn from_env() -> Result<Self, AppConfigError> {
-        // Load .env file if it exists (dev only, not required)
-        dotenvy::dotenv().ok();
+```go
+package config
 
-        Ok(Self {
-            database_url: required_env("DATABASE_URL")?,
-            database_max_connections: optional_env("DATABASE_MAX_CONNECTIONS")?.unwrap_or(10),
-            redis_url: required_env("REDIS_URL")?,
-            kratos_admin_url: required_env("KRATOS_ADMIN_URL")?,
-            kratos_public_url: required_env("KRATOS_PUBLIC_URL")?,
-            kratos_webhook_secret: required_env("KRATOS_WEBHOOK_SECRET")?,
-            cors_allowed_origins: required_env("CORS_ALLOWED_ORIGINS")?
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect(),
-            server_host: optional_env("SERVER_HOST")?.unwrap_or_else(|| "0.0.0.0".into()),
-            server_port: optional_env("SERVER_PORT")?.unwrap_or(3000),
-            log_level: optional_env("LOG_LEVEL")?.unwrap_or_else(|| "info".into()),
-            sentry_dsn: optional_env("SENTRY_DSN")?,
-            environment: match optional_env::<String>("ENVIRONMENT")?
-                .unwrap_or_else(|| "development".into())
-                .as_str()
-            {
-                "production" => Environment::Production,
-                "staging" => Environment::Staging,
-                _ => Environment::Development,
-            },
-        })
-    }
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/joho/godotenv"
+)
+
+// LoadConfig loads configuration from environment variables.
+func LoadConfig() (*AppConfig, error) {
+	// Load .env file if it exists (dev only, not required)
+	_ = godotenv.Load()
+
+	databaseURL, err := requiredEnv("DATABASE_URL")
+	if err != nil {
+		return nil, err
+	}
+
+	redisURL, err := requiredEnv("REDIS_URL")
+	if err != nil {
+		return nil, err
+	}
+
+	kratosAdminURL, err := requiredEnv("KRATOS_ADMIN_URL")
+	if err != nil {
+		return nil, err
+	}
+
+	kratosPublicURL, err := requiredEnv("KRATOS_PUBLIC_URL")
+	if err != nil {
+		return nil, err
+	}
+
+	kratosWebhookSecret, err := requiredEnv("KRATOS_WEBHOOK_SECRET")
+	if err != nil {
+		return nil, err
+	}
+
+	corsOrigins, err := requiredEnv("CORS_ALLOWED_ORIGINS")
+	if err != nil {
+		return nil, err
+	}
+
+	maxConns := 10
+	if v, ok := os.LookupEnv("DATABASE_MAX_CONNECTIONS"); ok {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid DATABASE_MAX_CONNECTIONS: %w", err)
+		}
+		maxConns = parsed
+	}
+
+	serverHost := envOrDefault("SERVER_HOST", "0.0.0.0")
+
+	serverPort := 3000
+	if v, ok := os.LookupEnv("SERVER_PORT"); ok {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SERVER_PORT: %w", err)
+		}
+		serverPort = parsed
+	}
+
+	logLevel := envOrDefault("LOG_LEVEL", "info")
+
+	var sentryDSN *string
+	if v, ok := os.LookupEnv("SENTRY_DSN"); ok {
+		sentryDSN = &v
+	}
+
+	envStr := envOrDefault("ENVIRONMENT", "development")
+	var env Environment
+	switch envStr {
+	case "production":
+		env = EnvironmentProduction
+	case "staging":
+		env = EnvironmentStaging
+	default:
+		env = EnvironmentDevelopment
+	}
+
+	origins := strings.Split(corsOrigins, ",")
+	for i := range origins {
+		origins[i] = strings.TrimSpace(origins[i])
+	}
+
+	return &AppConfig{
+		DatabaseURL:            databaseURL,
+		DatabaseMaxConnections: maxConns,
+		RedisURL:               redisURL,
+		KratosAdminURL:         kratosAdminURL,
+		KratosPublicURL:        kratosPublicURL,
+		KratosWebhookSecret:    kratosWebhookSecret,
+		CORSAllowedOrigins:     origins,
+		ServerHost:             serverHost,
+		ServerPort:             serverPort,
+		LogLevel:               logLevel,
+		SentryDSN:              sentryDSN,
+		Environment:            env,
+	}, nil
+}
+
+func requiredEnv(key string) (string, error) {
+	val, ok := os.LookupEnv(key)
+	if !ok || val == "" {
+		return "", fmt.Errorf("required environment variable %s is not set", key)
+	}
+	return val, nil
+}
+
+func envOrDefault(key, defaultVal string) string {
+	if val, ok := os.LookupEnv(key); ok {
+		return val
+	}
+	return defaultVal
 }
 ```
 
-`required_env` returns `AppConfigError::Missing` if absent. `optional_env` returns `None` if
-absent, `AppConfigError::InvalidValue` if present but unparseable.
+`requiredEnv` returns an error if absent. `envOrDefault` returns the default if absent.
 
 ### §3.3 .env.example
 
@@ -454,7 +506,7 @@ SERVER_HOST=0.0.0.0
 SERVER_PORT=3000
 
 # Logging
-LOG_LEVEL=homegrown_academy=debug,tower_http=debug,sea_orm=warn
+LOG_LEVEL=debug
 
 # Environment
 ENVIRONMENT=development
@@ -472,26 +524,34 @@ only documents the contract (env var names) that the deployment stack must satis
 
 ---
 
-## §4 Application Entrypoint (`src/main.rs`)
+## §4 Application Entrypoint (`cmd/server/main.go`)
 
 ### §4.1 Runtime
 
-Tokio multi-threaded runtime with default worker count (one per logical CPU core).
+Go uses goroutines natively — no async runtime configuration needed. The `main` function
+orchestrates the startup sequence.
 
-```rust
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Startup sequence — order matters
-    // (1) Init tracing
-    // (2) Load config
-    // (3) Create DB pool
-    // (4) Run migrations
-    // (5) Create Redis pool
-    // (6) Init EventBus + register subscriptions
-    // (7) Wire AppState
-    // (8) Build Axum app
-    // (9) Bind listener
-    // (10) Serve with graceful shutdown
+```go
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+)
+
+func main() {
+	// Startup sequence — order matters
+	// (1) Init slog logger
+	// (2) Load config
+	// (3) Create DB pool
+	// (4) Run migrations (goose)
+	// (5) Create Redis client
+	// (6) Init EventBus + register subscriptions
+	// (7) Wire AppState
+	// (8) Build Echo app
+	// (9) Start server
+	// (10) Serve with graceful shutdown
 }
 ```
 
@@ -502,19 +562,19 @@ previous step.
 
 | Step | Action | Depends On | Failure Behavior |
 |------|--------|------------|------------------|
-| 1 | `init_tracing(&config)` | None (uses env defaults until config loaded) | Fatal — exit |
-| 2 | `AppConfig::from_env()` | — | Fatal — exit with missing-env message |
-| 3 | `create_db_pool(&config)` | Config | Fatal — exit |
-| 4 | `Migrator::up(&db, None)` | DB pool | Fatal — exit with migration error |
-| 5 | `create_redis_pool(&config)` | Config | Fatal — exit |
-| 6 | `EventBus::new()` + subscription registration | Services | Fatal — exit |
-| 7 | `AppState::new(db, redis, event_bus, services...)` | All above | Infallible |
-| 8 | `create_app(state)` | AppState | Infallible |
-| 9 | `TcpListener::bind(addr)` | Config | Fatal — exit |
-| 10 | `axum::serve(listener, app).with_graceful_shutdown(signal)` | All above | Runs until signal |
+| 1 | `initLogger(cfg)` | None (uses defaults until config loaded) | Fatal — exit |
+| 2 | `config.LoadConfig()` | — | Fatal — exit with missing-env message |
+| 3 | `db.CreatePool(cfg)` | Config | Fatal — exit |
+| 4 | `goose.Up(db, migrationsDir)` | DB pool | Fatal — exit with migration error |
+| 5 | `redis.NewClient(cfg)` | Config | Fatal — exit |
+| 6 | `events.NewEventBus()` + subscription registration | Services | Fatal — exit |
+| 7 | `app.NewAppState(db, redis, eventBus, services...)` | All above | Infallible |
+| 8 | `app.NewApp(state)` | AppState | Infallible |
+| 9 | `e.Start(addr)` | Config | Fatal — exit |
+| 10 | Graceful shutdown via `os.Signal` listener | All above | Runs until signal |
 
-**Tracing bootstrap**: Step 1 initializes with defaults first (so steps 2-5 can log). After
-config is loaded, the tracing subscriber is reconfigured with the config-specified log level.
+**Logger bootstrap**: Step 1 initializes with defaults first (so steps 2-5 can log). After
+config is loaded, the slog handler is reconfigured with the config-specified log level.
 
 ### §4.3 Graceful Shutdown
 
@@ -527,46 +587,69 @@ development). On signal reception:
 4. Close Redis connections
 5. Exit with code 0
 
-```rust
-async fn shutdown_signal() {
-    let ctrl_c = tokio::signal::ctrl_c();
-    let mut sigterm = tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::terminate(),
-    ).expect("failed to install SIGTERM handler");
+```go
+package main
 
-    tokio::select! {
-        _ = ctrl_c => { tracing::info!("received Ctrl-C, shutting down"); }
-        _ = sigterm.recv() => { tracing::info!("received SIGTERM, shutting down"); }
-    }
+import (
+	"context"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+)
+
+func gracefulShutdown(ctx context.Context, e *echo.Echo, cleanup func()) {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	sig := <-quit
+	slog.Info("received shutdown signal", "signal", sig.String())
+
+	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := e.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown error", "error", err)
+	}
+
+	cleanup()
+	slog.Info("server stopped")
 }
 ```
 
 ---
 
-## §5 Application Wiring (`src/app.rs`)
+## §5 Application Wiring (`internal/app/app.go`)
 
 ### §5.1 AppState
 
-The central state struct passed to all Axum handlers via `State<AppState>`. Contains shared
-infrastructure and all domain service trait objects.
+The central state struct passed to all Echo handlers via context. Contains shared
+infrastructure and all domain service interfaces.
 
-```rust
-use sea_orm::DatabaseConnection;
-use std::sync::Arc;
+```go
+package app
 
-#[derive(Clone)]
-pub struct AppState {
-    // ─── Infrastructure ─────────────────────────────────────────────
-    pub db: DatabaseConnection,
-    pub redis: RedisPool,
-    pub event_bus: Arc<EventBus>,
-    pub config: Arc<AppConfig>,
+import (
+	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
+)
 
-    // ─── Domain Services (added incrementally as domains are built) ─
-    // pub iam: Arc<dyn IamService>,
-    // pub method: Arc<dyn MethodologyService>,
-    // pub social: Arc<dyn SocialService>,
-    // ... etc.
+// AppState holds shared infrastructure and domain service interfaces.
+type AppState struct {
+	// ─── Infrastructure ─────────────────────────────────────────────
+	DB       *gorm.DB
+	Redis    *redis.Client
+	EventBus *shared.EventBus
+	Config   *config.AppConfig
+
+	// ─── Domain Services (added incrementally as domains are built) ─
+	// IAM    IamService
+	// Method MethodologyService
+	// Social SocialService
+	// ... etc.
 }
 ```
 
@@ -575,44 +658,48 @@ compiles with infrastructure fields only.
 
 ### §5.2 Router Composition
 
-`create_app(state) -> Router` builds the Axum router with middleware layering and route groups.
+`NewApp(state) -> *echo.Echo` builds the Echo router with middleware layering and route groups.
 
-```rust
-pub fn create_app(state: AppState) -> Router {
-    let public_routes = Router::new()
-        .route("/health", get(health_handler));
+```go
+package app
 
-    let webhook_routes = Router::new();
-        // Domain webhooks added here (e.g., /hooks/kratos/*)
+import (
+	"github.com/labstack/echo/v4"
+	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
+)
 
-    let authenticated_routes = Router::new();
-        // Domain routes added here, all behind auth middleware
+func NewApp(state *AppState) *echo.Echo {
+	e := echo.New()
 
-    Router::new()
-        .merge(public_routes)
-        .nest("/hooks", webhook_routes)
-        .merge(
-            authenticated_routes
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    auth_middleware,
-                ))
-        )
-        // ─── Middleware stack (outermost applied first) ──────────────
-        .layer(TraceLayer::new_for_http())
-        .layer(security_headers_layer())
-        .layer(cors_layer(&state.config))
-        .with_state(state)
+	// ─── Global Middleware (outermost applied first) ──────────────
+	e.Use(echomw.RequestLoggerWithConfig(requestLoggerConfig()))
+	e.Use(middleware.SecurityHeaders())
+	e.Use(echomw.CORSWithConfig(corsConfig(state.Config)))
+
+	// ─── Public Routes ───────────────────────────────────────────
+	e.GET("/health", healthHandler(state))
+
+	// ─── Webhook Routes ──────────────────────────────────────────
+	// Domain webhooks added here (e.g., /hooks/kratos/*)
+	// hooks := e.Group("/hooks")
+
+	// ─── Authenticated Routes ────────────────────────────────────
+	// Domain routes added here, all behind auth middleware
+	auth := e.Group("")
+	auth.Use(middleware.Auth(state))
+
+	return e
 }
 ```
 
 ### §5.3 Middleware Stack Ordering
 
-Layers are applied outermost-first. The request passes through them top-to-bottom:
+Middleware is applied outermost-first. The request passes through them top-to-bottom:
 
 | Order | Layer | Scope | Purpose |
 |-------|-------|-------|---------|
-| 1 | `TraceLayer` | All routes | Request/response logging with timing |
+| 1 | `RequestLogger` | All routes | Request/response logging with timing |
 | 2 | Security headers | All routes | `X-Content-Type-Options`, `X-Frame-Options`, etc. |
 | 3 | CORS | All routes | Enforces allowed origins `[ARCH §2.3]` |
 | 4 | Rate limiting | All routes | Token bucket per IP (unauth) or per user (auth) |
@@ -636,7 +723,7 @@ Returns 200 with:
 }
 ```
 
-The version string is set from `env!("CARGO_PKG_VERSION")` at compile time. This endpoint
+The version string is set from a build-time `-ldflags` variable. This endpoint
 is unauthenticated — used by ALB health checks and UptimeRobot. `[ARCH §2.14]`
 
 No database connectivity check in the health endpoint. Database health is validated at startup
@@ -657,225 +744,312 @@ authoritative.
 
 ---
 
-## §6 Error Framework (`src/shared/error.rs`)
+## §6 Error Framework (`internal/shared/error.go`)
 
-### §6.1 AppError Enum
+### §6.1 AppError Type
 
 The application-wide error type. All domain errors convert to `AppError` before reaching
 the handler return type. `[CODING §2.2]`
 
-```rust
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+```go
+package shared
 
-#[derive(Debug, thiserror::Error)]
-pub enum AppError {
-    #[error("not found")]
-    NotFound,
+import (
+	"errors"
+	"fmt"
+	"net/http"
+)
 
-    #[error("unauthorized")]
-    Unauthorized,
+// AppError represents an application-level error with HTTP status mapping.
+type AppError struct {
+	Code       string
+	Message    string
+	StatusCode int
+	Err        error // wrapped internal error, never exposed to client
+}
 
-    #[error("forbidden")]
-    Forbidden,
+func (e *AppError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.Err)
+	}
+	return e.Message
+}
 
-    #[error("premium subscription required")]
-    PremiumRequired,
+func (e *AppError) Unwrap() error {
+	return e.Err
+}
 
-    #[error("COPPA consent required")]
-    CoppaConsentRequired,
+// Predefined error constructors
 
-    #[error("validation error: {0}")]
-    Validation(String),
+func ErrNotFound() *AppError {
+	return &AppError{Code: "not_found", Message: "Resource not found", StatusCode: http.StatusNotFound}
+}
 
-    #[error("conflict: {0}")]
-    Conflict(String),
+func ErrUnauthorized() *AppError {
+	return &AppError{Code: "unauthorized", Message: "Authentication required", StatusCode: http.StatusUnauthorized}
+}
 
-    #[error("rate limited")]
-    RateLimited,
+func ErrForbidden() *AppError {
+	return &AppError{Code: "forbidden", Message: "Access denied", StatusCode: http.StatusForbidden}
+}
 
-    #[error("bad request: {0}")]
-    BadRequest(String),
+func ErrPremiumRequired() *AppError {
+	return &AppError{Code: "premium_required", Message: "Premium subscription required", StatusCode: http.StatusPaymentRequired}
+}
 
-    #[error("account suspended")]
-    AccountSuspended,
+func ErrCoppaConsentRequired() *AppError {
+	return &AppError{Code: "coppa_consent_required", Message: "COPPA parental consent required", StatusCode: http.StatusForbidden}
+}
 
-    #[error("account banned")]
-    AccountBanned,
+func ErrValidation(msg string) *AppError {
+	return &AppError{Code: "validation_error", Message: msg, StatusCode: http.StatusUnprocessableEntity}
+}
 
-    #[error("internal error")]
-    Internal(#[from] anyhow::Error),
+func ErrConflict(msg string) *AppError {
+	return &AppError{Code: "conflict", Message: msg, StatusCode: http.StatusConflict}
+}
 
-    #[error("database error")]
-    Database(#[from] sea_orm::DbErr),
+func ErrRateLimited() *AppError {
+	return &AppError{Code: "rate_limited", Message: "Rate limit exceeded", StatusCode: http.StatusTooManyRequests}
+}
+
+func ErrBadRequest(msg string) *AppError {
+	return &AppError{Code: "bad_request", Message: msg, StatusCode: http.StatusBadRequest}
+}
+
+func ErrAccountSuspended() *AppError {
+	return &AppError{Code: "account_suspended", Message: "Your account has been temporarily suspended", StatusCode: http.StatusForbidden}
+}
+
+func ErrAccountBanned() *AppError {
+	return &AppError{Code: "account_banned", Message: "Your account has been permanently restricted", StatusCode: http.StatusForbidden}
+}
+
+func ErrInternal(err error) *AppError {
+	return &AppError{Code: "internal_error", Message: "An internal error occurred", StatusCode: http.StatusInternalServerError, Err: err}
+}
+
+func ErrDatabase(err error) *AppError {
+	return &AppError{Code: "internal_error", Message: "An internal error occurred", StatusCode: http.StatusInternalServerError, Err: err}
 }
 ```
 
 ### §6.2 HTTP Status Mapping
 
-| Variant | HTTP Status | JSON `code` |
+| Constructor | HTTP Status | JSON `code` |
 |---------|-------------|-------------|
-| `NotFound` | 404 Not Found | `not_found` |
-| `Unauthorized` | 401 Unauthorized | `unauthorized` |
-| `Forbidden` | 403 Forbidden | `forbidden` |
-| `PremiumRequired` | 402 Payment Required | `premium_required` |
-| `CoppaConsentRequired` | 403 Forbidden | `coppa_consent_required` |
-| `Validation(msg)` | 422 Unprocessable Entity | `validation_error` |
-| `Conflict(msg)` | 409 Conflict | `conflict` |
-| `RateLimited` | 429 Too Many Requests | `rate_limited` |
-| `BadRequest(msg)` | 400 Bad Request | `bad_request` |
-| `AccountSuspended` | 403 Forbidden | `account_suspended` |
-| `AccountBanned` | 403 Forbidden | `account_banned` |
-| `Internal(err)` | 500 Internal Server Error | `internal_error` |
-| `Database(err)` | 500 Internal Server Error | `internal_error` |
+| `ErrNotFound()` | 404 Not Found | `not_found` |
+| `ErrUnauthorized()` | 401 Unauthorized | `unauthorized` |
+| `ErrForbidden()` | 403 Forbidden | `forbidden` |
+| `ErrPremiumRequired()` | 402 Payment Required | `premium_required` |
+| `ErrCoppaConsentRequired()` | 403 Forbidden | `coppa_consent_required` |
+| `ErrValidation(msg)` | 422 Unprocessable Entity | `validation_error` |
+| `ErrConflict(msg)` | 409 Conflict | `conflict` |
+| `ErrRateLimited()` | 429 Too Many Requests | `rate_limited` |
+| `ErrBadRequest(msg)` | 400 Bad Request | `bad_request` |
+| `ErrAccountSuspended()` | 403 Forbidden | `account_suspended` |
+| `ErrAccountBanned()` | 403 Forbidden | `account_banned` |
+| `ErrInternal(err)` | 500 Internal Server Error | `internal_error` |
+| `ErrDatabase(err)` | 500 Internal Server Error | `internal_error` |
 
-### §6.3 IntoResponse Implementation
+### §6.3 Echo Error Handler
 
-```rust
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let (status, code, message) = match &self {
-            AppError::NotFound => (StatusCode::NOT_FOUND, "not_found", "Resource not found"),
-            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized", "Authentication required"),
-            AppError::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "Access denied"),
-            AppError::PremiumRequired => (StatusCode::PAYMENT_REQUIRED, "premium_required", "Premium subscription required"),
-            AppError::CoppaConsentRequired => (StatusCode::FORBIDDEN, "coppa_consent_required", "COPPA parental consent required"),
-            AppError::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, "validation_error", msg.as_str()),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.as_str()),
-            AppError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Rate limit exceeded"),
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad_request", msg.as_str()),
-            AppError::AccountSuspended => (StatusCode::FORBIDDEN, "account_suspended", "Your account has been temporarily suspended"),
-            AppError::AccountBanned => (StatusCode::FORBIDDEN, "account_banned", "Your account has been permanently restricted"),
-            AppError::Internal(err) => {
-                tracing::error!(error = %err, "internal server error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "An internal error occurred")
-            }
-            AppError::Database(err) => {
-                tracing::error!(error = %err, "database error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "An internal error occurred")
-            }
-        };
+```go
+package shared
 
-        let body = serde_json::json!({
-            "error": {
-                "code": code,
-                "message": message,
-            }
-        });
+import (
+	"errors"
+	"log/slog"
+	"net/http"
 
-        (status, axum::Json(body)).into_response()
-    }
+	"github.com/labstack/echo/v4"
+)
+
+// ErrorResponse is the JSON structure returned for all errors.
+type ErrorResponse struct {
+	Error ErrorBody `json:"error"`
+}
+
+// ErrorBody contains the machine-readable code and human-readable message.
+type ErrorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// HTTPErrorHandler is a custom Echo error handler that maps AppError to JSON responses.
+func HTTPErrorHandler(err error, c echo.Context) {
+	if c.Response().Committed {
+		return
+	}
+
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		if appErr.Err != nil {
+			slog.Error("internal server error", "error", appErr.Err)
+		}
+		_ = c.JSON(appErr.StatusCode, ErrorResponse{
+			Error: ErrorBody{
+				Code:    appErr.Code,
+				Message: appErr.Message,
+			},
+		})
+		return
+	}
+
+	// Fallback for non-AppError errors
+	slog.Error("unhandled error", "error", err)
+	_ = c.JSON(http.StatusInternalServerError, ErrorResponse{
+		Error: ErrorBody{
+			Code:    "internal_error",
+			Message: "An internal error occurred",
+		},
+	})
 }
 ```
 
 **Key behavior**:
-- `Internal` and `Database` variants log the actual error via `tracing::error!` but return
-  only `"An internal error occurred"` to the client. `[CODING §2.2, §5.2]`
-- Validation messages from `validator` are user-facing and included in the response.
+- `ErrInternal` and `ErrDatabase` constructors set the wrapped `Err` which is logged via
+  `slog.Error` but only `"An internal error occurred"` is returned to the client.
+  `[CODING §2.2, §5.2]`
+- Validation messages from `go-playground/validator` are user-facing and included in the response.
 - The `code` field provides a machine-readable error identifier for the frontend.
 
 ### §6.4 Domain Error Conversion Pattern
 
-Each domain defines its own error enum (e.g., `IamError`) and implements
-`From<DomainError> for AppError`. This pattern keeps domain errors specific while converging
-to a single HTTP error type.
+Each domain defines its own error types and provides a function to convert to `AppError`.
+This pattern keeps domain errors specific while converging to a single HTTP error type.
 
-```rust
+```go
 // Example pattern — each domain implements this
-impl From<IamError> for AppError {
-    fn from(err: IamError) -> Self {
-        match err {
-            IamError::FamilyNotFound => AppError::NotFound,
-            IamError::ParentNotFound => AppError::NotFound,
-            IamError::NotPrimaryParent => AppError::Forbidden,
-            IamError::PremiumRequired => AppError::PremiumRequired,
-            IamError::CoppaConsentRequired => AppError::CoppaConsentRequired,
-            IamError::InvalidConsentTransition { .. } => {
-                AppError::Validation(err.to_string())
-            }
-            IamError::ParentAlreadyInFamily => {
-                AppError::Conflict(err.to_string())
-            }
-            IamError::DatabaseError(db_err) => AppError::Database(db_err),
-            IamError::KratosError => AppError::Internal(anyhow::anyhow!("Kratos error")),
-            // ... other variants
-        }
-    }
+func ToAppError(err error) *shared.AppError {
+	var iamErr *IamError
+	if errors.As(err, &iamErr) {
+		switch iamErr.Kind {
+		case IamErrFamilyNotFound, IamErrParentNotFound:
+			return shared.ErrNotFound()
+		case IamErrNotPrimaryParent:
+			return shared.ErrForbidden()
+		case IamErrPremiumRequired:
+			return shared.ErrPremiumRequired()
+		case IamErrCoppaConsentRequired:
+			return shared.ErrCoppaConsentRequired()
+		case IamErrInvalidConsentTransition:
+			return shared.ErrValidation(iamErr.Error())
+		case IamErrParentAlreadyInFamily:
+			return shared.ErrConflict(iamErr.Error())
+		case IamErrDatabaseError:
+			return shared.ErrDatabase(iamErr.Err)
+		case IamErrKratosError:
+			return shared.ErrInternal(fmt.Errorf("Kratos error: %w", iamErr.Err))
+		default:
+			return shared.ErrInternal(iamErr)
+		}
+	}
+	return shared.ErrInternal(err)
 }
 ```
 
 ### §6.5 Validator Integration
 
-```rust
-impl From<validator::ValidationErrors> for AppError {
-    fn from(errors: validator::ValidationErrors) -> Self {
-        AppError::Validation(errors.to_string())
-    }
+```go
+package shared
+
+import (
+	"strings"
+
+	"github.com/go-playground/validator/v10"
+)
+
+// ValidationError converts go-playground/validator errors to an AppError.
+func ValidationError(err error) *AppError {
+	var ve validator.ValidationErrors
+	if errors.As(err, &ve) {
+		var msgs []string
+		for _, fe := range ve {
+			msgs = append(msgs, fmt.Sprintf("field '%s' failed on '%s' validation", fe.Field(), fe.Tag()))
+		}
+		return ErrValidation(strings.Join(msgs, "; "))
+	}
+	return ErrValidation(err.Error())
 }
 ```
 
-This allows handlers to use `cmd.validate()?` and have validation errors automatically
-map to 422 responses.
+This allows handlers to call `validate.Struct(cmd)` and convert validation errors to
+422 responses via `shared.ValidationError(err)`.
 
 ---
 
-## §7 Shared Types (`src/shared/types.rs`)
+## §7 Shared Types (`internal/shared/types.go`)
 
 ### §7.1 Newtype Wrappers
 
-Type-safe wrappers for UUID identifiers. Prevents accidentally passing a `FamilyId` where a
-`ParentId` is expected. `[ARCH §4.2]`
+Type-safe wrappers for UUID identifiers. Prevents accidentally passing a `FamilyID` where a
+`ParentID` is expected. `[ARCH §4.2]`
 
-```rust
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::ops::Deref;
-use utoipa::ToSchema;
-use uuid::Uuid;
+```go
+package shared
 
-macro_rules! uuid_newtype {
-    ($name:ident) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
-        #[serde(transparent)]
-        pub struct $name(Uuid);
+import (
+	"encoding/json"
 
-        impl $name {
-            pub fn new(id: Uuid) -> Self {
-                Self(id)
-            }
-        }
+	"github.com/google/uuid"
+)
 
-        impl Deref for $name {
-            type Target = Uuid;
-            fn deref(&self) -> &Uuid {
-                &self.0
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-
-        impl From<Uuid> for $name {
-            fn from(id: Uuid) -> Self {
-                Self(id)
-            }
-        }
-
-        impl From<$name> for Uuid {
-            fn from(id: $name) -> Self {
-                id.0
-            }
-        }
-    };
+// FamilyID is a type-safe wrapper for family UUIDs.
+type FamilyID struct {
+	uuid.UUID
 }
 
-uuid_newtype!(FamilyId);
-uuid_newtype!(ParentId);
-uuid_newtype!(StudentId);
-uuid_newtype!(CreatorId);
+// NewFamilyID creates a FamilyID from a UUID.
+func NewFamilyID(id uuid.UUID) FamilyID {
+	return FamilyID{UUID: id}
+}
+
+// MarshalJSON implements json.Marshaler.
+func (id FamilyID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(id.UUID)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (id *FamilyID) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &id.UUID)
+}
+
+// ParentID is a type-safe wrapper for parent UUIDs.
+type ParentID struct {
+	uuid.UUID
+}
+
+func NewParentID(id uuid.UUID) ParentID {
+	return ParentID{UUID: id}
+}
+
+func (id ParentID) MarshalJSON() ([]byte, error)  { return json.Marshal(id.UUID) }
+func (id *ParentID) UnmarshalJSON(data []byte) error { return json.Unmarshal(data, &id.UUID) }
+
+// StudentID is a type-safe wrapper for student UUIDs.
+type StudentID struct {
+	uuid.UUID
+}
+
+func NewStudentID(id uuid.UUID) StudentID {
+	return StudentID{UUID: id}
+}
+
+func (id StudentID) MarshalJSON() ([]byte, error)  { return json.Marshal(id.UUID) }
+func (id *StudentID) UnmarshalJSON(data []byte) error { return json.Unmarshal(data, &id.UUID) }
+
+// CreatorID is a type-safe wrapper for creator UUIDs.
+type CreatorID struct {
+	uuid.UUID
+}
+
+func NewCreatorID(id uuid.UUID) CreatorID {
+	return CreatorID{UUID: id}
+}
+
+func (id CreatorID) MarshalJSON() ([]byte, error)  { return json.Marshal(id.UUID) }
+func (id *CreatorID) UnmarshalJSON(data []byte) error { return json.Unmarshal(data, &id.UUID) }
 ```
 
 ### §7.2 AuthContext
@@ -883,199 +1057,203 @@ uuid_newtype!(CreatorId);
 The authoritative type definition for `AuthContext`. Consolidates `[ARCH §6.2]` and
 `[IAM §11.1]`.
 
-```rust
-/// Authenticated user context, inserted into request extensions by auth middleware.
-/// Consumed by every authenticated handler.
-#[derive(Clone, Debug)]
-pub struct AuthContext {
-    pub parent_id: Uuid,
-    pub family_id: Uuid,
-    pub kratos_identity_id: Uuid,
-    pub is_primary_parent: bool,
-    pub is_platform_admin: bool,  // [S§3.1.5, 11-safety §9]
-    pub subscription_tier: SubscriptionTier,
-    pub email: String,  // NOT logged — PII [CODING §5.2]
+```go
+// SubscriptionTier represents the family's subscription level.
+type SubscriptionTier string
+
+const (
+	SubscriptionTierFree    SubscriptionTier = "free"
+	SubscriptionTierPremium SubscriptionTier = "premium"
+)
+
+// ParseSubscriptionTier parses a string into a SubscriptionTier.
+func ParseSubscriptionTier(s string) SubscriptionTier {
+	switch s {
+	case "premium":
+		return SubscriptionTierPremium
+	default:
+		return SubscriptionTierFree
+	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum SubscriptionTier {
-    Free,
-    Premium,
+// AuthContext represents the authenticated user context, stored in Echo's
+// request context by auth middleware. Consumed by every authenticated handler.
+type AuthContext struct {
+	ParentID         uuid.UUID        `json:"parent_id"`
+	FamilyID         uuid.UUID        `json:"family_id"`
+	KratosIdentityID uuid.UUID        `json:"kratos_identity_id"`
+	IsPrimaryParent  bool             `json:"is_primary_parent"`
+	IsPlatformAdmin  bool             `json:"is_platform_admin"`  // [S§3.1.5, 11-safety §9]
+	SubscriptionTier SubscriptionTier `json:"subscription_tier"`
+	Email            string           `json:"-"` // NOT logged or serialized — PII [CODING §5.2]
 }
 ```
 
-**`AuthContext` FromRequestParts impl**: Extracts `AuthContext` from Axum request extensions.
-The auth middleware inserts it; this extractor retrieves it.
+**`AuthContext` extraction from Echo context**: The auth middleware stores `AuthContext` in
+Echo's context; helper functions retrieve it.
 
-```rust
-#[axum::async_trait]
-impl<S> axum::extract::FromRequestParts<S> for AuthContext
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
+```go
+// contextKey is an unexported type to prevent key collisions.
+type contextKey string
 
-    async fn from_request_parts(
-        parts: &mut axum::http::request::Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<AuthContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)
-    }
+const authContextKey contextKey = "auth_context"
+
+// SetAuthContext stores the AuthContext in the Echo context.
+func SetAuthContext(c echo.Context, auth *AuthContext) {
+	c.Set(string(authContextKey), auth)
+}
+
+// GetAuthContext retrieves the AuthContext from the Echo context.
+// Returns an error if not present (handler is behind auth middleware).
+func GetAuthContext(c echo.Context) (*AuthContext, error) {
+	val := c.Get(string(authContextKey))
+	if val == nil {
+		return nil, ErrUnauthorized()
+	}
+	auth, ok := val.(*AuthContext)
+	if !ok {
+		return nil, ErrUnauthorized()
+	}
+	return auth, nil
 }
 ```
 
 ### §7.3 SubscriptionTier
 
 Used by `AuthContext` and permission extractors. Matches the `subscription_tier` column on
-`iam_families`.
-
-```rust
-impl SubscriptionTier {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "premium" => SubscriptionTier::Premium,
-            _ => SubscriptionTier::Free,
-        }
-    }
-}
-```
+`iam_families`. (Defined inline with `AuthContext` above in §7.2.)
 
 ---
 
-## §8 Family Scope (`src/shared/family_scope.rs`)
+## §8 Family Scope (`internal/shared/family_scope.go`)
 
 ### §8.1 FamilyScope Type
 
 `FamilyScope` wraps a `family_id` and enforces that every repository query includes a family
-filter. The `family_id` field is private — callers can read it but cannot construct a
+filter. The `familyID` field is unexported — callers can read it but cannot construct a
 `FamilyScope` outside of the designated paths. `[ARCH §1.5, CODING §2.4]`
 
-```rust
-use uuid::Uuid;
+```go
+package shared
 
-/// Wraps a family_id for privacy-enforcing database queries.
-///
-/// Private constructor ensures FamilyScope can only be created from:
-/// 1. AuthContext (via From impl) — the normal authenticated path
-/// 2. pub(crate) constructor — for auth middleware and registration flows
-#[derive(Clone, Debug)]
-pub struct FamilyScope {
-    family_id: Uuid,
+import "github.com/google/uuid"
+
+// FamilyScope wraps a family_id for privacy-enforcing database queries.
+//
+// The unexported field ensures FamilyScope can only be created from:
+// 1. AuthContext (via NewFamilyScopeFromAuth) — the normal authenticated path
+// 2. newFamilyScope — for auth middleware and registration flows (package-internal)
+type FamilyScope struct {
+	familyID uuid.UUID
 }
 
-impl FamilyScope {
-    /// Create a FamilyScope from a raw family_id.
-    /// Restricted to crate-internal use (auth middleware, registration).
-    pub(crate) fn new(family_id: Uuid) -> Self {
-        Self { family_id }
-    }
-
-    /// Read the family_id. The only public access to the wrapped value.
-    pub fn family_id(&self) -> Uuid {
-        self.family_id
-    }
+// newFamilyScope creates a FamilyScope from a raw family_id.
+// Package-internal use only (auth middleware, registration).
+func newFamilyScope(familyID uuid.UUID) FamilyScope {
+	return FamilyScope{familyID: familyID}
 }
-```
 
-### §8.2 From<&AuthContext>
-
-```rust
-impl From<&AuthContext> for FamilyScope {
-    fn from(auth: &AuthContext) -> Self {
-        FamilyScope::new(auth.family_id)
-    }
+// FamilyID returns the wrapped family_id. The only public access to the value.
+func (s FamilyScope) FamilyID() uuid.UUID {
+	return s.familyID
 }
 ```
 
-### §8.3 FromRequestParts
+### §8.2 From AuthContext
 
-```rust
-#[axum::async_trait]
-impl<S> axum::extract::FromRequestParts<S> for FamilyScope
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
+```go
+// NewFamilyScopeFromAuth creates a FamilyScope from an AuthContext.
+func NewFamilyScopeFromAuth(auth *AuthContext) FamilyScope {
+	return newFamilyScope(auth.FamilyID)
+}
+```
 
-    async fn from_request_parts(
-        parts: &mut axum::http::request::Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth = parts
-            .extensions
-            .get::<AuthContext>()
-            .ok_or(AppError::Unauthorized)?;
-        Ok(FamilyScope::from(auth))
-    }
+### §8.3 Echo Context Helper
+
+```go
+// GetFamilyScope extracts a FamilyScope from the Echo context's AuthContext.
+// Returns an error if AuthContext is not present.
+func GetFamilyScope(c echo.Context) (FamilyScope, error) {
+	auth, err := GetAuthContext(c)
+	if err != nil {
+		return FamilyScope{}, err
+	}
+	return NewFamilyScopeFromAuth(auth), nil
 }
 ```
 
 ### §8.4 RLS Integration
 
-`FamilyScope` connects to the database RLS layer via `scoped_transaction()` (§9.2). When a
+`FamilyScope` connects to the database RLS layer via `ScopedTransaction()` (§9.2). When a
 repository executes a query inside a scoped transaction, PostgreSQL's `app.current_family_id`
 setting is automatically applied, and RLS policies enforce family isolation at the database
 level as defense-in-depth.
 
 ---
 
-## §9 Database Infrastructure (`src/shared/db.rs`)
+## §9 Database Infrastructure (`internal/shared/db.go`)
 
 ### §9.1 Pool Management
 
-```rust
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+```go
+package shared
 
-pub type DbPool = DatabaseConnection;
+import (
+	"fmt"
 
-pub async fn create_pool(config: &AppConfig) -> Result<DbPool, sea_orm::DbErr> {
-    let mut opts = ConnectOptions::new(&config.database_url);
-    opts.max_connections(config.database_max_connections)
-        .min_connections(1)
-        .sqlx_logging(false);  // Use tracing, not sqlx's built-in logging
+	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
 
-    Database::connect(opts).await
+// CreatePool creates a GORM database connection pool.
+func CreatePool(cfg *config.AppConfig) (*gorm.DB, error) {
+	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent), // Use slog, not GORM's built-in logging
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+
+	sqlDB.SetMaxOpenConns(cfg.DatabaseMaxConnections)
+	sqlDB.SetMaxIdleConns(1)
+
+	return db, nil
 }
 ```
 
 ### §9.2 Scoped Transactions
 
-`scoped_transaction` begins a database transaction, sets `SET LOCAL app.current_family_id`
-for RLS enforcement, executes a closure, and commits. The `SET LOCAL` value is automatically
+`ScopedTransaction` begins a database transaction, sets `SET LOCAL app.current_family_id`
+for RLS enforcement, executes a callback, and commits. The `SET LOCAL` value is automatically
 cleared on commit or rollback.
 
-```rust
-use sea_orm::{DatabaseConnection, TransactionTrait, ConnectionTrait, Statement};
+```go
+package shared
 
-/// Execute a closure within a family-scoped transaction.
-/// Sets `app.current_family_id` for RLS enforcement.
-pub async fn scoped_transaction<F, Fut, T>(
-    db: &DatabaseConnection,
-    scope: &FamilyScope,
-    f: F,
-) -> Result<T, AppError>
-where
-    F: FnOnce(&sea_orm::DatabaseTransaction) -> Fut,
-    Fut: std::future::Future<Output = Result<T, AppError>>,
-{
-    let txn = db.begin().await?;
+import (
+	"context"
+	"fmt"
 
-    txn.execute(Statement::from_string(
-        sea_orm::DatabaseBackend::Postgres,
-        format!(
-            "SET LOCAL app.current_family_id = '{}'",
-            scope.family_id()
-        ),
-    ))
-    .await?;
+	"gorm.io/gorm"
+)
 
-    let result = f(&txn).await?;
-    txn.commit().await?;
-    Ok(result)
+// ScopedTransaction executes fn within a family-scoped transaction.
+// Sets `app.current_family_id` for RLS enforcement.
+func ScopedTransaction(ctx context.Context, db *gorm.DB, scope FamilyScope, fn func(tx *gorm.DB) error) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		setSQL := fmt.Sprintf("SET LOCAL app.current_family_id = '%s'", scope.FamilyID().String())
+		if err := tx.Exec(setSQL).Error; err != nil {
+			return fmt.Errorf("failed to set family scope: %w", err)
+		}
+		return fn(tx)
+	})
 }
 ```
 
@@ -1083,44 +1261,43 @@ where
 
 For operations that intentionally bypass family scope. Each call site MUST document why.
 
-```rust
-/// Execute a closure in a transaction WITHOUT family scope.
-///
-/// ONLY for:
-/// - Auth middleware lookups (FamilyScope not yet constructed)
-/// - Registration webhooks (family does not exist yet)
-/// - Background cleanup jobs (cross-family by design)
-///
-/// Every call site MUST have a comment explaining why unscoped access is required.
-pub async fn unscoped_transaction<F, Fut, T>(
-    db: &DatabaseConnection,
-    f: F,
-) -> Result<T, AppError>
-where
-    F: FnOnce(&sea_orm::DatabaseTransaction) -> Fut,
-    Fut: std::future::Future<Output = Result<T, AppError>>,
-{
-    let txn = db.begin().await?;
-    let result = f(&txn).await?;
-    txn.commit().await?;
-    Ok(result)
+```go
+// UnscopedTransaction executes fn in a transaction WITHOUT family scope.
+//
+// ONLY for:
+// - Auth middleware lookups (FamilyScope not yet constructed)
+// - Registration webhooks (family does not exist yet)
+// - Background cleanup jobs (cross-family by design)
+//
+// Every call site MUST have a comment explaining why unscoped access is required.
+func UnscopedTransaction(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return fn(tx)
+	})
 }
 ```
 
 ### §9.4 Bootstrap Migration
 
-The first migration (`m000000_000000_bootstrap`) installs PostgreSQL extensions required by
+The first migration (`00000000000000_bootstrap.sql`) installs PostgreSQL extensions required by
 all domains. This was previously in 01-iam's first migration — it is moved here because
 extensions are shared infrastructure, not IAM-specific.
 
 ```sql
--- Migration: m000000_000000_bootstrap.rs
+-- +goose Up
+-- Migration: 00000000000000_bootstrap.sql
 -- Installs PostgreSQL extensions required by the platform.
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";     -- UUID generation
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";       -- Cryptographic functions
 CREATE EXTENSION IF NOT EXISTS "postgis";        -- Spatial queries [ARCH §5.4]
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";        -- Trigram fuzzy matching [ARCH §2.6]
+
+-- +goose Down
+DROP EXTENSION IF EXISTS "pg_trgm";
+DROP EXTENSION IF EXISTS "postgis";
+DROP EXTENSION IF EXISTS "pgcrypto";
+DROP EXTENSION IF EXISTS "uuid-ossp";
 ```
 
 **Idempotent**: `IF NOT EXISTS` ensures this migration can be re-run safely.
@@ -1131,8 +1308,8 @@ Two PostgreSQL roles are used:
 
 | Role | Purpose | RLS behavior |
 |------|---------|--------------|
-| Migration role | Runs `sea-orm-migration` (CREATE TABLE, ALTER, etc.) | Bypasses RLS (superuser or table owner) |
-| Application role | Used by the Rust API at runtime | Subject to RLS policies |
+| Migration role | Runs goose migrations (CREATE TABLE, ALTER, etc.) | Bypasses RLS (superuser or table owner) |
+| Application role | Used by the Go API at runtime | Subject to RLS policies |
 
 The application role MUST NOT be a superuser. This ensures RLS cannot be accidentally
 bypassed by application queries. The migration role creates tables and RLS policies; the
@@ -1144,24 +1321,36 @@ UPDATE, DELETE` on all tables. `[ARCH §2.5, §5.2]`
 
 ---
 
-## §10 Redis Infrastructure (`src/shared/redis.rs`)
+## §10 Redis Infrastructure (`internal/shared/redis.go`)
 
-### §10.1 Pool Creation
+### §10.1 Client Creation
 
-```rust
-use redis::aio::ConnectionManager;
+```go
+package shared
 
-pub type RedisPool = ConnectionManager;
+import (
+	"context"
+	"fmt"
 
-pub async fn create_redis_pool(config: &AppConfig) -> Result<RedisPool, redis::RedisError> {
-    let client = redis::Client::open(config.redis_url.as_str())?;
-    let manager = ConnectionManager::new(client).await?;
+	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"github.com/redis/go-redis/v9"
+)
 
-    // Validate connectivity with PING
-    let mut conn = manager.clone();
-    redis::cmd("PING").query_async::<String>(&mut conn).await?;
+// CreateRedisClient creates a Redis client and validates connectivity.
+func CreateRedisClient(ctx context.Context, cfg *config.AppConfig) (*redis.Client, error) {
+	opts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid redis URL: %w", err)
+	}
 
-    Ok(manager)
+	client := redis.NewClient(opts)
+
+	// Validate connectivity with PING
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("redis ping failed: %w", err)
+	}
+
+	return client, nil
 }
 ```
 
@@ -1170,41 +1359,52 @@ pub async fn create_redis_pool(config: &AppConfig) -> Result<RedisPool, redis::R
 Generic get/set with TTL and delete. These are the only Redis operations needed in Phase 1
 (rate limiting + methodology config caching).
 
-```rust
-use redis::AsyncCommands;
-use serde::{de::DeserializeOwned, Serialize};
+```go
+package shared
 
-/// Get a JSON-serialized value from Redis.
-pub async fn get<T: DeserializeOwned>(
-    pool: &mut RedisPool,
-    key: &str,
-) -> Result<Option<T>, AppError> {
-    let value: Option<String> = pool.get(key).await
-        .map_err(|e| AppError::Internal(e.into()))?;
-    match value {
-        Some(s) => Ok(Some(serde_json::from_str(&s)
-            .map_err(|e| AppError::Internal(e.into()))?)),
-        None => Ok(None),
-    }
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+// RedisGet retrieves a JSON-serialized value from Redis.
+func RedisGet[T any](ctx context.Context, client *redis.Client, key string) (*T, error) {
+	val, err := client.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, ErrInternal(fmt.Errorf("redis get: %w", err))
+	}
+
+	var result T
+	if err := json.Unmarshal([]byte(val), &result); err != nil {
+		return nil, ErrInternal(fmt.Errorf("redis unmarshal: %w", err))
+	}
+	return &result, nil
 }
 
-/// Set a JSON-serialized value in Redis with a TTL.
-pub async fn set<T: Serialize>(
-    pool: &mut RedisPool,
-    key: &str,
-    value: &T,
-    ttl_seconds: u64,
-) -> Result<(), AppError> {
-    let serialized = serde_json::to_string(value)
-        .map_err(|e| AppError::Internal(e.into()))?;
-    pool.set_ex(key, serialized, ttl_seconds).await
-        .map_err(|e| AppError::Internal(e.into()))
+// RedisSet stores a JSON-serialized value in Redis with a TTL.
+func RedisSet[T any](ctx context.Context, client *redis.Client, key string, value T, ttl time.Duration) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return ErrInternal(fmt.Errorf("redis marshal: %w", err))
+	}
+	if err := client.Set(ctx, key, string(data), ttl).Err(); err != nil {
+		return ErrInternal(fmt.Errorf("redis set: %w", err))
+	}
+	return nil
 }
 
-/// Delete a key from Redis.
-pub async fn delete(pool: &mut RedisPool, key: &str) -> Result<(), AppError> {
-    pool.del(key).await
-        .map_err(|e| AppError::Internal(e.into()))
+// RedisDelete removes a key from Redis.
+func RedisDelete(ctx context.Context, client *redis.Client, key string) error {
+	if err := client.Del(ctx, key).Err(); err != nil {
+		return ErrInternal(fmt.Errorf("redis del: %w", err))
+	}
+	return nil
 }
 ```
 
@@ -1212,27 +1412,23 @@ pub async fn delete(pool: &mut RedisPool, key: &str) -> Result<(), AppError> {
 
 Atomic increment with expiry for rate limiting (§13.2).
 
-```rust
-/// Increment a counter and set expiry if this is the first increment in the window.
-/// Returns the new counter value.
-pub async fn increment_with_expiry(
-    pool: &mut RedisPool,
-    key: &str,
-    window_seconds: u64,
-) -> Result<i64, AppError> {
-    let count: i64 = redis::cmd("INCR")
-        .arg(key)
-        .query_async(pool)
-        .await
-        .map_err(|e| AppError::Internal(e.into()))?;
+```go
+// RedisIncrementWithExpiry increments a counter and sets expiry if this is
+// the first increment in the window. Returns the new counter value.
+func RedisIncrementWithExpiry(ctx context.Context, client *redis.Client, key string, window time.Duration) (int64, error) {
+	count, err := client.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, ErrInternal(fmt.Errorf("redis incr: %w", err))
+	}
 
-    if count == 1 {
-        // First request in window — set expiry
-        pool.expire(key, window_seconds as i64).await
-            .map_err(|e| AppError::Internal(e.into()))?;
-    }
+	if count == 1 {
+		// First request in window — set expiry
+		if err := client.Expire(ctx, key, window).Err(); err != nil {
+			return 0, ErrInternal(fmt.Errorf("redis expire: %w", err))
+		}
+	}
 
-    Ok(count)
+	return count, nil
 }
 ```
 
@@ -1245,119 +1441,101 @@ here:
 |---------|---------------|---------------------|
 | Feed fan-out | `social::` | Sorted sets |
 | Pub/sub (WebSocket) | `social::`, `notify::` | Pub/sub channels |
-| Background job queues | `safety::`, `notify::`, `search::` | Lists (sidekiq-rs) |
+| Background job queues | `safety::`, `notify::`, `search::` | Lists (asynq) |
 | Session caching | `iam::` | Strings with TTL |
 
 ---
 
-## §11 Event Bus (`src/shared/events.rs`)
+## §11 Event Bus (`internal/shared/events.go`)
 
-### §11.1 Core Traits
+### §11.1 Core Interfaces
 
-```rust
-use std::any::TypeId;
-use std::collections::HashMap;
-use std::sync::Arc;
-use async_trait::async_trait;
+```go
+package shared
 
-/// Marker trait for domain events.
-/// Events MUST be defined in the emitting domain's `events.rs`. [CODING §8.4]
-pub trait DomainEvent: Send + Sync + 'static {}
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"reflect"
+	"sync"
+)
 
-/// Handler for a specific domain event type.
-/// Handlers MUST be defined in the consuming domain. [CODING §8.4]
-#[async_trait]
-pub trait DomainEventHandler<E: DomainEvent>: Send + Sync {
-    async fn handle(&self, event: &E) -> Result<(), AppError>;
+// DomainEvent is the interface all domain events must implement.
+// Events MUST be defined in the emitting domain's events.go. [CODING §8.4]
+type DomainEvent interface {
+	EventName() string
+}
+
+// DomainEventHandler handles a specific domain event type.
+// Handlers MUST be defined in the consuming domain. [CODING §8.4]
+type DomainEventHandler interface {
+	Handle(ctx context.Context, event DomainEvent) error
 }
 ```
 
 ### §11.2 EventBus Implementation
 
-The event bus uses `TypeId`-based dispatch. Each event type maps to a list of type-erased
-handlers.
+The event bus uses `reflect.Type`-based dispatch. Each event type maps to a list of handlers.
 
-```rust
-/// Type-erased handler wrapper.
-#[async_trait]
-trait ErasedHandler: Send + Sync {
-    async fn handle_erased(&self, event: &dyn std::any::Any) -> Result<(), AppError>;
+```go
+// EventBus dispatches domain events to registered handlers.
+type EventBus struct {
+	mu       sync.RWMutex
+	handlers map[reflect.Type][]DomainEventHandler
 }
 
-/// Adapter: wraps a typed handler as an erased handler.
-struct HandlerAdapter<E: DomainEvent, H: DomainEventHandler<E>> {
-    handler: Arc<H>,
-    _phantom: std::marker::PhantomData<E>,
+// NewEventBus creates a new EventBus.
+func NewEventBus() *EventBus {
+	return &EventBus{
+		handlers: make(map[reflect.Type][]DomainEventHandler),
+	}
 }
 
-#[async_trait]
-impl<E: DomainEvent + 'static, H: DomainEventHandler<E>> ErasedHandler
-    for HandlerAdapter<E, H>
-{
-    async fn handle_erased(&self, event: &dyn std::any::Any) -> Result<(), AppError> {
-        let event = event.downcast_ref::<E>()
-            .expect("event type mismatch — this is a bug in EventBus");
-        self.handler.handle(event).await
-    }
+// Subscribe registers a handler for a specific event type.
+// MUST be called at startup only (in main.go). [CODING §8.4]
+func (b *EventBus) Subscribe(eventType reflect.Type, handler DomainEventHandler) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.handlers[eventType] = append(b.handlers[eventType], handler)
 }
 
-pub struct EventBus {
-    handlers: HashMap<TypeId, Vec<Box<dyn ErasedHandler>>>,
-}
+// Publish dispatches a domain event to all registered handlers.
+//
+// Phase 1: Synchronous dispatch. Handlers run inline within the
+// caller's goroutine. Handler errors are logged but do NOT fail the
+// publish — the publishing domain's operation has already succeeded.
+func (b *EventBus) Publish(ctx context.Context, event DomainEvent) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 
-impl EventBus {
-    pub fn new() -> Self {
-        Self {
-            handlers: HashMap::new(),
-        }
-    }
+	eventType := reflect.TypeOf(event)
+	handlers, ok := b.handlers[eventType]
+	if !ok {
+		return nil
+	}
 
-    /// Register a handler for a specific event type.
-    /// MUST be called at startup only (in main.rs). [CODING §8.4]
-    pub fn subscribe<E, H>(&mut self, handler: Arc<H>)
-    where
-        E: DomainEvent + 'static,
-        H: DomainEventHandler<E> + 'static,
-    {
-        let adapter = Box::new(HandlerAdapter {
-            handler,
-            _phantom: std::marker::PhantomData::<E>,
-        });
-        self.handlers
-            .entry(TypeId::of::<E>())
-            .or_default()
-            .push(adapter);
-    }
+	for _, handler := range handlers {
+		if err := handler.Handle(ctx, event); err != nil {
+			slog.Error("event handler failed",
+				"event_type", event.EventName(),
+				"handler", fmt.Sprintf("%T", handler),
+				"error", err,
+			)
+			// Handler errors are logged, not propagated.
+			// The domain operation that triggered the event has
+			// already completed successfully.
+		}
+	}
 
-    /// Publish a domain event. Dispatches to all registered handlers.
-    ///
-    /// Phase 1: Synchronous dispatch. Handlers run inline within the
-    /// caller's context. Handler errors are logged but do NOT fail the
-    /// publish — the publishing domain's operation has already succeeded.
-    pub async fn publish<E: DomainEvent + 'static>(&self, event: E) -> Result<(), AppError> {
-        if let Some(handlers) = self.handlers.get(&TypeId::of::<E>()) {
-            for handler in handlers {
-                if let Err(err) = handler.handle_erased(&event).await {
-                    tracing::error!(
-                        event_type = std::any::type_name::<E>(),
-                        error = %err,
-                        "event handler failed"
-                    );
-                    // Handler errors are logged, not propagated.
-                    // The domain operation that triggered the event has
-                    // already completed successfully.
-                }
-            }
-        }
-        Ok(())
-    }
+	return nil
 }
 ```
 
 ### §11.3 Phase 1 Behavior
 
-- **Synchronous in-process dispatch**: `publish()` calls handlers sequentially within the
-  same async task. No message broker, no serialization overhead.
+- **Synchronous in-process dispatch**: `Publish()` calls handlers sequentially within the
+  same goroutine. No message broker, no serialization overhead.
 - **Error isolation**: Handler failures are logged but do not fail the publish call. The
   domain operation that triggered the event has already committed successfully — handler
   failure is a downstream concern, not a transactional rollback trigger.
@@ -1366,70 +1544,74 @@ impl EventBus {
 
 ### §11.4 Subscription Registration
 
-All subscriptions MUST be registered in `main.rs` during startup (step 6 of §4.2).
+All subscriptions MUST be registered in `cmd/server/main.go` during startup (step 6 of §4.2).
 `[CODING §8.4]`
 
-```rust
-// In main.rs, step 6:
-let mut event_bus = EventBus::new();
+```go
+// In cmd/server/main.go, step 6:
+eventBus := shared.NewEventBus()
 
 // IAM events → Social handler
-event_bus.subscribe::<FamilyCreated, _>(
-    Arc::new(social::event_handlers::OnFamilyCreated::new(social_service.clone()))
-);
+eventBus.Subscribe(
+	reflect.TypeOf(iam.FamilyCreated{}),
+	social.NewOnFamilyCreatedHandler(socialService),
+)
 
 // IAM events → Onboarding handler
-event_bus.subscribe::<FamilyCreated, _>(
-    Arc::new(onboard::event_handlers::OnFamilyCreated::new(onboard_service.clone()))
-);
+eventBus.Subscribe(
+	reflect.TypeOf(iam.FamilyCreated{}),
+	onboard.NewOnFamilyCreatedHandler(onboardService),
+)
 
 // ... more subscriptions added as domains are built
-let event_bus = Arc::new(event_bus);
 ```
 
 ---
 
-## §12 Pagination (`src/shared/pagination.rs`)
+## §12 Pagination (`internal/shared/pagination.go`)
 
 ### §12.1 PaginationParams
 
 Query parameters accepted by list endpoints. Cursor-based pagination is the primary
 mechanism. `[ARCH §1.4]`
 
-```rust
-use serde::Deserialize;
-use utoipa::IntoParams;
+```go
+package shared
 
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct PaginationParams {
-    /// Opaque cursor from previous response's `next_cursor`.
-    /// Omit for the first page.
-    pub cursor: Option<String>,
+// PaginationParams holds cursor-based pagination parameters.
+type PaginationParams struct {
+	// Opaque cursor from previous response's NextCursor.
+	// Omit for the first page.
+	Cursor *string `query:"cursor"`
 
-    /// Items per page. Default: 20. Max: 100.
-    pub limit: Option<u32>,
+	// Items per page. Default: 20. Max: 100.
+	Limit *int `query:"limit"`
 }
 
-impl PaginationParams {
-    pub fn effective_limit(&self) -> u32 {
-        self.limit.unwrap_or(20).min(100)
-    }
+// EffectiveLimit returns the clamped limit value.
+func (p PaginationParams) EffectiveLimit() int {
+	if p.Limit == nil {
+		return 20
+	}
+	limit := *p.Limit
+	if limit > 100 {
+		return 100
+	}
+	if limit < 1 {
+		return 20
+	}
+	return limit
 }
 ```
 
 ### §12.2 PaginatedResponse
 
-```rust
-use serde::Serialize;
-use utoipa::ToSchema;
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PaginatedResponse<T: Serialize> {
-    pub data: Vec<T>,
-    /// Opaque cursor for the next page. `null` if no more results.
-    pub next_cursor: Option<String>,
-    /// Whether more results exist beyond this page.
-    pub has_more: bool,
+```go
+// PaginatedResponse wraps a page of results with cursor metadata.
+type PaginatedResponse[T any] struct {
+	Data       []T     `json:"data"`
+	NextCursor *string `json:"next_cursor"` // nil if no more results
+	HasMore    bool    `json:"has_more"`
 }
 ```
 
@@ -1439,57 +1621,90 @@ Cursors encode `(id, created_at)` as base64url to prevent clients from construct
 manipulating cursors. The encoding is an implementation detail — clients treat cursors as
 opaque strings.
 
-```rust
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
+```go
+package shared
 
-pub fn encode_cursor(id: Uuid, created_at: DateTime<Utc>) -> String {
-    let raw = format!("{}:{}", id, created_at.timestamp_millis());
-    URL_SAFE_NO_PAD.encode(raw.as_bytes())
+import (
+	"encoding/base64"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// EncodeCursor encodes an ID and timestamp into an opaque cursor string.
+func EncodeCursor(id uuid.UUID, createdAt time.Time) string {
+	raw := fmt.Sprintf("%s:%d", id.String(), createdAt.UnixMilli())
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-pub fn decode_cursor(cursor: &str) -> Result<(Uuid, DateTime<Utc>), AppError> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(cursor)
-        .map_err(|_| AppError::BadRequest("invalid cursor".into()))?;
-    let raw = String::from_utf8(bytes)
-        .map_err(|_| AppError::BadRequest("invalid cursor".into()))?;
+// DecodeCursor decodes an opaque cursor string into an ID and timestamp.
+func DecodeCursor(cursor string) (uuid.UUID, time.Time, error) {
+	bytes, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return uuid.Nil, time.Time{}, ErrBadRequest("invalid cursor")
+	}
 
-    let parts: Vec<&str> = raw.splitn(2, ':').collect();
-    if parts.len() != 2 {
-        return Err(AppError::BadRequest("invalid cursor".into()));
-    }
+	raw := string(bytes)
+	parts := strings.SplitN(raw, ":", 2)
+	if len(parts) != 2 {
+		return uuid.Nil, time.Time{}, ErrBadRequest("invalid cursor")
+	}
 
-    let id = Uuid::parse_str(parts[0])
-        .map_err(|_| AppError::BadRequest("invalid cursor".into()))?;
-    let ts = parts[1]
-        .parse::<i64>()
-        .map_err(|_| AppError::BadRequest("invalid cursor".into()))?;
-    let created_at = DateTime::from_timestamp_millis(ts)
-        .ok_or_else(|| AppError::BadRequest("invalid cursor".into()))?;
+	id, err := uuid.Parse(parts[0])
+	if err != nil {
+		return uuid.Nil, time.Time{}, ErrBadRequest("invalid cursor")
+	}
 
-    Ok((id, created_at))
+	ts, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return uuid.Nil, time.Time{}, ErrBadRequest("invalid cursor")
+	}
+
+	createdAt := time.UnixMilli(ts)
+	return id, createdAt, nil
 }
 ```
 
 ---
 
-## §13 Middleware Stack (`src/middleware/`)
+## §13 Middleware Stack (`internal/middleware/`)
 
-### §13.1 Auth Middleware (`auth.rs`)
+### §13.1 Auth Middleware (`auth.go`)
 
-The auth middleware validates Kratos session cookies and populates `AuthContext` in request
-extensions.
+The auth middleware validates Kratos session cookies and populates `AuthContext` in the Echo
+context.
 
 **Signature**:
 
-```rust
-pub async fn auth_middleware(
-    State(state): State<AppState>,
-    mut req: Request<axum::body::Body>,
-    next: Next,
-) -> Result<Response, AppError>
+```go
+package middleware
+
+import (
+	"github.com/labstack/echo/v4"
+	"github.com/homegrown-academy/homegrown-academy/internal/app"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+)
+
+// Auth returns an Echo middleware that validates Kratos sessions
+// and populates AuthContext.
+func Auth(state *app.AppState) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// 1. Extract session cookie
+			// 2. Validate via Kratos
+			// 3. Look up parent in local DB
+			// 4. Look up family
+			// 5. Build AuthContext
+			// 5.5. Check account access (safety)
+			// 6. Store AuthContext in Echo context
+			// 7. Call next(c)
+			return next(c)
+		}
+	}
+}
 ```
 
 **Behavior**:
@@ -1501,27 +1716,27 @@ pub async fn auth_middleware(
 4. Look up the parent's family
 5. Build `AuthContext` from parent + family data (including `is_platform_admin`)
 5.5. **[safety:: integration]** Check account access via
-   `SafetyService::check_account_access(family_id)`. Uses Redis cache (60s TTL). If the
+   `SafetyService.CheckAccountAccess(familyID)`. Uses Redis cache (60s TTL). If the
    account is suspended or banned, return `AccountSuspended` or `AccountBanned` error
    immediately — do not proceed to the handler. `[11-safety §12.3]`
-6. Insert `AuthContext` into request extensions
-7. Call `next.run(req)`
+6. Store `AuthContext` in Echo context via `shared.SetAuthContext(c, auth)`
+7. Call `next(c)`
 
 **Error responses**:
 - No cookie present → 401 Unauthorized
 - Kratos session invalid/expired → 401 Unauthorized
 - Parent not found in local DB (orphaned Kratos identity) → 401 Unauthorized
 
-**Implementation ownership**: The auth middleware *function* lives in `src/middleware/auth.rs`
-(core infrastructure). It calls `KratosAdapter::validate_session()` which is a port defined
-in `src/iam/ports.rs` and implemented in `src/iam/adapters/kratos.rs`. The middleware depends
+**Implementation ownership**: The auth middleware *function* lives in `internal/middleware/auth.go`
+(core infrastructure). It calls `KratosAdapter.ValidateSession()` which is an interface defined
+in `internal/iam/ports.go` and implemented in `internal/iam/adapters/kratos.go`. The middleware depends
 on IAM's adapter at runtime but does not import IAM's service layer.
 
 **Dependency note**: Because auth middleware depends on `KratosAdapter`, the IAM domain's
 adapter must be available before the middleware can function. The `AppState` provides the
-adapter as `Arc<dyn KratosAdapter>`.
+adapter as a `KratosAdapter` interface value.
 
-### §13.2 Rate Limiting (`rate_limit.rs`)
+### §13.2 Rate Limiting (`rate_limit.go`)
 
 Token-bucket rate limiting via Redis. `[ARCH §3.3, S§2.3]`
 
@@ -1535,49 +1750,35 @@ Token-bucket rate limiting via Redis. `[ARCH §3.3, S§2.3]`
 | Sensitive endpoints | Per user ID | 20 requests | 60 seconds |
 
 **Behavior**:
-- Uses `increment_with_expiry` from `src/shared/redis.rs` (§10.3)
+- Uses `RedisIncrementWithExpiry` from `internal/shared/redis.go` (§10.3)
 - On exceeded limit: return 429 Too Many Requests with `Retry-After` header (seconds until
   window expires)
 - Rate limit key format: `rl:{scope}:{identifier}:{window_start}`
 
-**Note**: Rate limit tiers can be overridden per-route using Axum's layer system. Specific
+**Note**: Rate limit tiers can be overridden per-route using Echo's middleware system. Specific
 domains may apply more restrictive limits to their endpoints.
 
-### §13.3 Role Extractors (`extractors.rs`)
+### §13.3 Role Extractors (`extractors.go`)
 
-Axum extractors that wrap `AuthContext` with additional permission checks. These are consumed
+Helper functions that extract `AuthContext` with additional permission checks. These are consumed
 by many domains — they are shared infrastructure, not IAM-specific.
 
 #### `RequirePremium`
 
-```rust
-/// Extracts AuthContext and verifies the user has a premium subscription.
-/// Returns 402 Payment Required if the user is on the free tier. [S§3.2]
-pub struct RequirePremium(pub AuthContext);
+```go
+// RequirePremium extracts AuthContext and verifies the user has a premium subscription.
+// Returns 402 Payment Required if the user is on the free tier. [S§3.2]
+func RequirePremium(c echo.Context) (*shared.AuthContext, error) {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return nil, err
+	}
 
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for RequirePremium
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
+	if auth.SubscriptionTier != shared.SubscriptionTierPremium {
+		return nil, shared.ErrPremiumRequired()
+	}
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth = parts
-            .extensions
-            .get::<AuthContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)?;
-
-        if auth.subscription_tier != SubscriptionTier::Premium {
-            return Err(AppError::PremiumRequired);
-        }
-
-        Ok(RequirePremium(auth))
-    }
+	return auth, nil
 }
 ```
 
@@ -1585,24 +1786,26 @@ where
 
 #### `RequireCreator`
 
-```rust
-/// Extracts AuthContext and verifies the user has a creator account.
-/// Returns 403 Forbidden if no creator account exists. [S§3.1.4]
-///
-/// The creator_id is looked up from `mkt_creators` via the parent_id.
-/// This lookup crosses the IAM → Marketplace boundary via AppState,
-/// which holds a reference to the marketplace service or a lightweight
-/// creator-check query.
-pub struct RequireCreator {
-    pub auth: AuthContext,
-    pub creator_id: Uuid,
+```go
+// CreatorContext holds auth context plus verified creator ID.
+type CreatorContext struct {
+	Auth      *shared.AuthContext
+	CreatorID uuid.UUID
 }
+
+// RequireCreator extracts AuthContext and verifies the user has a creator account.
+// Returns 403 Forbidden if no creator account exists. [S§3.1.4]
+//
+// The creator_id is looked up from `mkt_creators` via the parent_id.
+// This lookup crosses the IAM → Marketplace boundary via AppState,
+// which holds a reference to the marketplace service or a lightweight
+// creator-check query.
 ```
 
 **Implementation note**: `RequireCreator` needs to check `mkt_creators` table. This crosses
 domain boundaries. Two acceptable approaches:
 
-1. **Preferred**: Add `creator_id: Option<Uuid>` to `AuthContext` (populated during auth
+1. **Preferred**: Add `CreatorID *uuid.UUID` to `AuthContext` (populated during auth
    middleware from a JOIN). No cross-domain call needed.
 2. **Alternative**: Query `mkt::` service from the extractor via `AppState`.
 
@@ -1612,17 +1815,27 @@ The chosen approach is documented in the marketplace domain spec (when written).
 
 #### `RequireCoppaConsent`
 
-```rust
-/// Extracts AuthContext and verifies the family has active COPPA consent.
-/// Returns 403 Forbidden with code `coppa_consent_required` if consent
-/// is not `Consented` or `ReVerified`. [ARCH §6.3]
-pub struct RequireCoppaConsent(pub AuthContext);
+```go
+// RequireCoppaConsent extracts AuthContext and verifies the family has active COPPA consent.
+// Returns 403 Forbidden with code `coppa_consent_required` if consent
+// is not `Consented` or `ReVerified`. [ARCH §6.3]
+func RequireCoppaConsent(c echo.Context) (*shared.AuthContext, error) {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check coppa_consent_status from AuthContext
+	// (populated by auth middleware from iam_families)
+
+	return auth, nil
+}
 ```
 
 **Implementation note**: Requires looking up `iam_families.coppa_consent_status`. Two
 approaches:
 
-1. **Preferred**: Add `coppa_consent_status` to `AuthContext` (populated during auth
+1. **Preferred**: Add `CoppaConsentStatus` to `AuthContext` (populated during auth
    middleware). No additional DB query per request.
 2. **Alternative**: Query `iam::` service from the extractor.
 
@@ -1633,34 +1846,21 @@ subscription tier, so adding the consent status is free.
 
 #### `RequirePrimaryParent` (Phase 2)
 
-```rust
-/// Extracts AuthContext and verifies the user is the family's primary parent.
-/// Returns 403 Forbidden if not. [S§3.4]
-pub struct RequirePrimaryParent(pub AuthContext);
+```go
+// RequirePrimaryParent extracts AuthContext and verifies the user is the
+// family's primary parent.
+// Returns 403 Forbidden if not. [S§3.4]
+func RequirePrimaryParent(c echo.Context) (*shared.AuthContext, error) {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return nil, err
+	}
 
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for RequirePrimaryParent
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
+	if !auth.IsPrimaryParent {
+		return nil, shared.ErrForbidden()
+	}
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth = parts
-            .extensions
-            .get::<AuthContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)?;
-
-        if !auth.is_primary_parent {
-            return Err(AppError::Forbidden);
-        }
-
-        Ok(RequirePrimaryParent(auth))
-    }
+	return auth, nil
 }
 ```
 
@@ -1668,37 +1868,23 @@ where
 
 #### `RequireAdmin`
 
-```rust
-/// Extracts AuthContext and verifies the user is a platform administrator.
-/// Returns 403 Forbidden if the user is not an admin. [S§3.1.5]
-///
-/// Backed by iam_parents.is_platform_admin column (01-iam §3.1).
-/// Phase 1: single boolean. Phase 2: granular admin roles. [11-safety §9]
-pub struct RequireAdmin(pub AuthContext);
+```go
+// RequireAdmin extracts AuthContext and verifies the user is a platform administrator.
+// Returns 403 Forbidden if the user is not an admin. [S§3.1.5]
+//
+// Backed by iam_parents.is_platform_admin column (01-iam §3.1).
+// Phase 1: single boolean. Phase 2: granular admin roles. [11-safety §9]
+func RequireAdmin(c echo.Context) (*shared.AuthContext, error) {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return nil, err
+	}
 
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for RequireAdmin
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
+	if !auth.IsPlatformAdmin {
+		return nil, shared.ErrForbidden()
+	}
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth = parts
-            .extensions
-            .get::<AuthContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)?;
-
-        if !auth.is_platform_admin {
-            return Err(AppError::Forbidden);
-        }
-
-        Ok(RequireAdmin(auth))
-    }
+	return auth, nil
 }
 ```
 
@@ -1706,57 +1892,72 @@ where
 
 ---
 
-## §14 Logging & Tracing
+## §14 Logging & Observability
 
 ### §14.1 Initialization
 
-```rust
-use tracing_subscriber::{fmt, EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+```go
+package main
 
-pub fn init_tracing(config: &AppConfig) {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.log_level));
+import (
+	"log/slog"
+	"os"
 
-    let format_layer = if config.environment == Environment::Production {
-        // JSON format for structured log aggregation (CloudWatch)
-        fmt::layer().json().flatten_event(true).boxed()
-    } else {
-        // Pretty format for local development
-        fmt::layer().pretty().boxed()
-    };
+	"github.com/getsentry/sentry-go"
+	"github.com/homegrown-academy/homegrown-academy/internal/config"
+)
 
-    let registry = tracing_subscriber::registry()
-        .with(filter)
-        .with(format_layer);
+func initLogger(cfg *config.AppConfig) {
+	var handler slog.Handler
 
-    // Optional Sentry integration [ARCH §2.14]
-    if let Some(dsn) = &config.sentry_dsn {
-        let _guard = sentry::init((
-            dsn.as_str(),
-            sentry::ClientOptions {
-                release: Some(env!("CARGO_PKG_VERSION").into()),
-                traces_sample_rate: 0.1,
-                ..Default::default()
-            },
-        ));
-        registry
-            .with(sentry::integrations::tracing::layer())
-            .init();
-    } else {
-        registry.init();
-    }
+	level := parseLogLevel(cfg.LogLevel)
+
+	if cfg.Environment == config.EnvironmentProduction {
+		// JSON format for structured log aggregation (CloudWatch)
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: level,
+		})
+	} else {
+		// Text format for local development
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: level,
+		})
+	}
+
+	slog.SetDefault(slog.New(handler))
+
+	// Optional Sentry integration [ARCH §2.14]
+	if cfg.SentryDSN != nil {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:              *cfg.SentryDSN,
+			Release:          version, // set via -ldflags at build time
+			TracesSampleRate: 0.1,
+		})
+		if err != nil {
+			slog.Error("sentry initialization failed", "error", err)
+		}
+	}
+}
+
+func parseLogLevel(s string) slog.Level {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 ```
 
-### §14.2 Log Level Filters
+### §14.2 Log Level Defaults
 
-Suppress noisy dependencies by default:
+Development default: `debug`
 
-```
-homegrown_academy=debug,tower_http=debug,sea_orm=warn,hyper=warn,rustls=warn
-```
-
-Production default: `homegrown_academy=info,tower_http=info`
+Production default: `info`
 
 ### §14.3 PII Rules
 
@@ -1778,61 +1979,49 @@ Production default: `homegrown_academy=info,tower_http=info`
 
 ---
 
-## §15 OpenAPI Generation Binary
+## §15 OpenAPI Generation
 
-### §15.1 Binary Location
+### §15.1 Generation Approach
 
-`src/bin/openapi_gen.rs` — a standalone binary that generates the OpenAPI spec.
-`[CODING §6.1]`
+OpenAPI spec generation uses `swaggo/swag`, which parses Go doc comments (annotations) on
+handler functions and model structs to produce `openapi/spec.yaml`. `[CODING §6.1]`
 
 ### §15.2 Behavior
 
-```rust
-use utoipa::OpenApi;
+Annotations are added to handler functions and model structs using swaggo comment syntax:
 
-#[derive(OpenApi)]
-#[openapi(
-    info(
-        title = "Homegrown Academy API",
-        version = "0.1.0",
-        description = "API for the Homegrown Academy homeschooling platform",
-    ),
-    paths(
-        // Domain paths are added here as domains are implemented
-        // crate::domains::iam::handlers::get_current_user,
-        // crate::domains::iam::handlers::get_family_profile,
-        // ...
-    ),
-    components(schemas(
-        // Domain schemas are added here as domains are implemented
-        // crate::domains::iam::models::CurrentUserResponse,
-        // crate::domains::iam::models::FamilyProfileResponse,
-        // ...
-    )),
-    tags(
-        (name = "health", description = "Health check"),
-        // Domain tags added as domains are implemented
-    )
-)]
-struct ApiDoc;
+```go
+// @title Homegrown Academy API
+// @version 0.1.0
+// @description API for the Homegrown Academy homeschooling platform
 
-fn main() {
-    let spec = ApiDoc::openapi()
-        .to_yaml()
-        .expect("failed to serialize OpenAPI spec");
+package main
+```
 
-    std::fs::write("openapi/spec.yaml", spec)
-        .expect("failed to write openapi/spec.yaml");
+Handler annotations example:
 
-    println!("OpenAPI spec written to openapi/spec.yaml");
+```go
+// HealthCheck godoc
+// @Summary Health check
+// @Tags health
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Router /health [get]
+func healthHandler(state *app.AppState) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		return c.JSON(http.StatusOK, HealthResponse{
+			Status:  "ok",
+			Version: version,
+		})
+	}
 }
 ```
 
-**Usage**: `cargo run --bin openapi-gen`
+**Usage**: `swag init -g cmd/server/main.go -o openapi/`
 
 **Key rules** `[CODING §6.1]`:
-- MUST run after any change to Rust API types in `models.rs`
-- MUST commit `openapi/spec.yaml` alongside the Rust changes
+- MUST run after any change to Go API types in `models.go`
+- MUST commit `openapi/spec.yaml` alongside the Go changes
 - MUST NOT generate the spec at runtime — it is a build artifact
 
 ---
@@ -2069,8 +2258,8 @@ docker compose up -d
 # 2. Wait for services (health checks ensure readiness)
 docker compose ps  # verify all services are healthy
 
-# 3. Start the Rust API
-cargo run
+# 3. Start the Go API
+go run ./cmd/server
 
 # 4. Start the frontend dev server (in a separate terminal)
 cd frontend && npm run dev
@@ -2080,82 +2269,83 @@ cd frontend && npm run dev
 
 ---
 
-## §17 Dev Commands (`justfile`)
+## §17 Dev Commands (`Makefile`)
 
-A `justfile` at project root provides all common development commands. `[CLAUDE.md —
+A `Makefile` at project root provides all common development commands. `[CLAUDE.md —
 "Development Commands" section]`
 
-```justfile
+```makefile
 # Homegrown Academy — Development Commands
 
-# Default recipe: run all quality gates
+.PHONY: default dev docker-up docker-down check lint test type-check \
+        migrate db-reset openapi generate-types full-generate
+
+# Default: run all quality gates
 default: check
 
 # ─── Development ─────────────────────────────────────────────────────
 
-# Start the Rust API server
+# Start the Go API server
 dev:
-    cargo run
+	go run ./cmd/server
 
 # Start all infrastructure services
 docker-up:
-    docker compose up -d
+	docker compose up -d
 
 # Stop all infrastructure services
 docker-down:
-    docker compose down
+	docker compose down
 
 # ─── Quality Gates ───────────────────────────────────────────────────
 
 # Run all quality gates (must pass before every commit)
 check: lint test type-check
 
-# Run Rust linter (zero warnings required)
+# Run Go linter (zero warnings required)
 lint:
-    cargo clippy -- -D warnings
+	golangci-lint run
 
-# Run Rust tests
+# Run Go tests
 test:
-    cargo test
+	go test ./...
 
 # Run TypeScript type checker (zero errors required)
 type-check:
-    cd frontend && npm run type-check
+	cd frontend && npm run type-check
 
 # ─── Database ────────────────────────────────────────────────────────
 
-# Run pending database migrations
+# Run pending database migrations (goose)
 migrate:
-    cargo run -- migrate
-
-# Regenerate SeaORM entities for a domain
-entities DOMAIN:
-    sea-orm-cli generate entity \
-        --with-serde both \
-        --output-dir src/domains/{{DOMAIN}}/entities/ \
-        --tables "$(echo {{DOMAIN}} | head -c 3)_%"
+	goose -dir migrations postgres "$(DATABASE_URL)" up
 
 # Reset the database (drop + recreate + migrate)
 db-reset:
-    docker compose exec postgres psql -U homegrown -c "DROP DATABASE IF EXISTS homegrown;"
-    docker compose exec postgres psql -U homegrown -c "CREATE DATABASE homegrown;"
-    just migrate
+	docker compose exec postgres psql -U homegrown -c "DROP DATABASE IF EXISTS homegrown;"
+	docker compose exec postgres psql -U homegrown -c "CREATE DATABASE homegrown;"
+	$(MAKE) migrate
 
 # ─── Code Generation ────────────────────────────────────────────────
 
-# Generate OpenAPI spec from Rust types
+# Generate OpenAPI spec from Go annotations
 openapi:
-    cargo run --bin openapi-gen
+	swag init -g cmd/server/main.go -o openapi/
 
 # Generate TypeScript types from OpenAPI spec
 generate-types:
-    cd frontend && npm run generate-types
+	cd frontend && npm run generate-types
 
-# Full generation pipeline: entities → openapi → TS types
-full-generate DOMAIN:
-    just entities {{DOMAIN}}
-    just openapi
-    just generate-types
+# Full generation pipeline: openapi → TS types
+full-generate:
+	$(MAKE) openapi
+	$(MAKE) generate-types
+
+# ─── Security ────────────────────────────────────────────────────────
+
+# Run vulnerability check
+audit:
+	govulncheck ./...
 ```
 
 ---
@@ -2336,60 +2526,59 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 ### Phase 1 — Core Infrastructure (must complete before any domain)
 
 #### Project Setup
-- [ ] Initialize `Cargo.toml` with all dependencies (§2.1)
+- [ ] Initialize `go.mod` with all dependencies (§2.1)
 - [ ] Create directory skeleton (§2.2)
 - [ ] Create `frontend/package.json` and install dependencies (§2.3)
 - [ ] Create `frontend/tsconfig.json` (§2.4)
 - [ ] Create `frontend/vite.config.ts` (§2.5)
 - [ ] Create `.env.example` (§3.3)
-- [ ] Create `.gitignore` (include `.env`, `target/`, `node_modules/`, etc.)
+- [ ] Create `.gitignore` (include `.env`, `bin/`, `node_modules/`, etc.)
 
 #### Configuration
-- [ ] Implement `AppConfig` struct and `from_env()` (§3.1, §3.2)
-- [ ] Implement `AppConfigError` with `required_env` / `optional_env` helpers
-- [ ] Implement `Environment` enum
+- [ ] Implement `AppConfig` struct and `LoadConfig()` (§3.1, §3.2)
+- [ ] Implement config error handling with `requiredEnv` / `envOrDefault` helpers
+- [ ] Implement `Environment` type
 
 #### Error Framework
-- [ ] Implement `AppError` enum with all variants (§6.1)
-- [ ] Implement `IntoResponse for AppError` (§6.3)
-- [ ] Implement `From<validator::ValidationErrors> for AppError` (§6.5)
-- [ ] Implement `From<sea_orm::DbErr> for AppError`
+- [ ] Implement `AppError` struct with all constructors (§6.1)
+- [ ] Implement `HTTPErrorHandler` for Echo (§6.3)
+- [ ] Implement `ValidationError` helper (§6.5)
 
 #### Shared Types
-- [ ] Implement newtype wrappers: `FamilyId`, `ParentId`, `StudentId`, `CreatorId` (§7.1)
+- [ ] Implement newtype wrappers: `FamilyID`, `ParentID`, `StudentID`, `CreatorID` (§7.1)
 - [ ] Implement `AuthContext` struct (§7.2)
-- [ ] Implement `SubscriptionTier` enum (§7.3)
-- [ ] Implement `FromRequestParts for AuthContext` (§7.2)
+- [ ] Implement `SubscriptionTier` type (§7.3)
+- [ ] Implement `GetAuthContext` / `SetAuthContext` helpers (§7.2)
 
 #### Family Scope
-- [ ] Implement `FamilyScope` struct with private field (§8.1)
-- [ ] Implement `From<&AuthContext> for FamilyScope` (§8.2)
-- [ ] Implement `FromRequestParts for FamilyScope` (§8.3)
+- [ ] Implement `FamilyScope` struct with unexported field (§8.1)
+- [ ] Implement `NewFamilyScopeFromAuth` (§8.2)
+- [ ] Implement `GetFamilyScope` helper (§8.3)
 
 #### Database
-- [ ] Implement `create_pool()` (§9.1)
-- [ ] Implement `scoped_transaction()` (§9.2)
-- [ ] Implement `unscoped_transaction()` (§9.3)
+- [ ] Implement `CreatePool()` (§9.1)
+- [ ] Implement `ScopedTransaction()` (§9.2)
+- [ ] Implement `UnscopedTransaction()` (§9.3)
 - [ ] Create bootstrap migration with PostgreSQL extensions (§9.4)
-- [ ] Set up migration runner in `main.rs`
+- [ ] Set up goose migration runner in `cmd/server/main.go`
 
 #### Redis
-- [ ] Implement `create_redis_pool()` (§10.1)
-- [ ] Implement generic `get<T>`, `set<T>`, `delete` helpers (§10.2)
-- [ ] Implement `increment_with_expiry` (§10.3)
+- [ ] Implement `CreateRedisClient()` (§10.1)
+- [ ] Implement generic `RedisGet`, `RedisSet`, `RedisDelete` helpers (§10.2)
+- [ ] Implement `RedisIncrementWithExpiry` (§10.3)
 
 #### Event Bus
-- [ ] Implement `DomainEvent` and `DomainEventHandler` traits (§11.1)
-- [ ] Implement `EventBus` with TypeId dispatch (§11.2)
+- [ ] Implement `DomainEvent` and `DomainEventHandler` interfaces (§11.1)
+- [ ] Implement `EventBus` with `reflect.Type` dispatch (§11.2)
 - [ ] Verify handler errors are logged but don't fail publish
 
 #### Pagination
 - [ ] Implement `PaginationParams` (§12.1)
-- [ ] Implement `PaginatedResponse<T>` (§12.2)
+- [ ] Implement `PaginatedResponse[T]` (§12.2)
 - [ ] Implement cursor encode/decode (§12.3)
 
 #### Middleware
-- [ ] Implement auth middleware signature (§13.1) — stub until IAM provides KratosAdapter
+- [ ] Implement auth middleware function (§13.1) — stub until IAM provides KratosAdapter
 - [ ] Implement rate limiting middleware (§13.2)
 - [ ] Implement `RequirePremium` extractor (§13.3)
 - [ ] Implement `RequireCoppaConsent` extractor (§13.3)
@@ -2397,7 +2586,7 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 
 #### Application Wiring
 - [ ] Implement `AppState` struct (§5.1)
-- [ ] Implement `create_app()` with router and middleware stack (§5.2)
+- [ ] Implement `NewApp()` with router and middleware stack (§5.2)
 - [ ] Implement health endpoint (§5.4)
 
 #### Main Entrypoint
@@ -2405,11 +2594,11 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 - [ ] Implement graceful shutdown (§4.3)
 
 #### Logging
-- [ ] Implement `init_tracing()` with JSON/pretty format switching (§14.1)
-- [ ] Configure log level filters (§14.2)
+- [ ] Implement `initLogger()` with JSON/text format switching (§14.1)
+- [ ] Configure log level parsing (§14.2)
 
 #### OpenAPI
-- [ ] Create `src/bin/openapi_gen.rs` skeleton (§15)
+- [ ] Add swaggo annotations to `cmd/server/main.go` (§15)
 - [ ] Create empty `openapi/` directory
 
 #### Local Dev
@@ -2418,8 +2607,8 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 - [ ] Create identity schema (§16.3)
 
 #### Dev Commands
-- [ ] Create `justfile` with all commands (§17)
-- [ ] Update `CLAUDE.md` "Development Commands" section to reference justfile
+- [ ] Create `Makefile` with all commands (§17)
+- [ ] Update `CLAUDE.md` "Development Commands" section to reference Makefile
 
 #### Frontend Shell
 - [ ] Create `index.html` (§18.1)
@@ -2430,9 +2619,9 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 - [ ] Create empty `api/generated/`, `components/ui/`, `features/` directories
 
 #### Quality Gates
-- [ ] Verify `cargo build` succeeds
-- [ ] Verify `cargo clippy -- -D warnings` passes
-- [ ] Verify `cargo test` passes (health endpoint test)
+- [ ] Verify `go build ./...` succeeds
+- [ ] Verify `golangci-lint run` passes
+- [ ] Verify `go test ./...` passes (health endpoint test)
 - [ ] Verify `cd frontend && npm run type-check` passes
 - [ ] Verify `cd frontend && npm run dev` starts without errors
 - [ ] Verify `docker compose up -d` starts all services with healthy status
@@ -2445,8 +2634,8 @@ domain requires them.
 | Item | Owned By | When |
 |------|----------|------|
 | `RequirePrimaryParent` extractor | This spec (§13.3) | When IAM Phase 2 is implemented |
-| Background job runner (`sidekiq-rs`) | Consuming domain | When first domain needs async jobs |
-| WebSocket infrastructure | `social::` | When messaging is implemented |
+| Background job runner (asynq) | Consuming domain | When first domain needs async jobs |
+| WebSocket infrastructure (gorilla/websocket) | `social::` | When messaging is implemented |
 | Meilisearch integration | `search::` | When PG FTS is insufficient (§2.6) |
 | Full CQRS read models | Consuming domain | When progressive optimization requires it |
 
@@ -2511,31 +2700,31 @@ behavioral documentation (what IAM populates), remove shared type definitions:
 > #### §11.1 AuthContext Population
 >
 > IAM owns the *population* of `AuthContext` (type defined in 00-core §7.2). The auth
-> middleware (`src/middleware/auth.rs`, defined in 00-core §13.1) calls IAM's
-> `KratosAdapter::validate_session()` and queries IAM repositories to build the
+> middleware (`internal/middleware/auth.go`, defined in 00-core §13.1) calls IAM's
+> `KratosAdapter.ValidateSession()` and queries IAM repositories to build the
 > `AuthContext`. The flow is:
 >
 > 1. Auth middleware extracts session cookie
-> 2. Calls `KratosAdapter::validate_session()` (IAM §7)
-> 3. Calls `ParentRepository::find_by_kratos_id()` (IAM §6)
-> 4. Calls `FamilyRepository::find_by_id()` (IAM §6)
+> 2. Calls `KratosAdapter.ValidateSession()` (IAM §7)
+> 3. Calls `ParentRepository.FindByKratosID()` (IAM §6)
+> 4. Calls `FamilyRepository.FindByID()` (IAM §6)
 > 5. Constructs `AuthContext` from parent + family data
 >
 > #### §11.2 COPPA Consent Check
 >
 > The `RequireCoppaConsent` extractor (00-core §13.3) checks
-> `AuthContext.coppa_consent_status` which IAM populates from `iam_families`.
+> `AuthContext.CoppaConsentStatus` which IAM populates from `iam_families`.
 >
 > [Keep existing §11.3-§11.6 behavioral docs but remove code samples that duplicate 00-core]
 
 ### §20.4 Update IAM §12 Error Types — Back-reference
 
-**Current** (IAM §12): Defines `IamError` enum and its mapping to HTTP statuses.
+**Current** (IAM §12): Defines `IamError` type and its mapping to HTTP statuses.
 
 **Change**: Add a reference to the base `AppError`:
 
-> `IamError` maps to `AppError` (defined in 00-core §6) via `From<IamError> for AppError`.
-> See 00-core §6.4 for the conversion pattern.
+> `IamError` maps to `AppError` (defined in 00-core §6) via the `ToAppError()` conversion
+> function. See 00-core §6.4 for the conversion pattern.
 
 This is an additive note — do NOT remove the `IamError` definition or its HTTP mapping table.
 `IamError` is IAM-specific; only the `AppError` base type moves to core.
@@ -2546,13 +2735,13 @@ This is an additive note — do NOT remove the `IamError` definition or its HTTP
 
 ```
 #### Shared Infrastructure
-- [ ] Implement `FamilyScope` type in `src/shared/family_scope.rs`
-- [ ] Implement `AuthContext` struct and auth middleware in `src/middleware/auth.rs`
+- [ ] Implement `FamilyScope` type in `internal/shared/family_scope.go`
+- [ ] Implement `AuthContext` struct and auth middleware in `internal/middleware/auth.go`
 - [ ] Implement `FamilyScope` extractor (from AuthContext)
 - [ ] Implement `RequirePremium` extractor
 - [ ] Implement `RequireCreator` extractor
 - [ ] Implement `RequireCoppaConsent` middleware
-- [ ] Implement `AppError` enum with IAM variants in `src/shared/error.rs`
+- [ ] Implement `AppError` type with IAM variants in `internal/shared/error.go`
 ```
 
 **Change**: Replace with a dependency reference:
@@ -2561,29 +2750,29 @@ This is an additive note — do NOT remove the `IamError` definition or its HTTP
 #### Shared Infrastructure (prerequisite — see 00-core)
 - [ ] Verify 00-core §19 checklist is complete (AppError, AuthContext, FamilyScope,
       extractors, middleware, DB pool, Redis pool, EventBus)
-- [ ] Implement `From<IamError> for AppError` conversion (00-core §6.4 pattern)
+- [ ] Implement `ToAppError()` conversion for IamError (00-core §6.4 pattern)
 ```
 
-### §20.6 Add coppa_consent_status to AuthContext Note
+### §20.6 Add CoppaConsentStatus to AuthContext Note
 
-Add a note in IAM §11.1 or §9 that `coppa_consent_status` SHOULD be included in
+Add a note in IAM §11.1 or §9 that `CoppaConsentStatus` SHOULD be included in
 `AuthContext` to enable the `RequireCoppaConsent` extractor to work without an extra DB query.
 This means the auth middleware's family lookup (already happening) also reads
 `coppa_consent_status` and includes it in the `AuthContext`.
 
-This change requires adding `coppa_consent_status: CoppaConsentStatus` to the `AuthContext`
-struct in 00-core §7.2. However, since `CoppaConsentStatus` is an IAM-owned enum, this
+This change requires adding `CoppaConsentStatus` to the `AuthContext`
+struct in 00-core §7.2. However, since `CoppaConsentStatus` is an IAM-owned type, this
 creates a dependency from shared types to IAM. Two resolution approaches:
 
-1. **Preferred**: Store the consent status as a `String` in `AuthContext` and let the
+1. **Preferred**: Store the consent status as a `string` in `AuthContext` and let the
    `RequireCoppaConsent` extractor match on known values. No cross-domain type dependency.
-2. **Alternative**: Move `CoppaConsentStatus` to `src/shared/types.rs` since it's needed
+2. **Alternative**: Move `CoppaConsentStatus` to `internal/shared/types.go` since it's needed
    by shared infrastructure.
 
-Decision: Use approach 1 (String). Add to `AuthContext`:
+Decision: Use approach 1 (string). Add to `AuthContext`:
 
-```rust
-pub coppa_consent_status: String,  // "consented", "re_verified", etc.
+```go
+CoppaConsentStatus string `json:"coppa_consent_status"` // "consented", "re_verified", etc.
 ```
 
 ---
@@ -2606,8 +2795,8 @@ How this document relates to the existing spec hierarchy.
 | §11 Event Bus | §4.6 (signatures) | §8.4 (event rules) | Partial — signatures existed, internals didn't |
 | §12 Pagination | §4.2 (shared kernel) | — | Yes — mentioned in shared kernel list, never specified |
 | §13 Middleware | §3.3 (request flow), §6.2-6.5 | §2.6 (handler pattern) | Partial — auth middleware in ARCH, rate limit/extractors weren't |
-| §14 Logging | — | §5.2 (PII rules) | Yes — PII rules existed, tracing setup didn't |
-| §15 OpenAPI | — | §6.1 (generation rules) | Yes — rules existed, binary spec didn't |
+| §14 Logging | — | §5.2 (PII rules) | Yes — PII rules existed, logging setup didn't |
+| §15 OpenAPI | — | §6.1 (generation rules) | Yes — rules existed, generation spec didn't |
 | §16 Local Dev | — | — | Yes — completely unspecified |
 | §17 Dev Commands | — | §7.2 (quality gates) | Yes — gates existed, commands didn't |
 | §18 Frontend Shell | §2.3 (React stack) | §3 (TS rules) | Yes — stack chosen, files unspecified |

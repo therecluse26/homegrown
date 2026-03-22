@@ -11,10 +11,10 @@ other domain depends on.
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/iam/` |
+| **Module path** | `internal/iam/` |
 | **DB prefix** | `iam_` |
 | **Complexity class** | Non-complex (no `domain/` subdirectory) `[ARCH §4.5]` |
-| **External adapter** | `src/iam/adapters/kratos.rs` |
+| **External adapter** | `internal/iam/adapters/kratos.go` |
 | **Key constraint** | Auth delegated to Ory Kratos; IAM owns identity *data* and *authorization* |
 
 **What IAM owns**: Family accounts, parent users, student profiles, COPPA consent tracking,
@@ -74,7 +74,7 @@ provide defense-in-depth for family-scoped isolation. `[ARCH §5.2]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_iam_tables.rs
+-- Migration: YYYYMMDD_000001_create_iam_tables.sql
 -- =============================================================================
 
 -- PostgreSQL extensions (uuid-ossp, pgcrypto, postgis, pg_trgm) are installed
@@ -219,7 +219,7 @@ filter, the database rejects cross-family access. `[ARCH §2.5, S§16.2]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000002_create_iam_rls_policies.rs
+-- Migration: YYYYMMDD_000002_create_iam_rls_policies.sql
 -- =============================================================================
 
 -- Enable RLS on all IAM tables with user data
@@ -230,7 +230,7 @@ ALTER TABLE iam_co_parent_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE iam_coppa_audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE iam_student_sessions ENABLE ROW LEVEL SECURITY;
 
--- Application role used by the Rust API (not the superuser)
+-- Application role used by the Go API (not the superuser)
 -- The app sets `SET LOCAL app.current_family_id = '<uuid>'` per transaction
 CREATE POLICY iam_families_isolation ON iam_families
     USING (id = current_setting('app.current_family_id', true)::uuid);
@@ -254,10 +254,10 @@ CREATE POLICY iam_student_sessions_family_policy ON iam_student_sessions
 -- The application role MUST NOT be a superuser.
 ```
 
-**RLS implementation note**: The Rust API sets `SET LOCAL app.current_family_id` at the start
-of each database transaction via a helper in `src/shared/db.rs`. This ensures RLS is active
+**RLS implementation note**: The Go API sets `SET LOCAL app.current_family_id` at the start
+of each database transaction via a helper in `internal/shared/db.go`. This ensures RLS is active
 for the lifetime of the transaction and automatically cleared on commit/rollback. Queries
-that intentionally bypass family scope (e.g., `find_parent_by_kratos_id` in auth middleware)
+that intentionally bypass family scope (e.g., `FindParentByKratosID` in auth middleware)
 run under the superuser role or with RLS temporarily disabled via `SET LOCAL` — these cases
 MUST be documented and reviewed.
 
@@ -306,7 +306,7 @@ middleware. Error responses follow `AppError` → HTTP status mapping (§12).
 Returns the currently authenticated user's info. Used by the frontend on every page load to
 establish identity and permissions.
 
-- **Extractors**: `AuthContext`
+- **Middleware**: `AuthContext`
 - **FamilyScope**: No (reads from AuthContext directly)
 - **Response**: `CurrentUserResponse`
 
@@ -315,7 +315,7 @@ establish identity and permissions.
 Returns the authenticated user's family profile including methodology selection,
 subscription tier, and COPPA status.
 
-- **Extractors**: `AuthContext`, `FamilyScope`
+- **Middleware**: `AuthContext`, `FamilyScope`
 - **Response**: `FamilyProfileResponse`
 
 #### `PATCH /v1/families/profile`
@@ -323,7 +323,8 @@ subscription tier, and COPPA status.
 Updates family display name, state code, or location region. Does NOT update methodology
 (that goes through `method::` endpoints) or subscription tier (that goes through `billing::`).
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `Json<UpdateFamilyCommand>`
+- **Middleware**: `AuthContext`, `FamilyScope`
+- **Body**: `UpdateFamilyCommand` (bound via `echo.Context.Bind`)
 - **Validation**: `display_name` length 1-100, `state_code` valid US state
 - **Response**: `FamilyProfileResponse`
 
@@ -331,7 +332,8 @@ Updates family display name, state code, or location region. Does NOT update met
 
 Creates a new student profile. Blocked if COPPA consent is not `Consented` or `ReVerified`.
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `RequireCoppaConsent`, `Json<CreateStudentCommand>`
+- **Middleware**: `AuthContext`, `FamilyScope`, `RequireCoppaConsent`
+- **Body**: `CreateStudentCommand` (bound via `echo.Context.Bind`)
 - **Validation**: `display_name` required, `birth_year` if present must be reasonable
 - **Response**: `StudentResponse` (201 Created)
 - **Events**: `StudentCreated`
@@ -340,14 +342,16 @@ Creates a new student profile. Blocked if COPPA consent is not `Consented` or `R
 
 Lists all students in the authenticated user's family.
 
-- **Extractors**: `AuthContext`, `FamilyScope`
-- **Response**: `Vec<StudentResponse>`
+- **Middleware**: `AuthContext`, `FamilyScope`
+- **Response**: `[]StudentResponse`
 
 #### `PATCH /v1/families/students/:id`
 
 Updates a student's display name, birth year, grade level, or methodology override.
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `Path<StudentId>`, `Json<UpdateStudentCommand>`
+- **Middleware**: `AuthContext`, `FamilyScope`
+- **Path param**: `StudentID` (from `echo.Context.Param`)
+- **Body**: `UpdateStudentCommand` (bound via `echo.Context.Bind`)
 - **Response**: `StudentResponse`
 
 #### `DELETE /v1/families/students/:id`
@@ -355,7 +359,8 @@ Updates a student's display name, birth year, grade level, or methodology overri
 Removes a student profile. In Phase 1, deletion is immediate. Phase 2 adds data export offer
 before deletion.
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `Path<StudentId>`
+- **Middleware**: `AuthContext`, `FamilyScope`
+- **Path param**: `StudentID` (from `echo.Context.Param`)
 - **Response**: 204 No Content
 - **Events**: `StudentDeleted`
 
@@ -363,7 +368,8 @@ before deletion.
 
 Submits COPPA parental consent. Phase 1 uses credit card micro-charge verification via Stripe.
 
-- **Extractors**: `AuthContext`, `FamilyScope`, `Json<CoppaConsentCommand>`
+- **Middleware**: `AuthContext`, `FamilyScope`
+- **Body**: `CoppaConsentCommand` (bound via `echo.Context.Bind`)
 - **Transitions**: `Registered → Noticed → Consented`, or `Noticed → Consented`
 - **Response**: `ConsentStatusResponse`
 - **Events**: `CoppaConsentGranted`
@@ -373,7 +379,7 @@ Submits COPPA parental consent. Phase 1 uses credit card micro-charge verificati
 
 Returns current COPPA consent status and history.
 
-- **Extractors**: `AuthContext`, `FamilyScope`
+- **Middleware**: `AuthContext`, `FamilyScope`
 - **Response**: `ConsentStatusResponse`
 
 #### `POST /hooks/kratos/post-registration` (Webhook)
@@ -399,7 +405,7 @@ Called by Kratos after successful login. Syncs Kratos traits (email, name) to lo
 Creates a supervised student session. Parent auth required.
 
 - **Auth**: Required (`FamilyScope`, parent only)
-- **Body**: `CreateStudentSessionCommand` (`expires_in_hours?`: default 2, `allowed_tool_slugs?`: defaults to student's resolved tool set)
+- **Body**: `CreateStudentSessionCommand` (`ExpiresInHours`: default 2, `AllowedToolSlugs`: defaults to student's resolved tool set)
 - **Validation**: Student must belong to family; student's `birth_year` must indicate age 10+; parent must have COPPA consent
 - **Response**: `StudentSessionResponse` (201 Created) — includes the session token (only returned once, on creation)
 
@@ -408,7 +414,7 @@ Creates a supervised student session. Parent auth required.
 Lists active sessions for a student. Parent auth required.
 
 - **Auth**: Required (`FamilyScope`, parent only)
-- **Response**: `Vec<StudentSessionSummaryResponse>` (200 OK)
+- **Response**: `[]StudentSessionSummaryResponse` (200 OK)
 
 ##### `DELETE /v1/families/students/:student_id/sessions/:id`
 
@@ -428,664 +434,477 @@ Returns the current student session's identity and permissions. Used by the stud
 
 ## §5 Service Interface
 
-The `IamService` trait defines all use cases exposed to handlers and other domains.
-Defined in `src/iam/ports.rs`. `[CODING §8.2]`
+The `IamService` interface defines all use cases exposed to handlers and other domains.
+Defined in `internal/iam/ports.go`. `[CODING §8.2]`
 
-```rust
-#[async_trait]
-pub trait IamService: Send + Sync {
+```go
+// internal/iam/ports.go
+
+type IamService interface {
     // ─── Queries ───────────────────────────────────────────────────────
 
-    /// Returns the current user's info (parent + family summary).
-    /// Used by GET /v1/auth/me.
-    async fn get_current_user(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<CurrentUserResponse, AppError>;
+    // GetCurrentUser returns the current user's info (parent + family summary).
+    // Used by GET /v1/auth/me.
+    GetCurrentUser(ctx context.Context, auth *AuthContext) (*CurrentUserResponse, error)
 
-    /// Returns the family profile for the given scope.
-    /// Used by GET /v1/families/profile.
-    async fn get_family_profile(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<FamilyProfileResponse, AppError>;
+    // GetFamilyProfile returns the family profile for the given scope.
+    // Used by GET /v1/families/profile.
+    GetFamilyProfile(ctx context.Context, scope *FamilyScope) (*FamilyProfileResponse, error)
 
-    /// Lists all students in the family.
-    /// Used by GET /v1/families/students.
-    async fn list_students(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<StudentResponse>, AppError>;
+    // ListStudents lists all students in the family.
+    // Used by GET /v1/families/students.
+    ListStudents(ctx context.Context, scope *FamilyScope) ([]StudentResponse, error)
 
-    /// Returns COPPA consent status and audit history.
-    /// Used by GET /v1/families/consent.
-    async fn get_consent_status(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<ConsentStatusResponse, AppError>;
+    // GetConsentStatus returns COPPA consent status and audit history.
+    // Used by GET /v1/families/consent.
+    GetConsentStatus(ctx context.Context, scope *FamilyScope) (*ConsentStatusResponse, error)
 
     // ─── Commands ──────────────────────────────────────────────────────
 
-    /// Handles Kratos post-registration webhook.
-    /// Creates family + parent atomically. Publishes FamilyCreated.
-    async fn handle_post_registration(
-        &self,
-        payload: KratosWebhookPayload,
-    ) -> Result<(), AppError>;
+    // HandlePostRegistration handles Kratos post-registration webhook.
+    // Creates family + parent atomically. Publishes FamilyCreated.
+    HandlePostRegistration(ctx context.Context, payload KratosWebhookPayload) error
 
-    /// Handles Kratos post-login webhook.
-    /// Syncs traits (email, name) from Kratos to local DB.
-    async fn handle_post_login(
-        &self,
-        payload: KratosWebhookPayload,
-    ) -> Result<(), AppError>;
+    // HandlePostLogin handles Kratos post-login webhook.
+    // Syncs traits (email, name) from Kratos to local DB.
+    HandlePostLogin(ctx context.Context, payload KratosWebhookPayload) error
 
-    /// Updates family profile fields (display_name, state_code, location_region).
-    /// Does NOT handle methodology or subscription changes.
-    async fn update_family_profile(
-        &self,
-        scope: &FamilyScope,
-        cmd: UpdateFamilyCommand,
-    ) -> Result<FamilyProfileResponse, AppError>;
+    // UpdateFamilyProfile updates family profile fields (display_name, state_code, location_region).
+    // Does NOT handle methodology or subscription changes.
+    UpdateFamilyProfile(ctx context.Context, scope *FamilyScope, cmd UpdateFamilyCommand) (*FamilyProfileResponse, error)
 
-    /// Creates a student profile. Requires COPPA consent (enforced by caller via extractor).
-    /// Publishes StudentCreated event.
-    async fn create_student(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateStudentCommand,
-    ) -> Result<StudentResponse, AppError>;
+    // CreateStudent creates a student profile. Requires COPPA consent (enforced by caller via middleware).
+    // Publishes StudentCreated event.
+    CreateStudent(ctx context.Context, scope *FamilyScope, cmd CreateStudentCommand) (*StudentResponse, error)
 
-    /// Updates a student profile.
-    async fn update_student(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: UpdateStudentCommand,
-    ) -> Result<StudentResponse, AppError>;
+    // UpdateStudent updates a student profile.
+    UpdateStudent(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd UpdateStudentCommand) (*StudentResponse, error)
 
-    /// Deletes a student profile. Publishes StudentDeleted event.
-    async fn delete_student(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteStudent deletes a student profile. Publishes StudentDeleted event.
+    DeleteStudent(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) error
 
-    /// Submits COPPA parental consent. Validates consent method (e.g., credit card
-    /// micro-charge). Publishes CoppaConsentGranted on success.
-    async fn submit_coppa_consent(
-        &self,
-        scope: &FamilyScope,
-        auth: &AuthContext,
-        cmd: CoppaConsentCommand,
-    ) -> Result<ConsentStatusResponse, AppError>;
+    // SubmitCoppaConsent submits COPPA parental consent. Validates consent method (e.g., credit card
+    // micro-charge). Publishes CoppaConsentGranted on success.
+    SubmitCoppaConsent(ctx context.Context, scope *FamilyScope, auth *AuthContext, cmd CoppaConsentCommand) (*ConsentStatusResponse, error)
 
     // ─── Phase 2 Commands ──────────────────────────────────────────────
 
-    /// Invites a co-parent via email. Generates secure token with 72h expiry.
-    /// Publishes event for notify:: to send invite email.
-    async fn invite_co_parent(
-        &self,
-        scope: &FamilyScope,
-        auth: &AuthContext,
-        cmd: InviteCoParentCommand,
-    ) -> Result<CoParentInviteResponse, AppError>;
+    // InviteCoParent invites a co-parent via email. Generates secure token with 72h expiry.
+    // Publishes event for notify:: to send invite email.
+    InviteCoParent(ctx context.Context, scope *FamilyScope, auth *AuthContext, cmd InviteCoParentCommand) (*CoParentInviteResponse, error)
 
-    /// Cancels a pending co-parent invite.
-    async fn cancel_invite(
-        &self,
-        scope: &FamilyScope,
-        invite_id: Uuid,
-    ) -> Result<(), AppError>;
+    // CancelInvite cancels a pending co-parent invite.
+    CancelInvite(ctx context.Context, scope *FamilyScope, inviteID uuid.UUID) error
 
-    /// Accepts a co-parent invite. The accepting user's Kratos identity is linked
-    /// to the inviting family. Returns updated family info.
-    async fn accept_invite(
-        &self,
-        auth: &AuthContext,
-        token: String,
-    ) -> Result<FamilyProfileResponse, AppError>;
+    // AcceptInvite accepts a co-parent invite. The accepting user's Kratos identity is linked
+    // to the inviting family. Returns updated family info.
+    AcceptInvite(ctx context.Context, auth *AuthContext, token string) (*FamilyProfileResponse, error)
 
-    /// Removes a co-parent from the family. Primary parent only.
-    /// Revokes the removed parent's Kratos sessions.
-    async fn remove_co_parent(
-        &self,
-        scope: &FamilyScope,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
+    // RemoveCoParent removes a co-parent from the family. Primary parent only.
+    // Revokes the removed parent's Kratos sessions.
+    RemoveCoParent(ctx context.Context, scope *FamilyScope, parentID uuid.UUID) error
 
-    /// Transfers the primary parent role to another parent in the family.
-    async fn transfer_primary_parent(
-        &self,
-        scope: &FamilyScope,
-        auth: &AuthContext,
-        new_primary_id: Uuid,
-    ) -> Result<(), AppError>;
+    // TransferPrimaryParent transfers the primary parent role to another parent in the family.
+    TransferPrimaryParent(ctx context.Context, scope *FamilyScope, auth *AuthContext, newPrimaryID uuid.UUID) error
 
-    /// Withdraws COPPA consent. Triggers student data export + deletion.
-    /// Publishes CoppaConsentWithdrawn.
-    async fn withdraw_coppa_consent(
-        &self,
-        scope: &FamilyScope,
-        auth: &AuthContext,
-    ) -> Result<(), AppError>;
+    // WithdrawCoppaConsent withdraws COPPA consent. Triggers student data export + deletion.
+    // Publishes CoppaConsentWithdrawn.
+    WithdrawCoppaConsent(ctx context.Context, scope *FamilyScope, auth *AuthContext) error
 
-    /// Requests family account deletion. Starts grace period.
-    /// Publishes FamilyDeletionScheduled.
-    async fn request_family_deletion(
-        &self,
-        scope: &FamilyScope,
-        auth: &AuthContext,
-    ) -> Result<(), AppError>;
+    // RequestFamilyDeletion requests family account deletion. Starts grace period.
+    // Publishes FamilyDeletionScheduled.
+    RequestFamilyDeletion(ctx context.Context, scope *FamilyScope, auth *AuthContext) error
 
-    /// Cancels a pending family deletion request.
-    async fn cancel_family_deletion(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<(), AppError>;
+    // CancelFamilyDeletion cancels a pending family deletion request.
+    CancelFamilyDeletion(ctx context.Context, scope *FamilyScope) error
 }
 ```
 
-**Implementation**: `IamServiceImpl` in `src/iam/service.rs`. Constructor receives:
-- `Arc<dyn FamilyRepository>`
-- `Arc<dyn ParentRepository>`
-- `Arc<dyn StudentRepository>`
-- `Arc<dyn CoParentInviteRepository>` (Phase 2)
-- `Arc<dyn KratosAdapter>`
-- `Arc<EventBus>`
+**Implementation**: `IamServiceImpl` in `internal/iam/service.go`. Constructor receives:
+- `FamilyRepository` (interface)
+- `ParentRepository` (interface)
+- `StudentRepository` (interface)
+- `CoParentInviteRepository` (interface, Phase 2)
+- `KratosAdapter` (interface)
+- `EventBus` (interface)
 
 ---
 
 ## §6 Repository Interfaces
 
-Defined in `src/iam/ports.rs`. Each method documents its `FamilyScope` requirement.
+Defined in `internal/iam/ports.go`. Each method documents its `FamilyScope` requirement.
 `[CODING §2.4, §8.2]`
 
-```rust
-#[async_trait]
-pub trait FamilyRepository: Send + Sync {
-    /// Creates a new family. NOT family-scoped (family does not exist yet).
-    async fn create(&self, cmd: CreateFamily) -> Result<Family, AppError>;
+```go
+// internal/iam/ports.go
 
-    /// Finds a family by ID. NOT family-scoped — used by auth middleware
-    /// before FamilyScope is constructed.
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<Family>, AppError>;
+type FamilyRepository interface {
+    // Create creates a new family. NOT family-scoped (family does not exist yet).
+    Create(ctx context.Context, cmd CreateFamily) (*Family, error)
 
-    /// Updates family profile fields. Family-scoped.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        cmd: UpdateFamily,
-    ) -> Result<Family, AppError>;
+    // FindByID finds a family by ID. NOT family-scoped — used by auth middleware
+    // before FamilyScope is constructed.
+    FindByID(ctx context.Context, id uuid.UUID) (*Family, error)
 
-    /// Sets the primary parent ID on the family. NOT family-scoped —
-    /// used during registration before scope exists.
-    async fn set_primary_parent(
-        &self,
-        family_id: Uuid,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Update updates family profile fields. Family-scoped.
+    Update(ctx context.Context, scope *FamilyScope, cmd UpdateFamily) (*Family, error)
 
-    /// Sets the COPPA consent status. Family-scoped.
-    async fn update_consent_status(
-        &self,
-        scope: &FamilyScope,
-        status: CoppaConsentStatus,
-        method: Option<String>,
-    ) -> Result<Family, AppError>;
+    // SetPrimaryParent sets the primary parent ID on the family. NOT family-scoped —
+    // used during registration before scope exists.
+    SetPrimaryParent(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error
 
-    /// Sets the methodology IDs on the family. Called by method:: service
-    /// via IamService. Family-scoped.
-    async fn set_methodology(
-        &self,
-        scope: &FamilyScope,
-        primary_id: Uuid,
-        secondary_ids: Vec<Uuid>,
-    ) -> Result<(), AppError>;
+    // UpdateConsentStatus sets the COPPA consent status. Family-scoped.
+    UpdateConsentStatus(ctx context.Context, scope *FamilyScope, status CoppaConsentStatus, method *string) (*Family, error)
 
-    /// Sets deletion_requested_at. Family-scoped.
-    async fn set_deletion_requested(
-        &self,
-        scope: &FamilyScope,
-        requested_at: Option<DateTime<Utc>>,
-    ) -> Result<(), AppError>;
+    // SetMethodology sets the methodology IDs on the family. Called by method:: service
+    // via IamService. Family-scoped.
+    SetMethodology(ctx context.Context, scope *FamilyScope, primaryID uuid.UUID, secondaryIDs []uuid.UUID) error
+
+    // SetDeletionRequested sets deletion_requested_at. Family-scoped.
+    SetDeletionRequested(ctx context.Context, scope *FamilyScope, requestedAt *time.Time) error
 }
 
-#[async_trait]
-pub trait ParentRepository: Send + Sync {
-    /// Creates a new parent. NOT family-scoped (used during registration
-    /// and co-parent invite acceptance).
-    async fn create(&self, cmd: CreateParent) -> Result<Parent, AppError>;
+type ParentRepository interface {
+    // Create creates a new parent. NOT family-scoped (used during registration
+    // and co-parent invite acceptance).
+    Create(ctx context.Context, cmd CreateParent) (*Parent, error)
 
-    /// Finds a parent by Kratos identity ID. NOT family-scoped — used by
-    /// auth middleware before scope is constructed. This is the lookup path
-    /// for every authenticated request.
-    async fn find_by_kratos_id(
-        &self,
-        kratos_identity_id: Uuid,
-    ) -> Result<Option<Parent>, AppError>;
+    // FindByKratosID finds a parent by Kratos identity ID. NOT family-scoped — used by
+    // auth middleware before scope is constructed. This is the lookup path
+    // for every authenticated request.
+    FindByKratosID(ctx context.Context, kratosIdentityID uuid.UUID) (*Parent, error)
 
-    /// Lists all parents in a family. Family-scoped.
-    async fn list_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<Parent>, AppError>;
+    // ListByFamily lists all parents in a family. Family-scoped.
+    ListByFamily(ctx context.Context, scope *FamilyScope) ([]Parent, error)
 
-    /// Finds a specific parent by ID. Family-scoped.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        parent_id: Uuid,
-    ) -> Result<Option<Parent>, AppError>;
+    // FindByID finds a specific parent by ID. Family-scoped.
+    FindByID(ctx context.Context, scope *FamilyScope, parentID uuid.UUID) (*Parent, error)
 
-    /// Updates parent fields (display_name, email sync). Family-scoped.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        parent_id: Uuid,
-        cmd: UpdateParent,
-    ) -> Result<Parent, AppError>;
+    // Update updates parent fields (display_name, email sync). Family-scoped.
+    Update(ctx context.Context, scope *FamilyScope, parentID uuid.UUID, cmd UpdateParent) (*Parent, error)
 
-    /// Removes a parent from the family. Family-scoped.
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Delete removes a parent from the family. Family-scoped.
+    Delete(ctx context.Context, scope *FamilyScope, parentID uuid.UUID) error
 
-    /// Updates is_primary flag. Family-scoped.
-    async fn set_primary(
-        &self,
-        scope: &FamilyScope,
-        parent_id: Uuid,
-        is_primary: bool,
-    ) -> Result<(), AppError>;
+    // SetPrimary updates is_primary flag. Family-scoped.
+    SetPrimary(ctx context.Context, scope *FamilyScope, parentID uuid.UUID, isPrimary bool) error
 }
 
-#[async_trait]
-pub trait StudentRepository: Send + Sync {
-    /// Creates a student profile. Family-scoped.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateStudent,
-    ) -> Result<Student, AppError>;
+type StudentRepository interface {
+    // Create creates a student profile. Family-scoped.
+    Create(ctx context.Context, scope *FamilyScope, cmd CreateStudent) (*Student, error)
 
-    /// Lists all students in the family. Family-scoped.
-    async fn list_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<Student>, AppError>;
+    // ListByFamily lists all students in the family. Family-scoped.
+    ListByFamily(ctx context.Context, scope *FamilyScope) ([]Student, error)
 
-    /// Finds a specific student by ID. Family-scoped.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-    ) -> Result<Option<Student>, AppError>;
+    // FindByID finds a specific student by ID. Family-scoped.
+    FindByID(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) (*Student, error)
 
-    /// Updates a student profile. Family-scoped.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: UpdateStudent,
-    ) -> Result<Student, AppError>;
+    // Update updates a student profile. Family-scoped.
+    Update(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd UpdateStudent) (*Student, error)
 
-    /// Deletes a student profile. Family-scoped.
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Delete deletes a student profile. Family-scoped.
+    Delete(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) error
 }
 
-/// Phase 2
-#[async_trait]
-pub trait CoParentInviteRepository: Send + Sync {
-    /// Creates a co-parent invite. Family-scoped.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateInvite,
-    ) -> Result<CoParentInvite, AppError>;
+// Phase 2
+type CoParentInviteRepository interface {
+    // Create creates a co-parent invite. Family-scoped.
+    Create(ctx context.Context, scope *FamilyScope, cmd CreateInvite) (*CoParentInvite, error)
 
-    /// Finds an invite by its secure token. NOT family-scoped —
-    /// the accepting user is not yet part of the family.
-    async fn find_by_token(
-        &self,
-        token: &str,
-    ) -> Result<Option<CoParentInvite>, AppError>;
+    // FindByToken finds an invite by its secure token. NOT family-scoped —
+    // the accepting user is not yet part of the family.
+    FindByToken(ctx context.Context, token string) (*CoParentInvite, error)
 
-    /// Finds an invite by ID. Family-scoped.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        invite_id: Uuid,
-    ) -> Result<Option<CoParentInvite>, AppError>;
+    // FindByID finds an invite by ID. Family-scoped.
+    FindByID(ctx context.Context, scope *FamilyScope, inviteID uuid.UUID) (*CoParentInvite, error)
 
-    /// Updates invite status. Family-scoped.
-    async fn update_status(
-        &self,
-        scope: &FamilyScope,
-        invite_id: Uuid,
-        status: InviteStatus,
-    ) -> Result<(), AppError>;
+    // UpdateStatus updates invite status. Family-scoped.
+    UpdateStatus(ctx context.Context, scope *FamilyScope, inviteID uuid.UUID, status InviteStatus) error
 
-    /// Lists pending invites for a family. Family-scoped.
-    async fn list_pending(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<CoParentInvite>, AppError>;
+    // ListPending lists pending invites for a family. Family-scoped.
+    ListPending(ctx context.Context, scope *FamilyScope) ([]CoParentInvite, error)
 
-    /// Expires all invites past their expiry time. NOT family-scoped —
-    /// runs as a background cleanup job across all families.
-    async fn expire_stale_invites(&self) -> Result<u64, AppError>;
+    // ExpireStaleInvites expires all invites past their expiry time. NOT family-scoped —
+    // runs as a background cleanup job across all families.
+    ExpireStaleInvites(ctx context.Context) (int64, error)
 }
 ```
 
 **FamilyScope exception documentation**: Methods marked "NOT family-scoped" include a
 comment explaining why. These exceptions are:
 
-1. **`find_by_kratos_id`** — runs in auth middleware before FamilyScope is constructed
-2. **`create` (family/parent)** — entity does not exist yet; no family to scope to
-3. **`find_by_token` (invites)** — accepting user is not yet a family member
-4. **`expire_stale_invites`** — batch cleanup job, crosses family boundaries by design
-5. **`find_by_id` (family)** — used by auth middleware and webhook handlers
+1. **`FindByKratosID`** — runs in auth middleware before FamilyScope is constructed
+2. **`Create` (family/parent)** — entity does not exist yet; no family to scope to
+3. **`FindByToken` (invites)** — accepting user is not yet a family member
+4. **`ExpireStaleInvites`** — batch cleanup job, crosses family boundaries by design
+5. **`FindByID` (family)** — used by auth middleware and webhook handlers
 
 ---
 
 ## §7 Kratos Adapter Interface
 
-Defined in `src/iam/ports.rs`. The adapter wraps Kratos SDK calls and returns domain types
+Defined in `internal/iam/ports.go`. The adapter wraps Kratos SDK calls and returns domain types
 only. `[CODING §8.1, ARCH §4.2]`
 
-```rust
-#[async_trait]
-pub trait KratosAdapter: Send + Sync {
-    /// Validates a Kratos session cookie/token.
-    /// Returns the Kratos identity ID if valid.
-    async fn validate_session(
-        &self,
-        session_cookie: &str,
-    ) -> Result<KratosSession, AppError>;
+```go
+// internal/iam/ports.go
 
-    /// Retrieves identity traits (email, name) from Kratos.
-    async fn get_identity(
-        &self,
-        identity_id: Uuid,
-    ) -> Result<KratosIdentity, AppError>;
+type KratosAdapter interface {
+    // ValidateSession validates a Kratos session cookie/token.
+    // Returns the Kratos session if valid.
+    ValidateSession(ctx context.Context, sessionCookie string) (*KratosSession, error)
 
-    /// Deletes a Kratos identity (used during family deletion).
-    async fn delete_identity(
-        &self,
-        identity_id: Uuid,
-    ) -> Result<(), AppError>;
+    // GetIdentity retrieves identity traits (email, name) from Kratos.
+    GetIdentity(ctx context.Context, identityID uuid.UUID) (*KratosIdentity, error)
 
-    /// Revokes all active sessions for an identity (used when removing a co-parent).
-    async fn revoke_sessions(
-        &self,
-        identity_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteIdentity deletes a Kratos identity (used during family deletion).
+    DeleteIdentity(ctx context.Context, identityID uuid.UUID) error
+
+    // RevokeSessions revokes all active sessions for an identity (used when removing a co-parent).
+    RevokeSessions(ctx context.Context, identityID uuid.UUID) error
 }
 
-/// Domain types returned by KratosAdapter — NOT Kratos SDK types
-pub struct KratosSession {
-    pub identity_id: Uuid,
-    pub active: bool,
-    pub authenticated_at: DateTime<Utc>,
+// Domain types returned by KratosAdapter — NOT Kratos SDK types
+
+type KratosSession struct {
+    IdentityID      uuid.UUID `json:"identity_id"`
+    Active          bool      `json:"active"`
+    AuthenticatedAt time.Time `json:"authenticated_at"`
 }
 
-pub struct KratosIdentity {
-    pub id: Uuid,
-    pub email: String,
-    pub name: String,
+type KratosIdentity struct {
+    ID    uuid.UUID `json:"id"`
+    Email string    `json:"email"`
+    Name  string    `json:"name"`
 }
 ```
 
-**Implementation**: `KratosAdapterImpl` in `src/iam/adapters/kratos.rs`. Uses the Kratos
-Admin API (internal sidecar URL, not public). The adapter maps Kratos errors to `AppError`
-variants — no Kratos SDK types leak beyond this file.
+**Implementation**: `KratosAdapterImpl` in `internal/iam/adapters/kratos.go`. Uses the Kratos
+Admin API (internal sidecar URL, not public) via `net/http`. The adapter maps Kratos errors to
+`AppError` variants — no Kratos SDK types leak beyond this file.
 
 ---
 
 ## §8 Models (DTOs)
 
-All types defined in `src/iam/models.rs`. All derive `serde::Serialize`, `serde::Deserialize`,
-and `utoipa::ToSchema`. Request types additionally derive `validator::Validate`. `[CODING §2.3]`
+All types defined in `internal/iam/models.go`. API-facing types use struct tags for JSON
+serialization (`json:"field"`) and swaggo/swag annotations for OpenAPI generation.
+Request types additionally use go-playground/validator tags. `[CODING §2.3]`
 
 ### §8.1 Request Types
 
-```rust
-/// POST /v1/families/students
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateStudentCommand {
-    #[validate(length(min = 1, max = 100))]
-    pub display_name: String,
-    /// Four-digit year (e.g., 2018). Optional.
-    #[validate(range(min = 2000, max = 2030))]
-    pub birth_year: Option<i16>,
-    /// Free-text grade level (e.g., "3rd", "PreK", "9th"). Optional.
-    #[validate(length(max = 20))]
-    pub grade_level: Option<String>,
-    /// Override family methodology for this student. Optional. [S§4.6]
-    pub methodology_override_id: Option<Uuid>,
+```go
+// internal/iam/models.go
+
+// CreateStudentCommand — POST /v1/families/students
+type CreateStudentCommand struct {
+    DisplayName          string     `json:"display_name" validate:"required,min=1,max=100"`
+    // Four-digit year (e.g., 2018). Optional.
+    BirthYear            *int16     `json:"birth_year,omitempty" validate:"omitempty,min=2000,max=2030"`
+    // Free-text grade level (e.g., "3rd", "PreK", "9th"). Optional.
+    GradeLevel           *string    `json:"grade_level,omitempty" validate:"omitempty,max=20"`
+    // Override family methodology for this student. Optional. [S§4.6]
+    MethodologyOverrideID *uuid.UUID `json:"methodology_override_id,omitempty"`
 }
 
-/// PATCH /v1/families/students/:id
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateStudentCommand {
-    #[validate(length(min = 1, max = 100))]
-    pub display_name: Option<String>,
-    #[validate(range(min = 2000, max = 2030))]
-    pub birth_year: Option<i16>,
-    #[validate(length(max = 20))]
-    pub grade_level: Option<String>,
-    pub methodology_override_id: Option<Option<Uuid>>,  // None = don't change, Some(None) = clear
+// UpdateStudentCommand — PATCH /v1/families/students/:id
+type UpdateStudentCommand struct {
+    DisplayName          *string    `json:"display_name,omitempty" validate:"omitempty,min=1,max=100"`
+    BirthYear            *int16     `json:"birth_year,omitempty" validate:"omitempty,min=2000,max=2030"`
+    GradeLevel           *string    `json:"grade_level,omitempty" validate:"omitempty,max=20"`
+    MethodologyOverrideID **uuid.UUID `json:"methodology_override_id,omitempty"` // nil = don't change, non-nil pointing to nil = clear
 }
 
-/// PATCH /v1/families/profile
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateFamilyCommand {
-    #[validate(length(min = 1, max = 100))]
-    pub display_name: Option<String>,
-    /// Two-letter US state code (e.g., "TX", "CA"). [S§6.2]
-    #[validate(length(equal = 2))]
-    pub state_code: Option<String>,
-    /// Coarse location (city/region name). [S§7.8]
-    #[validate(length(max = 200))]
-    pub location_region: Option<String>,
+// UpdateFamilyCommand — PATCH /v1/families/profile
+type UpdateFamilyCommand struct {
+    DisplayName  *string `json:"display_name,omitempty" validate:"omitempty,min=1,max=100"`
+    // Two-letter US state code (e.g., "TX", "CA"). [S§6.2]
+    StateCode    *string `json:"state_code,omitempty" validate:"omitempty,len=2"`
+    // Coarse location (city/region name). [S§7.8]
+    LocationRegion *string `json:"location_region,omitempty" validate:"omitempty,max=200"`
 }
 
-/// POST /v1/families/consent
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CoppaConsentCommand {
-    /// The consent method being used (e.g., "credit_card_verification")
-    pub method: String,
-    /// Method-specific payload (e.g., Stripe payment method token for credit card verification)
-    pub verification_token: String,
-    /// Parent acknowledges COPPA notice (must be true to proceed)
-    pub coppa_notice_acknowledged: bool,
+// CoppaConsentCommand — POST /v1/families/consent
+type CoppaConsentCommand struct {
+    // The consent method being used (e.g., "credit_card_verification")
+    Method string `json:"method" validate:"required"`
+    // Method-specific payload (e.g., Stripe payment method token for credit card verification)
+    VerificationToken string `json:"verification_token" validate:"required"`
+    // Parent acknowledges COPPA notice (must be true to proceed)
+    CoppaNoticeAcknowledged bool `json:"coppa_notice_acknowledged" validate:"required"`
 }
 
-/// POST /v1/families/invites (Phase 2)
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct InviteCoParentCommand {
-    #[validate(email)]
-    pub email: String,
+// InviteCoParentCommand — POST /v1/families/invites (Phase 2)
+type InviteCoParentCommand struct {
+    Email string `json:"email" validate:"required,email"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-/// GET /v1/auth/me
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CurrentUserResponse {
-    pub parent_id: Uuid,
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub email: String,
-    pub is_primary_parent: bool,
-    pub subscription_tier: String,       // "free" or "premium"
-    pub coppa_consent_status: String,
-    pub family_display_name: String,
+```go
+// CurrentUserResponse — GET /v1/auth/me
+type CurrentUserResponse struct {
+    ParentID           uuid.UUID `json:"parent_id"`
+    FamilyID           uuid.UUID `json:"family_id"`
+    DisplayName        string    `json:"display_name"`
+    Email              string    `json:"email"`
+    IsPrimaryParent    bool      `json:"is_primary_parent"`
+    SubscriptionTier   string    `json:"subscription_tier"`    // "free" or "premium"
+    CoppaConsentStatus string    `json:"coppa_consent_status"`
+    FamilyDisplayName  string    `json:"family_display_name"`
 }
 
-/// GET /v1/families/profile, PATCH /v1/families/profile
-#[derive(Debug, Serialize, ToSchema)]
-pub struct FamilyProfileResponse {
-    pub id: Uuid,
-    pub display_name: String,
-    pub state_code: Option<String>,
-    pub location_region: Option<String>,
-    pub primary_methodology_id: Uuid,
-    pub secondary_methodology_ids: Vec<Uuid>,
-    pub subscription_tier: String,
-    pub coppa_consent_status: String,
-    pub parents: Vec<ParentSummary>,
-    pub student_count: usize,
-    pub created_at: DateTime<Utc>,
+// FamilyProfileResponse — GET /v1/families/profile, PATCH /v1/families/profile
+type FamilyProfileResponse struct {
+    ID                     uuid.UUID   `json:"id"`
+    DisplayName            string      `json:"display_name"`
+    StateCode              *string     `json:"state_code,omitempty"`
+    LocationRegion         *string     `json:"location_region,omitempty"`
+    PrimaryMethodologyID   uuid.UUID   `json:"primary_methodology_id"`
+    SecondaryMethodologyIDs []uuid.UUID `json:"secondary_methodology_ids"`
+    SubscriptionTier       string      `json:"subscription_tier"`
+    CoppaConsentStatus     string      `json:"coppa_consent_status"`
+    Parents                []ParentSummary `json:"parents"`
+    StudentCount           int         `json:"student_count"`
+    CreatedAt              time.Time   `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ParentSummary {
-    pub id: Uuid,
-    pub display_name: String,
-    pub is_primary: bool,
+type ParentSummary struct {
+    ID          uuid.UUID `json:"id"`
+    DisplayName string    `json:"display_name"`
+    IsPrimary   bool      `json:"is_primary"`
 }
 
-/// Student CRUD responses
-#[derive(Debug, Serialize, ToSchema)]
-pub struct StudentResponse {
-    pub id: Uuid,
-    pub display_name: String,
-    pub birth_year: Option<i16>,
-    pub grade_level: Option<String>,
-    pub methodology_override_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// StudentResponse — Student CRUD responses
+type StudentResponse struct {
+    ID                    uuid.UUID  `json:"id"`
+    DisplayName           string     `json:"display_name"`
+    BirthYear             *int16     `json:"birth_year,omitempty"`
+    GradeLevel            *string    `json:"grade_level,omitempty"`
+    MethodologyOverrideID *uuid.UUID `json:"methodology_override_id,omitempty"`
+    CreatedAt             time.Time  `json:"created_at"`
+    UpdatedAt             time.Time  `json:"updated_at"`
 }
 
-/// GET /v1/families/consent, POST /v1/families/consent
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ConsentStatusResponse {
-    pub status: String,
-    pub consented_at: Option<DateTime<Utc>>,
-    pub consent_method: Option<String>,
-    pub can_create_students: bool,
+// ConsentStatusResponse — GET /v1/families/consent, POST /v1/families/consent
+type ConsentStatusResponse struct {
+    Status            string     `json:"status"`
+    ConsentedAt       *time.Time `json:"consented_at,omitempty"`
+    ConsentMethod     *string    `json:"consent_method,omitempty"`
+    CanCreateStudents bool       `json:"can_create_students"`
 }
 
-/// POST /v1/families/invites (Phase 2)
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CoParentInviteResponse {
-    pub id: Uuid,
-    pub email: String,
-    pub expires_at: DateTime<Utc>,
-    pub status: String,
+// CoParentInviteResponse — POST /v1/families/invites (Phase 2)
+type CoParentInviteResponse struct {
+    ID        uuid.UUID `json:"id"`
+    Email     string    `json:"email"`
+    ExpiresAt time.Time `json:"expires_at"`
+    Status    string    `json:"status"`
 }
 ```
 
 ### §8.3 Internal Types (not API-facing)
 
-```rust
-/// Payload from Kratos webhooks
-pub struct KratosWebhookPayload {
-    pub identity_id: Uuid,
-    pub traits: KratosTraits,
+```go
+// KratosWebhookPayload — Payload from Kratos webhooks
+type KratosWebhookPayload struct {
+    IdentityID uuid.UUID    `json:"identity_id"`
+    Traits     KratosTraits `json:"traits"`
 }
 
-pub struct KratosTraits {
-    pub email: String,
-    pub name: String,
+type KratosTraits struct {
+    Email string `json:"email"`
+    Name  string `json:"name"`
 }
 
-/// Internal family representation (from DB, not returned directly to API)
-pub struct Family {
-    pub id: Uuid,
-    pub display_name: String,
-    pub state_code: Option<String>,
-    pub location_region: Option<String>,
-    pub primary_parent_id: Option<Uuid>,
-    pub primary_methodology_id: Uuid,
-    pub secondary_methodology_ids: Vec<Uuid>,
-    pub subscription_tier: String,
-    pub coppa_consent_status: CoppaConsentStatus,
-    pub coppa_consented_at: Option<DateTime<Utc>>,
-    pub coppa_consent_method: Option<String>,
-    pub deletion_requested_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Family — Internal family representation (from DB, not returned directly to API)
+type Family struct {
+    ID                     uuid.UUID
+    DisplayName            string
+    StateCode              *string
+    LocationRegion         *string
+    PrimaryParentID        *uuid.UUID
+    PrimaryMethodologyID   uuid.UUID
+    SecondaryMethodologyIDs []uuid.UUID
+    SubscriptionTier       string
+    CoppaConsentStatus     CoppaConsentStatus
+    CoppaConsentedAt       *time.Time
+    CoppaConsentMethod     *string
+    DeletionRequestedAt    *time.Time
+    CreatedAt              time.Time
+    UpdatedAt              time.Time
 }
 
-/// Internal parent representation
-pub struct Parent {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub kratos_identity_id: Uuid,
-    pub display_name: String,
-    pub email: String,
-    pub is_primary: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Parent — Internal parent representation
+type Parent struct {
+    ID               uuid.UUID
+    FamilyID         uuid.UUID
+    KratosIdentityID uuid.UUID
+    DisplayName      string
+    Email            string
+    IsPrimary        bool
+    CreatedAt        time.Time
+    UpdatedAt        time.Time
 }
 
-/// Internal student representation
-pub struct Student {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub birth_year: Option<i16>,
-    pub grade_level: Option<String>,
-    pub methodology_override_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Student — Internal student representation
+type Student struct {
+    ID                    uuid.UUID
+    FamilyID              uuid.UUID
+    DisplayName           string
+    BirthYear             *int16
+    GradeLevel            *string
+    MethodologyOverrideID *uuid.UUID
+    CreatedAt             time.Time
+    UpdatedAt             time.Time
 }
 
-/// Create commands used by repository layer
-pub struct CreateFamily {
-    pub display_name: String,
-    pub primary_methodology_id: Uuid,
+// CreateFamily — Create command used by repository layer
+type CreateFamily struct {
+    DisplayName          string
+    PrimaryMethodologyID uuid.UUID
 }
 
-pub struct CreateParent {
-    pub family_id: Uuid,
-    pub kratos_identity_id: Uuid,
-    pub display_name: String,
-    pub email: String,
-    pub is_primary: bool,
+type CreateParent struct {
+    FamilyID         uuid.UUID
+    KratosIdentityID uuid.UUID
+    DisplayName      string
+    Email            string
+    IsPrimary        bool
 }
 
-pub struct CreateStudent {
-    pub display_name: String,
-    pub birth_year: Option<i16>,
-    pub grade_level: Option<String>,
-    pub methodology_override_id: Option<Uuid>,
+type CreateStudent struct {
+    DisplayName           string
+    BirthYear             *int16
+    GradeLevel            *string
+    MethodologyOverrideID *uuid.UUID
 }
 
-pub struct UpdateFamily {
-    pub display_name: Option<String>,
-    pub state_code: Option<String>,
-    pub location_region: Option<String>,
+type UpdateFamily struct {
+    DisplayName    *string
+    StateCode      *string
+    LocationRegion *string
 }
 
-pub struct UpdateParent {
-    pub display_name: Option<String>,
-    pub email: Option<String>,
+type UpdateParent struct {
+    DisplayName *string
+    Email       *string
 }
 
-pub struct UpdateStudent {
-    pub display_name: Option<String>,
-    pub birth_year: Option<i16>,
-    pub grade_level: Option<String>,
-    pub methodology_override_id: Option<Option<Uuid>>,
+type UpdateStudent struct {
+    DisplayName           *string
+    BirthYear             *int16
+    GradeLevel            *string
+    MethodologyOverrideID **uuid.UUID
 }
 
-pub struct CreateInvite {
-    pub invited_by: Uuid,
-    pub email: String,
-    pub token: String,
-    pub expires_at: DateTime<Utc>,
+type CreateInvite struct {
+    InvitedBy uuid.UUID
+    Email     string
+    Token     string
+    ExpiresAt time.Time
 }
 ```
 
@@ -1136,11 +955,11 @@ access student-related features. `[S§17.2, ARCH §6.3]`
 
 | From | To | Precondition | Action | Effects | Audit |
 |------|----|-------------|--------|---------|-------|
-| `Registered` | `Noticed` | Parent views COPPA notice page | `submit_coppa_consent` with `coppa_notice_acknowledged: true` only | Status updated | Log entry |
+| `Registered` | `Noticed` | Parent views COPPA notice page | `SubmitCoppaConsent` with `CoppaNoticeAcknowledged: true` only | Status updated | Log entry |
 | `Noticed` | `Consented` | Parent provides verifiable consent | Validate consent method (e.g., Stripe micro-charge) | Status updated, `coppa_consented_at` set, `coppa_consent_method` set | Log entry |
 | `Registered` | `Consented` | Combined flow: acknowledge + consent in one step | Validate consent method | Same as Noticed → Consented | Log entry |
 | `Consented` | `ReVerified` | Parent re-verifies consent (e.g., annually) | Validate consent method | `coppa_consented_at` updated | Log entry |
-| `Consented` | `Withdrawn` | Parent requests withdrawal | `withdraw_coppa_consent` | 48h grace period → student data export offered → student profiles deleted | Log entry |
+| `Consented` | `Withdrawn` | Parent requests withdrawal | `WithdrawCoppaConsent` | 48h grace period → student data export offered → student profiles deleted | Log entry |
 | `ReVerified` | `Withdrawn` | Parent requests withdrawal | Same as above | Same as above | Log entry |
 
 **Invalid transitions** (service MUST reject):
@@ -1162,7 +981,7 @@ credit card via Stripe. The charge is immediately refunded. The successful charg
 verification that the consenting party has access to a financial instrument, which the FTC
 considers a valid method of verifiable parental consent.
 
-- The `verification_token` in `CoppaConsentCommand` is a Stripe payment method token
+- The `VerificationToken` in `CoppaConsentCommand` is a Stripe payment method token
 - The service calls Stripe (via `billing::` adapter or a dedicated COPPA adapter) to
   process the micro-charge and refund
 - On success, consent status transitions and audit log is created
@@ -1238,7 +1057,7 @@ Primary parent only. `[S§3.4]`
    - Caller is primary parent
    - Target is NOT the primary parent (cannot remove self)
    - Target belongs to the same family
-3. Revokes all Kratos sessions for the removed parent (`KratosAdapter::revoke_sessions`)
+3. Revokes all Kratos sessions for the removed parent (`KratosAdapter.RevokeSessions`)
 4. Deletes `iam_parents` row (content preservation: social posts by this parent remain
    but are disassociated from the family — handled by `social::` event handler)
 5. Publishes `CoParentRemoved` event
@@ -1304,24 +1123,24 @@ and extractors). This section documents IAM-specific behavior only.
 ### §11.1 AuthContext Population
 
 IAM owns the *population* of `AuthContext` (type defined in 00-core §7.2). The auth
-middleware (`src/middleware/auth.rs`, defined in 00-core §13.1) calls IAM's
-`KratosAdapter::validate_session()` and queries IAM repositories to build the `AuthContext`.
+middleware (`internal/middleware/auth.go`, defined in 00-core §13.1) calls IAM's
+`KratosAdapter.ValidateSession()` and queries IAM repositories to build the `AuthContext`.
 
 **Population flow**:
 
 1. Auth middleware extracts session cookie from request
-2. Calls `KratosAdapter::validate_session()` (§7) → returns `kratos_identity_id`
-3. Calls `ParentRepository::find_by_kratos_id()` (§6) → returns parent record
-4. Calls `FamilyRepository::find_by_id()` (§6) → returns family record
+2. Calls `KratosAdapter.ValidateSession()` (§7) → returns `kratos_identity_id`
+3. Calls `ParentRepository.FindByKratosID()` (§6) → returns parent record
+4. Calls `FamilyRepository.FindByID()` (§6) → returns family record
 5. Constructs `AuthContext` from parent + family data:
-   - `parent_id` from parent record
-   - `family_id` from parent record
-   - `kratos_identity_id` from Kratos session
-   - `is_primary_parent` from parent record
-   - `is_platform_admin` from parent record `[S§3.1.5, 11-safety §9]`
-   - `subscription_tier` from family record
-   - `email` from parent record (NOT logged — PII)
-   - `coppa_consent_status` from family record (as String, for RequireCoppaConsent)
+   - `ParentID` from parent record
+   - `FamilyID` from parent record
+   - `KratosIdentityID` from Kratos session
+   - `IsPrimaryParent` from parent record
+   - `IsPlatformAdmin` from parent record `[S§3.1.5, 11-safety §9]`
+   - `SubscriptionTier` from family record
+   - `Email` from parent record (NOT logged — PII)
+   - `CoppaConsentStatus` from family record (as string, for RequireCoppaConsent)
 
 **Behavior**: Returns 401 Unauthorized if:
 - No session cookie present
@@ -1330,24 +1149,24 @@ middleware (`src/middleware/auth.rs`, defined in 00-core §13.1) calls IAM's
 
 ### §11.2 COPPA Consent Check
 
-The `RequireCoppaConsent` extractor (00-core §13.3) checks `coppa_consent_status` from
+The `RequireCoppaConsent` middleware (00-core §13.3) checks `CoppaConsentStatus` from
 `AuthContext`, which IAM populates from `iam_families.coppa_consent_status` during auth
 middleware execution. This avoids an extra DB query per request — the auth middleware already
 queries `iam_families` for subscription tier.
 
 ### §11.3 Extractor Summary
 
-All extractors are defined in 00-core §13.3. IAM provides the data they operate on:
+All middleware extractors are defined in 00-core §13.3. IAM provides the data they operate on:
 
-| Extractor | Defined In | Data Source (IAM) | Behavior |
+| Middleware | Defined In | Data Source (IAM) | Behavior |
 |-----------|------------|-------------------|----------|
 | `AuthContext` | 00-core §7.2 | Auth middleware (§11.1) | 401 if unauthenticated |
-| `FamilyScope` | 00-core §8 | Derived from `AuthContext.family_id` | 401 if unauthenticated |
-| `RequirePremium` | 00-core §13.3 | `AuthContext.subscription_tier` | 402 if Free |
+| `FamilyScope` | 00-core §8 | Derived from `AuthContext.FamilyID` | 401 if unauthenticated |
+| `RequirePremium` | 00-core §13.3 | `AuthContext.SubscriptionTier` | 402 if Free |
 | `RequireCreator` | 00-core §13.3 | `mkt_creators` lookup via parent_id | 403 if no creator account |
-| `RequireCoppaConsent` | 00-core §13.3 | `AuthContext.coppa_consent_status` | 403 if not consented |
-| `RequireAdmin` | 00-core §13.3 | `AuthContext.is_platform_admin` | 403 if not admin `[11-safety §9]` |
-| `RequirePrimaryParent` | 00-core §13.3 | `AuthContext.is_primary_parent` | 403 if not primary (Phase 2) |
+| `RequireCoppaConsent` | 00-core §13.3 | `AuthContext.CoppaConsentStatus` | 403 if not consented |
+| `RequireAdmin` | 00-core §13.3 | `AuthContext.IsPlatformAdmin` | 403 if not admin `[11-safety §9]` |
+| `RequirePrimaryParent` | 00-core §13.3 | `AuthContext.IsPrimaryParent` | 403 if not primary (Phase 2) |
 
 ### §11.4 Student Session Permissions
 
@@ -1357,69 +1176,60 @@ All extractors are defined in 00-core §13.3. IAM provides the data they operate
 
 ## §12 Error Types
 
-`IamError` enum defined in `src/iam/` (service-level errors). These map to `AppError`
-(defined in 00-core §6) in handlers via `From<IamError> for AppError` (see 00-core §6.4
+`IamError` type defined in `internal/iam/` (service-level errors). These map to `AppError`
+(defined in 00-core §6) in handlers via the `errors.Is`/`errors.As` pattern (see 00-core §6.4
 for the conversion pattern). `[CODING §2.2]`
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum IamError {
-    #[error("family not found")]
-    FamilyNotFound,
+```go
+// internal/iam/errors.go
 
-    #[error("parent not found")]
-    ParentNotFound,
+import "errors"
 
-    #[error("student not found")]
-    StudentNotFound,
+var (
+    // ─── Family ───────────────────────────────────────────────────────
+    ErrFamilyNotFound = errors.New("family not found")
 
-    #[error("invite not found")]
-    InviteNotFound,
+    // ─── Parent ───────────────────────────────────────────────────────
+    ErrParentNotFound = errors.New("parent not found")
 
-    #[error("invite expired")]
-    InviteExpired,
+    // ─── Student ──────────────────────────────────────────────────────
+    ErrStudentNotFound = errors.New("student not found")
 
-    #[error("invite already accepted")]
-    InviteAlreadyAccepted,
+    // ─── Invite ───────────────────────────────────────────────────────
+    ErrInviteNotFound       = errors.New("invite not found")
+    ErrInviteExpired        = errors.New("invite expired")
+    ErrInviteAlreadyAccepted = errors.New("invite already accepted")
 
-    #[error("invalid COPPA consent transition from {from} to {to}")]
-    InvalidConsentTransition { from: String, to: String },
+    // ─── COPPA ────────────────────────────────────────────────────────
+    ErrCoppaConsentRequired     = errors.New("COPPA consent required")
+    ErrConsentVerificationFailed = errors.New("consent verification failed")
 
-    #[error("COPPA consent required")]
-    CoppaConsentRequired,
+    // ─── Authorization ────────────────────────────────────────────────
+    ErrNotPrimaryParent       = errors.New("not the primary parent")
+    ErrCannotRemovePrimaryParent = errors.New("cannot remove primary parent")
+    ErrCannotTransferToSelf   = errors.New("cannot transfer primary to self")
 
-    #[error("consent verification failed")]
-    ConsentVerificationFailed,
+    // ─── Conflict ─────────────────────────────────────────────────────
+    ErrParentAlreadyInFamily  = errors.New("parent already exists in this family")
+    ErrEmailAlreadyAssociated = errors.New("email already associated with a family")
+    ErrDeletionAlreadyRequested = errors.New("family deletion already requested")
+    ErrNoPendingDeletion      = errors.New("no pending deletion request")
 
-    #[error("not the primary parent")]
-    NotPrimaryParent,
+    // ─── Subscription ─────────────────────────────────────────────────
+    ErrPremiumRequired = errors.New("premium subscription required")
 
-    #[error("cannot remove primary parent")]
-    CannotRemovePrimaryParent,
+    // ─── Infrastructure ───────────────────────────────────────────────
+    ErrKratosError = errors.New("kratos communication error")
+)
 
-    #[error("cannot transfer primary to self")]
-    CannotTransferToSelf,
+// InvalidConsentTransitionError is a structured error for invalid COPPA transitions.
+type InvalidConsentTransitionError struct {
+    From string
+    To   string
+}
 
-    #[error("parent already exists in this family")]
-    ParentAlreadyInFamily,
-
-    #[error("email already associated with a family")]
-    EmailAlreadyAssociated,
-
-    #[error("family deletion already requested")]
-    DeletionAlreadyRequested,
-
-    #[error("no pending deletion request")]
-    NoPendingDeletion,
-
-    #[error("premium subscription required")]
-    PremiumRequired,
-
-    #[error("kratos communication error")]
-    KratosError,
-
-    #[error("database error")]
-    DatabaseError(#[from] sea_orm::DbErr),
+func (e *InvalidConsentTransitionError) Error() string {
+    return "invalid COPPA consent transition from " + e.From + " to " + e.To
 }
 ```
 
@@ -1427,29 +1237,29 @@ pub enum IamError {
 
 | IamError Variant | HTTP Status | Error Code |
 |-----------------|-------------|------------|
-| `FamilyNotFound` | 404 Not Found | `family_not_found` |
-| `ParentNotFound` | 404 Not Found | `parent_not_found` |
-| `StudentNotFound` | 404 Not Found | `student_not_found` |
-| `InviteNotFound` | 404 Not Found | `invite_not_found` |
-| `InviteExpired` | 410 Gone | `invite_expired` |
-| `InviteAlreadyAccepted` | 409 Conflict | `invite_already_accepted` |
-| `InvalidConsentTransition` | 422 Unprocessable Entity | `invalid_consent_transition` |
-| `CoppaConsentRequired` | 403 Forbidden | `coppa_consent_required` |
-| `ConsentVerificationFailed` | 422 Unprocessable Entity | `consent_verification_failed` |
-| `NotPrimaryParent` | 403 Forbidden | `not_primary_parent` |
-| `CannotRemovePrimaryParent` | 422 Unprocessable Entity | `cannot_remove_primary_parent` |
-| `CannotTransferToSelf` | 422 Unprocessable Entity | `cannot_transfer_to_self` |
-| `ParentAlreadyInFamily` | 409 Conflict | `parent_already_in_family` |
-| `EmailAlreadyAssociated` | 409 Conflict | `email_already_associated` |
-| `DeletionAlreadyRequested` | 409 Conflict | `deletion_already_requested` |
-| `NoPendingDeletion` | 404 Not Found | `no_pending_deletion` |
-| `PremiumRequired` | 402 Payment Required | `premium_required` |
-| `KratosError` | 502 Bad Gateway | `auth_service_unavailable` |
-| `DatabaseError` | 500 Internal Server Error | `internal_error` |
+| `ErrFamilyNotFound` | 404 Not Found | `family_not_found` |
+| `ErrParentNotFound` | 404 Not Found | `parent_not_found` |
+| `ErrStudentNotFound` | 404 Not Found | `student_not_found` |
+| `ErrInviteNotFound` | 404 Not Found | `invite_not_found` |
+| `ErrInviteExpired` | 410 Gone | `invite_expired` |
+| `ErrInviteAlreadyAccepted` | 409 Conflict | `invite_already_accepted` |
+| `InvalidConsentTransitionError` | 422 Unprocessable Entity | `invalid_consent_transition` |
+| `ErrCoppaConsentRequired` | 403 Forbidden | `coppa_consent_required` |
+| `ErrConsentVerificationFailed` | 422 Unprocessable Entity | `consent_verification_failed` |
+| `ErrNotPrimaryParent` | 403 Forbidden | `not_primary_parent` |
+| `ErrCannotRemovePrimaryParent` | 422 Unprocessable Entity | `cannot_remove_primary_parent` |
+| `ErrCannotTransferToSelf` | 422 Unprocessable Entity | `cannot_transfer_to_self` |
+| `ErrParentAlreadyInFamily` | 409 Conflict | `parent_already_in_family` |
+| `ErrEmailAlreadyAssociated` | 409 Conflict | `email_already_associated` |
+| `ErrDeletionAlreadyRequested` | 409 Conflict | `deletion_already_requested` |
+| `ErrNoPendingDeletion` | 404 Not Found | `no_pending_deletion` |
+| `ErrPremiumRequired` | 402 Payment Required | `premium_required` |
+| `ErrKratosError` | 502 Bad Gateway | `auth_service_unavailable` |
+| GORM/database errors | 500 Internal Server Error | `internal_error` |
 
 **API error responses** MUST NOT expose internal details. The error codes above are returned
 as `{"error": "<code>", "message": "<user-friendly message>"}`. Internal details (SQL errors,
-Kratos response bodies) are logged server-side only. `[CODING §2.2, §5.2]`
+Kratos response bodies) are logged server-side only via `log/slog`. `[CODING §2.2, §5.2]`
 
 ---
 
@@ -1459,12 +1269,12 @@ Kratos response bodies) are logged server-side only. `[CODING §2.2, §5.2]`
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `AuthContext` | All domains | Axum request extension (middleware) |
-| `FamilyScope` | All domains | Axum extractor (from AuthContext) |
-| `RequirePremium` | `learn::`, `comply::`, `ai::` | Axum extractor |
-| `RequireCreator` | `mkt::` | Axum extractor |
-| `RequireCoppaConsent` | `learn::`, `social::` (student features) | Middleware |
-| `IamService` trait methods | `method::`, `onboard::`, `billing::` | `Arc<dyn IamService>` |
+| `AuthContext` | All domains | Echo context value (middleware) |
+| `FamilyScope` | All domains | Echo middleware (from AuthContext) |
+| `RequirePremium` | `learn::`, `comply::`, `ai::` | Echo middleware |
+| `RequireCreator` | `mkt::` | Echo middleware |
+| `RequireCoppaConsent` | `learn::`, `social::` (student features) | Echo middleware |
+| `IamService` interface methods | `method::`, `onboard::`, `billing::` | Interface value via app state |
 
 ### §13.2 IAM Consumes
 
@@ -1475,22 +1285,22 @@ Kratos response bodies) are logged server-side only. `[CODING §2.2, §5.2]`
 
 ### §13.3 Events IAM Publishes
 
-Defined in `src/iam/events.rs`. `[CODING §8.4]`
+Defined in `internal/iam/events.go`. `[CODING §8.4]`
 
 | Event | Subscribers | Effect |
 |-------|------------|--------|
-| `FamilyCreated { family_id, parent_id }` | `social::` | Create social profile for family |
+| `FamilyCreated { FamilyID, ParentID }` | `social::` | Create social profile for family |
 | | `onboard::` | Start onboarding wizard |
-| `StudentCreated { family_id, student_id }` | `learn::` | Initialize tool access for student |
-| `StudentDeleted { family_id, student_id }` | `learn::` | Clean up learning data and tool access |
-| `CoppaConsentGranted { family_id }` | `learn::` | Enable student-facing tools |
-| `CoppaConsentWithdrawn { family_id }` | `learn::` | Disable student tools, schedule data deletion |
-| `CoParentAdded { family_id, parent_id }` | `notify::` | Send welcome email to co-parent |
-| `CoParentRemoved { family_id, parent_id }` | `social::` | Disassociate posts from family |
-| `FamilyDeletionScheduled { family_id, delete_after }` | `billing::` | Cancel subscriptions |
+| `StudentCreated { FamilyID, StudentID }` | `learn::` | Initialize tool access for student |
+| `StudentDeleted { FamilyID, StudentID }` | `learn::` | Clean up learning data and tool access |
+| `CoppaConsentGranted { FamilyID }` | `learn::` | Enable student-facing tools |
+| `CoppaConsentWithdrawn { FamilyID }` | `learn::` | Disable student tools, schedule data deletion |
+| `CoParentAdded { FamilyID, ParentID }` | `notify::` | Send welcome email to co-parent |
+| `CoParentRemoved { FamilyID, ParentID }` | `social::` | Disassociate posts from family |
+| `FamilyDeletionScheduled { FamilyID, DeleteAfter }` | `billing::` | Cancel subscriptions |
 | | `notify::` | Send confirmation + cancellation link |
 | | All domains | Prepare for cascade deletion |
-| `PrimaryParentTransferred { family_id, old_primary, new_primary }` | `billing::` | Update Hyperswitch customer `[10-billing §16.4]` |
+| `PrimaryParentTransferred { FamilyID, OldPrimary, NewPrimary }` | `billing::` | Update Hyperswitch customer `[10-billing §16.4]` |
 
 ### §13.4 Events IAM Subscribes To
 
@@ -1510,7 +1320,7 @@ on `iam_families`.
 - Family profile CRUD (get, update)
 - Student CRUD (create, list, update, delete)
 - COPPA consent flow (submit, get status)
-- All middleware extractors: `AuthContext`, `FamilyScope`, `RequirePremium`, `RequireCreator`, `RequireCoppaConsent`
+- All middleware: `AuthContext`, `FamilyScope`, `RequirePremium`, `RequireCreator`, `RequireCoppaConsent`
 - RLS policies for defense-in-depth
 - Domain events: `FamilyCreated`, `StudentCreated`, `StudentDeleted`, `CoppaConsentGranted`
 - Error types and HTTP mapping
@@ -1522,14 +1332,14 @@ on `iam_families`.
 - Primary parent transfer
 - COPPA consent withdrawal (with data export + deletion)
 - Family deletion request (with grace period + cascade)
-- `RequirePrimaryParent` extractor
+- `RequirePrimaryParent` middleware
 - `iam_co_parent_invites` table and repository
 - Events: `CoParentAdded`, `CoParentRemoved`, `FamilyDeletionScheduled`, `CoppaConsentWithdrawn`, `PrimaryParentTransferred`
 
 ### Deferred (Phase 3+)
 
 - ~~Platform administrator access and audit logging `[S§3.1.5]`~~ **Moved to Phase 1** —
-  `is_platform_admin` column on `iam_parents` and `RequireAdmin` extractor are required by
+  `is_platform_admin` column on `iam_parents` and `RequireAdmin` middleware are required by
   `safety::` which is in the Phase 1 critical path. Granular admin role-based sub-permissions
   remain Phase 2. `[11-safety §9]`
 - Supervised student views for ages 10+ `[S§3.3]`
@@ -1571,23 +1381,23 @@ acceptance criteria for code review and integration testing.
 - [ ] Create migration: `iam_coppa_audit_log` table
 - [ ] Create migration: RLS policies for all IAM tables
 - [ ] Create migration: PostGIS `location_point` column on `iam_families`
-- [ ] Regenerate SeaORM entities from migrations
+- [ ] Define GORM models in `internal/iam/models.go`
 
 #### Shared Infrastructure (prerequisite — see 00-core)
 - [ ] Verify 00-core §19 checklist is complete (AppError, AuthContext, FamilyScope,
-      extractors, middleware, DB pool, Redis pool, EventBus)
-- [ ] Implement `From<IamError> for AppError` conversion (00-core §6.4 pattern)
+      middleware, DB pool, Redis pool, EventBus)
+- [ ] Implement `IamError` → `AppError` conversion using `errors.Is`/`errors.As` (00-core §6.4 pattern)
 
 #### Kratos Adapter
-- [ ] Implement `KratosAdapter` trait in `src/iam/ports.rs`
-- [ ] Implement `KratosAdapterImpl` in `src/iam/adapters/kratos.rs`
+- [ ] Define `KratosAdapter` interface in `internal/iam/ports.go`
+- [ ] Implement `KratosAdapterImpl` in `internal/iam/adapters/kratos.go`
 - [ ] Configure Kratos YAML (OIDC providers, webhooks, session config)
 
-#### Ports & Traits
-- [ ] Define `IamService` trait in `src/iam/ports.rs`
-- [ ] Define `FamilyRepository` trait in `src/iam/ports.rs`
-- [ ] Define `ParentRepository` trait in `src/iam/ports.rs`
-- [ ] Define `StudentRepository` trait in `src/iam/ports.rs`
+#### Ports & Interfaces
+- [ ] Define `IamService` interface in `internal/iam/ports.go`
+- [ ] Define `FamilyRepository` interface in `internal/iam/ports.go`
+- [ ] Define `ParentRepository` interface in `internal/iam/ports.go`
+- [ ] Define `StudentRepository` interface in `internal/iam/ports.go`
 
 #### Repository Implementations
 - [ ] Implement `PgFamilyRepository`
@@ -1611,21 +1421,21 @@ acceptance criteria for code review and integration testing.
 - [ ] `GET  /v1/families/consent` — get consent status
 
 #### Models (DTOs)
-- [ ] `CreateStudentCommand` with validator derives
-- [ ] `UpdateStudentCommand` with validator derives
-- [ ] `UpdateFamilyCommand` with validator derives
-- [ ] `CoppaConsentCommand` with validator derives
-- [ ] `StudentResponse` with serde + utoipa derives
-- [ ] `FamilyProfileResponse` with serde + utoipa derives
-- [ ] `CurrentUserResponse` with serde + utoipa derives
-- [ ] `ConsentStatusResponse` with serde + utoipa derives
+- [ ] `CreateStudentCommand` with validator tags
+- [ ] `UpdateStudentCommand` with validator tags
+- [ ] `UpdateFamilyCommand` with validator tags
+- [ ] `CoppaConsentCommand` with validator tags
+- [ ] `StudentResponse` with JSON struct tags + swaggo annotations
+- [ ] `FamilyProfileResponse` with JSON struct tags + swaggo annotations
+- [ ] `CurrentUserResponse` with JSON struct tags + swaggo annotations
+- [ ] `ConsentStatusResponse` with JSON struct tags + swaggo annotations
 
 #### Domain Events
 - [ ] Define `FamilyCreated` event
 - [ ] Define `StudentCreated` event
 - [ ] Define `StudentDeleted` event
 - [ ] Define `CoppaConsentGranted` event
-- [ ] Register event subscriptions in `app.rs`
+- [ ] Register event subscriptions in `main.go`
 
 #### Tests
 - [ ] Integration test: registration creates family + parent atomically
@@ -1635,18 +1445,18 @@ acceptance criteria for code review and integration testing.
 - [ ] Integration test: RequirePremium returns 402 for free-tier
 - [ ] Unit test: COPPA state transitions (valid transitions succeed, invalid rejected)
 - [ ] Verify: no PII in application log output
-- [ ] Verify: `cargo clippy -- -D warnings` passes
-- [ ] Verify: `cargo test` passes
+- [ ] Verify: `golangci-lint run` passes
+- [ ] Verify: `go test ./...` passes
 
 #### Code Generation
-- [ ] Generate OpenAPI spec from Rust types
+- [ ] Generate OpenAPI spec from Go types via swaggo/swag
 - [ ] Generate TypeScript types from OpenAPI spec
 
 ### Phase 2 — Co-Parent & Lifecycle
 
 #### Database
 - [ ] Create migration: `iam_co_parent_invites` table
-- [ ] Regenerate SeaORM entities
+- [ ] Update GORM models in `internal/iam/models.go`
 
 #### Endpoints
 - [ ] `POST /v1/families/invites` — invite co-parent
@@ -1659,8 +1469,8 @@ acceptance criteria for code review and integration testing.
 - [ ] `DELETE /v1/families/deletion-request` — cancel deletion
 
 #### Supporting Work
-- [ ] Implement `RequirePrimaryParent` extractor
-- [ ] Implement `CoParentInviteRepository` trait + `PgCoParentInviteRepository`
+- [ ] Implement `RequirePrimaryParent` middleware
+- [ ] Implement `CoParentInviteRepository` interface + `PgCoParentInviteRepository`
 - [ ] Implement co-parent invite email (via `notify::` domain event)
 - [ ] Implement family deletion grace period + cascade
 - [ ] Implement COPPA consent withdrawal + student data export
@@ -1715,7 +1525,7 @@ IAM provides the underlying Kratos session data that `lifecycle::` exposes via
 - Wrapping Kratos Admin API to list active sessions for a parent identity
 - Enriching session data with device type parsed from User-Agent
 - Providing IP → city-level location mapping (coarse only, no GPS) `[S§7.8]`
-- Exposing `revoke_session(session_id)` and `revoke_all_sessions(identity_id)` via `KratosAdapter`
+- Exposing `RevokeSession(sessionID)` and `RevokeAllSessions(identityID)` via `KratosAdapter`
 
 ### §17.2 Concurrent Session Policy
 
@@ -1742,30 +1552,24 @@ downgraded, account suspended):
 IAM delegates account recovery orchestration to `lifecycle::` but provides the Kratos
 integration layer:
 
-```rust
-// In KratosAdapter:
+```go
+// In KratosAdapter interface:
 
-/// Initiate Kratos recovery flow for an email address.
-/// Returns a recovery flow ID (Kratos-managed).
-async fn initiate_recovery_flow(
-    &self,
-    email: &str,
-) -> Result<String, KratosError>;
+// InitiateRecoveryFlow initiates Kratos recovery flow for an email address.
+// Returns a recovery flow ID (Kratos-managed).
+InitiateRecoveryFlow(ctx context.Context, email string) (string, error)
 
-/// Admin-level password reset (for escalated recovery, called by admin::).
-/// Requires RequireAdmin context.
-async fn admin_reset_credentials(
-    &self,
-    identity_id: &str,
-) -> Result<(), KratosError>;
+// AdminResetCredentials performs admin-level password reset (for escalated recovery, called by admin::).
+// Requires RequireAdmin context.
+AdminResetCredentials(ctx context.Context, identityID string) error
 ```
 
 ### §17.5 IAM Implementation Updates
 
 The following changes to existing IAM sections are needed:
 
-- **§7 Kratos Adapter**: Add `list_sessions()`, `revoke_session()`, `revoke_all_sessions()`,
-  `initiate_recovery_flow()`, and `admin_reset_credentials()` methods
+- **§7 Kratos Adapter**: Add `ListSessions()`, `RevokeSession()`, `RevokeAllSessions()`,
+  `InitiateRecoveryFlow()`, and `AdminResetCredentials()` methods
 - **§10 Family Account Lifecycle**: Add `FamilyMemberRemoved` event handling (session revocation)
 - **§11 Middleware & Extractors**: Add suspension check via Redis flag in auth middleware
 - **§13 Cross-Domain Interactions**: Add interaction with `lifecycle::` (session data provider)

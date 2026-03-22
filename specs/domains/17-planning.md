@@ -10,7 +10,7 @@ meetings, and social events — this domain serves that core workflow. `[S§17, 
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/plan/` |
+| **Module path** | `internal/plan/` |
 | **DB prefix** | `plan_` |
 | **Complexity class** | Non-complex (no `domain/` subdirectory) `[ARCH §4.5]` |
 | **CQRS** | Yes — calendar reads aggregate from multiple domains; schedule writes are simple `[ARCH §4.7]` |
@@ -51,7 +51,7 @@ All tables use the `plan_` prefix. `[ARCH §5.1]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_plan_tables.rs
+-- Migration: YYYYMMDD_000001_create_plan_tables.sql
 -- =============================================================================
 
 -- Schedule items: family-created calendar entries
@@ -168,95 +168,97 @@ GET    /v1/planning/calendar/pdf?start=&end=    # PDF export (Phase 2)
 
 ## §5 Service Interface
 
-```rust
-#[async_trait]
-pub trait PlanningService: Send + Sync {
+```go
+// PlanningService defines the service contract for planning and scheduling.
+type PlanningService interface {
     // === Calendar View (Read) ===
 
-    /// Get aggregated calendar for a date range.
-    /// Combines: plan:: schedule items + learn:: activities + comply:: attendance
-    ///           + social:: events.
-    async fn get_calendar(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        params: CalendarQuery,
-    ) -> Result<CalendarResponse, AppError>;
+    // GetCalendar returns an aggregated calendar for a date range.
+    // Combines: plan:: schedule items + learn:: activities + comply:: attendance
+    //           + social:: events.
+    GetCalendar(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        params CalendarQuery,
+    ) (CalendarResponse, error)
 
-    /// Get detailed day view with all items, activities, and events.
-    async fn get_day_view(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        date: NaiveDate,
-        student_id: Option<Uuid>,
-    ) -> Result<DayViewResponse, AppError>;
+    // GetDayView returns a detailed day view with all items, activities, and events.
+    GetDayView(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        date time.Time,
+        studentID *uuid.UUID,
+    ) (DayViewResponse, error)
 
     // === Schedule Items (Write) ===
 
-    /// Create a new schedule item.
-    async fn create_schedule_item(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        input: CreateScheduleItemInput,
-    ) -> Result<ScheduleItemId, AppError>;
+    // CreateScheduleItem creates a new schedule item.
+    CreateScheduleItem(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        input CreateScheduleItemInput,
+    ) (uuid.UUID, error)
 
-    /// Update a schedule item.
-    async fn update_schedule_item(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        item_id: Uuid,
-        input: UpdateScheduleItemInput,
-    ) -> Result<(), AppError>;
+    // UpdateScheduleItem updates a schedule item.
+    UpdateScheduleItem(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        itemID uuid.UUID,
+        input UpdateScheduleItemInput,
+    ) error
 
-    /// Delete a schedule item.
-    async fn delete_schedule_item(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        item_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteScheduleItem deletes a schedule item.
+    DeleteScheduleItem(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        itemID uuid.UUID,
+    ) error
 
-    /// Mark a schedule item as completed.
-    async fn complete_schedule_item(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        item_id: Uuid,
-    ) -> Result<(), AppError>;
+    // CompleteScheduleItem marks a schedule item as completed.
+    CompleteScheduleItem(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        itemID uuid.UUID,
+    ) error
 
-    /// Log a completed schedule item as a learning activity.
-    /// Creates an activity in learn:: and links it back to this schedule item.
-    async fn log_as_activity(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        item_id: Uuid,
-        input: LogAsActivityInput,
-    ) -> Result<Uuid, AppError>; // returns the created activity ID
+    // LogAsActivity logs a completed schedule item as a learning activity.
+    // Creates an activity in learn:: and links it back to this schedule item.
+    // Returns the created activity ID.
+    LogAsActivity(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        itemID uuid.UUID,
+        input LogAsActivityInput,
+    ) (uuid.UUID, error)
 
-    /// List schedule items with filters.
-    async fn list_schedule_items(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        params: ScheduleItemQuery,
-        pagination: PaginationParams,
-    ) -> Result<PaginatedResponse<ScheduleItemResponse>, AppError>;
+    // ListScheduleItems lists schedule items with filters.
+    ListScheduleItems(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        params ScheduleItemQuery,
+        pagination PaginationParams,
+    ) (PaginatedResponse[ScheduleItemResponse], error)
 
     // === Print/Export ===
 
-    /// Generate a print-friendly HTML view of the calendar.
-    async fn get_print_view(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        start: NaiveDate,
-        end: NaiveDate,
-        student_id: Option<Uuid>,
-    ) -> Result<String, AppError>; // returns HTML string
+    // GetPrintView generates a print-friendly HTML view of the calendar.
+    // Returns an HTML string.
+    GetPrintView(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        start time.Time,
+        end time.Time,
+        studentID *uuid.UUID,
+    ) (string, error)
 }
 ```
 
@@ -264,94 +266,94 @@ pub trait PlanningService: Send + Sync {
 
 ## §6 Repository Interfaces
 
-```rust
-#[async_trait]
-pub trait ScheduleItemRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        input: &CreateScheduleItem,
-    ) -> Result<ScheduleItem, DbErr>;
+```go
+// ScheduleItemRepository defines data access for plan_schedule_items.
+type ScheduleItemRepository interface {
+    Create(
+        ctx context.Context,
+        scope *FamilyScope,
+        input *CreateScheduleItem,
+    ) (ScheduleItem, error)
 
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-    ) -> Result<Option<ScheduleItem>, DbErr>;
+    FindByID(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+    ) (*ScheduleItem, error)
 
-    async fn list_by_date_range(
-        &self,
-        scope: &FamilyScope,
-        start: NaiveDate,
-        end: NaiveDate,
-        student_id: Option<Uuid>,
-    ) -> Result<Vec<ScheduleItem>, DbErr>;
+    ListByDateRange(
+        ctx context.Context,
+        scope *FamilyScope,
+        start time.Time,
+        end time.Time,
+        studentID *uuid.UUID,
+    ) ([]ScheduleItem, error)
 
-    async fn list_filtered(
-        &self,
-        scope: &FamilyScope,
-        query: &ScheduleItemQuery,
-        pagination: &PaginationParams,
-    ) -> Result<Vec<ScheduleItem>, DbErr>;
+    ListFiltered(
+        ctx context.Context,
+        scope *FamilyScope,
+        query *ScheduleItemQuery,
+        pagination *PaginationParams,
+    ) ([]ScheduleItem, error)
 
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-        input: &UpdateScheduleItem,
-    ) -> Result<(), DbErr>;
+    Update(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+        input *UpdateScheduleItem,
+    ) error
 
-    async fn mark_completed(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-    ) -> Result<(), DbErr>;
+    MarkCompleted(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+    ) error
 
-    async fn set_linked_activity(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-        activity_id: Uuid,
-    ) -> Result<(), DbErr>;
+    SetLinkedActivity(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+        activityID uuid.UUID,
+    ) error
 
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-    ) -> Result<(), DbErr>;
+    Delete(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+    ) error
 }
 
-#[async_trait]
-pub trait ScheduleTemplateRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        input: &CreateScheduleTemplate,
-    ) -> Result<ScheduleTemplate, DbErr>;
+// ScheduleTemplateRepository defines data access for plan_schedule_templates.
+type ScheduleTemplateRepository interface {
+    Create(
+        ctx context.Context,
+        scope *FamilyScope,
+        input *CreateScheduleTemplate,
+    ) (ScheduleTemplate, error)
 
-    async fn list_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<ScheduleTemplate>, DbErr>;
+    ListByFamily(
+        ctx context.Context,
+        scope *FamilyScope,
+    ) ([]ScheduleTemplate, error)
 
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-    ) -> Result<Option<ScheduleTemplate>, DbErr>;
+    FindByID(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+    ) (*ScheduleTemplate, error)
 
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-        input: &UpdateScheduleTemplate,
-    ) -> Result<(), DbErr>;
+    Update(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+        input *UpdateScheduleTemplate,
+    ) error
 
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-    ) -> Result<(), DbErr>;
+    Delete(
+        ctx context.Context,
+        scope *FamilyScope,
+        id uuid.UUID,
+    ) error
 }
 ```
 
@@ -359,172 +361,177 @@ pub trait ScheduleTemplateRepository: Send + Sync {
 
 ## §7 Models (DTOs)
 
-```rust
+```go
 // --- Request types ---
 
-#[derive(Deserialize, ToSchema)]
-pub struct CalendarQuery {
-    pub start: NaiveDate,
-    pub end: NaiveDate,
-    pub student_id: Option<Uuid>,
-    /// Which sources to include (default: all)
-    pub sources: Option<Vec<CalendarSource>>,
+// CalendarQuery represents filter parameters for calendar queries.
+type CalendarQuery struct {
+    Start     time.Time        `json:"start"      validate:"required"`
+    End       time.Time        `json:"end"        validate:"required"`
+    StudentID *uuid.UUID       `json:"student_id"`
+    // Which sources to include (default: all)
+    Sources   []CalendarSource `json:"sources"`
 }
 
-#[derive(Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum CalendarSource {
-    Schedule,      // plan:: schedule items
-    Activities,    // learn:: logged activities
-    Attendance,    // comply:: attendance records
-    Events,        // social:: events
+// CalendarSource identifies which domain provides calendar items.
+type CalendarSource string
+
+const (
+    CalendarSourceSchedule   CalendarSource = "schedule"    // plan:: schedule items
+    CalendarSourceActivities CalendarSource = "activities"   // learn:: logged activities
+    CalendarSourceAttendance CalendarSource = "attendance"   // comply:: attendance records
+    CalendarSourceEvents     CalendarSource = "events"       // social:: events
+)
+
+// CreateScheduleItemInput is the request body for creating a schedule item.
+type CreateScheduleItemInput struct {
+    Title           string            `json:"title"            validate:"required,max=200"`
+    Description     *string           `json:"description"`
+    StudentID       *uuid.UUID        `json:"student_id"`
+    StartDate       time.Time         `json:"start_date"       validate:"required"`
+    StartTime       *string           `json:"start_time"`
+    EndTime         *string           `json:"end_time"`
+    DurationMinutes *int              `json:"duration_minutes"`
+    Category        *ScheduleCategory `json:"category"`
+    SubjectID       *uuid.UUID        `json:"subject_id"`
+    Color           *string           `json:"color"`
+    Notes           *string           `json:"notes"`
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct CreateScheduleItemInput {
-    pub title: String,
-    pub description: Option<String>,
-    pub student_id: Option<Uuid>,
-    pub start_date: NaiveDate,
-    pub start_time: Option<NaiveTime>,
-    pub end_time: Option<NaiveTime>,
-    pub duration_minutes: Option<i32>,
-    pub category: Option<ScheduleCategory>,
-    pub subject_id: Option<Uuid>,
-    pub color: Option<String>,
-    pub notes: Option<String>,
+// UpdateScheduleItemInput is the request body for updating a schedule item.
+// Pointer fields use nil = "don't update", non-nil = "set to this value".
+type UpdateScheduleItemInput struct {
+    Title           *string           `json:"title"`
+    Description     *string           `json:"description"`
+    StudentID       *uuid.UUID        `json:"student_id"`
+    StartDate       *time.Time        `json:"start_date"`
+    StartTime       *string           `json:"start_time"`
+    EndTime         *string           `json:"end_time"`
+    DurationMinutes *int              `json:"duration_minutes"`
+    Category        *ScheduleCategory `json:"category"`
+    SubjectID       *uuid.UUID        `json:"subject_id"`
+    Color           *string           `json:"color"`
+    Notes           *string           `json:"notes"`
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct UpdateScheduleItemInput {
-    pub title: Option<String>,
-    pub description: Option<String>,
-    pub student_id: Option<Option<Uuid>>,
-    pub start_date: Option<NaiveDate>,
-    pub start_time: Option<Option<NaiveTime>>,
-    pub end_time: Option<Option<NaiveTime>>,
-    pub duration_minutes: Option<Option<i32>>,
-    pub category: Option<ScheduleCategory>,
-    pub subject_id: Option<Option<Uuid>>,
-    pub color: Option<Option<String>>,
-    pub notes: Option<Option<String>>,
+// LogAsActivityInput provides additional details for logging a schedule item
+// as a learning activity.
+type LogAsActivityInput struct {
+    // Additional details for the activity log entry
+    Description *string  `json:"description"`
+    Tags        []string `json:"tags"`
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct LogAsActivityInput {
-    /// Additional details for the activity log entry
-    pub description: Option<String>,
-    pub tags: Option<Vec<String>>,
-}
-
-#[derive(Deserialize, ToSchema)]
-pub struct ScheduleItemQuery {
-    pub start_date: Option<NaiveDate>,
-    pub end_date: Option<NaiveDate>,
-    pub student_id: Option<Uuid>,
-    pub category: Option<ScheduleCategory>,
-    pub is_completed: Option<bool>,
+// ScheduleItemQuery provides filter parameters for listing schedule items.
+type ScheduleItemQuery struct {
+    StartDate   *time.Time        `json:"start_date"`
+    EndDate     *time.Time        `json:"end_date"`
+    StudentID   *uuid.UUID        `json:"student_id"`
+    Category    *ScheduleCategory `json:"category"`
+    IsCompleted *bool             `json:"is_completed"`
 }
 
 // --- Response types ---
 
-#[derive(Serialize, ToSchema)]
-pub struct CalendarResponse {
-    pub start: NaiveDate,
-    pub end: NaiveDate,
-    pub days: Vec<CalendarDay>,
+// CalendarResponse contains the aggregated calendar for a date range.
+type CalendarResponse struct {
+    Start time.Time     `json:"start"`
+    End   time.Time     `json:"end"`
+    Days  []CalendarDay `json:"days"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct CalendarDay {
-    pub date: NaiveDate,
-    pub items: Vec<CalendarItem>,
+// CalendarDay contains all calendar items for a single date.
+type CalendarDay struct {
+    Date  time.Time      `json:"date"`
+    Items []CalendarItem `json:"items"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct CalendarItem {
-    pub id: Uuid,
-    pub source: CalendarSource,
-    pub title: String,
-    pub start_time: Option<NaiveTime>,
-    pub end_time: Option<NaiveTime>,
-    pub duration_minutes: Option<i32>,
-    pub category: Option<String>,
-    pub color: Option<String>,
-    pub student_id: Option<Uuid>,
-    pub student_name: Option<String>,
-    pub is_completed: Option<bool>,
-    /// Source-specific details
-    pub details: CalendarItemDetails,
+// CalendarItem represents a single entry on the calendar from any source.
+type CalendarItem struct {
+    ID              uuid.UUID           `json:"id"`
+    Source          CalendarSource      `json:"source"`
+    Title           string              `json:"title"`
+    StartTime       *string             `json:"start_time"`
+    EndTime         *string             `json:"end_time"`
+    DurationMinutes *int                `json:"duration_minutes"`
+    Category        *string             `json:"category"`
+    Color           *string             `json:"color"`
+    StudentID       *uuid.UUID          `json:"student_id"`
+    StudentName     *string             `json:"student_name"`
+    IsCompleted     *bool               `json:"is_completed"`
+    // Source-specific details
+    Details         CalendarItemDetails `json:"details"`
 }
 
-#[derive(Serialize, ToSchema)]
-#[serde(tag = "type")]
-pub enum CalendarItemDetails {
-    Schedule {
-        description: Option<String>,
-        notes: Option<String>,
-        linked_activity_id: Option<Uuid>,
-    },
-    Activity {
-        subject: Option<String>,
-        tags: Vec<String>,
-    },
-    Attendance {
-        status: String,  // "present", "absent", "holiday"
-    },
-    Event {
-        group_name: Option<String>,
-        location: Option<String>,
-        rsvp_status: Option<String>,
-    },
+// CalendarItemDetails holds source-specific detail fields.
+// The Type field acts as a discriminator (analogous to a tagged union).
+type CalendarItemDetails struct {
+    Type string `json:"type"` // "schedule", "activity", "attendance", "event"
+
+    // Schedule fields (Type == "schedule")
+    Description      *string    `json:"description,omitempty"`
+    Notes            *string    `json:"notes,omitempty"`
+    LinkedActivityID *uuid.UUID `json:"linked_activity_id,omitempty"`
+
+    // Activity fields (Type == "activity")
+    Subject *string  `json:"subject,omitempty"`
+    Tags    []string `json:"tags,omitempty"`
+
+    // Attendance fields (Type == "attendance")
+    Status *string `json:"status,omitempty"` // "present", "absent", "holiday"
+
+    // Event fields (Type == "event")
+    GroupName  *string `json:"group_name,omitempty"`
+    Location   *string `json:"location,omitempty"`
+    RSVPStatus *string `json:"rsvp_status,omitempty"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct DayViewResponse {
-    pub date: NaiveDate,
-    pub schedule_items: Vec<ScheduleItemResponse>,
-    pub activities: Vec<ActivitySummary>,
-    pub attendance: Option<AttendanceSummary>,
-    pub events: Vec<EventSummary>,
+// DayViewResponse contains all items for a single day, grouped by source.
+type DayViewResponse struct {
+    Date          time.Time              `json:"date"`
+    ScheduleItems []ScheduleItemResponse `json:"schedule_items"`
+    Activities    []ActivitySummary      `json:"activities"`
+    Attendance    *AttendanceSummary     `json:"attendance"`
+    Events        []EventSummary         `json:"events"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct ScheduleItemResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub student_id: Option<Uuid>,
-    pub student_name: Option<String>,
-    pub start_date: NaiveDate,
-    pub start_time: Option<NaiveTime>,
-    pub end_time: Option<NaiveTime>,
-    pub duration_minutes: Option<i32>,
-    pub category: ScheduleCategory,
-    pub subject_id: Option<Uuid>,
-    pub subject_name: Option<String>,
-    pub color: Option<String>,
-    pub is_completed: bool,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub linked_activity_id: Option<Uuid>,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
+// ScheduleItemResponse is the response representation of a schedule item.
+type ScheduleItemResponse struct {
+    ID               uuid.UUID        `json:"id"`
+    Title            string           `json:"title"`
+    Description      *string          `json:"description"`
+    StudentID        *uuid.UUID       `json:"student_id"`
+    StudentName      *string          `json:"student_name"`
+    StartDate        time.Time        `json:"start_date"`
+    StartTime        *string          `json:"start_time"`
+    EndTime          *string          `json:"end_time"`
+    DurationMinutes  *int             `json:"duration_minutes"`
+    Category         ScheduleCategory `json:"category"`
+    SubjectID        *uuid.UUID       `json:"subject_id"`
+    SubjectName      *string          `json:"subject_name"`
+    Color            *string          `json:"color"`
+    IsCompleted      bool             `json:"is_completed"`
+    CompletedAt      *time.Time       `json:"completed_at"`
+    LinkedActivityID *uuid.UUID       `json:"linked_activity_id"`
+    Notes            *string          `json:"notes"`
+    CreatedAt        time.Time        `json:"created_at"`
 }
 
 // --- Enums ---
 
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ScheduleCategory {
-    Lesson,
-    Reading,
-    Activity,
-    Assessment,
-    FieldTrip,
-    CoOp,
-    Break,
-    Custom,
-}
+// ScheduleCategory classifies schedule items.
+type ScheduleCategory string
+
+const (
+    ScheduleCategoryLesson     ScheduleCategory = "lesson"
+    ScheduleCategoryReading    ScheduleCategory = "reading"
+    ScheduleCategoryActivity   ScheduleCategory = "activity"
+    ScheduleCategoryAssessment ScheduleCategory = "assessment"
+    ScheduleCategoryFieldTrip  ScheduleCategory = "field_trip"
+    ScheduleCategoryCoOp       ScheduleCategory = "co_op"
+    ScheduleCategoryBreak      ScheduleCategory = "break"
+    ScheduleCategoryCustom     ScheduleCategory = "custom"
+)
 ```
 
 ---
@@ -534,17 +541,18 @@ pub enum ScheduleCategory {
 plan:: does NOT have external adapters. It reads from other domains via their service
 interfaces:
 
-```rust
-// Dependencies injected into PlanningServiceImpl:
-pub struct PlanningServiceImpl {
-    schedule_repo: Arc<dyn ScheduleItemRepository>,
-    template_repo: Arc<dyn ScheduleTemplateRepository>,
+```go
+// PlanningServiceImpl holds dependencies for the planning service.
+// Read-only dependencies on other domains are injected as interfaces.
+type PlanningServiceImpl struct {
+    scheduleRepo      ScheduleItemRepository
+    templateRepo      ScheduleTemplateRepository
     // Read-only dependencies on other domains:
-    learning_service: Arc<dyn LearningService>,
-    compliance_service: Arc<dyn ComplianceService>,
-    social_service: Arc<dyn SocialService>,
-    iam_service: Arc<dyn IamService>,
-    event_bus: Arc<EventBus>,
+    learningService   LearningService
+    complianceService ComplianceService
+    socialService     SocialService
+    iamService        IamService
+    eventBus          *EventBus
 }
 ```
 
@@ -559,54 +567,80 @@ The calendar view aggregates four data sources:
 | Source | Domain | Data | Read Method |
 |--------|--------|------|-------------|
 | Schedule items | plan:: | Family-created calendar entries | Direct DB query |
-| Activities | learn:: | Logged learning activities with dates | `LearningService::list_activities()` |
-| Attendance | comply:: | Attendance records by date | `ComplianceService::get_attendance()` |
-| Events | social:: | Social/co-op events | `SocialService::get_events()` |
+| Activities | learn:: | Logged learning activities with dates | `LearningService.ListActivitiesForCalendar()` |
+| Attendance | comply:: | Attendance records by date | `ComplianceService.GetAttendanceRange()` |
+| Events | social:: | Social/co-op events | `SocialService.GetEventsForCalendar()` |
 
 ### §9.2 Aggregation Strategy
 
-```rust
-impl PlanningServiceImpl {
-    async fn get_calendar(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        params: CalendarQuery,
-    ) -> Result<CalendarResponse, AppError> {
-        // Fetch from all sources in parallel
-        let (schedule_items, activities, attendance, events) = tokio::try_join!(
-            self.schedule_repo.list_by_date_range(
-                scope, params.start, params.end, params.student_id
-            ),
-            self.learning_service.list_activities_for_calendar(
-                auth, scope, params.start, params.end, params.student_id
-            ),
-            self.compliance_service.get_attendance_range(
-                auth, scope, params.start, params.end, params.student_id
-            ),
-            self.social_service.get_events_for_calendar(
-                auth, scope, params.start, params.end
-            ),
-        )?;
+```go
+func (s *PlanningServiceImpl) GetCalendar(
+    ctx context.Context,
+    auth *AuthContext,
+    scope *FamilyScope,
+    params CalendarQuery,
+) (CalendarResponse, error) {
+    // Fetch from all sources in parallel using errgroup
+    g, ctx := errgroup.WithContext(ctx)
 
-        // Merge into CalendarDay structs, sorted by time within each day
-        let days = self.merge_into_calendar_days(
-            params.start, params.end,
-            schedule_items, activities, attendance, events,
-        );
+    var scheduleItems []ScheduleItem
+    var activities []ActivitySummary
+    var attendance []AttendanceRecord
+    var events []EventSummary
 
-        Ok(CalendarResponse {
-            start: params.start,
-            end: params.end,
-            days,
-        })
+    g.Go(func() error {
+        var err error
+        scheduleItems, err = s.scheduleRepo.ListByDateRange(
+            ctx, scope, params.Start, params.End, params.StudentID,
+        )
+        return err
+    })
+
+    g.Go(func() error {
+        var err error
+        activities, err = s.learningService.ListActivitiesForCalendar(
+            ctx, auth, scope, params.Start, params.End, params.StudentID,
+        )
+        return err
+    })
+
+    g.Go(func() error {
+        var err error
+        attendance, err = s.complianceService.GetAttendanceRange(
+            ctx, auth, scope, params.Start, params.End, params.StudentID,
+        )
+        return err
+    })
+
+    g.Go(func() error {
+        var err error
+        events, err = s.socialService.GetEventsForCalendar(
+            ctx, auth, scope, params.Start, params.End,
+        )
+        return err
+    })
+
+    if err := g.Wait(); err != nil {
+        return CalendarResponse{}, err
     }
+
+    // Merge into CalendarDay structs, sorted by time within each day
+    days := s.mergeIntoCalendarDays(
+        params.Start, params.End,
+        scheduleItems, activities, attendance, events,
+    )
+
+    return CalendarResponse{
+        Start: params.Start,
+        End:   params.End,
+        Days:  days,
+    }, nil
 }
 ```
 
 ### §9.3 Performance Consideration
 
-Calendar queries fetch from 4 sources in parallel (`tokio::try_join!`). For typical
+Calendar queries fetch from 4 sources in parallel (`errgroup.WithContext`). For typical
 date ranges (1 week = 7 days), this should complete well within the p99 < 500ms SLO.
 For month views, each source returns at most ~30 days of data.
 
@@ -640,7 +674,7 @@ Create → [calendar display] → Complete → Log as Activity (optional)
 
 When a parent chooses to log a completed schedule item as a learning activity:
 
-1. Service creates a `learn::` activity via `LearningService::log_activity()`
+1. Service creates a `learn::` activity via `LearningService.LogActivity()`
 2. The new activity's ID is linked back to the schedule item (`linked_activity_id`)
 3. This prevents duplicate entries — the calendar shows the schedule item as "logged"
 4. The activity inherits: title, date, duration, subject, and student from the schedule item
@@ -673,7 +707,7 @@ Recurring items are expanded into concrete instances on read (not pre-generated)
 - Calendar queries expand RRULE for the requested date range
 - Instances inherit all properties from the recurring item
 - Individual instances can be modified (exception) or deleted (exclusion)
-- RRULE parsing uses the `rrule` Rust crate
+- RRULE parsing uses a Go rrule library (e.g., `github.com/teambition/rrule-go`)
 
 ### §11.3 Schedule Templates
 
@@ -727,9 +761,9 @@ Co-op days are social events owned by `social::`. The planning domain integrates
 
 ### §13.2 PDF Export (Phase 2)
 
-PDF generation via a server-side HTML-to-PDF renderer (e.g., `weasyprint` or `wkhtmltopdf`
-called as a subprocess, or a Rust PDF library). Enqueued as a background job for
-week/month ranges.
+PDF generation via a server-side HTML-to-PDF renderer (e.g., `chromedp` headless Chrome,
+`wkhtmltopdf` called as a subprocess, or a Go PDF library such as `jung-kurt/gofpdf`).
+Enqueued as a background job for week/month ranges.
 
 ---
 
@@ -772,50 +806,48 @@ Linked activity IDs in `learn::` are NOT deleted (learn:: owns those records).
 
 ## §17 Error Types
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum PlanningError {
-    #[error("Schedule item not found")]
-    ItemNotFound,
+```go
+import "errors"
 
-    #[error("Schedule template not found")]
-    TemplateNotFound,
+var (
+    // ErrItemNotFound indicates the schedule item was not found.
+    ErrItemNotFound = errors.New("schedule item not found")
 
-    #[error("Invalid date range: start must be before end")]
-    InvalidDateRange,
+    // ErrTemplateNotFound indicates the schedule template was not found.
+    ErrTemplateNotFound = errors.New("schedule template not found")
 
-    #[error("Date range too large (maximum 90 days)")]
-    DateRangeTooLarge,
+    // ErrInvalidDateRange indicates start must be before end.
+    ErrInvalidDateRange = errors.New("invalid date range: start must be before end")
 
-    #[error("Schedule item already completed")]
-    AlreadyCompleted,
+    // ErrDateRangeTooLarge indicates the date range exceeds 90 days.
+    ErrDateRangeTooLarge = errors.New("date range too large (maximum 90 days)")
 
-    #[error("Schedule item already logged as activity")]
-    AlreadyLogged,
+    // ErrAlreadyCompleted indicates the schedule item is already completed.
+    ErrAlreadyCompleted = errors.New("schedule item already completed")
 
-    #[error("Invalid recurrence rule")]
-    InvalidRecurrenceRule,
+    // ErrAlreadyLogged indicates the schedule item is already logged as an activity.
+    ErrAlreadyLogged = errors.New("schedule item already logged as activity")
 
-    #[error("Student not found in family")]
-    StudentNotInFamily,
+    // ErrInvalidRecurrenceRule indicates the RRULE string is invalid.
+    ErrInvalidRecurrenceRule = errors.New("invalid recurrence rule")
 
-    #[error("Database error")]
-    Database(#[from] sea_orm::DbErr),
-}
+    // ErrStudentNotInFamily indicates the student does not belong to the family.
+    ErrStudentNotInFamily = errors.New("student not found in family")
+)
 ```
 
 **HTTP mapping**:
 
 | Error | HTTP Status |
 |-------|-------------|
-| `ItemNotFound` | 404 |
-| `TemplateNotFound` | 404 |
-| `InvalidDateRange` | 400 |
-| `DateRangeTooLarge` | 400 |
-| `AlreadyCompleted` | 409 Conflict |
-| `AlreadyLogged` | 409 Conflict |
-| `InvalidRecurrenceRule` | 400 |
-| `StudentNotInFamily` | 404 |
+| `ErrItemNotFound` | 404 |
+| `ErrTemplateNotFound` | 404 |
+| `ErrInvalidDateRange` | 400 |
+| `ErrDateRangeTooLarge` | 400 |
+| `ErrAlreadyCompleted` | 409 Conflict |
+| `ErrAlreadyLogged` | 409 Conflict |
+| `ErrInvalidRecurrenceRule` | 400 |
+| `ErrStudentNotInFamily` | 404 |
 
 ---
 
@@ -872,13 +904,11 @@ pub enum PlanningError {
 ## §21 Module Structure
 
 ```
-src/plan/
-├── mod.rs              # Re-exports
-├── handlers.rs         # Axum route handlers
-├── service.rs          # Calendar aggregation + schedule CRUD
-├── repository.rs       # plan_ table queries
-├── models.rs           # DTOs (request/response)
-├── ports.rs            # Service + repository trait definitions
-├── event_handlers.rs   # Handlers for social:: and learn:: events
-└── entities/           # SeaORM-generated (plan_ tables)
+internal/plan/
+├── handler.go          # Echo route handlers
+├── service.go          # Calendar aggregation + schedule CRUD
+├── repository.go       # plan_ table queries (GORM)
+├── models.go           # DTOs (request/response) + GORM model definitions
+├── ports.go            # Service + repository interface definitions
+└── event_handlers.go   # Handlers for social:: and learn:: events
 ```

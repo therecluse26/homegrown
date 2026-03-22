@@ -12,7 +12,7 @@ config lookup — never methodology branching. `[S§8, V§5, V§8]`
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/learn/` |
+| **Module path** | `internal/learn/` |
 | **DB prefix** | `learn_` |
 | **Complexity class** | Complex (has `domain/` subdirectory) `[ARCH §4.5]` |
 | **CQRS** | Yes — activity log writes separated from progress analytics reads `[ARCH §4.7]` |
@@ -156,7 +156,7 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_learn_tables.rs
+-- Migration: YYYYMMDD_000001_create_learn_tables.go (goose migration)
 -- =============================================================================
 
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -888,7 +888,7 @@ Browse/search activity definitions.
 
 - **Auth**: Required
 - **Query**: `?subject=<slug>&methodology_id=<uuid>&publisher_id=<uuid>&q=<search>&cursor=<uuid>&limit=20`
-- **Response**: `PaginatedResponse<ActivityDefSummaryResponse>` (200 OK)
+- **Response**: `PaginatedResponse[ActivityDefSummaryResponse]` (200 OK)
 
 ##### `GET /v1/learning/activities/defs/:id`
 
@@ -931,7 +931,7 @@ Browse/search reading items.
 
 - **Auth**: Required
 - **Query**: `?q=<search>&subject=<slug>&isbn=<isbn>&cursor=<uuid>&limit=20`
-- **Response**: `PaginatedResponse<ReadingItemSummaryResponse>` (200 OK)
+- **Response**: `PaginatedResponse[ReadingItemSummaryResponse]` (200 OK)
 
 ##### `GET /v1/learning/reading-items/:id`
 
@@ -966,7 +966,7 @@ Gets all artifacts linked to a specific content item.
 
 - **Auth**: Required
 - **Query**: `?type=<content_type>&id=<uuid>&direction=source|target|both`
-- **Response**: `Vec<ArtifactLinkResponse>` (200 OK)
+- **Response**: `[]ArtifactLinkResponse` (200 OK)
 
 ##### `DELETE /v1/learning/links/:id`
 
@@ -993,7 +993,7 @@ Lists activity logs for a student, filterable. `[S§8.1.1]`
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?subject=<slug>&date_from=<date>&date_to=<date>&cursor=<uuid>&limit=20`
-- **Response**: `PaginatedResponse<ActivityLogResponse>` (200 OK)
+- **Response**: `PaginatedResponse[ActivityLogResponse]` (200 OK)
 
 ##### `GET /v1/learning/students/:student_id/activities/:id`
 
@@ -1035,7 +1035,7 @@ Lists journal entries for a student. `[S§8.1.4]`
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?entry_type=<type>&date_from=<date>&date_to=<date>&q=<search>&cursor=<uuid>&limit=20`
-- **Response**: `PaginatedResponse<JournalEntryResponse>` (200 OK)
+- **Response**: `PaginatedResponse[JournalEntryResponse]` (200 OK)
 
 ##### `GET /v1/learning/students/:student_id/journals/:id`
 
@@ -1086,7 +1086,7 @@ Lists reading progress for a student.
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?status=<status>&cursor=<uuid>&limit=20`
-- **Response**: `PaginatedResponse<ReadingProgressResponse>` (200 OK)
+- **Response**: `PaginatedResponse[ReadingProgressResponse]` (200 OK)
 
 #### Reading Lists (Layer 3 — family-scoped)
 
@@ -1103,7 +1103,7 @@ Creates a named reading list. `[S§8.1.3]`
 Lists the family's reading lists.
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<ReadingListSummaryResponse>` (200 OK)
+- **Response**: `[]ReadingListSummaryResponse` (200 OK)
 
 ##### `GET /v1/learning/reading-lists/:id`
 
@@ -1144,7 +1144,7 @@ Browse/search questions for quiz building.
 
 - **Auth**: Required (publisher membership check for write context; any auth for read)
 - **Query**: `?publisher_id=<uuid>&question_type=<type>&subject=<slug>&methodology_id=<uuid>&q=<search>&cursor=<uuid>&limit=20`
-- **Response**: `PaginatedResponse<QuestionSummaryResponse>` (200 OK)
+- **Response**: `PaginatedResponse[QuestionSummaryResponse]` (200 OK)
 
 ##### `PATCH /v1/learning/questions/:id`
 
@@ -1292,7 +1292,7 @@ Lists assignments for a student. Accessible by both parent and student sessions.
 
 - **Auth**: Required (`FamilyScope` or student session)
 - **Query**: `?status=<status>&due_before=<date>&cursor=<uuid>&limit=20`
-- **Response**: `PaginatedResponse<AssignmentResponse>` (200 OK)
+- **Response**: `PaginatedResponse[AssignmentResponse]` (200 OK)
 
 ##### `PATCH /v1/learning/students/:student_id/assignments/:id`
 
@@ -1328,7 +1328,7 @@ Returns per-subject breakdown for a student.
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?date_from=<date>&date_to=<date>`
-- **Response**: `Vec<SubjectProgressResponse>` (200 OK)
+- **Response**: `[]SubjectProgressResponse` (200 OK)
 
 ##### `GET /v1/learning/progress/:student_id/timeline`
 
@@ -1336,7 +1336,7 @@ Returns activity timeline for a student.
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?date_from=<date>&date_to=<date>&cursor=<uuid>&limit=50`
-- **Response**: `PaginatedResponse<TimelineEntryResponse>` (200 OK)
+- **Response**: `PaginatedResponse[TimelineEntryResponse]` (200 OK)
 
 #### Tools
 
@@ -1345,14 +1345,14 @@ Returns activity timeline for a student.
 Returns the family's resolved tool set. Delegates to `method::`. `[S§4.2]`
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<ActiveToolResponse>` (200 OK)
+- **Response**: `[]ActiveToolResponse` (200 OK)
 
 ##### `GET /v1/learning/tools/:student_id`
 
 Returns a student-specific resolved tool set. `[S§4.6, S§8.2]`
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<ActiveToolResponse>` (200 OK)
+- **Response**: `[]ActiveToolResponse` (200 OK)
 
 #### Subject Taxonomy
 
@@ -1362,7 +1362,7 @@ Returns the subject taxonomy tree (platform + family custom subjects). `[S§8.3]
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?level=<0|1|2>&parent_id=<uuid>`
-- **Response**: `Vec<SubjectTaxonomyResponse>` (200 OK)
+- **Response**: `[]SubjectTaxonomyResponse` (200 OK)
 
 ##### `POST /v1/learning/subjects/custom`
 
@@ -1423,944 +1423,457 @@ Sharing: 2, Import: 1, Annotations: 3).
 
 ## §5 Service Interface
 
-The `LearningService` trait defines all use cases exposed to handlers and other domains.
-Defined in `src/learn/ports.rs`. Methods are organized with CQRS separation: command
+The `LearningService` interface defines all use cases exposed to handlers and other domains.
+Defined in `internal/learn/ports.go`. Methods are organized with CQRS separation: command
 methods (writes with side effects) are separated from query methods (reads). `[CODING §8.2, ARCH §4.7]`
 
-```rust
-// src/learn/ports.rs
-
-#[async_trait]
-pub trait LearningService: Send + Sync {
-    // ═══ COMMAND SIDE (writes with side effects) ════════════════════════
-
-    // ─── Definition Commands (Layer 1 — publisher-based access) ───────
-
-    /// Creates an activity definition. Publisher membership required. [S§8.1.1]
-    async fn create_activity_def(
-        &self,
-        cmd: CreateActivityDefCommand,
-    ) -> Result<ActivityDefResponse, AppError>;
-
-    /// Updates an activity definition. Publisher membership required.
-    async fn update_activity_def(
-        &self,
-        def_id: Uuid,
-        cmd: UpdateActivityDefCommand,
-    ) -> Result<ActivityDefResponse, AppError>;
-
-    /// Soft-deletes an activity definition. Publisher membership required.
-    async fn delete_activity_def(
-        &self,
-        def_id: Uuid,
-        caller_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Creates a reading item definition. Publisher membership required. [S§8.1.3]
-    async fn create_reading_item(
-        &self,
-        cmd: CreateReadingItemCommand,
-    ) -> Result<ReadingItemResponse, AppError>;
-
-    /// Updates a reading item. Publisher membership required.
-    async fn update_reading_item(
-        &self,
-        item_id: Uuid,
-        cmd: UpdateReadingItemCommand,
-    ) -> Result<ReadingItemResponse, AppError>;
-
-    /// Creates an artifact link between two published content items. [§9]
-    async fn link_artifacts(
-        &self,
-        cmd: CreateArtifactLinkCommand,
-    ) -> Result<ArtifactLinkResponse, AppError>;
-
-    /// Removes an artifact link. Must own source content.
-    async fn unlink_artifacts(
-        &self,
-        link_id: Uuid,
-        caller_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    // ─── Instance Commands (Layer 3 — FamilyScope required) ───────────
-
-    /// Logs an activity for a student. [S§8.1.1]
-    async fn log_activity(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: LogActivityCommand,
-    ) -> Result<ActivityLogResponse, AppError>;
-
-    /// Updates an activity log entry.
-    async fn update_activity_log(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        log_id: Uuid,
-        cmd: UpdateActivityLogCommand,
-    ) -> Result<ActivityLogResponse, AppError>;
-
-    /// Deletes an activity log entry.
-    async fn delete_activity_log(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        log_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Creates a journal entry for a student. [S§8.1.4]
-    async fn create_journal_entry(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: CreateJournalEntryCommand,
-    ) -> Result<JournalEntryResponse, AppError>;
-
-    /// Updates a journal entry.
-    async fn update_journal_entry(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        entry_id: Uuid,
-        cmd: UpdateJournalEntryCommand,
-    ) -> Result<JournalEntryResponse, AppError>;
-
-    /// Deletes a journal entry.
-    async fn delete_journal_entry(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        entry_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Starts tracking a reading item for a student. [S§8.1.3]
-    async fn start_reading(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: StartReadingCommand,
-    ) -> Result<ReadingProgressResponse, AppError>;
-
-    /// Updates reading progress. Completing triggers BookCompleted event.
-    async fn update_reading_progress(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        progress_id: Uuid,
-        cmd: UpdateReadingProgressCommand,
-    ) -> Result<ReadingProgressResponse, AppError>;
-
-    /// Creates a named reading list. [S§8.1.3]
-    async fn create_reading_list(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateReadingListCommand,
-    ) -> Result<ReadingListResponse, AppError>;
-
-    /// Updates a reading list (metadata and items).
-    async fn update_reading_list(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-        cmd: UpdateReadingListCommand,
-    ) -> Result<ReadingListResponse, AppError>;
-
-    /// Deletes a reading list.
-    async fn delete_reading_list(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Creates a family-scoped custom subject. [S§8.3]
-    async fn create_custom_subject(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateCustomSubjectCommand,
-    ) -> Result<CustomSubjectResponse, AppError>;
-
-    /// Requests an async data export. [S§8.5]
-    async fn request_data_export(
-        &self,
-        scope: &FamilyScope,
-        cmd: RequestExportCommand,
-    ) -> Result<ExportRequestResponse, AppError>;
-
-    // ─── Event Handlers ──────────────────────────────────────────────
-
-    /// Handles StudentCreated event — initialize student learning defaults.
-    async fn handle_student_created(
-        &self,
-        family_id: FamilyId,
-        student_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Handles StudentDeleted event — cascade-delete learning data.
-    async fn handle_student_deleted(
-        &self,
-        family_id: FamilyId,
-        student_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Handles FamilyDeletionScheduled — trigger export opportunity.
-    async fn handle_family_deletion_scheduled(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
-
-    /// Handles PurchaseCompleted — integrate purchased content (including interactive content).
-    async fn handle_purchase_completed(
-        &self,
-        family_id: FamilyId,
-        purchase_metadata: PurchaseMetadata,
-    ) -> Result<(), AppError>;
-
-    /// Handles MethodologyConfigUpdated — invalidate tool cache.
-    async fn handle_methodology_config_updated(
-        &self,
-    ) -> Result<(), AppError>;
-
-    // ─── Assessment Engine Commands (Layer 1 + Layer 3) ───────────── [S§8.1.9]
-
-    /// Creates a question. Publisher membership required.
-    async fn create_question(
-        &self,
-        cmd: CreateQuestionCommand,
-    ) -> Result<QuestionResponse, AppError>;
-
-    /// Updates a question. Publisher membership required.
-    async fn update_question(
-        &self,
-        question_id: Uuid,
-        cmd: UpdateQuestionCommand,
-    ) -> Result<QuestionResponse, AppError>;
-
-    /// Creates a quiz definition from questions. Publisher membership required.
-    async fn create_quiz_def(
-        &self,
-        cmd: CreateQuizDefCommand,
-    ) -> Result<QuizDefResponse, AppError>;
-
-    /// Updates a quiz definition. Publisher membership required.
-    async fn update_quiz_def(
-        &self,
-        quiz_def_id: Uuid,
-        cmd: UpdateQuizDefCommand,
-    ) -> Result<QuizDefResponse, AppError>;
-
-    /// Starts a quiz session for a student.
-    async fn start_quiz_session(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: StartQuizSessionCommand,
-    ) -> Result<QuizSessionResponse, AppError>;
-
-    /// Saves progress or submits a quiz session.
-    async fn update_quiz_session(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        session_id: Uuid,
-        cmd: UpdateQuizSessionCommand,
-    ) -> Result<QuizSessionResponse, AppError>;
-
-    /// Parent scores short-answer questions on a submitted quiz.
-    async fn score_quiz_session(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        session_id: Uuid,
-        cmd: ScoreQuizCommand,
-    ) -> Result<QuizSessionResponse, AppError>;
-
-    // ─── Sequence Engine Commands (Layer 1 + Layer 3) ─────────────── [S§8.1.12]
-
-    /// Creates a lesson sequence. Publisher membership required.
-    async fn create_sequence_def(
-        &self,
-        cmd: CreateSequenceDefCommand,
-    ) -> Result<SequenceDefResponse, AppError>;
-
-    /// Updates a sequence definition. Publisher membership required.
-    async fn update_sequence_def(
-        &self,
-        sequence_def_id: Uuid,
-        cmd: UpdateSequenceDefCommand,
-    ) -> Result<SequenceDefResponse, AppError>;
-
-    /// Starts a sequence for a student.
-    async fn start_sequence(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: StartSequenceCommand,
-    ) -> Result<SequenceProgressResponse, AppError>;
-
-    /// Advances, skips, or unlocks items in a sequence.
-    async fn update_sequence_progress(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        progress_id: Uuid,
-        cmd: UpdateSequenceProgressCommand,
-    ) -> Result<SequenceProgressResponse, AppError>;
-
-    // ─── Assignment Commands (Layer 3) ────────────────────────────── [S§8.6.3]
-
-    /// Assigns content to a student. Parent auth required.
-    async fn create_assignment(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        cmd: CreateAssignmentCommand,
-    ) -> Result<AssignmentResponse, AppError>;
-
-    /// Updates assignment status.
-    async fn update_assignment(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        assignment_id: Uuid,
-        cmd: UpdateAssignmentCommand,
-    ) -> Result<AssignmentResponse, AppError>;
-
-    /// Removes an assignment. Parent auth required.
-    async fn delete_assignment(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        assignment_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    // ═══ QUERY SIDE (reads, no side effects) ════════════════════════
-
-    // ─── Definition Queries (Layer 1 — no FamilyScope) ──────────────
-
-    /// Lists activity definitions with filtering.
-    async fn list_activity_defs(
-        &self,
-        query: ActivityDefQuery,
-    ) -> Result<PaginatedResponse<ActivityDefSummaryResponse>, AppError>;
-
-    /// Returns a single activity definition.
-    async fn get_activity_def(
-        &self,
-        def_id: Uuid,
-    ) -> Result<ActivityDefResponse, AppError>;
-
-    /// Lists reading items with filtering.
-    async fn list_reading_items(
-        &self,
-        query: ReadingItemQuery,
-    ) -> Result<PaginatedResponse<ReadingItemSummaryResponse>, AppError>;
-
-    /// Returns a single reading item with linked artifacts.
-    async fn get_reading_item(
-        &self,
-        item_id: Uuid,
-    ) -> Result<ReadingItemDetailResponse, AppError>;
-
-    /// Gets all artifacts linked to a content item. [§9]
-    async fn get_linked_artifacts(
-        &self,
-        content_type: &str,
-        content_id: Uuid,
-        direction: LinkDirection,
-    ) -> Result<Vec<ArtifactLinkResponse>, AppError>;
-
-    // ─── Instance Queries (Layer 3 — FamilyScope required) ──────────
-
-    /// Lists activity logs for a student with filtering. [S§8.1.1]
-    async fn list_activity_logs(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: ActivityLogQuery,
-    ) -> Result<PaginatedResponse<ActivityLogResponse>, AppError>;
-
-    /// Returns a single activity log entry.
-    async fn get_activity_log(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        log_id: Uuid,
-    ) -> Result<ActivityLogResponse, AppError>;
-
-    /// Lists journal entries for a student. [S§8.1.4]
-    async fn list_journal_entries(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: JournalEntryQuery,
-    ) -> Result<PaginatedResponse<JournalEntryResponse>, AppError>;
-
-    /// Returns a single journal entry.
-    async fn get_journal_entry(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        entry_id: Uuid,
-    ) -> Result<JournalEntryResponse, AppError>;
-
-    /// Lists reading progress for a student. [S§8.1.3]
-    async fn list_reading_progress(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: ReadingProgressQuery,
-    ) -> Result<PaginatedResponse<ReadingProgressResponse>, AppError>;
-
-    /// Lists the family's reading lists. [S§8.1.3]
-    async fn list_reading_lists(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<ReadingListSummaryResponse>, AppError>;
-
-    /// Returns a reading list with items and student progress.
-    async fn get_reading_list(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-    ) -> Result<ReadingListDetailResponse, AppError>;
-
-    /// Returns progress summary for a student. [S§8.1.7]
-    async fn get_progress_summary(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: ProgressQuery,
-    ) -> Result<ProgressSummaryResponse, AppError>;
-
-    /// Returns per-subject breakdown for a student.
-    async fn get_subject_breakdown(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: ProgressQuery,
-    ) -> Result<Vec<SubjectProgressResponse>, AppError>;
-
-    /// Returns activity timeline for a student.
-    async fn get_activity_timeline(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: TimelineQuery,
-    ) -> Result<PaginatedResponse<TimelineEntryResponse>, AppError>;
-
-    /// Returns the family's resolved tool set. Delegates to method::. [S§4.2]
-    async fn get_resolved_tools(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<ActiveToolResponse>, AppError>;
-
-    /// Returns a student-specific resolved tool set. [S§4.6, S§8.2]
-    async fn get_student_tools(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-    ) -> Result<Vec<ActiveToolResponse>, AppError>;
-
-    /// Returns subject taxonomy tree. [S§8.3]
-    async fn get_subject_taxonomy(
-        &self,
-        scope: &FamilyScope,
-        query: TaxonomyQuery,
-    ) -> Result<Vec<SubjectTaxonomyResponse>, AppError>;
-
-    /// Returns export request status.
-    async fn get_export_request(
-        &self,
-        scope: &FamilyScope,
-        export_id: Uuid,
-    ) -> Result<ExportRequestResponse, AppError>;
-
-    // ─── Assessment Engine Queries ────────────────────────────────── [S§8.1.9]
-
-    /// Lists questions with filtering (for quiz building).
-    async fn list_questions(
-        &self,
-        query: QuestionQuery,
-    ) -> Result<PaginatedResponse<QuestionSummaryResponse>, AppError>;
-
-    /// Returns a quiz definition with questions.
-    async fn get_quiz_def(
-        &self,
-        quiz_def_id: Uuid,
-        include_answers: bool,
-    ) -> Result<QuizDefDetailResponse, AppError>;
-
-    /// Returns a quiz session (for resume or review).
-    async fn get_quiz_session(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        session_id: Uuid,
-    ) -> Result<QuizSessionResponse, AppError>;
-
-    // ─── Sequence Engine Queries ──────────────────────────────────── [S§8.1.12]
-
-    /// Returns a sequence definition with items.
-    async fn get_sequence_def(
-        &self,
-        sequence_def_id: Uuid,
-    ) -> Result<SequenceDefDetailResponse, AppError>;
-
-    /// Returns sequence progress with per-item completion status.
-    async fn get_sequence_progress(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        progress_id: Uuid,
-    ) -> Result<SequenceProgressResponse, AppError>;
-
-    // ─── Assignment Queries ───────────────────────────────────────── [S§8.6.3]
-
-    /// Lists assignments for a student.
-    async fn list_assignments(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: AssignmentQuery,
-    ) -> Result<PaginatedResponse<AssignmentResponse>, AppError>;
+```go
+// internal/learn/ports.go
+
+// LearningService defines all learning domain use cases.
+type LearningService interface {
+    // === COMMAND SIDE (writes with side effects) ============================
+
+    // --- Definition Commands (Layer 1 — publisher-based access) -------------
+
+    // CreateActivityDef creates an activity definition. Publisher membership required. [S§8.1.1]
+    CreateActivityDef(ctx context.Context, cmd CreateActivityDefCommand) (ActivityDefResponse, error)
+
+    // UpdateActivityDef updates an activity definition. Publisher membership required.
+    UpdateActivityDef(ctx context.Context, defID uuid.UUID, cmd UpdateActivityDefCommand) (ActivityDefResponse, error)
+
+    // DeleteActivityDef soft-deletes an activity definition. Publisher membership required.
+    DeleteActivityDef(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error
+
+    // CreateReadingItem creates a reading item definition. Publisher membership required. [S§8.1.3]
+    CreateReadingItem(ctx context.Context, cmd CreateReadingItemCommand) (ReadingItemResponse, error)
+
+    // UpdateReadingItem updates a reading item. Publisher membership required.
+    UpdateReadingItem(ctx context.Context, itemID uuid.UUID, cmd UpdateReadingItemCommand) (ReadingItemResponse, error)
+
+    // LinkArtifacts creates an artifact link between two published content items. [§9]
+    LinkArtifacts(ctx context.Context, cmd CreateArtifactLinkCommand) (ArtifactLinkResponse, error)
+
+    // UnlinkArtifacts removes an artifact link. Must own source content.
+    UnlinkArtifacts(ctx context.Context, linkID uuid.UUID, callerID uuid.UUID) error
+
+    // --- Instance Commands (Layer 3 — FamilyScope required) -----------------
+
+    // LogActivity logs an activity for a student. [S§8.1.1]
+    LogActivity(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd LogActivityCommand) (ActivityLogResponse, error)
+
+    // UpdateActivityLog updates an activity log entry.
+    UpdateActivityLog(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, logID uuid.UUID, cmd UpdateActivityLogCommand) (ActivityLogResponse, error)
+
+    // DeleteActivityLog deletes an activity log entry.
+    DeleteActivityLog(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, logID uuid.UUID) error
+
+    // CreateJournalEntry creates a journal entry for a student. [S§8.1.4]
+    CreateJournalEntry(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd CreateJournalEntryCommand) (JournalEntryResponse, error)
+
+    // UpdateJournalEntry updates a journal entry.
+    UpdateJournalEntry(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, entryID uuid.UUID, cmd UpdateJournalEntryCommand) (JournalEntryResponse, error)
+
+    // DeleteJournalEntry deletes a journal entry.
+    DeleteJournalEntry(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, entryID uuid.UUID) error
+
+    // StartReading starts tracking a reading item for a student. [S§8.1.3]
+    StartReading(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd StartReadingCommand) (ReadingProgressResponse, error)
+
+    // UpdateReadingProgress updates reading progress. Completing triggers BookCompleted event.
+    UpdateReadingProgress(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, progressID uuid.UUID, cmd UpdateReadingProgressCommand) (ReadingProgressResponse, error)
+
+    // CreateReadingList creates a named reading list. [S§8.1.3]
+    CreateReadingList(ctx context.Context, scope *FamilyScope, cmd CreateReadingListCommand) (ReadingListResponse, error)
+
+    // UpdateReadingList updates a reading list (metadata and items).
+    UpdateReadingList(ctx context.Context, scope *FamilyScope, listID uuid.UUID, cmd UpdateReadingListCommand) (ReadingListResponse, error)
+
+    // DeleteReadingList deletes a reading list.
+    DeleteReadingList(ctx context.Context, scope *FamilyScope, listID uuid.UUID) error
+
+    // CreateCustomSubject creates a family-scoped custom subject. [S§8.3]
+    CreateCustomSubject(ctx context.Context, scope *FamilyScope, cmd CreateCustomSubjectCommand) (CustomSubjectResponse, error)
+
+    // RequestDataExport requests an async data export. [S§8.5]
+    RequestDataExport(ctx context.Context, scope *FamilyScope, cmd RequestExportCommand) (ExportRequestResponse, error)
+
+    // --- Event Handlers ------------------------------------------------------
+
+    // HandleStudentCreated handles StudentCreated event — initialize student learning defaults.
+    HandleStudentCreated(ctx context.Context, familyID FamilyID, studentID uuid.UUID) error
+
+    // HandleStudentDeleted handles StudentDeleted event — cascade-delete learning data.
+    HandleStudentDeleted(ctx context.Context, familyID FamilyID, studentID uuid.UUID) error
+
+    // HandleFamilyDeletionScheduled handles FamilyDeletionScheduled — trigger export opportunity.
+    HandleFamilyDeletionScheduled(ctx context.Context, familyID FamilyID) error
+
+    // HandlePurchaseCompleted handles PurchaseCompleted — integrate purchased content (including interactive content).
+    HandlePurchaseCompleted(ctx context.Context, familyID FamilyID, purchaseMetadata PurchaseMetadata) error
+
+    // HandleMethodologyConfigUpdated handles MethodologyConfigUpdated — invalidate tool cache.
+    HandleMethodologyConfigUpdated(ctx context.Context) error
+
+    // --- Assessment Engine Commands (Layer 1 + Layer 3) ----- [S§8.1.9]
+
+    // CreateQuestion creates a question. Publisher membership required.
+    CreateQuestion(ctx context.Context, cmd CreateQuestionCommand) (QuestionResponse, error)
+
+    // UpdateQuestion updates a question. Publisher membership required.
+    UpdateQuestion(ctx context.Context, questionID uuid.UUID, cmd UpdateQuestionCommand) (QuestionResponse, error)
+
+    // CreateQuizDef creates a quiz definition from questions. Publisher membership required.
+    CreateQuizDef(ctx context.Context, cmd CreateQuizDefCommand) (QuizDefResponse, error)
+
+    // UpdateQuizDef updates a quiz definition. Publisher membership required.
+    UpdateQuizDef(ctx context.Context, quizDefID uuid.UUID, cmd UpdateQuizDefCommand) (QuizDefResponse, error)
+
+    // StartQuizSession starts a quiz session for a student.
+    StartQuizSession(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd StartQuizSessionCommand) (QuizSessionResponse, error)
+
+    // UpdateQuizSession saves progress or submits a quiz session.
+    UpdateQuizSession(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, sessionID uuid.UUID, cmd UpdateQuizSessionCommand) (QuizSessionResponse, error)
+
+    // ScoreQuizSession allows a parent to score short-answer questions on a submitted quiz.
+    ScoreQuizSession(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, sessionID uuid.UUID, cmd ScoreQuizCommand) (QuizSessionResponse, error)
+
+    // --- Sequence Engine Commands (Layer 1 + Layer 3) ------- [S§8.1.12]
+
+    // CreateSequenceDef creates a lesson sequence. Publisher membership required.
+    CreateSequenceDef(ctx context.Context, cmd CreateSequenceDefCommand) (SequenceDefResponse, error)
+
+    // UpdateSequenceDef updates a sequence definition. Publisher membership required.
+    UpdateSequenceDef(ctx context.Context, sequenceDefID uuid.UUID, cmd UpdateSequenceDefCommand) (SequenceDefResponse, error)
+
+    // StartSequence starts a sequence for a student.
+    StartSequence(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd StartSequenceCommand) (SequenceProgressResponse, error)
+
+    // UpdateSequenceProgress advances, skips, or unlocks items in a sequence.
+    UpdateSequenceProgress(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, progressID uuid.UUID, cmd UpdateSequenceProgressCommand) (SequenceProgressResponse, error)
+
+    // --- Assignment Commands (Layer 3) ---------------------- [S§8.6.3]
+
+    // CreateAssignment assigns content to a student. Parent auth required.
+    CreateAssignment(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd CreateAssignmentCommand) (AssignmentResponse, error)
+
+    // UpdateAssignment updates assignment status.
+    UpdateAssignment(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, assignmentID uuid.UUID, cmd UpdateAssignmentCommand) (AssignmentResponse, error)
+
+    // DeleteAssignment removes an assignment. Parent auth required.
+    DeleteAssignment(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, assignmentID uuid.UUID) error
+
+    // === QUERY SIDE (reads, no side effects) ================================
+
+    // --- Definition Queries (Layer 1 — no FamilyScope) ----------------------
+
+    // ListActivityDefs lists activity definitions with filtering.
+    ListActivityDefs(ctx context.Context, query ActivityDefQuery) (PaginatedResponse[ActivityDefSummaryResponse], error)
+
+    // GetActivityDef returns a single activity definition.
+    GetActivityDef(ctx context.Context, defID uuid.UUID) (ActivityDefResponse, error)
+
+    // ListReadingItems lists reading items with filtering.
+    ListReadingItems(ctx context.Context, query ReadingItemQuery) (PaginatedResponse[ReadingItemSummaryResponse], error)
+
+    // GetReadingItem returns a single reading item with linked artifacts.
+    GetReadingItem(ctx context.Context, itemID uuid.UUID) (ReadingItemDetailResponse, error)
+
+    // GetLinkedArtifacts gets all artifacts linked to a content item. [§9]
+    GetLinkedArtifacts(ctx context.Context, contentType string, contentID uuid.UUID, direction LinkDirection) ([]ArtifactLinkResponse, error)
+
+    // --- Instance Queries (Layer 3 — FamilyScope required) ------------------
+
+    // ListActivityLogs lists activity logs for a student with filtering. [S§8.1.1]
+    ListActivityLogs(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query ActivityLogQuery) (PaginatedResponse[ActivityLogResponse], error)
+
+    // GetActivityLog returns a single activity log entry.
+    GetActivityLog(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, logID uuid.UUID) (ActivityLogResponse, error)
+
+    // ListJournalEntries lists journal entries for a student. [S§8.1.4]
+    ListJournalEntries(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query JournalEntryQuery) (PaginatedResponse[JournalEntryResponse], error)
+
+    // GetJournalEntry returns a single journal entry.
+    GetJournalEntry(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, entryID uuid.UUID) (JournalEntryResponse, error)
+
+    // ListReadingProgress lists reading progress for a student. [S§8.1.3]
+    ListReadingProgress(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query ReadingProgressQuery) (PaginatedResponse[ReadingProgressResponse], error)
+
+    // ListReadingLists lists the family's reading lists. [S§8.1.3]
+    ListReadingLists(ctx context.Context, scope *FamilyScope) ([]ReadingListSummaryResponse, error)
+
+    // GetReadingList returns a reading list with items and student progress.
+    GetReadingList(ctx context.Context, scope *FamilyScope, listID uuid.UUID) (ReadingListDetailResponse, error)
+
+    // GetProgressSummary returns progress summary for a student. [S§8.1.7]
+    GetProgressSummary(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query ProgressQuery) (ProgressSummaryResponse, error)
+
+    // GetSubjectBreakdown returns per-subject breakdown for a student.
+    GetSubjectBreakdown(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query ProgressQuery) ([]SubjectProgressResponse, error)
+
+    // GetActivityTimeline returns activity timeline for a student.
+    GetActivityTimeline(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query TimelineQuery) (PaginatedResponse[TimelineEntryResponse], error)
+
+    // GetResolvedTools returns the family's resolved tool set. Delegates to method::. [S§4.2]
+    GetResolvedTools(ctx context.Context, scope *FamilyScope) ([]ActiveToolResponse, error)
+
+    // GetStudentTools returns a student-specific resolved tool set. [S§4.6, S§8.2]
+    GetStudentTools(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) ([]ActiveToolResponse, error)
+
+    // GetSubjectTaxonomy returns subject taxonomy tree. [S§8.3]
+    GetSubjectTaxonomy(ctx context.Context, scope *FamilyScope, query TaxonomyQuery) ([]SubjectTaxonomyResponse, error)
+
+    // GetExportRequest returns export request status.
+    GetExportRequest(ctx context.Context, scope *FamilyScope, exportID uuid.UUID) (ExportRequestResponse, error)
+
+    // --- Assessment Engine Queries ---------------------- [S§8.1.9]
+
+    // ListQuestions lists questions with filtering (for quiz building).
+    ListQuestions(ctx context.Context, query QuestionQuery) (PaginatedResponse[QuestionSummaryResponse], error)
+
+    // GetQuizDef returns a quiz definition with questions.
+    GetQuizDef(ctx context.Context, quizDefID uuid.UUID, includeAnswers bool) (QuizDefDetailResponse, error)
+
+    // GetQuizSession returns a quiz session (for resume or review).
+    GetQuizSession(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, sessionID uuid.UUID) (QuizSessionResponse, error)
+
+    // --- Sequence Engine Queries ------------------------ [S§8.1.12]
+
+    // GetSequenceDef returns a sequence definition with items.
+    GetSequenceDef(ctx context.Context, sequenceDefID uuid.UUID) (SequenceDefDetailResponse, error)
+
+    // GetSequenceProgress returns sequence progress with per-item completion status.
+    GetSequenceProgress(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, progressID uuid.UUID) (SequenceProgressResponse, error)
+
+    // --- Assignment Queries ----------------------------- [S§8.6.3]
+
+    // ListAssignments lists assignments for a student.
+    ListAssignments(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query AssignmentQuery) (PaginatedResponse[AssignmentResponse], error)
 }
 ```
 
-**Implementation**: `LearningServiceImpl` in `src/learn/service.rs`. Constructor receives:
-- `Arc<dyn ActivityDefRepository>`
-- `Arc<dyn ActivityLogRepository>`
-- `Arc<dyn ReadingItemRepository>`
-- `Arc<dyn ReadingProgressRepository>`
-- `Arc<dyn ReadingListRepository>`
-- `Arc<dyn JournalEntryRepository>`
-- `Arc<dyn ArtifactLinkRepository>`
-- `Arc<dyn ProgressRepository>`
-- `Arc<dyn SubjectTaxonomyRepository>`
-- `Arc<dyn ExportRepository>`
-- `Arc<dyn QuestionRepository>` (assessment engine)
-- `Arc<dyn QuizDefRepository>` (assessment engine)
-- `Arc<dyn QuizSessionRepository>` (assessment engine)
-- `Arc<dyn SequenceDefRepository>` (sequence engine)
-- `Arc<dyn SequenceProgressRepository>` (sequence engine)
-- `Arc<dyn AssignmentRepository>` (student assignments)
-- `Arc<dyn MethodologyService>` (for tool resolution)
-- `Arc<dyn IamService>` (for student/family data lookup)
-- `Arc<EventBus>`
+**Implementation**: `LearningServiceImpl` in `internal/learn/service.go`. Constructor receives:
+- `ActivityDefRepository` (interface)
+- `ActivityLogRepository` (interface)
+- `ReadingItemRepository` (interface)
+- `ReadingProgressRepository` (interface)
+- `ReadingListRepository` (interface)
+- `JournalEntryRepository` (interface)
+- `ArtifactLinkRepository` (interface)
+- `ProgressRepository` (interface)
+- `SubjectTaxonomyRepository` (interface)
+- `ExportRepository` (interface)
+- `QuestionRepository` (interface, assessment engine)
+- `QuizDefRepository` (interface, assessment engine)
+- `QuizSessionRepository` (interface, assessment engine)
+- `SequenceDefRepository` (interface, sequence engine)
+- `SequenceProgressRepository` (interface, sequence engine)
+- `AssignmentRepository` (interface, student assignments)
+- `MethodologyService` (interface, for tool resolution)
+- `IamService` (interface, for student/family data lookup)
+- `EventBus`
 
 ---
 
 ## §6 Repository Interfaces
 
-Defined in `src/learn/ports.rs`. Repositories are organized by data layer. Layer 3
+Defined in `internal/learn/ports.go`. Repositories are organized by data layer. Layer 3
 repositories require `FamilyScope` for all operations. Layer 1 repositories use
 publisher-based access control at the application level. `[CODING §2.4, CODING §8.2]`
 
-```rust
-// src/learn/ports.rs (continued)
+```go
+// internal/learn/ports.go (continued)
 
-// ═══ Layer 1: Definition Repositories (no FamilyScope) ══════════════════
+// === Layer 1: Definition Repositories (no FamilyScope) =======================
 
-#[async_trait]
-pub trait ActivityDefRepository: Send + Sync {
-    /// Creates an activity definition.
-    async fn create(
-        &self,
-        def: &CreateActivityDefRecord,
-    ) -> Result<ActivityDef, AppError>;
+// ActivityDefRepository manages activity definition persistence.
+type ActivityDefRepository interface {
+    // Create creates an activity definition.
+    Create(ctx context.Context, def *CreateActivityDefRecord) (*ActivityDef, error)
 
-    /// Finds an activity definition by ID.
-    async fn find_by_id(
-        &self,
-        def_id: Uuid,
-    ) -> Result<Option<ActivityDef>, AppError>;
+    // FindByID finds an activity definition by ID.
+    FindByID(ctx context.Context, defID uuid.UUID) (*ActivityDef, error)
 
-    /// Lists activity definitions with filtering and pagination.
-    async fn list(
-        &self,
-        query: &ActivityDefQuery,
-    ) -> Result<Vec<ActivityDef>, AppError>;
+    // List lists activity definitions with filtering and pagination.
+    List(ctx context.Context, query *ActivityDefQuery) ([]ActivityDef, error)
 
-    /// Updates an activity definition.
-    async fn update(
-        &self,
-        def_id: Uuid,
-        update: &UpdateActivityDefRecord,
-    ) -> Result<ActivityDef, AppError>;
+    // Update updates an activity definition.
+    Update(ctx context.Context, defID uuid.UUID, update *UpdateActivityDefRecord) (*ActivityDef, error)
 
-    /// Soft-deletes an activity definition (sets is_active = false).
-    async fn soft_delete(
-        &self,
-        def_id: Uuid,
-    ) -> Result<(), AppError>;
+    // SoftDelete soft-deletes an activity definition (sets is_active = false).
+    SoftDelete(ctx context.Context, defID uuid.UUID) error
 }
 
-#[async_trait]
-pub trait ReadingItemRepository: Send + Sync {
-    /// Creates a reading item definition.
-    async fn create(
-        &self,
-        item: &CreateReadingItemRecord,
-    ) -> Result<ReadingItem, AppError>;
+// ReadingItemRepository manages reading item persistence.
+type ReadingItemRepository interface {
+    // Create creates a reading item definition.
+    Create(ctx context.Context, item *CreateReadingItemRecord) (*ReadingItem, error)
 
-    /// Finds a reading item by ID.
-    async fn find_by_id(
-        &self,
-        item_id: Uuid,
-    ) -> Result<Option<ReadingItem>, AppError>;
+    // FindByID finds a reading item by ID.
+    FindByID(ctx context.Context, itemID uuid.UUID) (*ReadingItem, error)
 
-    /// Lists reading items with filtering and pagination.
-    async fn list(
-        &self,
-        query: &ReadingItemQuery,
-    ) -> Result<Vec<ReadingItem>, AppError>;
+    // List lists reading items with filtering and pagination.
+    List(ctx context.Context, query *ReadingItemQuery) ([]ReadingItem, error)
 
-    /// Updates a reading item.
-    async fn update(
-        &self,
-        item_id: Uuid,
-        update: &UpdateReadingItemRecord,
-    ) -> Result<ReadingItem, AppError>;
+    // Update updates a reading item.
+    Update(ctx context.Context, itemID uuid.UUID, update *UpdateReadingItemRecord) (*ReadingItem, error)
 
-    /// Finds reading items by IDs (batch load for reading list hydration).
-    async fn find_by_ids(
-        &self,
-        item_ids: &[Uuid],
-    ) -> Result<Vec<ReadingItem>, AppError>;
+    // FindByIDs finds reading items by IDs (batch load for reading list hydration).
+    FindByIDs(ctx context.Context, itemIDs []uuid.UUID) ([]ReadingItem, error)
 }
 
-#[async_trait]
-pub trait ArtifactLinkRepository: Send + Sync {
-    /// Creates an artifact link.
-    async fn create(
-        &self,
-        link: &CreateArtifactLinkRecord,
-    ) -> Result<ArtifactLink, AppError>;
+// ArtifactLinkRepository manages artifact link persistence.
+type ArtifactLinkRepository interface {
+    // Create creates an artifact link.
+    Create(ctx context.Context, link *CreateArtifactLinkRecord) (*ArtifactLink, error)
 
-    /// Finds links by source or target.
-    async fn find_by_content(
-        &self,
-        content_type: &str,
-        content_id: Uuid,
-        direction: LinkDirection,
-    ) -> Result<Vec<ArtifactLink>, AppError>;
+    // FindByContent finds links by source or target.
+    FindByContent(ctx context.Context, contentType string, contentID uuid.UUID, direction LinkDirection) ([]ArtifactLink, error)
 
-    /// Finds a link by ID.
-    async fn find_by_id(
-        &self,
-        link_id: Uuid,
-    ) -> Result<Option<ArtifactLink>, AppError>;
+    // FindByID finds a link by ID.
+    FindByID(ctx context.Context, linkID uuid.UUID) (*ArtifactLink, error)
 
-    /// Deletes a link.
-    async fn delete(
-        &self,
-        link_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Delete deletes a link.
+    Delete(ctx context.Context, linkID uuid.UUID) error
 }
 
-// ═══ Layer 3: Instance Repositories (FamilyScope required) ══════════════
+// === Layer 3: Instance Repositories (FamilyScope required) ===================
 
-#[async_trait]
-pub trait ActivityLogRepository: Send + Sync {
-    /// Creates an activity log entry.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        log: &CreateActivityLogRecord,
-    ) -> Result<ActivityLog, AppError>;
+// ActivityLogRepository manages activity log persistence.
+type ActivityLogRepository interface {
+    // Create creates an activity log entry.
+    Create(ctx context.Context, scope *FamilyScope, log *CreateActivityLogRecord) (*ActivityLog, error)
 
-    /// Finds an activity log by ID.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        log_id: Uuid,
-    ) -> Result<Option<ActivityLog>, AppError>;
+    // FindByID finds an activity log by ID.
+    FindByID(ctx context.Context, scope *FamilyScope, logID uuid.UUID) (*ActivityLog, error)
 
-    /// Lists activity logs for a student with filtering.
-    async fn list_by_student(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: &ActivityLogQuery,
-    ) -> Result<Vec<ActivityLog>, AppError>;
+    // ListByStudent lists activity logs for a student with filtering.
+    ListByStudent(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query *ActivityLogQuery) ([]ActivityLog, error)
 
-    /// Updates an activity log.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        log_id: Uuid,
-        update: &UpdateActivityLogRecord,
-    ) -> Result<ActivityLog, AppError>;
+    // Update updates an activity log.
+    Update(ctx context.Context, scope *FamilyScope, logID uuid.UUID, update *UpdateActivityLogRecord) (*ActivityLog, error)
 
-    /// Deletes an activity log.
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        log_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Delete deletes an activity log.
+    Delete(ctx context.Context, scope *FamilyScope, logID uuid.UUID) error
 
-    /// Counts activities in a date range for a student (progress queries).
-    async fn count_by_student_date_range(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        date_from: Date,
-        date_to: Date,
-    ) -> Result<i64, AppError>;
+    // CountByStudentDateRange counts activities in a date range for a student (progress queries).
+    CountByStudentDateRange(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, dateFrom time.Time, dateTo time.Time) (int64, error)
 
-    /// Aggregates hours by subject for a student in a date range.
-    async fn hours_by_subject(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        date_from: Date,
-        date_to: Date,
-    ) -> Result<Vec<SubjectHours>, AppError>;
+    // HoursBySubject aggregates hours by subject for a student in a date range.
+    HoursBySubject(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, dateFrom time.Time, dateTo time.Time) ([]SubjectHours, error)
 }
 
-#[async_trait]
-pub trait JournalEntryRepository: Send + Sync {
-    /// Creates a journal entry.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        entry: &CreateJournalEntryRecord,
-    ) -> Result<JournalEntry, AppError>;
+// JournalEntryRepository manages journal entry persistence.
+type JournalEntryRepository interface {
+    // Create creates a journal entry.
+    Create(ctx context.Context, scope *FamilyScope, entry *CreateJournalEntryRecord) (*JournalEntry, error)
 
-    /// Finds a journal entry by ID.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        entry_id: Uuid,
-    ) -> Result<Option<JournalEntry>, AppError>;
+    // FindByID finds a journal entry by ID.
+    FindByID(ctx context.Context, scope *FamilyScope, entryID uuid.UUID) (*JournalEntry, error)
 
-    /// Lists journal entries for a student with filtering.
-    async fn list_by_student(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: &JournalEntryQuery,
-    ) -> Result<Vec<JournalEntry>, AppError>;
+    // ListByStudent lists journal entries for a student with filtering.
+    ListByStudent(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query *JournalEntryQuery) ([]JournalEntry, error)
 
-    /// Updates a journal entry.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        entry_id: Uuid,
-        update: &UpdateJournalEntryRecord,
-    ) -> Result<JournalEntry, AppError>;
+    // Update updates a journal entry.
+    Update(ctx context.Context, scope *FamilyScope, entryID uuid.UUID, update *UpdateJournalEntryRecord) (*JournalEntry, error)
 
-    /// Deletes a journal entry.
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        entry_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Delete deletes a journal entry.
+    Delete(ctx context.Context, scope *FamilyScope, entryID uuid.UUID) error
 }
 
-#[async_trait]
-pub trait ReadingProgressRepository: Send + Sync {
-    /// Creates a reading progress record.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        progress: &CreateReadingProgressRecord,
-    ) -> Result<ReadingProgress, AppError>;
+// ReadingProgressRepository manages reading progress persistence.
+type ReadingProgressRepository interface {
+    // Create creates a reading progress record.
+    Create(ctx context.Context, scope *FamilyScope, progress *CreateReadingProgressRecord) (*ReadingProgress, error)
 
-    /// Finds reading progress by ID.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        progress_id: Uuid,
-    ) -> Result<Option<ReadingProgress>, AppError>;
+    // FindByID finds reading progress by ID.
+    FindByID(ctx context.Context, scope *FamilyScope, progressID uuid.UUID) (*ReadingProgress, error)
 
-    /// Lists reading progress for a student.
-    async fn list_by_student(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        query: &ReadingProgressQuery,
-    ) -> Result<Vec<ReadingProgress>, AppError>;
+    // ListByStudent lists reading progress for a student.
+    ListByStudent(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query *ReadingProgressQuery) ([]ReadingProgress, error)
 
-    /// Updates reading progress.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        progress_id: Uuid,
-        update: &UpdateReadingProgressRecord,
-    ) -> Result<ReadingProgress, AppError>;
+    // Update updates reading progress.
+    Update(ctx context.Context, scope *FamilyScope, progressID uuid.UUID, update *UpdateReadingProgressRecord) (*ReadingProgress, error)
 
-    /// Checks if a student is already tracking a reading item.
-    async fn exists(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        reading_item_id: Uuid,
-    ) -> Result<bool, AppError>;
+    // Exists checks if a student is already tracking a reading item.
+    Exists(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, readingItemID uuid.UUID) (bool, error)
 
-    /// Counts completed books for a student in a date range.
-    async fn count_completed(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        date_from: Date,
-        date_to: Date,
-    ) -> Result<i64, AppError>;
+    // CountCompleted counts completed books for a student in a date range.
+    CountCompleted(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, dateFrom time.Time, dateTo time.Time) (int64, error)
 }
 
-#[async_trait]
-pub trait ReadingListRepository: Send + Sync {
-    /// Creates a reading list.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        list: &CreateReadingListRecord,
-    ) -> Result<ReadingList, AppError>;
+// ReadingListRepository manages reading list persistence.
+type ReadingListRepository interface {
+    // Create creates a reading list.
+    Create(ctx context.Context, scope *FamilyScope, list *CreateReadingListRecord) (*ReadingList, error)
 
-    /// Finds a reading list by ID.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-    ) -> Result<Option<ReadingList>, AppError>;
+    // FindByID finds a reading list by ID.
+    FindByID(ctx context.Context, scope *FamilyScope, listID uuid.UUID) (*ReadingList, error)
 
-    /// Lists reading lists for a family.
-    async fn list_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<ReadingList>, AppError>;
+    // ListByFamily lists reading lists for a family.
+    ListByFamily(ctx context.Context, scope *FamilyScope) ([]ReadingList, error)
 
-    /// Updates a reading list.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-        update: &UpdateReadingListRecord,
-    ) -> Result<ReadingList, AppError>;
+    // Update updates a reading list.
+    Update(ctx context.Context, scope *FamilyScope, listID uuid.UUID, update *UpdateReadingListRecord) (*ReadingList, error)
 
-    /// Deletes a reading list.
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Delete deletes a reading list.
+    Delete(ctx context.Context, scope *FamilyScope, listID uuid.UUID) error
 
-    /// Adds items to a reading list.
-    async fn add_items(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-        item_ids: &[Uuid],
-    ) -> Result<(), AppError>;
+    // AddItems adds items to a reading list.
+    AddItems(ctx context.Context, scope *FamilyScope, listID uuid.UUID, itemIDs []uuid.UUID) error
 
-    /// Removes items from a reading list.
-    async fn remove_items(
-        &self,
-        scope: &FamilyScope,
-        list_id: Uuid,
-        item_ids: &[Uuid],
-    ) -> Result<(), AppError>;
+    // RemoveItems removes items from a reading list.
+    RemoveItems(ctx context.Context, scope *FamilyScope, listID uuid.UUID, itemIDs []uuid.UUID) error
 
-    /// Lists items in a reading list with sort order.
-    async fn list_items(
-        &self,
-        list_id: Uuid,
-    ) -> Result<Vec<ReadingListItem>, AppError>;
+    // ListItems lists items in a reading list with sort order.
+    ListItems(ctx context.Context, listID uuid.UUID) ([]ReadingListItem, error)
 }
 
-#[async_trait]
-pub trait ProgressRepository: Send + Sync {
-    /// Stores a progress snapshot.
-    async fn create_snapshot(
-        &self,
-        scope: &FamilyScope,
-        snapshot: &CreateProgressSnapshotRecord,
-    ) -> Result<ProgressSnapshot, AppError>;
+// ProgressRepository manages progress snapshot persistence.
+type ProgressRepository interface {
+    // CreateSnapshot stores a progress snapshot.
+    CreateSnapshot(ctx context.Context, scope *FamilyScope, snapshot *CreateProgressSnapshotRecord) (*ProgressSnapshot, error)
 
-    /// Gets the latest progress snapshot for a student.
-    async fn get_latest_snapshot(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-    ) -> Result<Option<ProgressSnapshot>, AppError>;
+    // GetLatestSnapshot gets the latest progress snapshot for a student.
+    GetLatestSnapshot(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) (*ProgressSnapshot, error)
 
-    /// Gets snapshots in a date range for trend analysis.
-    async fn list_snapshots(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        date_from: Date,
-        date_to: Date,
-    ) -> Result<Vec<ProgressSnapshot>, AppError>;
+    // ListSnapshots gets snapshots in a date range for trend analysis.
+    ListSnapshots(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, dateFrom time.Time, dateTo time.Time) ([]ProgressSnapshot, error)
 }
 
-#[async_trait]
-pub trait ExportRepository: Send + Sync {
-    /// Creates an export request.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        request: &CreateExportRequestRecord,
-    ) -> Result<ExportRequest, AppError>;
+// ExportRepository manages export request persistence.
+type ExportRepository interface {
+    // Create creates an export request.
+    Create(ctx context.Context, scope *FamilyScope, request *CreateExportRequestRecord) (*ExportRequest, error)
 
-    /// Finds an export request by ID.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        export_id: Uuid,
-    ) -> Result<Option<ExportRequest>, AppError>;
+    // FindByID finds an export request by ID.
+    FindByID(ctx context.Context, scope *FamilyScope, exportID uuid.UUID) (*ExportRequest, error)
 
-    /// Checks if there is an active (pending/processing) export for a family.
-    async fn has_active_export(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<bool, AppError>;
+    // HasActiveExport checks if there is an active (pending/processing) export for a family.
+    HasActiveExport(ctx context.Context, scope *FamilyScope) (bool, error)
 
-    /// Updates export status and file URL.
-    async fn update_status(
-        &self,
-        export_id: Uuid,
-        status: &str,
-        file_url: Option<&str>,
-        expires_at: Option<DateTime<Utc>>,
-        error_message: Option<&str>,
-    ) -> Result<ExportRequest, AppError>;
+    // UpdateStatus updates export status and file URL.
+    UpdateStatus(ctx context.Context, exportID uuid.UUID, status string, fileURL *string, expiresAt *time.Time, errorMessage *string) (*ExportRequest, error)
 }
 
-// ═══ Platform Repositories (no FamilyScope) ═════════════════════════════
+// === Platform Repositories (no FamilyScope) ==================================
 
-#[async_trait]
-pub trait SubjectTaxonomyRepository: Send + Sync {
-    /// Lists taxonomy nodes with optional filtering by level and parent.
-    async fn list(
-        &self,
-        query: &TaxonomyQuery,
-    ) -> Result<Vec<SubjectTaxonomy>, AppError>;
+// SubjectTaxonomyRepository manages subject taxonomy persistence.
+type SubjectTaxonomyRepository interface {
+    // List lists taxonomy nodes with optional filtering by level and parent.
+    List(ctx context.Context, query *TaxonomyQuery) ([]SubjectTaxonomy, error)
 
-    /// Finds a taxonomy node by slug.
-    async fn find_by_slug(
-        &self,
-        slug: &str,
-    ) -> Result<Option<SubjectTaxonomy>, AppError>;
+    // FindBySlug finds a taxonomy node by slug.
+    FindBySlug(ctx context.Context, slug string) (*SubjectTaxonomy, error)
 
-    /// Validates that all slugs exist in the taxonomy.
-    async fn validate_slugs(
-        &self,
-        slugs: &[String],
-    ) -> Result<bool, AppError>;
+    // ValidateSlugs validates that all slugs exist in the taxonomy.
+    ValidateSlugs(ctx context.Context, slugs []string) (bool, error)
 
-    /// Lists family-scoped custom subjects.
-    async fn list_custom_subjects(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<CustomSubject>, AppError>;
+    // ListCustomSubjects lists family-scoped custom subjects.
+    ListCustomSubjects(ctx context.Context, scope *FamilyScope) ([]CustomSubject, error)
 
-    /// Creates a family-scoped custom subject.
-    async fn create_custom_subject(
-        &self,
-        scope: &FamilyScope,
-        subject: &CreateCustomSubjectRecord,
-    ) -> Result<CustomSubject, AppError>;
+    // CreateCustomSubject creates a family-scoped custom subject.
+    CreateCustomSubject(ctx context.Context, scope *FamilyScope, subject *CreateCustomSubjectRecord) (*CustomSubject, error)
 }
 ```
 
@@ -2371,25 +1884,17 @@ pub trait SubjectTaxonomyRepository: Send + Sync {
 The learning domain has one adapter interface for media operations. No external third-party
 service dependencies. `[CODING §8.1]`
 
-```rust
-// src/learn/ports.rs (continued)
+```go
+// internal/learn/ports.go (continued)
 
-/// Media adapter for file upload/download operations.
-/// Delegates to media:: domain for actual storage and validation.
-#[async_trait]
-pub trait MediaAdapter: Send + Sync {
-    /// Validates an attachment (magic bytes, size limit, MIME type).
-    async fn validate_attachment(
-        &self,
-        attachment: &AttachmentInput,
-    ) -> Result<(), AppError>;
+// MediaAdapter handles file upload/download operations.
+// Delegates to media:: domain for actual storage and validation.
+type MediaAdapter interface {
+    // ValidateAttachment validates an attachment (magic bytes, size limit, MIME type).
+    ValidateAttachment(ctx context.Context, attachment *AttachmentInput) error
 
-    /// Generates a pre-signed upload URL for direct client upload.
-    async fn get_upload_url(
-        &self,
-        content_type: &str,
-        filename: &str,
-    ) -> Result<UploadUrlResponse, AppError>;
+    // GetUploadURL generates a pre-signed upload URL for direct client upload.
+    GetUploadURL(ctx context.Context, contentType string, filename string) (*UploadURLResponse, error)
 }
 ```
 
@@ -2397,742 +1902,688 @@ pub trait MediaAdapter: Send + Sync {
 
 ## §8 Models (DTOs)
 
-All types defined in `src/learn/models.rs`. API-facing types derive `serde::Serialize`,
-`serde::Deserialize`, and `utoipa::ToSchema`. Request types additionally derive
-`validator::Validate`. `[CODING §2.3]`
+All types defined in `internal/learn/models.go`. API-facing types use struct tags:
+`json:"field"` for serialization, `validate:"required"` for validation (go-playground/validator),
+and swaggo/swag comment annotations for OpenAPI generation. `[CODING §2.3]`
 
 ### §8.1 Request Types
 
-```rust
-// src/learn/models.rs
+```go
+// internal/learn/models.go
 
-// ─── Layer 1: Definition Commands ─────────────────────────────────────
+// --- Layer 1: Definition Commands -------------------------------------------
 
-/// Create activity definition. [S§8.1.1]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateActivityDefCommand {
-    pub publisher_id: Uuid,
-    #[validate(length(min = 1, max = 500))]
-    pub title: String,
-    #[validate(length(max = 5000))]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub subject_tags: Vec<String>,
-    pub methodology_id: Option<Uuid>,
-    pub tool_id: Option<Uuid>,
-    pub est_duration_minutes: Option<i16>,
-    #[serde(default)]
-    pub attachments: Vec<AttachmentInput>,
+// CreateActivityDefCommand creates an activity definition. [S§8.1.1]
+// @Description Create activity definition request
+type CreateActivityDefCommand struct {
+    PublisherID       uuid.UUID         `json:"publisher_id" validate:"required"`
+    Title             string            `json:"title" validate:"required,min=1,max=500"`
+    Description       *string           `json:"description,omitempty" validate:"omitempty,max=5000"`
+    SubjectTags       []string          `json:"subject_tags"`
+    MethodologyID     *uuid.UUID        `json:"methodology_id,omitempty"`
+    ToolID            *uuid.UUID        `json:"tool_id,omitempty"`
+    EstDurationMinutes *int16           `json:"est_duration_minutes,omitempty"`
+    Attachments       []AttachmentInput `json:"attachments"`
 }
 
-/// Update activity definition.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateActivityDefCommand {
-    #[validate(length(min = 1, max = 500))]
-    pub title: Option<String>,
-    #[validate(length(max = 5000))]
-    pub description: Option<String>,
-    pub subject_tags: Option<Vec<String>>,
-    pub methodology_id: Option<Uuid>,
-    pub tool_id: Option<Uuid>,
-    pub est_duration_minutes: Option<i16>,
-    pub attachments: Option<Vec<AttachmentInput>>,
+// UpdateActivityDefCommand updates an activity definition.
+// @Description Update activity definition request
+type UpdateActivityDefCommand struct {
+    Title              *string           `json:"title,omitempty" validate:"omitempty,min=1,max=500"`
+    Description        *string           `json:"description,omitempty" validate:"omitempty,max=5000"`
+    SubjectTags        *[]string         `json:"subject_tags,omitempty"`
+    MethodologyID      *uuid.UUID        `json:"methodology_id,omitempty"`
+    ToolID             *uuid.UUID        `json:"tool_id,omitempty"`
+    EstDurationMinutes *int16            `json:"est_duration_minutes,omitempty"`
+    Attachments        *[]AttachmentInput `json:"attachments,omitempty"`
 }
 
-/// Create reading item. [S§8.1.3]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateReadingItemCommand {
-    pub publisher_id: Uuid,
-    #[validate(length(min = 1, max = 500))]
-    pub title: String,
-    #[validate(length(max = 300))]
-    pub author: Option<String>,
-    #[validate(length(max = 20))]
-    pub isbn: Option<String>,
-    #[serde(default)]
-    pub subject_tags: Vec<String>,
-    #[validate(length(max = 2000))]
-    pub description: Option<String>,
-    pub cover_image_url: Option<String>,
-    pub page_count: Option<i16>,
+// CreateReadingItemCommand creates a reading item. [S§8.1.3]
+// @Description Create reading item request
+type CreateReadingItemCommand struct {
+    PublisherID    uuid.UUID  `json:"publisher_id" validate:"required"`
+    Title          string     `json:"title" validate:"required,min=1,max=500"`
+    Author         *string    `json:"author,omitempty" validate:"omitempty,max=300"`
+    ISBN           *string    `json:"isbn,omitempty" validate:"omitempty,max=20"`
+    SubjectTags    []string   `json:"subject_tags"`
+    Description    *string    `json:"description,omitempty" validate:"omitempty,max=2000"`
+    CoverImageURL  *string    `json:"cover_image_url,omitempty"`
+    PageCount      *int16     `json:"page_count,omitempty"`
 }
 
-/// Update reading item.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateReadingItemCommand {
-    #[validate(length(min = 1, max = 500))]
-    pub title: Option<String>,
-    #[validate(length(max = 300))]
-    pub author: Option<String>,
-    pub isbn: Option<String>,
-    pub subject_tags: Option<Vec<String>>,
-    pub description: Option<String>,
-    pub cover_image_url: Option<String>,
-    pub page_count: Option<i16>,
+// UpdateReadingItemCommand updates a reading item.
+// @Description Update reading item request
+type UpdateReadingItemCommand struct {
+    Title          *string    `json:"title,omitempty" validate:"omitempty,min=1,max=500"`
+    Author         *string    `json:"author,omitempty" validate:"omitempty,max=300"`
+    ISBN           *string    `json:"isbn,omitempty"`
+    SubjectTags    *[]string  `json:"subject_tags,omitempty"`
+    Description    *string    `json:"description,omitempty"`
+    CoverImageURL  *string    `json:"cover_image_url,omitempty"`
+    PageCount      *int16     `json:"page_count,omitempty"`
 }
 
-/// Create artifact link. [§9]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateArtifactLinkCommand {
-    pub source_type: String,
-    pub source_id: Uuid,
-    pub target_type: String,
-    pub target_id: Uuid,
-    pub relationship: Option<String>,  // defaults to "about"
+// CreateArtifactLinkCommand creates an artifact link. [§9]
+// @Description Create artifact link request
+type CreateArtifactLinkCommand struct {
+    SourceType   string     `json:"source_type" validate:"required"`
+    SourceID     uuid.UUID  `json:"source_id" validate:"required"`
+    TargetType   string     `json:"target_type" validate:"required"`
+    TargetID     uuid.UUID  `json:"target_id" validate:"required"`
+    Relationship *string    `json:"relationship,omitempty"` // defaults to "about"
 }
 
-// ─── Layer 3: Instance Commands ───────────────────────────────────────
+// --- Layer 3: Instance Commands ---------------------------------------------
 
-/// Log an activity. [S§8.1.1]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct LogActivityCommand {
-    #[validate(length(min = 1, max = 500))]
-    pub title: String,
-    #[validate(length(max = 5000))]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub subject_tags: Vec<String>,
-    pub content_id: Option<Uuid>,       // optional ref to activity_def
-    pub methodology_id: Option<Uuid>,
-    pub tool_id: Option<Uuid>,
-    pub duration_minutes: Option<i16>,
-    #[serde(default)]
-    pub attachments: Vec<AttachmentInput>,
-    pub activity_date: Option<NaiveDate>,   // defaults to today
+// LogActivityCommand logs an activity. [S§8.1.1]
+// @Description Log activity request
+type LogActivityCommand struct {
+    Title           string            `json:"title" validate:"required,min=1,max=500"`
+    Description     *string           `json:"description,omitempty" validate:"omitempty,max=5000"`
+    SubjectTags     []string          `json:"subject_tags"`
+    ContentID       *uuid.UUID        `json:"content_id,omitempty"`       // optional ref to activity_def
+    MethodologyID   *uuid.UUID        `json:"methodology_id,omitempty"`
+    ToolID          *uuid.UUID        `json:"tool_id,omitempty"`
+    DurationMinutes *int16            `json:"duration_minutes,omitempty"`
+    Attachments     []AttachmentInput `json:"attachments"`
+    ActivityDate    *time.Time        `json:"activity_date,omitempty"`    // defaults to today
 }
 
-/// Update activity log.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateActivityLogCommand {
-    #[validate(length(min = 1, max = 500))]
-    pub title: Option<String>,
-    #[validate(length(max = 5000))]
-    pub description: Option<String>,
-    pub subject_tags: Option<Vec<String>>,
-    pub duration_minutes: Option<i16>,
-    pub attachments: Option<Vec<AttachmentInput>>,
-    pub activity_date: Option<NaiveDate>,
+// UpdateActivityLogCommand updates an activity log.
+// @Description Update activity log request
+type UpdateActivityLogCommand struct {
+    Title           *string            `json:"title,omitempty" validate:"omitempty,min=1,max=500"`
+    Description     *string            `json:"description,omitempty" validate:"omitempty,max=5000"`
+    SubjectTags     *[]string          `json:"subject_tags,omitempty"`
+    DurationMinutes *int16             `json:"duration_minutes,omitempty"`
+    Attachments     *[]AttachmentInput `json:"attachments,omitempty"`
+    ActivityDate    *time.Time         `json:"activity_date,omitempty"`
 }
 
-/// Create journal entry. [S§8.1.4]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateJournalEntryCommand {
-    pub entry_type: String,             // "freeform" | "narration" | "reflection"
-    #[validate(length(max = 500))]
-    pub title: Option<String>,
-    #[validate(length(min = 1, max = 50000))]
-    pub content: String,
-    #[serde(default)]
-    pub subject_tags: Vec<String>,
-    pub content_id: Option<Uuid>,
-    #[serde(default)]
-    pub attachments: Vec<AttachmentInput>,
-    pub entry_date: Option<NaiveDate>,
+// CreateJournalEntryCommand creates a journal entry. [S§8.1.4]
+// @Description Create journal entry request
+type CreateJournalEntryCommand struct {
+    EntryType   string            `json:"entry_type" validate:"required"` // "freeform" | "narration" | "reflection"
+    Title       *string           `json:"title,omitempty" validate:"omitempty,max=500"`
+    Content     string            `json:"content" validate:"required,min=1,max=50000"`
+    SubjectTags []string          `json:"subject_tags"`
+    ContentID   *uuid.UUID        `json:"content_id,omitempty"`
+    Attachments []AttachmentInput `json:"attachments"`
+    EntryDate   *time.Time        `json:"entry_date,omitempty"`
 }
 
-/// Update journal entry.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateJournalEntryCommand {
-    pub entry_type: Option<String>,
-    #[validate(length(max = 500))]
-    pub title: Option<String>,
-    #[validate(length(min = 1, max = 50000))]
-    pub content: Option<String>,
-    pub subject_tags: Option<Vec<String>>,
-    pub attachments: Option<Vec<AttachmentInput>>,
-    pub entry_date: Option<NaiveDate>,
+// UpdateJournalEntryCommand updates a journal entry.
+// @Description Update journal entry request
+type UpdateJournalEntryCommand struct {
+    EntryType   *string            `json:"entry_type,omitempty"`
+    Title       *string            `json:"title,omitempty" validate:"omitempty,max=500"`
+    Content     *string            `json:"content,omitempty" validate:"omitempty,min=1,max=50000"`
+    SubjectTags *[]string          `json:"subject_tags,omitempty"`
+    Attachments *[]AttachmentInput `json:"attachments,omitempty"`
+    EntryDate   *time.Time         `json:"entry_date,omitempty"`
 }
 
-/// Start reading a book. [S§8.1.3]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct StartReadingCommand {
-    pub reading_item_id: Uuid,
-    pub reading_list_id: Option<Uuid>,
+// StartReadingCommand starts reading a book. [S§8.1.3]
+// @Description Start reading request
+type StartReadingCommand struct {
+    ReadingItemID uuid.UUID  `json:"reading_item_id" validate:"required"`
+    ReadingListID *uuid.UUID `json:"reading_list_id,omitempty"`
 }
 
-/// Update reading progress.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateReadingProgressCommand {
-    pub status: Option<String>,         // "to_read" | "in_progress" | "completed"
-    #[validate(length(max = 2000))]
-    pub notes: Option<String>,
+// UpdateReadingProgressCommand updates reading progress.
+// @Description Update reading progress request
+type UpdateReadingProgressCommand struct {
+    Status *string `json:"status,omitempty"`          // "to_read" | "in_progress" | "completed"
+    Notes  *string `json:"notes,omitempty" validate:"omitempty,max=2000"`
 }
 
-/// Create reading list. [S§8.1.3]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateReadingListCommand {
-    #[validate(length(min = 1, max = 200))]
-    pub name: String,
-    #[validate(length(max = 2000))]
-    pub description: Option<String>,
-    pub student_id: Option<Uuid>,
-    #[serde(default)]
-    pub reading_item_ids: Vec<Uuid>,
+// CreateReadingListCommand creates a reading list. [S§8.1.3]
+// @Description Create reading list request
+type CreateReadingListCommand struct {
+    Name           string      `json:"name" validate:"required,min=1,max=200"`
+    Description    *string     `json:"description,omitempty" validate:"omitempty,max=2000"`
+    StudentID      *uuid.UUID  `json:"student_id,omitempty"`
+    ReadingItemIDs []uuid.UUID `json:"reading_item_ids"`
 }
 
-/// Update reading list.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateReadingListCommand {
-    #[validate(length(min = 1, max = 200))]
-    pub name: Option<String>,
-    #[validate(length(max = 2000))]
-    pub description: Option<String>,
-    pub add_item_ids: Option<Vec<Uuid>>,
-    pub remove_item_ids: Option<Vec<Uuid>>,
+// UpdateReadingListCommand updates a reading list.
+// @Description Update reading list request
+type UpdateReadingListCommand struct {
+    Name          *string     `json:"name,omitempty" validate:"omitempty,min=1,max=200"`
+    Description   *string     `json:"description,omitempty" validate:"omitempty,max=2000"`
+    AddItemIDs    *[]uuid.UUID `json:"add_item_ids,omitempty"`
+    RemoveItemIDs *[]uuid.UUID `json:"remove_item_ids,omitempty"`
 }
 
-/// Create custom subject. [S§8.3]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateCustomSubjectCommand {
-    #[validate(length(min = 1, max = 200))]
-    pub name: String,
-    pub parent_taxonomy_id: Option<Uuid>,
+// CreateCustomSubjectCommand creates a custom subject. [S§8.3]
+// @Description Create custom subject request
+type CreateCustomSubjectCommand struct {
+    Name             string     `json:"name" validate:"required,min=1,max=200"`
+    ParentTaxonomyID *uuid.UUID `json:"parent_taxonomy_id,omitempty"`
 }
 
-/// Request data export. [S§8.5]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct RequestExportCommand {
-    pub format: Option<String>,         // "json" | "csv", defaults to "json"
+// RequestExportCommand requests a data export. [S§8.5]
+// @Description Request data export
+type RequestExportCommand struct {
+    Format *string `json:"format,omitempty"` // "json" | "csv", defaults to "json"
 }
 
-/// Shared attachment input type.
-#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
-pub struct AttachmentInput {
-    pub url: String,
-    pub content_type: String,           // MIME type
-    pub filename: Option<String>,
+// AttachmentInput is a shared attachment input type.
+// @Description Attachment input
+type AttachmentInput struct {
+    URL         string  `json:"url" validate:"required"`
+    ContentType string  `json:"content_type" validate:"required"` // MIME type
+    Filename    *string `json:"filename,omitempty"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-// ─── Layer 1: Definition Responses ────────────────────────────────────
+```go
+// --- Layer 1: Definition Responses ------------------------------------------
 
-/// Activity definition response. [S§8.1.1]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ActivityDefResponse {
-    pub id: Uuid,
-    pub publisher_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub methodology_id: Option<Uuid>,
-    pub tool_id: Option<Uuid>,
-    pub est_duration_minutes: Option<i16>,
-    pub attachments: Vec<AttachmentInput>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// ActivityDefResponse is the activity definition response. [S§8.1.1]
+// @Description Activity definition
+type ActivityDefResponse struct {
+    ID                 uuid.UUID         `json:"id"`
+    PublisherID        uuid.UUID         `json:"publisher_id"`
+    Title              string            `json:"title"`
+    Description        *string           `json:"description,omitempty"`
+    SubjectTags        []string          `json:"subject_tags"`
+    MethodologyID      *uuid.UUID        `json:"methodology_id,omitempty"`
+    ToolID             *uuid.UUID        `json:"tool_id,omitempty"`
+    EstDurationMinutes *int16            `json:"est_duration_minutes,omitempty"`
+    Attachments        []AttachmentInput `json:"attachments"`
+    CreatedAt          time.Time         `json:"created_at"`
+    UpdatedAt          time.Time         `json:"updated_at"`
 }
 
-/// Activity definition summary (for list views).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ActivityDefSummaryResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub subject_tags: Vec<String>,
-    pub methodology_id: Option<Uuid>,
-    pub est_duration_minutes: Option<i16>,
+// ActivityDefSummaryResponse is the activity definition summary (for list views).
+// @Description Activity definition summary
+type ActivityDefSummaryResponse struct {
+    ID                 uuid.UUID  `json:"id"`
+    Title              string     `json:"title"`
+    SubjectTags        []string   `json:"subject_tags"`
+    MethodologyID      *uuid.UUID `json:"methodology_id,omitempty"`
+    EstDurationMinutes *int16     `json:"est_duration_minutes,omitempty"`
 }
 
-/// Reading item response. [S§8.1.3]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingItemResponse {
-    pub id: Uuid,
-    pub publisher_id: Uuid,
-    pub title: String,
-    pub author: Option<String>,
-    pub isbn: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub description: Option<String>,
-    pub cover_image_url: Option<String>,
-    pub page_count: Option<i16>,
-    pub created_at: DateTime<Utc>,
+// ReadingItemResponse is the reading item response. [S§8.1.3]
+// @Description Reading item
+type ReadingItemResponse struct {
+    ID            uuid.UUID `json:"id"`
+    PublisherID   uuid.UUID `json:"publisher_id"`
+    Title         string    `json:"title"`
+    Author        *string   `json:"author,omitempty"`
+    ISBN          *string   `json:"isbn,omitempty"`
+    SubjectTags   []string  `json:"subject_tags"`
+    Description   *string   `json:"description,omitempty"`
+    CoverImageURL *string   `json:"cover_image_url,omitempty"`
+    PageCount     *int16    `json:"page_count,omitempty"`
+    CreatedAt     time.Time `json:"created_at"`
 }
 
-/// Reading item summary (for list views).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingItemSummaryResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub author: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub cover_image_url: Option<String>,
+// ReadingItemSummaryResponse is the reading item summary (for list views).
+// @Description Reading item summary
+type ReadingItemSummaryResponse struct {
+    ID            uuid.UUID `json:"id"`
+    Title         string    `json:"title"`
+    Author        *string   `json:"author,omitempty"`
+    SubjectTags   []string  `json:"subject_tags"`
+    CoverImageURL *string   `json:"cover_image_url,omitempty"`
 }
 
-/// Reading item detail with linked artifacts.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingItemDetailResponse {
-    #[serde(flatten)]
-    pub item: ReadingItemResponse,
-    pub linked_artifacts: Vec<ArtifactLinkResponse>,
+// ReadingItemDetailResponse is the reading item detail with linked artifacts.
+// @Description Reading item detail
+type ReadingItemDetailResponse struct {
+    ReadingItemResponse
+    LinkedArtifacts []ArtifactLinkResponse `json:"linked_artifacts"`
 }
 
-/// Artifact link response. [§9]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ArtifactLinkResponse {
-    pub id: Uuid,
-    pub source_type: String,
-    pub source_id: Uuid,
-    pub target_type: String,
-    pub target_id: Uuid,
-    pub relationship: String,
-    pub created_at: DateTime<Utc>,
+// ArtifactLinkResponse is the artifact link response. [§9]
+// @Description Artifact link
+type ArtifactLinkResponse struct {
+    ID           uuid.UUID `json:"id"`
+    SourceType   string    `json:"source_type"`
+    SourceID     uuid.UUID `json:"source_id"`
+    TargetType   string    `json:"target_type"`
+    TargetID     uuid.UUID `json:"target_id"`
+    Relationship string    `json:"relationship"`
+    CreatedAt    time.Time `json:"created_at"`
 }
 
-// ─── Layer 3: Instance Responses ──────────────────────────────────────
+// --- Layer 3: Instance Responses --------------------------------------------
 
-/// Activity log response. [S§8.1.1]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ActivityLogResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub content_id: Option<Uuid>,
-    pub content_title: Option<String>,  // resolved from activity_def if linked
-    pub methodology_id: Option<Uuid>,
-    pub tool_id: Option<Uuid>,
-    pub duration_minutes: Option<i16>,
-    pub attachments: Vec<AttachmentInput>,
-    pub activity_date: NaiveDate,
-    pub created_at: DateTime<Utc>,
+// ActivityLogResponse is the activity log response. [S§8.1.1]
+// @Description Activity log entry
+type ActivityLogResponse struct {
+    ID              uuid.UUID         `json:"id"`
+    StudentID       uuid.UUID         `json:"student_id"`
+    Title           string            `json:"title"`
+    Description     *string           `json:"description,omitempty"`
+    SubjectTags     []string          `json:"subject_tags"`
+    ContentID       *uuid.UUID        `json:"content_id,omitempty"`
+    ContentTitle    *string           `json:"content_title,omitempty"` // resolved from activity_def if linked
+    MethodologyID   *uuid.UUID        `json:"methodology_id,omitempty"`
+    ToolID          *uuid.UUID        `json:"tool_id,omitempty"`
+    DurationMinutes *int16            `json:"duration_minutes,omitempty"`
+    Attachments     []AttachmentInput `json:"attachments"`
+    ActivityDate    time.Time         `json:"activity_date"`
+    CreatedAt       time.Time         `json:"created_at"`
 }
 
-/// Journal entry response. [S§8.1.4]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct JournalEntryResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub entry_type: String,
-    pub title: Option<String>,
-    pub content: String,
-    pub subject_tags: Vec<String>,
-    pub attachments: Vec<AttachmentInput>,
-    pub entry_date: NaiveDate,
-    pub created_at: DateTime<Utc>,
+// JournalEntryResponse is the journal entry response. [S§8.1.4]
+// @Description Journal entry
+type JournalEntryResponse struct {
+    ID          uuid.UUID         `json:"id"`
+    StudentID   uuid.UUID         `json:"student_id"`
+    EntryType   string            `json:"entry_type"`
+    Title       *string           `json:"title,omitempty"`
+    Content     string            `json:"content"`
+    SubjectTags []string          `json:"subject_tags"`
+    Attachments []AttachmentInput `json:"attachments"`
+    EntryDate   time.Time         `json:"entry_date"`
+    CreatedAt   time.Time         `json:"created_at"`
 }
 
-/// Reading progress response. [S§8.1.3]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingProgressResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub reading_item: ReadingItemSummaryResponse,
-    pub reading_list_id: Option<Uuid>,
-    pub status: String,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub notes: Option<String>,
+// ReadingProgressResponse is the reading progress response. [S§8.1.3]
+// @Description Reading progress
+type ReadingProgressResponse struct {
+    ID            uuid.UUID                  `json:"id"`
+    StudentID     uuid.UUID                  `json:"student_id"`
+    ReadingItem   ReadingItemSummaryResponse `json:"reading_item"`
+    ReadingListID *uuid.UUID                 `json:"reading_list_id,omitempty"`
+    Status        string                     `json:"status"`
+    StartedAt     *time.Time                 `json:"started_at,omitempty"`
+    CompletedAt   *time.Time                 `json:"completed_at,omitempty"`
+    Notes         *string                    `json:"notes,omitempty"`
 }
 
-/// Reading list summary.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingListSummaryResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub student_id: Option<Uuid>,
-    pub item_count: i64,
-    pub completed_count: i64,
+// ReadingListSummaryResponse is the reading list summary.
+// @Description Reading list summary
+type ReadingListSummaryResponse struct {
+    ID             uuid.UUID  `json:"id"`
+    Name           string     `json:"name"`
+    Description    *string    `json:"description,omitempty"`
+    StudentID      *uuid.UUID `json:"student_id,omitempty"`
+    ItemCount      int64      `json:"item_count"`
+    CompletedCount int64      `json:"completed_count"`
 }
 
-/// Reading list response.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingListResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub student_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
+// ReadingListResponse is the reading list response.
+// @Description Reading list
+type ReadingListResponse struct {
+    ID          uuid.UUID  `json:"id"`
+    Name        string     `json:"name"`
+    Description *string    `json:"description,omitempty"`
+    StudentID   *uuid.UUID `json:"student_id,omitempty"`
+    CreatedAt   time.Time  `json:"created_at"`
 }
 
-/// Reading list detail with items and progress.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingListDetailResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub student_id: Option<Uuid>,
-    pub items: Vec<ReadingListItemWithProgress>,
-    pub created_at: DateTime<Utc>,
+// ReadingListDetailResponse is the reading list detail with items and progress.
+// @Description Reading list detail
+type ReadingListDetailResponse struct {
+    ID          uuid.UUID                    `json:"id"`
+    Name        string                       `json:"name"`
+    Description *string                      `json:"description,omitempty"`
+    StudentID   *uuid.UUID                   `json:"student_id,omitempty"`
+    Items       []ReadingListItemWithProgress `json:"items"`
+    CreatedAt   time.Time                    `json:"created_at"`
 }
 
-/// Reading list item with optional student progress.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReadingListItemWithProgress {
-    pub reading_item: ReadingItemSummaryResponse,
-    pub sort_order: i16,
-    pub progress: Option<ReadingProgressResponse>,
+// ReadingListItemWithProgress is a reading list item with optional student progress.
+// @Description Reading list item with progress
+type ReadingListItemWithProgress struct {
+    ReadingItem ReadingItemSummaryResponse `json:"reading_item"`
+    SortOrder   int16                      `json:"sort_order"`
+    Progress    *ReadingProgressResponse   `json:"progress,omitempty"`
 }
 
-// ─── Cross-Cutting Responses ──────────────────────────────────────────
+// --- Cross-Cutting Responses ------------------------------------------------
 
-/// Progress summary. [S§8.1.7]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ProgressSummaryResponse {
-    pub student_id: Uuid,
-    pub date_from: NaiveDate,
-    pub date_to: NaiveDate,
-    pub total_activities: i64,
-    pub total_hours: f64,
-    pub hours_by_subject: Vec<SubjectHoursResponse>,
-    pub books_completed: i64,
-    pub journal_entries: i64,
+// ProgressSummaryResponse is the progress summary. [S§8.1.7]
+// @Description Progress summary
+type ProgressSummaryResponse struct {
+    StudentID       uuid.UUID              `json:"student_id"`
+    DateFrom        time.Time              `json:"date_from"`
+    DateTo          time.Time              `json:"date_to"`
+    TotalActivities int64                  `json:"total_activities"`
+    TotalHours      float64                `json:"total_hours"`
+    HoursBySubject  []SubjectHoursResponse `json:"hours_by_subject"`
+    BooksCompleted  int64                  `json:"books_completed"`
+    JournalEntries  int64                  `json:"journal_entries"`
 }
 
-/// Hours per subject.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SubjectHoursResponse {
-    pub subject_slug: String,
-    pub subject_name: String,
-    pub hours: f64,
+// SubjectHoursResponse is hours per subject.
+// @Description Subject hours
+type SubjectHoursResponse struct {
+    SubjectSlug string  `json:"subject_slug"`
+    SubjectName string  `json:"subject_name"`
+    Hours       float64 `json:"hours"`
 }
 
-/// Per-subject progress breakdown.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SubjectProgressResponse {
-    pub subject_slug: String,
-    pub subject_name: String,
-    pub activity_count: i64,
-    pub total_hours: f64,
-    pub journal_count: i64,
-    pub books_completed: i64,
+// SubjectProgressResponse is per-subject progress breakdown.
+// @Description Subject progress
+type SubjectProgressResponse struct {
+    SubjectSlug    string  `json:"subject_slug"`
+    SubjectName    string  `json:"subject_name"`
+    ActivityCount  int64   `json:"activity_count"`
+    TotalHours     float64 `json:"total_hours"`
+    JournalCount   int64   `json:"journal_count"`
+    BooksCompleted int64   `json:"books_completed"`
 }
 
-/// Activity timeline entry (union of activity logs and journal entries).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct TimelineEntryResponse {
-    pub id: Uuid,
-    pub entry_type: String,             // "activity" | "journal" | "reading_completed"
-    pub title: String,
-    pub description: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub date: NaiveDate,
-    pub created_at: DateTime<Utc>,
+// TimelineEntryResponse is an activity timeline entry (union of activity logs and journal entries).
+// @Description Timeline entry
+type TimelineEntryResponse struct {
+    ID          uuid.UUID `json:"id"`
+    EntryType   string    `json:"entry_type"` // "activity" | "journal" | "reading_completed"
+    Title       string    `json:"title"`
+    Description *string   `json:"description,omitempty"`
+    SubjectTags []string  `json:"subject_tags"`
+    Date        time.Time `json:"date"`
+    CreatedAt   time.Time `json:"created_at"`
 }
 
-/// Subject taxonomy node. [S§8.3]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SubjectTaxonomyResponse {
-    pub id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub slug: String,
-    pub level: i16,
-    pub children: Vec<SubjectTaxonomyResponse>,
-    pub is_custom: bool,                // true for family-scoped custom subjects
+// SubjectTaxonomyResponse is a subject taxonomy node. [S§8.3]
+// @Description Subject taxonomy node
+type SubjectTaxonomyResponse struct {
+    ID       uuid.UUID                 `json:"id"`
+    ParentID *uuid.UUID                `json:"parent_id,omitempty"`
+    Name     string                    `json:"name"`
+    Slug     string                    `json:"slug"`
+    Level    int16                     `json:"level"`
+    Children []SubjectTaxonomyResponse `json:"children"`
+    IsCustom bool                      `json:"is_custom"` // true for family-scoped custom subjects
 }
 
-/// Custom subject response.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CustomSubjectResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub parent_taxonomy_id: Option<Uuid>,
+// CustomSubjectResponse is the custom subject response.
+// @Description Custom subject
+type CustomSubjectResponse struct {
+    ID               uuid.UUID  `json:"id"`
+    Name             string     `json:"name"`
+    Slug             string     `json:"slug"`
+    ParentTaxonomyID *uuid.UUID `json:"parent_taxonomy_id,omitempty"`
 }
 
-/// Export request response. [S§8.5]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ExportRequestResponse {
-    pub id: Uuid,
-    pub status: String,
-    pub file_url: Option<String>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+// ExportRequestResponse is the export request response. [S§8.5]
+// @Description Export request
+type ExportRequestResponse struct {
+    ID        uuid.UUID  `json:"id"`
+    Status    string     `json:"status"`
+    FileURL   *string    `json:"file_url,omitempty"`
+    ExpiresAt *time.Time `json:"expires_at,omitempty"`
+    CreatedAt time.Time  `json:"created_at"`
 }
 
-/// Active tool response (from method:: delegation). [S§4.2]
-/// Re-exported from method:: types for convenience.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ActiveToolResponse {
-    pub tool_id: Uuid,
-    pub slug: String,
-    pub display_name: String,
-    pub label: Option<String>,          // methodology-specific override
-    pub description: Option<String>,
-    pub tier: String,                   // "free" | "premium"
-    pub guidance: Option<String>,       // methodology-specific guidance [S§8.4]
-    pub config_overrides: serde_json::Value,
-    pub sort_order: i16,
+// ActiveToolResponse is the active tool response (from method:: delegation). [S§4.2]
+// Re-exported from method:: types for convenience.
+// @Description Active tool
+type ActiveToolResponse struct {
+    ToolID          uuid.UUID              `json:"tool_id"`
+    Slug            string                 `json:"slug"`
+    DisplayName     string                 `json:"display_name"`
+    Label           *string                `json:"label,omitempty"`           // methodology-specific override
+    Description     *string                `json:"description,omitempty"`
+    Tier            string                 `json:"tier"`                      // "free" | "premium"
+    Guidance        *string                `json:"guidance,omitempty"`        // methodology-specific guidance [S§8.4]
+    ConfigOverrides map[string]interface{} `json:"config_overrides"`
+    SortOrder       int16                  `json:"sort_order"`
 }
 
-/// Upload URL response (from media:: adapter).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct UploadUrlResponse {
-    pub upload_url: String,
-    pub file_key: String,
+// UploadURLResponse is the upload URL response (from media:: adapter).
+// @Description Upload URL
+type UploadURLResponse struct {
+    UploadURL string `json:"upload_url"`
+    FileKey   string `json:"file_key"`
 }
 ```
 
 ### §8.3 Internal Types
 
-```rust
-/// Internal activity definition record.
-#[derive(Debug, Clone)]
-pub struct ActivityDef {
-    pub id: Uuid,
-    pub publisher_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub methodology_id: Option<Uuid>,
-    pub tool_id: Option<Uuid>,
-    pub est_duration_minutes: Option<i16>,
-    pub attachments: serde_json::Value,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+```go
+// ActivityDef is the internal activity definition record.
+type ActivityDef struct {
+    ID                 uuid.UUID
+    PublisherID        uuid.UUID
+    Title              string
+    Description        *string
+    SubjectTags        []string
+    MethodologyID      *uuid.UUID
+    ToolID             *uuid.UUID
+    EstDurationMinutes *int16
+    Attachments        json.RawMessage
+    IsActive           bool
+    CreatedAt          time.Time
+    UpdatedAt          time.Time
 }
 
-/// Internal reading item record.
-#[derive(Debug, Clone)]
-pub struct ReadingItem {
-    pub id: Uuid,
-    pub publisher_id: Uuid,
-    pub title: String,
-    pub author: Option<String>,
-    pub isbn: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub description: Option<String>,
-    pub cover_image_url: Option<String>,
-    pub page_count: Option<i16>,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// ReadingItem is the internal reading item record.
+type ReadingItem struct {
+    ID            uuid.UUID
+    PublisherID   uuid.UUID
+    Title         string
+    Author        *string
+    ISBN          *string
+    SubjectTags   []string
+    Description   *string
+    CoverImageURL *string
+    PageCount     *int16
+    IsActive      bool
+    CreatedAt     time.Time
+    UpdatedAt     time.Time
 }
 
-/// Internal artifact link record.
-#[derive(Debug, Clone)]
-pub struct ArtifactLink {
-    pub id: Uuid,
-    pub source_type: String,
-    pub source_id: Uuid,
-    pub target_type: String,
-    pub target_id: Uuid,
-    pub relationship: String,
-    pub created_at: DateTime<Utc>,
+// ArtifactLink is the internal artifact link record.
+type ArtifactLink struct {
+    ID           uuid.UUID
+    SourceType   string
+    SourceID     uuid.UUID
+    TargetType   string
+    TargetID     uuid.UUID
+    Relationship string
+    CreatedAt    time.Time
 }
 
-/// Internal activity log record.
-#[derive(Debug, Clone)]
-pub struct ActivityLog {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub student_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub subject_tags: Vec<String>,
-    pub content_id: Option<Uuid>,
-    pub methodology_id: Option<Uuid>,
-    pub tool_id: Option<Uuid>,
-    pub duration_minutes: Option<i16>,
-    pub attachments: serde_json::Value,
-    pub activity_date: NaiveDate,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// ActivityLog is the internal activity log record.
+type ActivityLog struct {
+    ID              uuid.UUID
+    FamilyID        uuid.UUID
+    StudentID       uuid.UUID
+    Title           string
+    Description     *string
+    SubjectTags     []string
+    ContentID       *uuid.UUID
+    MethodologyID   *uuid.UUID
+    ToolID          *uuid.UUID
+    DurationMinutes *int16
+    Attachments     json.RawMessage
+    ActivityDate    time.Time
+    CreatedAt       time.Time
+    UpdatedAt       time.Time
 }
 
-/// Internal journal entry record.
-#[derive(Debug, Clone)]
-pub struct JournalEntry {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub student_id: Uuid,
-    pub entry_type: String,
-    pub title: Option<String>,
-    pub content: String,
-    pub subject_tags: Vec<String>,
-    pub content_id: Option<Uuid>,
-    pub attachments: serde_json::Value,
-    pub entry_date: NaiveDate,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// JournalEntry is the internal journal entry record.
+type JournalEntry struct {
+    ID          uuid.UUID
+    FamilyID    uuid.UUID
+    StudentID   uuid.UUID
+    EntryType   string
+    Title       *string
+    Content     string
+    SubjectTags []string
+    ContentID   *uuid.UUID
+    Attachments json.RawMessage
+    EntryDate   time.Time
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
 }
 
-/// Internal reading progress record.
-#[derive(Debug, Clone)]
-pub struct ReadingProgress {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub student_id: Uuid,
-    pub reading_item_id: Uuid,
-    pub reading_list_id: Option<Uuid>,
-    pub status: String,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// ReadingProgress is the internal reading progress record.
+type ReadingProgress struct {
+    ID            uuid.UUID
+    FamilyID      uuid.UUID
+    StudentID     uuid.UUID
+    ReadingItemID uuid.UUID
+    ReadingListID *uuid.UUID
+    Status        string
+    StartedAt     *time.Time
+    CompletedAt   *time.Time
+    Notes         *string
+    CreatedAt     time.Time
+    UpdatedAt     time.Time
 }
 
-/// Internal reading list record.
-#[derive(Debug, Clone)]
-pub struct ReadingList {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub student_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// ReadingList is the internal reading list record.
+type ReadingList struct {
+    ID          uuid.UUID
+    FamilyID    uuid.UUID
+    Name        string
+    Description *string
+    StudentID   *uuid.UUID
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
 }
 
-/// Internal reading list item.
-#[derive(Debug, Clone)]
-pub struct ReadingListItem {
-    pub reading_list_id: Uuid,
-    pub reading_item_id: Uuid,
-    pub sort_order: i16,
-    pub added_at: DateTime<Utc>,
+// ReadingListItem is the internal reading list item.
+type ReadingListItem struct {
+    ReadingListID uuid.UUID
+    ReadingItemID uuid.UUID
+    SortOrder     int16
+    AddedAt       time.Time
 }
 
-/// Internal progress snapshot record.
-#[derive(Debug, Clone)]
-pub struct ProgressSnapshot {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub student_id: Uuid,
-    pub snapshot_date: NaiveDate,
-    pub data: serde_json::Value,
-    pub created_at: DateTime<Utc>,
+// ProgressSnapshot is the internal progress snapshot record.
+type ProgressSnapshot struct {
+    ID           uuid.UUID
+    FamilyID     uuid.UUID
+    StudentID    uuid.UUID
+    SnapshotDate time.Time
+    Data         json.RawMessage
+    CreatedAt    time.Time
 }
 
-/// Internal export request record.
-#[derive(Debug, Clone)]
-pub struct ExportRequest {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub requested_by: Uuid,
-    pub status: String,
-    pub file_url: Option<String>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub error_message: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// ExportRequest is the internal export request record.
+type ExportRequest struct {
+    ID           uuid.UUID
+    FamilyID     uuid.UUID
+    RequestedBy  uuid.UUID
+    Status       string
+    FileURL      *string
+    ExpiresAt    *time.Time
+    ErrorMessage *string
+    CreatedAt    time.Time
+    UpdatedAt    time.Time
 }
 
-/// Internal subject taxonomy node.
-#[derive(Debug, Clone)]
-pub struct SubjectTaxonomy {
-    pub id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub slug: String,
-    pub level: i16,
-    pub display_order: i16,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// SubjectTaxonomy is the internal subject taxonomy node.
+type SubjectTaxonomy struct {
+    ID           uuid.UUID
+    ParentID     *uuid.UUID
+    Name         string
+    Slug         string
+    Level        int16
+    DisplayOrder int16
+    IsActive     bool
+    CreatedAt    time.Time
+    UpdatedAt    time.Time
 }
 
-/// Internal custom subject record.
-#[derive(Debug, Clone)]
-pub struct CustomSubject {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub parent_taxonomy_id: Option<Uuid>,
-    pub name: String,
-    pub slug: String,
-    pub created_at: DateTime<Utc>,
+// CustomSubject is the internal custom subject record.
+type CustomSubject struct {
+    ID               uuid.UUID
+    FamilyID         uuid.UUID
+    ParentTaxonomyID *uuid.UUID
+    Name             string
+    Slug             string
+    CreatedAt        time.Time
 }
 
-/// Subject hours aggregation (from repository query).
-#[derive(Debug, Clone)]
-pub struct SubjectHours {
-    pub subject_slug: String,
-    pub total_minutes: i64,
+// SubjectHours is a subject hours aggregation (from repository query).
+type SubjectHours struct {
+    SubjectSlug  string
+    TotalMinutes int64
 }
 
-/// Link direction filter for artifact queries.
-#[derive(Debug, Clone)]
-pub enum LinkDirection {
-    Source,
-    Target,
-    Both,
+// LinkDirection is a link direction filter for artifact queries.
+type LinkDirection int
+
+const (
+    LinkDirectionSource LinkDirection = iota
+    LinkDirectionTarget
+    LinkDirectionBoth
+)
+
+// ActivityDefQuery contains query parameters for activity definitions.
+type ActivityDefQuery struct {
+    Subject       *string
+    MethodologyID *uuid.UUID
+    PublisherID   *uuid.UUID
+    Search        *string
+    Cursor        *uuid.UUID
+    Limit         int64
 }
 
-/// Query parameters for activity definitions.
-#[derive(Debug, Clone)]
-pub struct ActivityDefQuery {
-    pub subject: Option<String>,
-    pub methodology_id: Option<Uuid>,
-    pub publisher_id: Option<Uuid>,
-    pub search: Option<String>,
-    pub cursor: Option<Uuid>,
-    pub limit: i64,
+// ReadingItemQuery contains query parameters for reading items.
+type ReadingItemQuery struct {
+    Search *string
+    Subject *string
+    ISBN   *string
+    Cursor *uuid.UUID
+    Limit  int64
 }
 
-/// Query parameters for reading items.
-#[derive(Debug, Clone)]
-pub struct ReadingItemQuery {
-    pub search: Option<String>,
-    pub subject: Option<String>,
-    pub isbn: Option<String>,
-    pub cursor: Option<Uuid>,
-    pub limit: i64,
+// ActivityLogQuery contains query parameters for activity logs.
+type ActivityLogQuery struct {
+    Subject  *string
+    DateFrom *time.Time
+    DateTo   *time.Time
+    Cursor   *uuid.UUID
+    Limit    int64
 }
 
-/// Query parameters for activity logs.
-#[derive(Debug, Clone)]
-pub struct ActivityLogQuery {
-    pub subject: Option<String>,
-    pub date_from: Option<NaiveDate>,
-    pub date_to: Option<NaiveDate>,
-    pub cursor: Option<Uuid>,
-    pub limit: i64,
+// JournalEntryQuery contains query parameters for journal entries.
+type JournalEntryQuery struct {
+    EntryType *string
+    DateFrom  *time.Time
+    DateTo    *time.Time
+    Search    *string
+    Cursor    *uuid.UUID
+    Limit     int64
 }
 
-/// Query parameters for journal entries.
-#[derive(Debug, Clone)]
-pub struct JournalEntryQuery {
-    pub entry_type: Option<String>,
-    pub date_from: Option<NaiveDate>,
-    pub date_to: Option<NaiveDate>,
-    pub search: Option<String>,
-    pub cursor: Option<Uuid>,
-    pub limit: i64,
+// ReadingProgressQuery contains query parameters for reading progress.
+type ReadingProgressQuery struct {
+    Status *string
+    Cursor *uuid.UUID
+    Limit  int64
 }
 
-/// Query parameters for reading progress.
-#[derive(Debug, Clone)]
-pub struct ReadingProgressQuery {
-    pub status: Option<String>,
-    pub cursor: Option<Uuid>,
-    pub limit: i64,
+// ProgressQuery contains query parameters for progress.
+type ProgressQuery struct {
+    DateFrom *time.Time
+    DateTo   *time.Time
 }
 
-/// Query parameters for progress.
-#[derive(Debug, Clone)]
-pub struct ProgressQuery {
-    pub date_from: Option<NaiveDate>,
-    pub date_to: Option<NaiveDate>,
+// TimelineQuery contains query parameters for timeline.
+type TimelineQuery struct {
+    DateFrom *time.Time
+    DateTo   *time.Time
+    Cursor   *uuid.UUID
+    Limit    int64
 }
 
-/// Query parameters for timeline.
-#[derive(Debug, Clone)]
-pub struct TimelineQuery {
-    pub date_from: Option<NaiveDate>,
-    pub date_to: Option<NaiveDate>,
-    pub cursor: Option<Uuid>,
-    pub limit: i64,
+// TaxonomyQuery contains query parameters for taxonomy.
+type TaxonomyQuery struct {
+    Level    *int16
+    ParentID *uuid.UUID
 }
 
-/// Query parameters for taxonomy.
-#[derive(Debug, Clone)]
-pub struct TaxonomyQuery {
-    pub level: Option<i16>,
-    pub parent_id: Option<Uuid>,
-}
-
-/// Metadata from a marketplace purchase (received via event).
-#[derive(Debug, Clone)]
-pub struct PurchaseMetadata {
-    pub content_type: String,
-    pub content_ids: Vec<Uuid>,
-    pub publisher_id: Uuid,
+// PurchaseMetadata is metadata from a marketplace purchase (received via event).
+type PurchaseMetadata struct {
+    ContentType string
+    ContentIDs  []uuid.UUID
+    PublisherID uuid.UUID
 }
 ```
 
@@ -3208,14 +2659,14 @@ GET /v1/learning/tools
 1. Handler extracts FamilyScope
     │
     ▼
-2. LearningService::get_resolved_tools(scope)
+2. LearningService.GetResolvedTools(scope)
     │
     ▼
-3. Delegates to method::MethodologyService::resolve_family_tools(scope)
+3. Delegates to method::MethodologyService.ResolveFamilyTools(scope)
     │  ├── Loads family's primary + secondary methodology IDs from iam_families
     │  ├── Queries method_tool_activations for all methodologies
     │  ├── Constructs ToolResolver with primary methodology ID
-    │  └── Returns Vec<ActiveToolResponse>
+    │  └── Returns []ActiveToolResponse
     │
     ▼
 4. Returns tool set to handler
@@ -3230,10 +2681,10 @@ GET /v1/learning/tools/:student_id
 1. Handler extracts FamilyScope, validates student belongs to family
     │
     ▼
-2. LearningService::get_student_tools(scope, student_id)
+2. LearningService.GetStudentTools(scope, studentID)
     │
     ▼
-3. Delegates to method::MethodologyService::resolve_student_tools(scope, student_id)
+3. Delegates to method::MethodologyService.ResolveStudentTools(scope, studentID)
     │  ├── Checks iam_students.methodology_override_id for student
     │  ├── If override exists → resolve for override methodology only
     │  └── If no override → fall through to family resolution
@@ -3259,17 +2710,17 @@ learn:: maps slugs to handler modules:
 
 | Tool Slug | Module | Phase |
 |-----------|--------|-------|
-| `activities` | `src/learn/handlers.rs` (activity log endpoints) | 1 |
-| `reading-lists` | `src/learn/handlers.rs` (reading list endpoints) | 1 |
-| `journaling` | `src/learn/handlers.rs` (journal entry endpoints) | 1 |
-| `progress-tracking` | `src/learn/handlers.rs` (progress endpoints) | 1 |
-| `assessment-engine` | `src/learn/handlers.rs` (quiz/question endpoints) | 1 |
+| `activities` | `internal/learn/handler.go` (activity log endpoints) | 1 |
+| `reading-lists` | `internal/learn/handler.go` (reading list endpoints) | 1 |
+| `journaling` | `internal/learn/handler.go` (journal entry endpoints) | 1 |
+| `progress-tracking` | `internal/learn/handler.go` (progress endpoints) | 1 |
+| `assessment-engine` | `internal/learn/handler.go` (quiz/question endpoints) | 1 |
 | `content-viewer` | Frontend-only (no backend handler — uses `media::` signed URLs) | 1 |
-| `video-player` | `src/learn/handlers.rs` (video progress endpoints) | 1 |
-| `lesson-sequences` | `src/learn/handlers.rs` (sequence endpoints) | 1 |
-| `tests-grades` | `src/learn/handlers.rs` (assessment result endpoints) | 1* |
-| `projects` | `src/learn/handlers.rs` (project endpoints) | 2 |
-| `video-lessons` | `src/learn/handlers.rs` (marketplace video integration) | 1* |
+| `video-player` | `internal/learn/handler.go` (video progress endpoints) | 1 |
+| `lesson-sequences` | `internal/learn/handler.go` (sequence endpoints) | 1 |
+| `tests-grades` | `internal/learn/handler.go` (assessment result endpoints) | 1* |
+| `projects` | `internal/learn/handler.go` (project endpoints) | 2 |
+| `video-lessons` | `internal/learn/handler.go` (marketplace video integration) | 1* |
 | `nature-journals` | Phase 3 | 3 |
 | `trivium-tracker` | Phase 3 | 3 |
 | `rhythm-planner` | Phase 3 | 3 |
@@ -3285,7 +2736,7 @@ learn:: maps slugs to handler modules:
 
 ## §11 Activity Logging Invariants (Domain Deep-Dive 3)
 
-The `Activity` aggregate root in `src/learn/domain/activity.rs` enforces these invariants
+The `Activity` aggregate root in `internal/learn/domain/activity.go` enforces these invariants
 structurally. `[ARCH §4.5]`
 
 ### §11.1 Invariants
@@ -3299,7 +2750,7 @@ structurally. `[ARCH §4.5]`
 4. **Activity date cannot be in the future**: `activity_date <= CURRENT_DATE`. Enforced in
    service layer to avoid timezone edge cases in database constraints.
 5. **Attachments validated via media::**: Before persisting, each attachment is validated through
-   `MediaAdapter::validate_attachment` (magic bytes, size limits). `[CODING §4.2]`
+   `MediaAdapter.ValidateAttachment` (magic bytes, size limits). `[CODING §4.2]`
 6. **Content ID reference must be valid**: If `content_id` is provided, it must reference an
    active `learn_activity_defs` row.
 7. **Tool ID must be in family's active tool set**: If `tool_id` is provided, it must be in the
@@ -3307,37 +2758,40 @@ structurally. `[ARCH §4.5]`
 
 ### §11.2 Aggregate Root
 
-```rust
-// src/learn/domain/activity.rs
+```go
+// internal/learn/domain/activity.go
 
-#[derive(Debug)]
-pub struct Activity {
-    student_id: Uuid,
-    title: String,
-    subject_tags: Vec<String>,
-    activity_date: NaiveDate,
-    duration_minutes: Option<i16>,
+// Activity is the aggregate root for activity logging — enforces invariants.
+type Activity struct {
+    studentID       uuid.UUID
+    title           string
+    subjectTags     []string
+    activityDate    time.Time
+    durationMinutes *int16
     // ... private fields
 }
 
-impl Activity {
-    pub fn new(
-        student_id: Uuid,
-        title: String,
-        subject_tags: Vec<String>,
-        activity_date: NaiveDate,
-        duration_minutes: Option<i16>,
-    ) -> Result<Self, LearningError> {
-        if let Some(d) = duration_minutes {
-            if d < 0 {
-                return Err(LearningError::NegativeDuration);
-            }
-        }
-        if activity_date > chrono::Local::now().date_naive() {
-            return Err(LearningError::FutureDateNotAllowed);
-        }
-        Ok(Self { student_id, title, subject_tags, activity_date, duration_minutes })
+// NewActivity creates a validated Activity, enforcing domain invariants.
+func NewActivity(
+    studentID uuid.UUID,
+    title string,
+    subjectTags []string,
+    activityDate time.Time,
+    durationMinutes *int16,
+) (*Activity, error) {
+    if durationMinutes != nil && *durationMinutes < 0 {
+        return nil, ErrNegativeDuration
     }
+    if activityDate.After(time.Now().Truncate(24 * time.Hour)) {
+        return nil, ErrFutureDateNotAllowed
+    }
+    return &Activity{
+        studentID:       studentID,
+        title:           title,
+        subjectTags:     subjectTags,
+        activityDate:    activityDate,
+        durationMinutes: durationMinutes,
+    }, nil
 }
 ```
 
@@ -3454,16 +2908,16 @@ The same taxonomy is used for: `[S§8.3]`
 POST /v1/learning/export
     │
     ▼
-1. Check no active export (ExportRepository::has_active_export)
+1. Check no active export (ExportRepository.HasActiveExport)
     │
     ▼
 2. Create export_request (status = 'pending')
     │
     ▼
-3. Enqueue ExportGenerationJob (background via sidekiq-rs)
+3. Enqueue ExportGenerationTask (background via asynq)
     │
     ▼
-4. Job executes:
+4. Task executes:
     ├── Set status = 'processing'
     ├── Query all family learning data (FamilyScope)
     ├── Generate JSON/CSV bundle
@@ -3480,7 +2934,7 @@ POST /v1/learning/export
 - **Available regardless of subscription tier** `[S§8.5]`
 - **24-hour download window** — `expires_at` is set to creation + 24 hours
 - **One active export at a time** — prevents abuse; returns `ExportAlreadyInProgress` if concurrent
-- **Async generation** — export runs in background job; notification sent on completion
+- **Async generation** — export runs in background task; notification sent on completion
 - **All student data** — export includes data for all students in the family
 
 ---
@@ -3556,142 +3010,185 @@ When a family downgrades from premium to free:
 
 ## §17 Error Types
 
-`LearningError` enum defined in `src/learn/domain/errors.rs`. Maps to `AppError` via
-`From<LearningError> for AppError` `[00-core §6.4]`. `[CODING §2.2, CODING §8.3]`
+`LearningError` types defined in `internal/learn/domain/errors.go`. Maps to `AppError` via
+custom error types and `errors.Is`/`errors.As` `[00-core §6.4]`. `[CODING §2.2, CODING §8.3]`
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum LearningError {
-    // ─── Student ──────────────────────────────────────────────────────
-    #[error("student not found")]
-    StudentNotFound,
+```go
+// internal/learn/domain/errors.go
 
-    #[error("student does not belong to this family")]
-    StudentNotInFamily,
+package domain
 
-    // ─── Activity ─────────────────────────────────────────────────────
-    #[error("activity not found")]
-    ActivityNotFound,
+import "errors"
 
-    #[error("activity definition not found")]
-    ActivityDefNotFound,
+// --- Student ----------------------------------------------------------------
 
-    // ─── Journal ──────────────────────────────────────────────────────
-    #[error("journal entry not found")]
-    JournalNotFound,
+// ErrStudentNotFound indicates the student was not found.
+var ErrStudentNotFound = errors.New("student not found")
 
-    #[error("invalid entry type: {0}")]
-    InvalidEntryType(String),
+// ErrStudentNotInFamily indicates the student does not belong to this family.
+var ErrStudentNotInFamily = errors.New("student does not belong to this family")
 
-    // ─── Reading ──────────────────────────────────────────────────────
-    #[error("reading item not found")]
-    ReadingItemNotFound,
+// --- Activity ---------------------------------------------------------------
 
-    #[error("reading list not found")]
-    ReadingListNotFound,
+// ErrActivityNotFound indicates the activity was not found.
+var ErrActivityNotFound = errors.New("activity not found")
 
-    #[error("reading progress not found")]
-    ReadingProgressNotFound,
+// ErrActivityDefNotFound indicates the activity definition was not found.
+var ErrActivityDefNotFound = errors.New("activity definition not found")
 
-    #[error("already tracking this reading item")]
-    DuplicateReadingProgress,
+// --- Journal ----------------------------------------------------------------
 
-    #[error("invalid reading status transition")]
-    InvalidReadingStatusTransition,
+// ErrJournalNotFound indicates the journal entry was not found.
+var ErrJournalNotFound = errors.New("journal entry not found")
 
-    // ─── Subject Taxonomy ─────────────────────────────────────────────
-    #[error("invalid subject tag: {0}")]
-    InvalidSubjectTag(String),
+// ErrInvalidEntryType indicates an invalid journal entry type.
+type ErrInvalidEntryType struct {
+    EntryType string
+}
 
-    #[error("duplicate custom subject")]
-    DuplicateCustomSubject,
+func (e *ErrInvalidEntryType) Error() string {
+    return "invalid entry type: " + e.EntryType
+}
 
-    // ─── Validation ───────────────────────────────────────────────────
-    #[error("activity date cannot be in the future")]
-    FutureDateNotAllowed,
+// --- Reading ----------------------------------------------------------------
 
-    #[error("duration cannot be negative")]
-    NegativeDuration,
+// ErrReadingItemNotFound indicates the reading item was not found.
+var ErrReadingItemNotFound = errors.New("reading item not found")
 
-    // ─── Artifact Links ───────────────────────────────────────────────
-    #[error("source content not found")]
-    SourceNotFound,
+// ErrReadingListNotFound indicates the reading list was not found.
+var ErrReadingListNotFound = errors.New("reading list not found")
 
-    #[error("target content not found")]
-    TargetNotFound,
+// ErrReadingProgressNotFound indicates the reading progress was not found.
+var ErrReadingProgressNotFound = errors.New("reading progress not found")
 
-    #[error("duplicate artifact link")]
-    DuplicateLink,
+// ErrDuplicateReadingProgress indicates duplicate tracking of the same reading item.
+var ErrDuplicateReadingProgress = errors.New("already tracking this reading item")
 
-    #[error("invalid artifact type: {0}")]
-    InvalidArtifactType(String),
+// ErrInvalidReadingStatusTransition indicates an invalid reading status transition.
+var ErrInvalidReadingStatusTransition = errors.New("invalid reading status transition")
 
-    // ─── Tools & Tier ─────────────────────────────────────────────────
-    #[error("tool not active for this student")]
-    ToolNotActive,
+// --- Subject Taxonomy -------------------------------------------------------
 
-    #[error("premium subscription required")]
-    PremiumRequired,
+// ErrInvalidSubjectTag indicates an invalid subject tag.
+type ErrInvalidSubjectTag struct {
+    Tag string
+}
 
-    // ─── Export ───────────────────────────────────────────────────────
-    #[error("export already in progress")]
-    ExportAlreadyInProgress,
+func (e *ErrInvalidSubjectTag) Error() string {
+    return "invalid subject tag: " + e.Tag
+}
 
-    #[error("export not ready")]
-    ExportNotReady,
+// ErrDuplicateCustomSubject indicates a duplicate custom subject.
+var ErrDuplicateCustomSubject = errors.New("duplicate custom subject")
 
-    #[error("export has expired")]
-    ExportExpired,
+// --- Validation -------------------------------------------------------------
 
-    // ─── Publisher ────────────────────────────────────────────────────
-    #[error("not a member of this publisher")]
-    NotPublisherMember,
+// ErrFutureDateNotAllowed indicates the activity date cannot be in the future.
+var ErrFutureDateNotAllowed = errors.New("activity date cannot be in the future")
 
-    // ─── Attachments ──────────────────────────────────────────────────
-    #[error("attachment too large")]
-    AttachmentTooLarge,
+// ErrNegativeDuration indicates the duration cannot be negative.
+var ErrNegativeDuration = errors.New("duration cannot be negative")
 
-    #[error("invalid attachment type")]
-    InvalidAttachmentType,
+// --- Artifact Links ---------------------------------------------------------
 
-    // ─── Infrastructure ───────────────────────────────────────────────
-    #[error("database error")]
-    DatabaseError(#[from] sea_orm::DbErr),
+// ErrSourceNotFound indicates the source content was not found.
+var ErrSourceNotFound = errors.New("source content not found")
+
+// ErrTargetNotFound indicates the target content was not found.
+var ErrTargetNotFound = errors.New("target content not found")
+
+// ErrDuplicateLink indicates a duplicate artifact link.
+var ErrDuplicateLink = errors.New("duplicate artifact link")
+
+// ErrInvalidArtifactType indicates an invalid artifact type.
+type ErrInvalidArtifactType struct {
+    ArtifactType string
+}
+
+func (e *ErrInvalidArtifactType) Error() string {
+    return "invalid artifact type: " + e.ArtifactType
+}
+
+// --- Tools & Tier -----------------------------------------------------------
+
+// ErrToolNotActive indicates the tool is not active for this student.
+var ErrToolNotActive = errors.New("tool not active for this student")
+
+// ErrPremiumRequired indicates a premium subscription is required.
+var ErrPremiumRequired = errors.New("premium subscription required")
+
+// --- Export -----------------------------------------------------------------
+
+// ErrExportAlreadyInProgress indicates an export is already in progress.
+var ErrExportAlreadyInProgress = errors.New("export already in progress")
+
+// ErrExportNotReady indicates the export is not ready yet.
+var ErrExportNotReady = errors.New("export not ready")
+
+// ErrExportExpired indicates the export has expired.
+var ErrExportExpired = errors.New("export has expired")
+
+// --- Publisher --------------------------------------------------------------
+
+// ErrNotPublisherMember indicates the caller is not a member of this publisher.
+var ErrNotPublisherMember = errors.New("not a member of this publisher")
+
+// --- Attachments ------------------------------------------------------------
+
+// ErrAttachmentTooLarge indicates the attachment is too large.
+var ErrAttachmentTooLarge = errors.New("attachment too large")
+
+// ErrInvalidAttachmentType indicates an invalid attachment type.
+var ErrInvalidAttachmentType = errors.New("invalid attachment type")
+
+// --- Infrastructure ---------------------------------------------------------
+
+// ErrDatabase wraps a database error.
+type ErrDatabase struct {
+    Err error
+}
+
+func (e *ErrDatabase) Error() string {
+    return "database error"
+}
+
+func (e *ErrDatabase) Unwrap() error {
+    return e.Err
 }
 ```
 
 ### §17.1 Error-to-HTTP Mapping
 
-| LearningError Variant | HTTP Status | Error Code |
-|----------------------|-------------|------------|
-| `StudentNotFound` | 404 | `student_not_found` |
-| `StudentNotInFamily` | 403 | `student_not_in_family` |
-| `ActivityNotFound` | 404 | `activity_not_found` |
-| `ActivityDefNotFound` | 404 | `activity_def_not_found` |
-| `JournalNotFound` | 404 | `journal_not_found` |
-| `InvalidEntryType` | 422 | `invalid_entry_type` |
-| `ReadingItemNotFound` | 404 | `reading_item_not_found` |
-| `ReadingListNotFound` | 404 | `reading_list_not_found` |
-| `ReadingProgressNotFound` | 404 | `reading_progress_not_found` |
-| `DuplicateReadingProgress` | 409 | `duplicate_reading_progress` |
-| `InvalidReadingStatusTransition` | 422 | `invalid_status_transition` |
-| `InvalidSubjectTag` | 422 | `invalid_subject_tag` |
-| `DuplicateCustomSubject` | 409 | `duplicate_custom_subject` |
-| `FutureDateNotAllowed` | 422 | `future_date_not_allowed` |
-| `NegativeDuration` | 422 | `negative_duration` |
-| `SourceNotFound` | 404 | `source_not_found` |
-| `TargetNotFound` | 404 | `target_not_found` |
-| `DuplicateLink` | 409 | `duplicate_link` |
-| `InvalidArtifactType` | 422 | `invalid_artifact_type` |
-| `ToolNotActive` | 403 | `tool_not_active` |
-| `PremiumRequired` | 403 | `premium_required` |
-| `ExportAlreadyInProgress` | 409 | `export_already_in_progress` |
-| `ExportNotReady` | 202 | `export_not_ready` |
-| `ExportExpired` | 410 | `export_expired` |
-| `NotPublisherMember` | 403 | `not_publisher_member` |
-| `AttachmentTooLarge` | 413 | `attachment_too_large` |
-| `InvalidAttachmentType` | 422 | `invalid_attachment_type` |
-| `DatabaseError` | 500 | `internal_error` |
+| LearningError | HTTP Status | Error Code |
+|--------------|-------------|------------|
+| `ErrStudentNotFound` | 404 | `student_not_found` |
+| `ErrStudentNotInFamily` | 403 | `student_not_in_family` |
+| `ErrActivityNotFound` | 404 | `activity_not_found` |
+| `ErrActivityDefNotFound` | 404 | `activity_def_not_found` |
+| `ErrJournalNotFound` | 404 | `journal_not_found` |
+| `ErrInvalidEntryType` | 422 | `invalid_entry_type` |
+| `ErrReadingItemNotFound` | 404 | `reading_item_not_found` |
+| `ErrReadingListNotFound` | 404 | `reading_list_not_found` |
+| `ErrReadingProgressNotFound` | 404 | `reading_progress_not_found` |
+| `ErrDuplicateReadingProgress` | 409 | `duplicate_reading_progress` |
+| `ErrInvalidReadingStatusTransition` | 422 | `invalid_status_transition` |
+| `ErrInvalidSubjectTag` | 422 | `invalid_subject_tag` |
+| `ErrDuplicateCustomSubject` | 409 | `duplicate_custom_subject` |
+| `ErrFutureDateNotAllowed` | 422 | `future_date_not_allowed` |
+| `ErrNegativeDuration` | 422 | `negative_duration` |
+| `ErrSourceNotFound` | 404 | `source_not_found` |
+| `ErrTargetNotFound` | 404 | `target_not_found` |
+| `ErrDuplicateLink` | 409 | `duplicate_link` |
+| `ErrInvalidArtifactType` | 422 | `invalid_artifact_type` |
+| `ErrToolNotActive` | 403 | `tool_not_active` |
+| `ErrPremiumRequired` | 403 | `premium_required` |
+| `ErrExportAlreadyInProgress` | 409 | `export_already_in_progress` |
+| `ErrExportNotReady` | 202 | `export_not_ready` |
+| `ErrExportExpired` | 410 | `export_expired` |
+| `ErrNotPublisherMember` | 403 | `not_publisher_member` |
+| `ErrAttachmentTooLarge` | 413 | `attachment_too_large` |
+| `ErrInvalidAttachmentType` | 422 | `invalid_attachment_type` |
+| `ErrDatabase` | 500 | `internal_error` |
 
 ---
 
@@ -3701,7 +3198,7 @@ pub enum LearningError {
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `LearningService` trait methods | `comply::` | `Arc<dyn LearningService>` via AppState |
+| `LearningService` interface methods | `comply::` | `LearningService` interface via AppState |
 | `ActivityLogged` event | `comply::`, `ai::`, `notify::` | Domain event — attendance tracking, recommendation signal, streak check |
 | `MilestoneAchieved` event | `notify::`, `social::` | Domain event — notification, optional milestone post |
 | `BookCompleted` event | `notify::` | Domain event — streak check, reading milestone |
@@ -3724,92 +3221,100 @@ pub enum LearningError {
 
 ### §18.3 Events learn:: Publishes
 
-Defined in `src/learn/events.rs`. `[CODING §8.4]`
+Defined in `internal/learn/events.go`. `[CODING §8.4]`
 
-```rust
-// src/learn/events.rs
+```go
+// internal/learn/events.go
 
-#[derive(Clone, Debug)]
-pub struct ActivityLogged {
-    pub family_id: FamilyId,
-    pub student_id: Uuid,
-    pub activity_id: Uuid,
-    pub subject_tags: Vec<String>,
-    pub duration_minutes: Option<i16>,
-    pub activity_date: NaiveDate,
+// ActivityLogged is published when an activity is logged for a student.
+type ActivityLogged struct {
+    FamilyID        FamilyID    `json:"family_id"`
+    StudentID       uuid.UUID   `json:"student_id"`
+    ActivityID      uuid.UUID   `json:"activity_id"`
+    SubjectTags     []string    `json:"subject_tags"`
+    DurationMinutes *int16      `json:"duration_minutes"`
+    ActivityDate    time.Time   `json:"activity_date"`
 }
-impl DomainEvent for ActivityLogged {}
 
-#[derive(Clone, Debug)]
-pub struct MilestoneAchieved {
-    pub family_id: FamilyId,
-    pub student_id: Uuid,
-    pub student_name: String,
-    pub milestone_type: String,         // "books_completed", "activity_streak", "subject_hours"
-    pub description: String,
+func (e ActivityLogged) EventName() string { return "learn.activity_logged" }
+
+// MilestoneAchieved is published when a student reaches a learning milestone.
+type MilestoneAchieved struct {
+    FamilyID      FamilyID  `json:"family_id"`
+    StudentID     uuid.UUID `json:"student_id"`
+    StudentName   string    `json:"student_name"`
+    MilestoneType string    `json:"milestone_type"` // "books_completed", "activity_streak", "subject_hours"
+    Description   string    `json:"description"`
 }
-impl DomainEvent for MilestoneAchieved {}
 
-#[derive(Clone, Debug)]
-pub struct BookCompleted {
-    pub family_id: FamilyId,
-    pub student_id: Uuid,
-    pub reading_item_id: Uuid,
-    pub reading_item_title: String,
+func (e MilestoneAchieved) EventName() string { return "learn.milestone_achieved" }
+
+// BookCompleted is published when a student finishes a book.
+type BookCompleted struct {
+    FamilyID         FamilyID  `json:"family_id"`
+    StudentID        uuid.UUID `json:"student_id"`
+    ReadingItemID    uuid.UUID `json:"reading_item_id"`
+    ReadingItemTitle string    `json:"reading_item_title"`
 }
-impl DomainEvent for BookCompleted {}
 
-#[derive(Clone, Debug)]
-pub struct DataExportReady {
-    pub family_id: FamilyId,
-    pub export_id: Uuid,
-    pub file_url: String,
-    pub expires_at: DateTime<Utc>,
+func (e BookCompleted) EventName() string { return "learn.book_completed" }
+
+// DataExportReady is published when a data export is ready for download.
+type DataExportReady struct {
+    FamilyID  FamilyID  `json:"family_id"`
+    ExportID  uuid.UUID `json:"export_id"`
+    FileURL   string    `json:"file_url"`
+    ExpiresAt time.Time `json:"expires_at"`
 }
-impl DomainEvent for DataExportReady {}
 
-// ─── Interactive Learning Events ─────────────────────────────── [S§8.1.9, S§8.1.12, S§8.6]
+func (e DataExportReady) EventName() string { return "learn.data_export_ready" }
 
-#[derive(Clone, Debug)]
-pub struct QuizCompleted {
-    pub family_id: FamilyId,
-    pub student_id: Uuid,
-    pub quiz_def_id: Uuid,
-    pub quiz_session_id: Uuid,
-    pub score: f64,
-    pub max_score: f64,
-    pub passed: bool,
+// --- Interactive Learning Events ----------------------- [S§8.1.9, S§8.1.12, S§8.6]
+
+// QuizCompleted is published when a quiz is fully scored.
+type QuizCompleted struct {
+    FamilyID      FamilyID  `json:"family_id"`
+    StudentID     uuid.UUID `json:"student_id"`
+    QuizDefID     uuid.UUID `json:"quiz_def_id"`
+    QuizSessionID uuid.UUID `json:"quiz_session_id"`
+    Score         float64   `json:"score"`
+    MaxScore      float64   `json:"max_score"`
+    Passed        bool      `json:"passed"`
 }
-impl DomainEvent for QuizCompleted {}
 
-#[derive(Clone, Debug)]
-pub struct SequenceAdvanced {
-    pub family_id: FamilyId,
-    pub student_id: Uuid,
-    pub sequence_def_id: Uuid,
-    pub item_index: i16,
-    pub item_content_type: String,
-    pub item_content_id: Uuid,
-}
-impl DomainEvent for SequenceAdvanced {}
+func (e QuizCompleted) EventName() string { return "learn.quiz_completed" }
 
-#[derive(Clone, Debug)]
-pub struct SequenceCompleted {
-    pub family_id: FamilyId,
-    pub student_id: Uuid,
-    pub sequence_def_id: Uuid,
+// SequenceAdvanced is published when a student completes a sequence item.
+type SequenceAdvanced struct {
+    FamilyID        FamilyID  `json:"family_id"`
+    StudentID       uuid.UUID `json:"student_id"`
+    SequenceDefID   uuid.UUID `json:"sequence_def_id"`
+    ItemIndex       int16     `json:"item_index"`
+    ItemContentType string    `json:"item_content_type"`
+    ItemContentID   uuid.UUID `json:"item_content_id"`
 }
-impl DomainEvent for SequenceCompleted {}
 
-#[derive(Clone, Debug)]
-pub struct AssignmentCompleted {
-    pub family_id: FamilyId,
-    pub student_id: Uuid,
-    pub assignment_id: Uuid,
-    pub content_type: String,
-    pub content_id: Uuid,
+func (e SequenceAdvanced) EventName() string { return "learn.sequence_advanced" }
+
+// SequenceCompleted is published when a student completes all required items in a sequence.
+type SequenceCompleted struct {
+    FamilyID      FamilyID  `json:"family_id"`
+    StudentID     uuid.UUID `json:"student_id"`
+    SequenceDefID uuid.UUID `json:"sequence_def_id"`
 }
-impl DomainEvent for AssignmentCompleted {}
+
+func (e SequenceCompleted) EventName() string { return "learn.sequence_completed" }
+
+// AssignmentCompleted is published when a student completes an assignment.
+type AssignmentCompleted struct {
+    FamilyID     FamilyID  `json:"family_id"`
+    StudentID    uuid.UUID `json:"student_id"`
+    AssignmentID uuid.UUID `json:"assignment_id"`
+    ContentType  string    `json:"content_type"`
+    ContentID    uuid.UUID `json:"content_id"`
+}
+
+func (e AssignmentCompleted) EventName() string { return "learn.assignment_completed" }
 ```
 
 ### §18.4 Events learn:: Subscribes To
@@ -3822,75 +3327,77 @@ impl DomainEvent for AssignmentCompleted {}
 | `PurchaseCompleted { family_id, content_metadata }` | `mkt::` | Integrate purchased content into family's tool access `[S§18.4]` |
 | `MethodologyConfigUpdated` | `method::` | Invalidate cached tool resolution results |
 
-```rust
-// src/learn/event_handlers.rs
+```go
+// internal/learn/event_handlers.go
 
-use crate::iam::events::{StudentCreated, StudentDeleted, FamilyDeletionScheduled};
-use crate::mkt::events::PurchaseCompleted;
-use crate::method::events::MethodologyConfigUpdated;
+import (
+    "context"
 
-pub struct StudentCreatedHandler {
-    learning_service: Arc<dyn LearningService>,
+    iamevents "internal/iam/events"
+    mktevents "internal/mkt/events"
+    methodevents "internal/method/events"
+)
+
+// StudentCreatedHandler handles the StudentCreated event for the learning domain.
+type StudentCreatedHandler struct {
+    learningService LearningService
 }
 
-#[async_trait]
-impl DomainEventHandler<StudentCreated> for StudentCreatedHandler {
-    async fn handle(&self, event: &StudentCreated) -> Result<(), AppError> {
-        self.learning_service.handle_student_created(
-            event.family_id,
-            event.student_id,
-        ).await
-    }
+// Handle processes a StudentCreated event.
+func (h *StudentCreatedHandler) Handle(ctx context.Context, event *iamevents.StudentCreated) error {
+    return h.learningService.HandleStudentCreated(
+        ctx,
+        event.FamilyID,
+        event.StudentID,
+    )
 }
 
-pub struct StudentDeletedHandler {
-    learning_service: Arc<dyn LearningService>,
+// StudentDeletedHandler handles the StudentDeleted event for the learning domain.
+type StudentDeletedHandler struct {
+    learningService LearningService
 }
 
-#[async_trait]
-impl DomainEventHandler<StudentDeleted> for StudentDeletedHandler {
-    async fn handle(&self, event: &StudentDeleted) -> Result<(), AppError> {
-        self.learning_service.handle_student_deleted(
-            event.family_id,
-            event.student_id,
-        ).await
-    }
+// Handle processes a StudentDeleted event.
+func (h *StudentDeletedHandler) Handle(ctx context.Context, event *iamevents.StudentDeleted) error {
+    return h.learningService.HandleStudentDeleted(
+        ctx,
+        event.FamilyID,
+        event.StudentID,
+    )
 }
 
-pub struct FamilyDeletionScheduledHandler {
-    learning_service: Arc<dyn LearningService>,
+// FamilyDeletionScheduledHandler handles the FamilyDeletionScheduled event.
+type FamilyDeletionScheduledHandler struct {
+    learningService LearningService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.learning_service.handle_family_deletion_scheduled(event.family_id).await
-    }
+// Handle processes a FamilyDeletionScheduled event.
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *iamevents.FamilyDeletionScheduled) error {
+    return h.learningService.HandleFamilyDeletionScheduled(ctx, event.FamilyID)
 }
 
-pub struct PurchaseCompletedHandler {
-    learning_service: Arc<dyn LearningService>,
+// PurchaseCompletedHandler handles the PurchaseCompleted event.
+type PurchaseCompletedHandler struct {
+    learningService LearningService
 }
 
-#[async_trait]
-impl DomainEventHandler<PurchaseCompleted> for PurchaseCompletedHandler {
-    async fn handle(&self, event: &PurchaseCompleted) -> Result<(), AppError> {
-        self.learning_service.handle_purchase_completed(
-            event.family_id,
-            event.content_metadata.clone(),
-        ).await
-    }
+// Handle processes a PurchaseCompleted event.
+func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event *mktevents.PurchaseCompleted) error {
+    return h.learningService.HandlePurchaseCompleted(
+        ctx,
+        event.FamilyID,
+        event.ContentMetadata,
+    )
 }
 
-pub struct MethodologyConfigUpdatedHandler {
-    learning_service: Arc<dyn LearningService>,
+// MethodologyConfigUpdatedHandler handles the MethodologyConfigUpdated event.
+type MethodologyConfigUpdatedHandler struct {
+    learningService LearningService
 }
 
-#[async_trait]
-impl DomainEventHandler<MethodologyConfigUpdated> for MethodologyConfigUpdatedHandler {
-    async fn handle(&self, _event: &MethodologyConfigUpdated) -> Result<(), AppError> {
-        self.learning_service.handle_methodology_config_updated().await
-    }
+// Handle processes a MethodologyConfigUpdated event.
+func (h *MethodologyConfigUpdatedHandler) Handle(ctx context.Context, event *methodevents.MethodologyConfigUpdated) error {
+    return h.learningService.HandleMethodologyConfigUpdated(ctx)
 }
 ```
 
@@ -3928,12 +3435,12 @@ impl DomainEventHandler<MethodologyConfigUpdated> for MethodologyConfigUpdatedHa
 - Subject taxonomy (platform + family custom)
 - Data export (async, JSON/CSV)
 - ~72 Phase 1 endpoints
-- `LearningService` trait + `LearningServiceImpl`
-- 16 repository traits + PostgreSQL implementations
-- `MediaAdapter` trait
-- Domain `domain/` subdirectory: activity.rs, journal.rs, reading_list.rs, progress.rs,
-  taxonomy.rs, quiz_session.rs, sequence.rs, assignment.rs, errors.rs
-- `LearningError` enum + HTTP mapping
+- `LearningService` interface + `LearningServiceImpl`
+- 16 repository interfaces + PostgreSQL implementations
+- `MediaAdapter` interface
+- Domain `domain/` subdirectory: activity.go, journal.go, reading_list.go, progress.go,
+  taxonomy.go, quiz_session.go, sequence.go, assignment.go, errors.go
+- `LearningError` types + HTTP mapping
 - Domain events: `ActivityLogged`, `MilestoneAchieved`, `BookCompleted`, `DataExportReady`, `QuizCompleted`, `SequenceAdvanced`, `SequenceCompleted`, `AssignmentCompleted`
 - Event handlers: `StudentCreatedHandler`, `StudentDeletedHandler`,
   `FamilyDeletionScheduledHandler`, `PurchaseCompletedHandler`,
@@ -4060,33 +3567,31 @@ Numbered assertions that MUST be true when the learn:: implementation is correct
 ## §21 Module Structure
 
 ```
-src/learn/
-├── mod.rs                    # Re-exports, domain-level doc comments
-├── handlers.rs               # Axum route handlers (thin layer only)
-├── service.rs                # LearningServiceImpl — orchestration
-├── repository.rs             # PgActivityDefRepository, PgActivityLogRepository,
-│                             # PgReadingItemRepository, PgReadingProgressRepository,
-│                             # PgReadingListRepository, PgJournalEntryRepository,
-│                             # PgArtifactLinkRepository, PgProgressRepository,
-│                             # PgSubjectTaxonomyRepository, PgExportRepository
-├── models.rs                 # Request/response types, internal types, query params
-├── ports.rs                  # LearningService trait, all repository traits,
-│                             # MediaAdapter trait
-├── events.rs                 # ActivityLogged, MilestoneAchieved, BookCompleted, QuizCompleted, SequenceAdvanced, SequenceCompleted, AssignmentCompleted,
+internal/learn/
+├── handler.go                # Echo route handlers (thin layer only)
+├── service.go                # LearningServiceImpl — orchestration
+├── repository.go             # GormActivityDefRepository, GormActivityLogRepository,
+│                             # GormReadingItemRepository, GormReadingProgressRepository,
+│                             # GormReadingListRepository, GormJournalEntryRepository,
+│                             # GormArtifactLinkRepository, GormProgressRepository,
+│                             # GormSubjectTaxonomyRepository, GormExportRepository
+├── models.go                 # Request/response types, internal types, query params,
+│                             # GORM model definitions
+├── ports.go                  # LearningService interface, all repository interfaces,
+│                             # MediaAdapter interface
+├── events.go                 # ActivityLogged, MilestoneAchieved, BookCompleted, QuizCompleted, SequenceAdvanced, SequenceCompleted, AssignmentCompleted,
 │                             # DataExportReady
-├── event_handlers.rs         # StudentCreatedHandler, StudentDeletedHandler,
+├── event_handlers.go         # StudentCreatedHandler, StudentDeletedHandler,
 │                             # FamilyDeletionScheduledHandler,
 │                             # PurchaseCompletedHandler,
 │                             # MethodologyConfigUpdatedHandler
-├── export.rs                 # ExportGenerationJob — background worker for
+├── export.go                 # ExportGenerationTask — background worker (asynq) for
 │                             # async data export generation
-├── domain/
-│   ├── mod.rs
-│   ├── activity.rs           # Activity aggregate root — invariant enforcement
-│   ├── journal.rs            # Journal entry validation — entry type rules
-│   ├── reading_list.rs       # Reading list aggregate — item management, status transitions
-│   ├── progress.rs           # Progress computation — metric aggregation logic
-│   ├── taxonomy.rs           # Taxonomy validation — slug generation, hierarchy checks
-│   └── errors.rs             # LearningError enum
-└── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
+└── domain/
+    ├── activity.go           # Activity aggregate root — invariant enforcement
+    ├── journal.go            # Journal entry validation — entry type rules
+    ├── reading_list.go       # Reading list aggregate — item management, status transitions
+    ├── progress.go           # Progress computation — metric aggregation logic
+    ├── taxonomy.go           # Taxonomy validation — slug generation, hierarchy checks
+    └── errors.go             # LearningError types
 ```

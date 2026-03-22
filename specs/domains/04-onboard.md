@@ -10,9 +10,9 @@ state and materialized guidance artifacts. `[S§6]`
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/onboard/` |
+| **Module path** | `internal/onboard/` |
 | **DB prefix** | `onb_` |
-| **Complexity class** | Non-complex (no `domain/` subdirectory) `[ARCH §4.5]` |
+| **Complexity class** | Non-complex `[ARCH §4.5]` |
 | **External adapter** | None |
 | **Key constraint** | Workflow orchestration only; all core data lives in other domains |
 
@@ -50,11 +50,11 @@ Every SPEC.md §6 requirement maps to a section in this document.
 | Quiz result import as starting point | `[S§6.3]` | §4 (`POST /v1/onboarding/methodology/import-quiz`), §9.4 |
 | Three methodology selection paths | `[S§6.3]` | §4 (`PATCH /v1/onboarding/methodology`), §8, §9.3 |
 | Primary + secondary methodology selection | `[S§6.3]` | §4 (`PATCH /v1/onboarding/methodology`), §8 |
-| Multi-methodology model explanation | `[S§6.3]` | §8 (`MethodologySelectionRequest.explanation_acknowledged`) |
+| Multi-methodology model explanation | `[S§6.3]` | §8 (`MethodologySelectionRequest.ExplanationAcknowledged`) |
 | Methodology-specific getting-started roadmap | `[S§6.4]` | §4 (`GET /v1/onboarding/roadmap`), §10 |
 | Concrete, actionable first-week checklist | `[S§6.4]` | §10.2 (item types: `task`, `resource`, `feature_tour`) |
 | Age-adapted roadmaps | `[S§6.4]` | §10.3 (5 age brackets from student birth_year) |
-| Roadmap items link to platform features and content | `[S§6.4]` | §10.2 (`link_url` field on roadmap items) |
+| Roadmap items link to platform features and content | `[S§6.4]` | §10.2 (`LinkURL` field on roadmap items) |
 | Curated starter curriculum recommendations | `[S§6.5]` | §4 (`GET /v1/onboarding/recommendations`), §8 |
 | Specific, limited recommendations (not catalog dump) | `[S§6.5]` | §10.4 (max 6 per age group, from `onboarding_config.starter_recs`) |
 | Methodology-specific, age-appropriate recommendations | `[S§6.5]` | §10.3, §10.4 |
@@ -238,7 +238,7 @@ setting display_name, state_code, and location_region. Delegates to `iam::IamSer
 - **Body**: `UpdateFamilyProfileRequest` (`display_name`, `state_code`, `location_region`)
 - **Validation**: `display_name` required (non-empty); `state_code` must be valid 2-letter code
 - **Response**: `WizardProgressResponse` (200 OK) — wizard advances if this was the current step
-- **Side effect**: Calls `iam::IamService::update_family_profile`
+- **Side effect**: Calls `iam::IamService::UpdateFamilyProfile`
 
 #### `POST /v1/onboarding/children`
 
@@ -247,7 +247,7 @@ Adds a student profile during the onboarding wizard. Delegates to `iam::IamServi
 - **Auth**: Required (`FamilyScope`, `RequireCoppaConsent`)
 - **Body**: `CreateStudentRequest` (`display_name`, `birth_year?`, `grade_level?`)
 - **Response**: `StudentResponse` (201 Created) — student data from IAM
-- **Side effect**: Calls `iam::IamService::create_student`
+- **Side effect**: Calls `iam::IamService::CreateStudent`
 
 #### `DELETE /v1/onboarding/children/:student_id`
 
@@ -255,7 +255,7 @@ Removes a student profile during onboarding. Delegates to `iam::IamService`.
 
 - **Auth**: Required (`FamilyScope`)
 - **Response**: 204 No Content
-- **Side effect**: Calls `iam::IamService::delete_student`
+- **Side effect**: Calls `iam::IamService::DeleteStudent`
 
 #### `PATCH /v1/onboarding/methodology`
 
@@ -266,19 +266,19 @@ to `method::MethodologyService`.
 - **Body**: `MethodologySelectionRequest` (`primary_methodology_id`, `secondary_methodology_ids?`, `methodology_path`, `explanation_acknowledged`)
 - **Validation**: `methodology_path` must be one of `quiz_informed`, `exploration`, `skip`. `explanation_acknowledged` must be `true` if secondary methodologies are selected. All methodology IDs must be valid and active.
 - **Response**: `WizardProgressResponse` (200 OK) — advances wizard to `roadmap_review`
-- **Side effect**: Calls `method::MethodologyService::update_family_methodology`. Triggers roadmap, recommendations, and community suggestion materialization.
+- **Side effect**: Calls `method::MethodologyService::UpdateFamilyMethodology`. Triggers roadmap, recommendations, and community suggestion materialization.
 
 #### `POST /v1/onboarding/methodology/import-quiz`
 
 Imports a previously taken quiz result to pre-populate methodology selection. Calls
-`discover::DiscoveryService::claim_quiz_result` and `discover::DiscoveryService::get_quiz_result`.
+`discover::DiscoveryService::ClaimQuizResult` and `discover::DiscoveryService::GetQuizResult`.
 
 - **Auth**: Required (`FamilyScope`)
 - **Body**: `ImportQuizRequest` (`share_id`)
 - **Response**: `QuizImportResponse` (200 OK) — quiz result data with methodology recommendations
 - **404**: Quiz result not found
 - **409**: Quiz result already claimed by a different family
-- **Dependency note**: `discover::claim_quiz_result` is Phase 2 in 03-discover.md. This endpoint will return 501 Not Implemented until discover implements claiming. The `get_quiz_result` portion (viewing results) works immediately.
+- **Dependency note**: `discover::ClaimQuizResult` is Phase 2 in 03-discover.md. This endpoint will return 501 Not Implemented until discover implements claiming. The `GetQuizResult` portion (viewing results) works immediately.
 
 #### `GET /v1/onboarding/roadmap`
 
@@ -321,7 +321,7 @@ Allows the user to skip the remaining wizard steps. Sets status to `skipped`.
 - **Auth**: Required (`FamilyScope`)
 - **Precondition**: Wizard must be `in_progress`
 - **Response**: `WizardProgressResponse` (200 OK) — status set to `skipped`
-- **Events**: `OnboardingCompleted` (with `skipped: true`)
+- **Events**: `OnboardingCompleted` (with `Skipped: true`)
 
 ### §4.2 Phase 2 Endpoints
 
@@ -344,134 +344,81 @@ methodology change). Resets wizard to `in_progress`, clears materialized data.
 
 ## §5 Service Interface
 
-```rust
-// src/onboard/ports.rs
+```go
+// internal/onboard/ports.go
 
-#[async_trait]
-pub trait OnboardingService: Send + Sync {
+// OnboardingService defines the onboarding domain's service interface.
+type OnboardingService interface {
     // ─── Wizard Progress ──────────────────────────────────────────────
 
-    /// Returns current wizard progress for the family.
-    /// Used by GET /v1/onboarding/progress. [S§6]
-    async fn get_progress(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<WizardProgressResponse, AppError>;
+    // GetProgress returns current wizard progress for the family.
+    // Used by GET /v1/onboarding/progress. [S§6]
+    GetProgress(ctx context.Context, scope *FamilyScope) (*WizardProgressResponse, error)
 
-    /// Initializes wizard progress for a new family.
-    /// Called by FamilyCreated event handler. [S§6]
-    async fn initialize_wizard(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+    // InitializeWizard initializes wizard progress for a new family.
+    // Called by FamilyCreated event handler. [S§6]
+    InitializeWizard(ctx context.Context, familyID uuid.UUID) error
 
     // ─── Family Profile Step ──────────────────────────────────────────
 
-    /// Updates family profile as part of onboarding wizard.
-    /// Delegates to iam::IamService::update_family_profile.
-    /// Advances wizard if family_profile is the current step. [S§6.2]
-    async fn update_family_profile(
-        &self,
-        scope: &FamilyScope,
-        cmd: UpdateFamilyProfileRequest,
-    ) -> Result<WizardProgressResponse, AppError>;
+    // UpdateFamilyProfile updates family profile as part of onboarding wizard.
+    // Delegates to iam.IamService.UpdateFamilyProfile.
+    // Advances wizard if family_profile is the current step. [S§6.2]
+    UpdateFamilyProfile(ctx context.Context, scope *FamilyScope, cmd *UpdateFamilyProfileRequest) (*WizardProgressResponse, error)
 
     // ─── Children Step ────────────────────────────────────────────────
 
-    /// Adds a student during onboarding. Delegates to iam::IamService. [S§6.2]
-    async fn add_child(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateStudentRequest,
-    ) -> Result<StudentResponse, AppError>;
+    // AddChild adds a student during onboarding. Delegates to iam.IamService. [S§6.2]
+    AddChild(ctx context.Context, scope *FamilyScope, cmd *CreateStudentRequest) (*StudentResponse, error)
 
-    /// Removes a student during onboarding. Delegates to iam::IamService. [S§6.2]
-    async fn remove_child(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-    ) -> Result<(), AppError>;
+    // RemoveChild removes a student during onboarding. Delegates to iam.IamService. [S§6.2]
+    RemoveChild(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) error
 
     // ─── Methodology Step ─────────────────────────────────────────────
 
-    /// Selects family methodology and materializes roadmap, recommendations,
-    /// and community suggestions.
-    /// Delegates methodology persistence to method::MethodologyService. [S§6.3]
-    async fn select_methodology(
-        &self,
-        scope: &FamilyScope,
-        cmd: MethodologySelectionRequest,
-    ) -> Result<WizardProgressResponse, AppError>;
+    // SelectMethodology selects family methodology and materializes roadmap,
+    // recommendations, and community suggestions.
+    // Delegates methodology persistence to method.MethodologyService. [S§6.3]
+    SelectMethodology(ctx context.Context, scope *FamilyScope, cmd *MethodologySelectionRequest) (*WizardProgressResponse, error)
 
-    /// Imports quiz results to pre-populate methodology selection.
-    /// Calls discover::DiscoveryService::claim_quiz_result + get_quiz_result. [S§6.3]
-    async fn import_quiz(
-        &self,
-        scope: &FamilyScope,
-        cmd: ImportQuizRequest,
-    ) -> Result<QuizImportResponse, AppError>;
+    // ImportQuiz imports quiz results to pre-populate methodology selection.
+    // Calls discover.DiscoveryService.ClaimQuizResult + GetQuizResult. [S§6.3]
+    ImportQuiz(ctx context.Context, scope *FamilyScope, cmd *ImportQuizRequest) (*QuizImportResponse, error)
 
     // ─── Roadmap & Recommendations ────────────────────────────────────
 
-    /// Returns materialized roadmap items, grouped by age group. [S§6.4]
-    async fn get_roadmap(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<RoadmapResponse, AppError>;
+    // GetRoadmap returns materialized roadmap items, grouped by age group. [S§6.4]
+    GetRoadmap(ctx context.Context, scope *FamilyScope) (*RoadmapResponse, error)
 
-    /// Returns materialized starter recommendations, grouped by age group. [S§6.5]
-    async fn get_recommendations(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<RecommendationsResponse, AppError>;
+    // GetRecommendations returns materialized starter recommendations, grouped by age group. [S§6.5]
+    GetRecommendations(ctx context.Context, scope *FamilyScope) (*RecommendationsResponse, error)
 
-    /// Returns materialized community suggestions. [S§6.6]
-    async fn get_community_suggestions(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<CommunitySuggestionsResponse, AppError>;
+    // GetCommunitySuggestions returns materialized community suggestions. [S§6.6]
+    GetCommunitySuggestions(ctx context.Context, scope *FamilyScope) (*CommunitySuggestionsResponse, error)
 
     // ─── Wizard Completion ────────────────────────────────────────────
 
-    /// Completes the onboarding wizard. Validates required steps are done.
-    /// Publishes OnboardingCompleted event. [S§6]
-    async fn complete_wizard(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<WizardProgressResponse, AppError>;
+    // CompleteWizard completes the onboarding wizard. Validates required steps are done.
+    // Publishes OnboardingCompleted event. [S§6]
+    CompleteWizard(ctx context.Context, scope *FamilyScope) (*WizardProgressResponse, error)
 
-    /// Skips remaining wizard steps. Publishes OnboardingCompleted (skipped=true). [S§6]
-    async fn skip_wizard(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<WizardProgressResponse, AppError>;
+    // SkipWizard skips remaining wizard steps. Publishes OnboardingCompleted (skipped=true). [S§6]
+    SkipWizard(ctx context.Context, scope *FamilyScope) (*WizardProgressResponse, error)
 
     // ─── Event Handlers ───────────────────────────────────────────────
 
-    /// Handles FamilyMethodologyChanged event.
-    /// Re-materializes roadmap, recommendations, and community suggestions
-    /// if wizard is still in progress. [S§6.4]
-    async fn handle_methodology_changed(
-        &self,
-        family_id: FamilyId,
-        primary_methodology_id: Uuid,
-        secondary_methodology_ids: Vec<Uuid>,
-    ) -> Result<(), AppError>;
+    // HandleMethodologyChanged handles FamilyMethodologyChanged event.
+    // Re-materializes roadmap, recommendations, and community suggestions
+    // if wizard is still in progress. [S§6.4]
+    HandleMethodologyChanged(ctx context.Context, familyID uuid.UUID, primaryMethodologyID uuid.UUID, secondaryMethodologyIDs []uuid.UUID) error
 
     // ─── Phase 2 ──────────────────────────────────────────────────────
 
-    /// Marks a roadmap item as completed. (Phase 2) [S§6.4]
-    async fn complete_roadmap_item(
-        &self,
-        scope: &FamilyScope,
-        item_id: Uuid,
-    ) -> Result<RoadmapItemResponse, AppError>;
+    // CompleteRoadmapItem marks a roadmap item as completed. (Phase 2) [S§6.4]
+    CompleteRoadmapItem(ctx context.Context, scope *FamilyScope, itemID uuid.UUID) (*RoadmapItemResponse, error)
 
-    /// Restarts onboarding wizard. Resets progress, clears materialized data. (Phase 2)
-    async fn restart_wizard(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<WizardProgressResponse, AppError>;
+    // RestartWizard restarts onboarding wizard. Resets progress, clears materialized data. (Phase 2)
+    RestartWizard(ctx context.Context, scope *FamilyScope) (*WizardProgressResponse, error)
 }
 ```
 
@@ -479,102 +426,58 @@ pub trait OnboardingService: Send + Sync {
 
 ## §6 Repository Interfaces
 
-```rust
-// src/onboard/ports.rs (continued)
+```go
+// internal/onboard/ports.go (continued)
 
-#[async_trait]
-pub trait WizardProgressRepository: Send + Sync {
-    /// Creates a new wizard progress record for a family.
-    async fn create(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<WizardProgress, AppError>;
+// WizardProgressRepository defines persistence operations for onb_wizard_progress.
+type WizardProgressRepository interface {
+    // Create creates a new wizard progress record for a family.
+    Create(ctx context.Context, familyID uuid.UUID) (*WizardProgress, error)
 
-    /// Finds wizard progress by family_id. Family-scoped.
-    async fn find_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Option<WizardProgress>, AppError>;
+    // FindByFamily finds wizard progress by family_id. Family-scoped.
+    FindByFamily(ctx context.Context, scope *FamilyScope) (*WizardProgress, error)
 
-    /// Updates wizard progress (current_step, completed_steps, status, etc.).
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        progress: &WizardProgress,
-    ) -> Result<WizardProgress, AppError>;
+    // Update updates wizard progress (current_step, completed_steps, status, etc.).
+    Update(ctx context.Context, scope *FamilyScope, progress *WizardProgress) (*WizardProgress, error)
 }
 
-#[async_trait]
-pub trait RoadmapRepository: Send + Sync {
-    /// Bulk-inserts roadmap items for a family wizard.
-    async fn create_batch(
-        &self,
-        items: Vec<CreateRoadmapItem>,
-    ) -> Result<Vec<RoadmapItem>, AppError>;
+// RoadmapRepository defines persistence operations for onb_roadmap_items.
+type RoadmapRepository interface {
+    // CreateBatch bulk-inserts roadmap items for a family wizard.
+    CreateBatch(ctx context.Context, items []CreateRoadmapItem) ([]RoadmapItem, error)
 
-    /// Returns all roadmap items for a family, ordered by sort_order.
-    async fn find_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<RoadmapItem>, AppError>;
+    // FindByFamily returns all roadmap items for a family, ordered by sort_order.
+    FindByFamily(ctx context.Context, scope *FamilyScope) ([]RoadmapItem, error)
 
-    /// Deletes all roadmap items for a wizard (used during re-materialization).
-    async fn delete_by_wizard(
-        &self,
-        scope: &FamilyScope,
-        wizard_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteByWizard deletes all roadmap items for a wizard (used during re-materialization).
+    DeleteByWizard(ctx context.Context, scope *FamilyScope, wizardID uuid.UUID) error
 
-    /// Marks a roadmap item as completed. (Phase 2)
-    async fn mark_completed(
-        &self,
-        scope: &FamilyScope,
-        item_id: Uuid,
-    ) -> Result<RoadmapItem, AppError>;
+    // MarkCompleted marks a roadmap item as completed. (Phase 2)
+    MarkCompleted(ctx context.Context, scope *FamilyScope, itemID uuid.UUID) (*RoadmapItem, error)
 }
 
-#[async_trait]
-pub trait RecommendationRepository: Send + Sync {
-    /// Bulk-inserts starter recommendations for a family wizard.
-    async fn create_batch(
-        &self,
-        items: Vec<CreateRecommendation>,
-    ) -> Result<Vec<StarterRecommendation>, AppError>;
+// RecommendationRepository defines persistence operations for onb_starter_recommendations.
+type RecommendationRepository interface {
+    // CreateBatch bulk-inserts starter recommendations for a family wizard.
+    CreateBatch(ctx context.Context, items []CreateRecommendation) ([]StarterRecommendation, error)
 
-    /// Returns all recommendations for a family, ordered by sort_order.
-    async fn find_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<StarterRecommendation>, AppError>;
+    // FindByFamily returns all recommendations for a family, ordered by sort_order.
+    FindByFamily(ctx context.Context, scope *FamilyScope) ([]StarterRecommendation, error)
 
-    /// Deletes all recommendations for a wizard (used during re-materialization).
-    async fn delete_by_wizard(
-        &self,
-        scope: &FamilyScope,
-        wizard_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteByWizard deletes all recommendations for a wizard (used during re-materialization).
+    DeleteByWizard(ctx context.Context, scope *FamilyScope, wizardID uuid.UUID) error
 }
 
-#[async_trait]
-pub trait CommunitySuggestionRepository: Send + Sync {
-    /// Bulk-inserts community suggestions for a family wizard.
-    async fn create_batch(
-        &self,
-        items: Vec<CreateCommunitySuggestion>,
-    ) -> Result<Vec<CommunitySuggestion>, AppError>;
+// CommunitySuggestionRepository defines persistence operations for onb_community_suggestions.
+type CommunitySuggestionRepository interface {
+    // CreateBatch bulk-inserts community suggestions for a family wizard.
+    CreateBatch(ctx context.Context, items []CreateCommunitySuggestion) ([]CommunitySuggestion, error)
 
-    /// Returns all community suggestions for a family, ordered by sort_order.
-    async fn find_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<CommunitySuggestion>, AppError>;
+    // FindByFamily returns all community suggestions for a family, ordered by sort_order.
+    FindByFamily(ctx context.Context, scope *FamilyScope) ([]CommunitySuggestion, error)
 
-    /// Deletes all community suggestions for a wizard (used during re-materialization).
-    async fn delete_by_wizard(
-        &self,
-        scope: &FamilyScope,
-        wizard_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteByWizard deletes all community suggestions for a wizard (used during re-materialization).
+    DeleteByWizard(ctx context.Context, scope *FamilyScope, wizardID uuid.UUID) error
 }
 ```
 
@@ -583,8 +486,8 @@ pub trait CommunitySuggestionRepository: Send + Sync {
 ## §7 Adapter Interfaces
 
 None. The onboarding domain has no external service dependencies. All cross-domain
-communication goes through service traits (`iam::IamService`, `method::MethodologyService`,
-`discover::DiscoveryService`) injected via `AppState`.
+communication goes through service interfaces (`iam.IamService`, `method.MethodologyService`,
+`discover.DiscoveryService`) injected via dependency injection.
 
 ---
 
@@ -592,316 +495,302 @@ communication goes through service traits (`iam::IamService`, `method::Methodolo
 
 ### §8.1 Request Types
 
-```rust
-// src/onboard/models.rs
+```go
+// internal/onboard/models.go
 
-/// Family profile update during onboarding wizard. [S§6.2]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateFamilyProfileRequest {
-    /// Family display name (required, non-empty)
-    #[validate(length(min = 1, max = 200))]
-    pub display_name: String,
+// UpdateFamilyProfileRequest represents the family profile update during onboarding wizard. [S§6.2]
+type UpdateFamilyProfileRequest struct {
+    // Family display name (required, non-empty)
+    DisplayName string `json:"display_name" validate:"required,min=1,max=200"`
 
-    /// Two-letter state code for compliance. [S§6.2]
-    /// Explained to user as needed for state-specific legal info.
-    #[validate(length(equal = 2))]
-    pub state_code: Option<String>,
+    // Two-letter state code for compliance. [S§6.2]
+    // Explained to user as needed for state-specific legal info.
+    StateCode *string `json:"state_code,omitempty" validate:"omitempty,len=2"`
 
-    /// Coarse location region (city or region). [ARCH §1.5]
-    #[validate(length(max = 200))]
-    pub location_region: Option<String>,
+    // Coarse location region (city or region). [ARCH §1.5]
+    LocationRegion *string `json:"location_region,omitempty" validate:"omitempty,max=200"`
 }
 
-/// Student creation during onboarding wizard. [S§6.2]
-/// Mirrors iam::CreateStudentRequest — the handler delegates to IAM.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateStudentRequest {
-    #[validate(length(min = 1, max = 200))]
-    pub display_name: String,
+// CreateStudentRequest represents student creation during onboarding wizard. [S§6.2]
+// Mirrors iam.CreateStudentRequest — the handler delegates to IAM.
+type CreateStudentRequest struct {
+    DisplayName string `json:"display_name" validate:"required,min=1,max=200"`
 
-    /// Birth year for age-adapted roadmaps. [S§6.4]
-    pub birth_year: Option<i16>,
+    // Birth year for age-adapted roadmaps. [S§6.4]
+    BirthYear *int16 `json:"birth_year,omitempty"`
 
-    /// Optional grade level. [S§6.2]
-    #[validate(length(max = 50))]
-    pub grade_level: Option<String>,
+    // Optional grade level. [S§6.2]
+    GradeLevel *string `json:"grade_level,omitempty" validate:"omitempty,max=50"`
 }
 
-/// Methodology selection during onboarding wizard. [S§6.3]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct MethodologySelectionRequest {
-    /// Primary methodology ID (required). [S§6.3]
-    pub primary_methodology_id: Uuid,
+// MethodologySelectionRequest represents methodology selection during onboarding wizard. [S§6.3]
+type MethodologySelectionRequest struct {
+    // Primary methodology ID (required). [S§6.3]
+    PrimaryMethodologyID uuid.UUID `json:"primary_methodology_id" validate:"required"`
 
-    /// Optional secondary methodology IDs. [S§6.3]
-    #[serde(default)]
-    pub secondary_methodology_ids: Vec<Uuid>,
+    // Optional secondary methodology IDs. [S§6.3]
+    SecondaryMethodologyIDs []uuid.UUID `json:"secondary_methodology_ids"`
 
-    /// Which selection path the user took. [S§6.3]
-    /// One of: "quiz_informed", "exploration", "skip"
-    pub methodology_path: String,
+    // Which selection path the user took. [S§6.3]
+    // One of: "quiz_informed", "exploration", "skip"
+    MethodologyPath string `json:"methodology_path" validate:"required"`
 
-    /// User acknowledged the multi-methodology model explanation.
-    /// Required to be true when secondary methodologies are selected. [S§6.3]
-    #[serde(default)]
-    pub explanation_acknowledged: bool,
+    // User acknowledged the multi-methodology model explanation.
+    // Required to be true when secondary methodologies are selected. [S§6.3]
+    ExplanationAcknowledged bool `json:"explanation_acknowledged"`
 }
 
-/// Quiz result import request. [S§6.3]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct ImportQuizRequest {
-    /// The share_id from a previously taken quiz. [S§5.1.3]
-    pub share_id: String,
+// ImportQuizRequest represents quiz result import request. [S§6.3]
+type ImportQuizRequest struct {
+    // The share_id from a previously taken quiz. [S§5.1.3]
+    ShareID string `json:"share_id" validate:"required"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-/// Wizard progress response. [S§6]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct WizardProgressResponse {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub status: String,                    // "in_progress", "completed", "skipped"
-    pub current_step: String,              // enum value as string
-    pub completed_steps: Vec<String>,      // list of completed step names
-    pub quiz_share_id: Option<String>,     // if quiz was imported
-    pub methodology_path: Option<String>,  // which path was taken
-    pub completed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+```go
+// WizardProgressResponse represents wizard progress response. [S§6]
+type WizardProgressResponse struct {
+    ID               uuid.UUID  `json:"id"`
+    FamilyID         uuid.UUID  `json:"family_id"`
+    Status           string     `json:"status"`             // "in_progress", "completed", "skipped"
+    CurrentStep      string     `json:"current_step"`       // enum value as string
+    CompletedSteps   []string   `json:"completed_steps"`    // list of completed step names
+    QuizShareID      *string    `json:"quiz_share_id"`      // if quiz was imported
+    MethodologyPath  *string    `json:"methodology_path"`   // which path was taken
+    CompletedAt      *time.Time `json:"completed_at"`
+    CreatedAt        time.Time  `json:"created_at"`
+    UpdatedAt        time.Time  `json:"updated_at"`
 }
 
-/// Roadmap response, grouped by age group. [S§6.4]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RoadmapResponse {
-    pub family_id: Uuid,
-    pub groups: Vec<RoadmapAgeGroup>,
+// RoadmapResponse represents roadmap response, grouped by age group. [S§6.4]
+type RoadmapResponse struct {
+    FamilyID uuid.UUID        `json:"family_id"`
+    Groups   []RoadmapAgeGroup `json:"groups"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RoadmapAgeGroup {
-    pub age_group: Option<String>,         // NULL means "all ages"
-    pub items: Vec<RoadmapItemResponse>,
+// RoadmapAgeGroup represents a group of roadmap items for a specific age range.
+type RoadmapAgeGroup struct {
+    AgeGroup *string              `json:"age_group"` // nil means "all ages"
+    Items    []RoadmapItemResponse `json:"items"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RoadmapItemResponse {
-    pub id: Uuid,
-    pub item_type: String,                 // "task", "resource", "feature_tour"
-    pub title: String,
-    pub description: Option<String>,
-    pub link_url: Option<String>,
-    pub age_group: Option<String>,
-    pub sort_order: i16,
-    pub is_completed: bool,
+// RoadmapItemResponse represents a single roadmap item.
+type RoadmapItemResponse struct {
+    ID          uuid.UUID `json:"id"`
+    ItemType    string    `json:"item_type"` // "task", "resource", "feature_tour"
+    Title       string    `json:"title"`
+    Description *string   `json:"description"`
+    LinkURL     *string   `json:"link_url"`
+    AgeGroup    *string   `json:"age_group"`
+    SortOrder   int16     `json:"sort_order"`
+    IsCompleted bool      `json:"is_completed"`
 }
 
-/// Starter recommendations response, grouped by age group. [S§6.5]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RecommendationsResponse {
-    pub family_id: Uuid,
-    pub groups: Vec<RecommendationAgeGroup>,
+// RecommendationsResponse represents starter recommendations response, grouped by age group. [S§6.5]
+type RecommendationsResponse struct {
+    FamilyID uuid.UUID                  `json:"family_id"`
+    Groups   []RecommendationAgeGroup   `json:"groups"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RecommendationAgeGroup {
-    pub age_group: Option<String>,
-    pub items: Vec<RecommendationItemResponse>,
+// RecommendationAgeGroup represents a group of recommendations for a specific age range.
+type RecommendationAgeGroup struct {
+    AgeGroup *string                      `json:"age_group"`
+    Items    []RecommendationItemResponse `json:"items"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RecommendationItemResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub link_url: Option<String>,
-    pub price_type: String,                // "free" or "paid"
-    pub age_group: Option<String>,
-    pub sort_order: i16,
+// RecommendationItemResponse represents a single starter recommendation.
+type RecommendationItemResponse struct {
+    ID          uuid.UUID `json:"id"`
+    Title       string    `json:"title"`
+    Description *string   `json:"description"`
+    LinkURL     *string   `json:"link_url"`
+    PriceType   string    `json:"price_type"` // "free" or "paid"
+    AgeGroup    *string   `json:"age_group"`
+    SortOrder   int16     `json:"sort_order"`
 }
 
-/// Community suggestions response. [S§6.6]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CommunitySuggestionsResponse {
-    pub family_id: Uuid,
-    pub suggestions: Vec<CommunitySuggestionResponse>,
+// CommunitySuggestionsResponse represents community suggestions response. [S§6.6]
+type CommunitySuggestionsResponse struct {
+    FamilyID    uuid.UUID                     `json:"family_id"`
+    Suggestions []CommunitySuggestionResponse `json:"suggestions"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CommunitySuggestionResponse {
-    pub id: Uuid,
-    pub suggestion_type: String,           // "methodology_group", "local_group", "mentor"
-    pub title: String,
-    pub description: Option<String>,
-    pub reference_id: Option<Uuid>,        // ID of the social group or user
-    pub sort_order: i16,
+// CommunitySuggestionResponse represents a single community suggestion.
+type CommunitySuggestionResponse struct {
+    ID             uuid.UUID  `json:"id"`
+    SuggestionType string     `json:"suggestion_type"` // "methodology_group", "local_group", "mentor"
+    Title          string     `json:"title"`
+    Description    *string    `json:"description"`
+    ReferenceID    *uuid.UUID `json:"reference_id"` // ID of the social group or user
+    SortOrder      int16      `json:"sort_order"`
 }
 
-/// Quiz import response. [S§6.3]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QuizImportResponse {
-    pub share_id: String,
-    pub methodology_recommendations: Vec<QuizMethodologyRecommendation>,
-    pub suggested_primary_id: Uuid,        // top recommendation
+// QuizImportResponse represents quiz import response. [S§6.3]
+type QuizImportResponse struct {
+    ShareID                     string                          `json:"share_id"`
+    MethodologyRecommendations []QuizMethodologyRecommendation `json:"methodology_recommendations"`
+    SuggestedPrimaryID         uuid.UUID                       `json:"suggested_primary_id"` // top recommendation
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QuizMethodologyRecommendation {
-    pub methodology_id: Uuid,
-    pub methodology_name: String,
-    pub score_percentage: i32,             // 0-100
-    pub explanation: String,
+// QuizMethodologyRecommendation represents a quiz-derived methodology recommendation.
+type QuizMethodologyRecommendation struct {
+    MethodologyID   uuid.UUID `json:"methodology_id"`
+    MethodologyName string    `json:"methodology_name"`
+    ScorePercentage int32     `json:"score_percentage"` // 0-100
+    Explanation     string    `json:"explanation"`
 }
 ```
 
 ### §8.3 Internal Types
 
-```rust
-/// Internal wizard progress model (maps to onb_wizard_progress row).
-#[derive(Debug, Clone)]
-pub struct WizardProgress {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub status: WizardStatus,
-    pub current_step: WizardStep,
-    pub completed_steps: Vec<WizardStep>,
-    pub quiz_share_id: Option<String>,
-    pub methodology_path: Option<MethodologyPath>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+```go
+// WizardProgress represents the internal wizard progress model (maps to onb_wizard_progress row).
+type WizardProgress struct {
+    ID              uuid.UUID
+    FamilyID        uuid.UUID
+    Status          WizardStatus
+    CurrentStep     WizardStep
+    CompletedSteps  []WizardStep
+    QuizShareID     *string
+    MethodologyPath *MethodologyPath
+    CompletedAt     *time.Time
+    CreatedAt       time.Time
+    UpdatedAt       time.Time
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum WizardStatus {
-    InProgress,
-    Completed,
-    Skipped,
+// WizardStatus represents the overall wizard status.
+type WizardStatus string
+
+const (
+    WizardStatusInProgress WizardStatus = "in_progress"
+    WizardStatusCompleted  WizardStatus = "completed"
+    WizardStatusSkipped    WizardStatus = "skipped"
+)
+
+// WizardStep represents a wizard step identifier.
+type WizardStep string
+
+const (
+    WizardStepFamilyProfile WizardStep = "family_profile"
+    WizardStepChildren      WizardStep = "children"
+    WizardStepMethodology   WizardStep = "methodology"
+    WizardStepRoadmapReview WizardStep = "roadmap_review"
+)
+
+// MethodologyPath represents the methodology selection path.
+type MethodologyPath string
+
+const (
+    MethodologyPathQuizInformed MethodologyPath = "quiz_informed"
+    MethodologyPathExploration  MethodologyPath = "exploration"
+    MethodologyPathSkip         MethodologyPath = "skip"
+)
+
+// RoadmapItem represents the internal roadmap item model (maps to onb_roadmap_items row).
+type RoadmapItem struct {
+    ID             uuid.UUID
+    FamilyID       uuid.UUID
+    WizardID       uuid.UUID
+    MethodologyID  uuid.UUID
+    ItemType       RoadmapItemType
+    Title          string
+    Description    *string
+    LinkURL        *string
+    AgeGroup       *string
+    SortOrder      int16
+    IsCompleted    bool
+    CreatedAt      time.Time
+    UpdatedAt      time.Time
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum WizardStep {
-    FamilyProfile,
-    Children,
-    Methodology,
-    RoadmapReview,
+// RoadmapItemType represents the type of roadmap item.
+type RoadmapItemType string
+
+const (
+    RoadmapItemTypeTask        RoadmapItemType = "task"
+    RoadmapItemTypeResource    RoadmapItemType = "resource"
+    RoadmapItemTypeFeatureTour RoadmapItemType = "feature_tour"
+)
+
+// CreateRoadmapItem is the input type for batch-creating roadmap items during materialization.
+type CreateRoadmapItem struct {
+    FamilyID      uuid.UUID
+    WizardID      uuid.UUID
+    MethodologyID uuid.UUID
+    ItemType      RoadmapItemType
+    Title         string
+    Description   *string
+    LinkURL       *string
+    AgeGroup      *string
+    SortOrder     int16
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum MethodologyPath {
-    QuizInformed,
-    Exploration,
-    Skip,
+// StarterRecommendation represents the internal recommendation model (maps to onb_starter_recommendations row).
+type StarterRecommendation struct {
+    ID            uuid.UUID
+    FamilyID      uuid.UUID
+    WizardID      uuid.UUID
+    MethodologyID uuid.UUID
+    Title         string
+    Description   *string
+    LinkURL       *string
+    PriceType     string
+    AgeGroup      *string
+    SortOrder     int16
+    CreatedAt     time.Time
 }
 
-/// Internal roadmap item model (maps to onb_roadmap_items row).
-#[derive(Debug, Clone)]
-pub struct RoadmapItem {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub wizard_id: Uuid,
-    pub methodology_id: Uuid,
-    pub item_type: RoadmapItemType,
-    pub title: String,
-    pub description: Option<String>,
-    pub link_url: Option<String>,
-    pub age_group: Option<String>,
-    pub sort_order: i16,
-    pub is_completed: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// CreateRecommendation is the input type for batch-creating recommendations during materialization.
+type CreateRecommendation struct {
+    FamilyID      uuid.UUID
+    WizardID      uuid.UUID
+    MethodologyID uuid.UUID
+    Title         string
+    Description   *string
+    LinkURL       *string
+    PriceType     string
+    AgeGroup      *string
+    SortOrder     int16
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum RoadmapItemType {
-    Task,
-    Resource,
-    FeatureTour,
+// CommunitySuggestion represents the internal community suggestion model (maps to onb_community_suggestions row).
+type CommunitySuggestion struct {
+    ID             uuid.UUID
+    FamilyID       uuid.UUID
+    WizardID       uuid.UUID
+    MethodologyID  uuid.UUID
+    SuggestionType string
+    Title          string
+    Description    *string
+    ReferenceID    *uuid.UUID
+    SortOrder      int16
+    CreatedAt      time.Time
 }
 
-/// Input type for batch-creating roadmap items during materialization.
-#[derive(Debug)]
-pub struct CreateRoadmapItem {
-    pub family_id: Uuid,
-    pub wizard_id: Uuid,
-    pub methodology_id: Uuid,
-    pub item_type: RoadmapItemType,
-    pub title: String,
-    pub description: Option<String>,
-    pub link_url: Option<String>,
-    pub age_group: Option<String>,
-    pub sort_order: i16,
+// CreateCommunitySuggestion is the input type for batch-creating community suggestions during materialization.
+type CreateCommunitySuggestion struct {
+    FamilyID       uuid.UUID
+    WizardID       uuid.UUID
+    MethodologyID  uuid.UUID
+    SuggestionType string
+    Title          string
+    Description    *string
+    ReferenceID    *uuid.UUID
+    SortOrder      int16
 }
 
-/// Internal recommendation model (maps to onb_starter_recommendations row).
-#[derive(Debug, Clone)]
-pub struct StarterRecommendation {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub wizard_id: Uuid,
-    pub methodology_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub link_url: Option<String>,
-    pub price_type: String,
-    pub age_group: Option<String>,
-    pub sort_order: i16,
-    pub created_at: DateTime<Utc>,
-}
+// AgeGroup represents an age bracket for roadmap/recommendation filtering. [S§6.4]
+type AgeGroup string
 
-/// Input type for batch-creating recommendations during materialization.
-#[derive(Debug)]
-pub struct CreateRecommendation {
-    pub family_id: Uuid,
-    pub wizard_id: Uuid,
-    pub methodology_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub link_url: Option<String>,
-    pub price_type: String,
-    pub age_group: Option<String>,
-    pub sort_order: i16,
-}
-
-/// Internal community suggestion model (maps to onb_community_suggestions row).
-#[derive(Debug, Clone)]
-pub struct CommunitySuggestion {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub wizard_id: Uuid,
-    pub methodology_id: Uuid,
-    pub suggestion_type: String,
-    pub title: String,
-    pub description: Option<String>,
-    pub reference_id: Option<Uuid>,
-    pub sort_order: i16,
-    pub created_at: DateTime<Utc>,
-}
-
-/// Input type for batch-creating community suggestions during materialization.
-#[derive(Debug)]
-pub struct CreateCommunitySuggestion {
-    pub family_id: Uuid,
-    pub wizard_id: Uuid,
-    pub methodology_id: Uuid,
-    pub suggestion_type: String,
-    pub title: String,
-    pub description: Option<String>,
-    pub reference_id: Option<Uuid>,
-    pub sort_order: i16,
-}
-
-/// Age bracket for roadmap/recommendation filtering. [S§6.4]
-#[derive(Debug, Clone, PartialEq)]
-pub enum AgeGroup {
-    EarlyChildhood,   // 3-5
-    EarlyElementary,  // 6-8
-    UpperElementary,  // 9-11
-    MiddleSchool,     // 12-14
-    HighSchool,       // 15-18
-}
+const (
+    AgeGroupEarlyChildhood  AgeGroup = "3-5"
+    AgeGroupEarlyElementary AgeGroup = "6-8"
+    AgeGroupUpperElementary AgeGroup = "9-11"
+    AgeGroupMiddleSchool    AgeGroup = "12-14"
+    AgeGroupHighSchool      AgeGroup = "15-18"
+)
 ```
 
 ---
@@ -937,21 +826,21 @@ The `methodology` step supports three paths per `[S§6.3]`:
 |------|----------|
 | `quiz_informed` | User imported quiz results. Primary methodology pre-populated from top quiz recommendation. User can adjust. |
 | `exploration` | User browsed methodology summaries via `GET /v1/methodologies` (served by `method::`, not `onboard::`) and selected directly. The frontend calls `method::` endpoints directly for methodology listing and detail — `onboard::` does not proxy these. |
-| `skip` | User selected "I don't know yet". The family's primary methodology is set to the default (via `method::get_default_methodology_id()`). A prompt to revisit is recorded for later notification. |
+| `skip` | User selected "I don't know yet". The family's primary methodology is set to the default (via `method.GetDefaultMethodologyID()`). A prompt to revisit is recorded for later notification. |
 
 ### §9.4 Quiz Import Flow
 
 1. User provides `share_id` from a previously taken quiz.
-2. `OnboardingService::import_quiz` calls `discover::DiscoveryService::get_quiz_result(share_id)`.
-3. If the result exists, the service calls `discover::DiscoveryService::claim_quiz_result(scope, share_id)` to link it to the family.
+2. `OnboardingService.ImportQuiz` calls `discover.DiscoveryService.GetQuizResult(shareID)`.
+3. If the result exists, the service calls `discover.DiscoveryService.ClaimQuizResult(scope, shareID)` to link it to the family.
 4. The quiz result's methodology recommendations are returned as `QuizImportResponse`.
-5. The top recommendation's methodology ID is provided as `suggested_primary_id`.
-6. The wizard records `quiz_share_id` on `onb_wizard_progress`.
+5. The top recommendation's methodology ID is provided as `SuggestedPrimaryID`.
+6. The wizard records `QuizShareID` on `onb_wizard_progress`.
 7. The user proceeds to methodology selection with pre-populated values (path = `quiz_informed`).
 
-**Dependency**: `claim_quiz_result` is Phase 2 in 03-discover.md. Until implemented:
-- `get_quiz_result` works (the quiz result data can be viewed)
-- `claim_quiz_result` will fail — the onboard service should handle this gracefully by
+**Dependency**: `ClaimQuizResult` is Phase 2 in 03-discover.md. Until implemented:
+- `GetQuizResult` works (the quiz result data can be viewed)
+- `ClaimQuizResult` will fail — the onboard service should handle this gracefully by
   logging a warning and proceeding without claiming (the quiz data is still usable for
   pre-populating methodology selection)
 
@@ -964,30 +853,24 @@ Wizard state is persisted to `onb_wizard_progress` after every step action. This
 
 ### §9.6 Age Group Resolution
 
-Student `birth_year` values from `iam::IamService::list_students` are converted to age
+Student `birth_year` values from `iam.IamService.ListStudents` are converted to age
 groups for roadmap and recommendation filtering:
 
-```rust
-impl AgeGroup {
-    pub fn from_birth_year(birth_year: i16, current_year: i16) -> Self {
-        let age = current_year - birth_year;
-        match age {
-            ..=5 => AgeGroup::EarlyChildhood,
-            6..=8 => AgeGroup::EarlyElementary,
-            9..=11 => AgeGroup::UpperElementary,
-            12..=14 => AgeGroup::MiddleSchool,
-            15.. => AgeGroup::HighSchool,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            AgeGroup::EarlyChildhood => "3-5",
-            AgeGroup::EarlyElementary => "6-8",
-            AgeGroup::UpperElementary => "9-11",
-            AgeGroup::MiddleSchool => "12-14",
-            AgeGroup::HighSchool => "15-18",
-        }
+```go
+// AgeGroupFromBirthYear converts a birth year to an AgeGroup.
+func AgeGroupFromBirthYear(birthYear int16, currentYear int16) AgeGroup {
+    age := currentYear - birthYear
+    switch {
+    case age <= 5:
+        return AgeGroupEarlyChildhood
+    case age <= 8:
+        return AgeGroupEarlyElementary
+    case age <= 11:
+        return AgeGroupUpperElementary
+    case age <= 14:
+        return AgeGroupMiddleSchool
+    default:
+        return AgeGroupHighSchool
     }
 }
 ```
@@ -1014,11 +897,11 @@ Both triggers call the same internal materialization logic.
 ### §10.2 Data Source
 
 All materialized data comes from `method_definitions` columns:
-- **Roadmap items** ← `method_definitions.onboarding_config` → `{ "roadmap_steps": [...] }`
-- **Starter recommendations** ← `method_definitions.onboarding_config` → `{ "starter_recs": [...] }`
-- **Community suggestions** ← `method_definitions.community_config` → `{ "default_group_ids": [...] }`
+- **Roadmap items** <- `method_definitions.onboarding_config` -> `{ "roadmap_steps": [...] }`
+- **Starter recommendations** <- `method_definitions.onboarding_config` -> `{ "starter_recs": [...] }`
+- **Community suggestions** <- `method_definitions.community_config` -> `{ "default_group_ids": [...] }`
 
-The service calls `method::MethodologyService::get_methodology(slug)` for each of the family's
+The service calls `method.MethodologyService.GetMethodology(slug)` for each of the family's
 selected methodologies (primary + secondary) and extracts these JSONB values.
 
 ### §10.3 Age-Adapted Filtering
@@ -1026,7 +909,7 @@ selected methodologies (primary + secondary) and extracts these JSONB values.
 Roadmap items and recommendations in the JSONB config include an `age_group` field. During
 materialization:
 
-1. The service fetches the family's students via `iam::IamService::list_students(scope)`.
+1. The service fetches the family's students via `iam.IamService.ListStudents(scope)`.
 2. Each student's `birth_year` is converted to an `AgeGroup` (§9.6).
 3. Config items are filtered to include only those matching the family's age groups, plus
    items with `age_group: null` (applicable to all ages).
@@ -1104,92 +987,43 @@ When methodology changes during onboarding (via `FamilyMethodologyChanged` event
 
 ## §11 Error Types
 
-```rust
-// src/onboard/models.rs (error section)
+```go
+// internal/onboard/errors.go
 
-#[derive(Debug, thiserror::Error)]
-pub enum OnboardError {
-    #[error("wizard not found for this family")]
-    WizardNotFound,
+import "errors"
 
-    #[error("wizard is not in progress")]
-    WizardNotInProgress,
-
-    #[error("wizard is already completed")]
-    WizardAlreadyCompleted,
-
-    #[error("required steps not completed: {0:?}")]
-    RequiredStepsIncomplete(Vec<String>),
-
-    #[error("invalid wizard step transition")]
-    InvalidStepTransition,
-
-    #[error("methodology explanation not acknowledged")]
-    ExplanationNotAcknowledged,
-
-    #[error("quiz result not found")]
-    QuizResultNotFound,
-
-    #[error("quiz result already claimed by another family")]
-    QuizAlreadyClaimed,
-
-    #[error("roadmap not yet materialized")]
-    RoadmapNotMaterialized,
-
-    #[error("recommendations not yet materialized")]
-    RecommendationsNotMaterialized,
-
-    #[error("community suggestions not yet materialized")]
-    CommunitySuggestionsNotMaterialized,
-
-    #[error("invalid methodology path: {0}")]
-    InvalidMethodologyPath(String),
-}
-
-impl From<OnboardError> for AppError {
-    fn from(err: OnboardError) -> Self {
-        match err {
-            OnboardError::WizardNotFound => AppError::NotFound,
-            OnboardError::WizardNotInProgress => AppError::Conflict("wizard is not in progress".into()),
-            OnboardError::WizardAlreadyCompleted => AppError::Conflict("wizard is already completed".into()),
-            OnboardError::RequiredStepsIncomplete(_) => {
-                AppError::Validation("required onboarding steps not completed".into())
-            }
-            OnboardError::InvalidStepTransition => {
-                AppError::Validation("invalid wizard step transition".into())
-            }
-            OnboardError::ExplanationNotAcknowledged => {
-                AppError::Validation("multi-methodology explanation must be acknowledged".into())
-            }
-            OnboardError::QuizResultNotFound => AppError::NotFound,
-            OnboardError::QuizAlreadyClaimed => AppError::Conflict("quiz result already claimed".into()),
-            OnboardError::RoadmapNotMaterialized => AppError::NotFound,
-            OnboardError::RecommendationsNotMaterialized => AppError::NotFound,
-            OnboardError::CommunitySuggestionsNotMaterialized => AppError::NotFound,
-            OnboardError::InvalidMethodologyPath(_) => {
-                AppError::Validation("invalid methodology selection path".into())
-            }
-        }
-    }
-}
+var (
+    ErrWizardNotFound                    = errors.New("wizard not found for this family")
+    ErrWizardNotInProgress               = errors.New("wizard is not in progress")
+    ErrWizardAlreadyCompleted            = errors.New("wizard is already completed")
+    ErrRequiredStepsIncomplete           = errors.New("required steps not completed")
+    ErrInvalidStepTransition             = errors.New("invalid wizard step transition")
+    ErrExplanationNotAcknowledged        = errors.New("methodology explanation not acknowledged")
+    ErrQuizResultNotFound                = errors.New("quiz result not found")
+    ErrQuizAlreadyClaimed                = errors.New("quiz result already claimed by another family")
+    ErrRoadmapNotMaterialized            = errors.New("roadmap not yet materialized")
+    ErrRecommendationsNotMaterialized    = errors.New("recommendations not yet materialized")
+    ErrCommunitySuggestionsNotMaterialized = errors.New("community suggestions not yet materialized")
+    ErrInvalidMethodologyPath            = errors.New("invalid methodology path")
+)
 ```
 
 ### §11.1 HTTP Status Mapping
 
-| OnboardError Variant | AppError Variant | HTTP Status |
-|---------------------|------------------|-------------|
-| `WizardNotFound` | `NotFound` | 404 |
-| `WizardNotInProgress` | `Conflict` | 409 |
-| `WizardAlreadyCompleted` | `Conflict` | 409 |
-| `RequiredStepsIncomplete` | `Validation` | 422 |
-| `InvalidStepTransition` | `Validation` | 422 |
-| `ExplanationNotAcknowledged` | `Validation` | 422 |
-| `QuizResultNotFound` | `NotFound` | 404 |
-| `QuizAlreadyClaimed` | `Conflict` | 409 |
-| `RoadmapNotMaterialized` | `NotFound` | 404 |
-| `RecommendationsNotMaterialized` | `NotFound` | 404 |
-| `CommunitySuggestionsNotMaterialized` | `NotFound` | 404 |
-| `InvalidMethodologyPath` | `Validation` | 422 |
+| Error | HTTP Status |
+|-------|-------------|
+| `ErrWizardNotFound` | 404 |
+| `ErrWizardNotInProgress` | 409 |
+| `ErrWizardAlreadyCompleted` | 409 |
+| `ErrRequiredStepsIncomplete` | 422 |
+| `ErrInvalidStepTransition` | 422 |
+| `ErrExplanationNotAcknowledged` | 422 |
+| `ErrQuizResultNotFound` | 404 |
+| `ErrQuizAlreadyClaimed` | 409 |
+| `ErrRoadmapNotMaterialized` | 404 |
+| `ErrRecommendationsNotMaterialized` | 404 |
+| `ErrCommunitySuggestionsNotMaterialized` | 404 |
+| `ErrInvalidMethodologyPath` | 422 |
 
 ---
 
@@ -1199,7 +1033,7 @@ impl From<OnboardError> for AppError {
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `OnboardingService` trait methods | None currently | `Arc<dyn OnboardingService>` via AppState |
+| `OnboardingService` interface methods | None currently | Interface value via DI |
 | `OnboardingCompleted` event | `notify::` | Domain event (send welcome email, dismiss onboarding prompts) |
 
 Onboarding is primarily a **consumer** of other domains' services. No other domain depends
@@ -1209,72 +1043,66 @@ on onboard::'s service for business logic.
 
 | Dependency | Source | Purpose |
 |-----------|--------|---------|
-| Family profile CRUD | `iam::IamService` | Update family display_name, state_code, location during wizard `[S§6.2]` |
-| Student CRUD | `iam::IamService` | Add/remove students during wizard `[S§6.2]` |
-| Student listing | `iam::IamService` | List students for age-group resolution `[S§6.4]` |
-| Methodology listing | `method::MethodologyService` | List methodologies for selection wizard `[S§6.3]` |
-| Methodology detail | `method::MethodologyService` | Get onboarding_config and community_config for materialization `[S§6.4]` |
-| Methodology validation + persistence | `method::MethodologyService` | Validate and set family methodology `[S§6.3]` |
-| Default methodology ID | `method::MethodologyService` | Set methodology when user picks "skip" path `[S§6.3]` |
-| Quiz result retrieval | `discover::DiscoveryService` | Get quiz results for methodology pre-population `[S§6.3]` |
-| Quiz result claiming | `discover::DiscoveryService` | Link quiz result to family account `[S§5.1.3]` (Phase 2 dependency) |
+| Family profile CRUD | `iam.IamService` | Update family display_name, state_code, location during wizard `[S§6.2]` |
+| Student CRUD | `iam.IamService` | Add/remove students during wizard `[S§6.2]` |
+| Student listing | `iam.IamService` | List students for age-group resolution `[S§6.4]` |
+| Methodology listing | `method.MethodologyService` | List methodologies for selection wizard `[S§6.3]` |
+| Methodology detail | `method.MethodologyService` | Get onboarding_config and community_config for materialization `[S§6.4]` |
+| Methodology validation + persistence | `method.MethodologyService` | Validate and set family methodology `[S§6.3]` |
+| Default methodology ID | `method.MethodologyService` | Set methodology when user picks "skip" path `[S§6.3]` |
+| Quiz result retrieval | `discover.DiscoveryService` | Get quiz results for methodology pre-population `[S§6.3]` |
+| Quiz result claiming | `discover.DiscoveryService` | Link quiz result to family account `[S§5.1.3]` (Phase 2 dependency) |
 
 ### §12.3 Events onboard:: Publishes
 
-Defined in `src/onboard/events.rs`. `[CODING §8.4]`
+Defined in `internal/onboard/events.go`. `[CODING §8.4]`
 
 | Event | Subscribers | Effect |
 |-------|------------|--------|
-| `OnboardingCompleted { family_id, skipped: bool }` | `notify::` | Send welcome email with roadmap summary (if not skipped) |
+| `OnboardingCompleted { FamilyID, Skipped bool }` | `notify::` | Send welcome email with roadmap summary (if not skipped) |
 
-```rust
-// src/onboard/events.rs
+```go
+// internal/onboard/events.go
 
-#[derive(Clone, Debug)]
-pub struct OnboardingCompleted {
-    pub family_id: FamilyId,
-    /// True if the user skipped the wizard rather than completing all steps.
-    pub skipped: bool,
+// OnboardingCompleted is published when a family completes or skips the onboarding wizard.
+type OnboardingCompleted struct {
+    FamilyID uuid.UUID
+    // Skipped is true if the user skipped the wizard rather than completing all steps.
+    Skipped bool
 }
-impl DomainEvent for OnboardingCompleted {}
 ```
 
 ### §12.4 Events onboard:: Subscribes To
 
 | Event | Source | Effect |
 |-------|--------|--------|
-| `FamilyCreated { family_id, parent_id }` | `iam::` | Create `onb_wizard_progress` row for the new family. Sets wizard to `in_progress` at step `family_profile`. `[ARCH §4.6]` |
-| `FamilyMethodologyChanged { family_id, ... }` | `method::` | If wizard is `in_progress`, re-materialize roadmap, recommendations, and community suggestions using the new methodology. `[S§6.4]` |
+| `FamilyCreated { FamilyID, ParentID }` | `iam::` | Create `onb_wizard_progress` row for the new family. Sets wizard to `in_progress` at step `family_profile`. `[ARCH §4.6]` |
+| `FamilyMethodologyChanged { FamilyID, ... }` | `method::` | If wizard is `in_progress`, re-materialize roadmap, recommendations, and community suggestions using the new methodology. `[S§6.4]` |
 
-```rust
-// src/onboard/event_handlers.rs
-use crate::iam::events::FamilyCreated;           // defined in src/iam/events.rs (01-iam §13.3)
-use crate::method::events::FamilyMethodologyChanged; // defined in src/method/events.rs (02-method §11.3)
+```go
+// internal/onboard/event_handlers.go
 
-pub struct FamilyCreatedHandler {
-    onboarding_service: Arc<dyn OnboardingService>,
+// FamilyCreatedHandler handles the FamilyCreated event from iam::.
+type FamilyCreatedHandler struct {
+    onboardingService OnboardingService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyCreated> for FamilyCreatedHandler {
-    async fn handle(&self, event: &FamilyCreated) -> Result<(), AppError> {
-        self.onboarding_service.initialize_wizard(event.family_id).await
-    }
+func (h *FamilyCreatedHandler) Handle(ctx context.Context, event *iam.FamilyCreated) error {
+    return h.onboardingService.InitializeWizard(ctx, event.FamilyID)
 }
 
-pub struct FamilyMethodologyChangedHandler {
-    onboarding_service: Arc<dyn OnboardingService>,
+// FamilyMethodologyChangedHandler handles the FamilyMethodologyChanged event from method::.
+type FamilyMethodologyChangedHandler struct {
+    onboardingService OnboardingService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyMethodologyChanged> for FamilyMethodologyChangedHandler {
-    async fn handle(&self, event: &FamilyMethodologyChanged) -> Result<(), AppError> {
-        self.onboarding_service.handle_methodology_changed(
-            event.family_id,
-            event.primary_methodology_id,
-            event.secondary_methodology_ids.clone(),
-        ).await
-    }
+func (h *FamilyMethodologyChangedHandler) Handle(ctx context.Context, event *method.FamilyMethodologyChanged) error {
+    return h.onboardingService.HandleMethodologyChanged(
+        ctx,
+        event.FamilyID,
+        event.PrimaryMethodologyID,
+        event.SecondaryMethodologyIDs,
+    )
 }
 ```
 
@@ -1294,19 +1122,19 @@ impl DomainEventHandler<FamilyMethodologyChanged> for FamilyMethodologyChangedHa
   `PATCH /v1/onboarding/methodology`, `POST /v1/onboarding/methodology/import-quiz`,
   `GET /v1/onboarding/roadmap`, `GET /v1/onboarding/recommendations`,
   `GET /v1/onboarding/community`, `POST /v1/onboarding/complete`, `POST /v1/onboarding/skip`
-- `OnboardingService` trait + `OnboardingServiceImpl`
-- 4 repository traits + PostgreSQL implementations
+- `OnboardingService` interface + `OnboardingServiceImpl`
+- 4 repository interfaces + GORM implementations
 - Wizard state machine (4 steps, navigation rules)
 - Materialization logic (roadmap, recommendations, community from methodology config)
 - Age-group resolution from student birth_year
-- `OnboardError` enum + HTTP mapping
+- `OnboardError` sentinel errors + HTTP mapping
 - Domain events: `OnboardingCompleted`
 - Event handlers: `FamilyCreatedHandler`, `FamilyMethodologyChangedHandler`
 - All Phase 1 models (request, response, internal)
 - OpenAPI spec + TypeScript type generation
 
 **Note**: `POST /v1/onboarding/methodology/import-quiz` will partially work in Phase 1
-(quiz viewing via `get_quiz_result`) but quiz claiming requires `discover::claim_quiz_result`
+(quiz viewing via `GetQuizResult`) but quiz claiming requires `discover.ClaimQuizResult`
 which is Phase 2 in 03-discover.md. The onboard handler will gracefully degrade (log warning,
 skip claiming, still return quiz data for pre-population).
 
@@ -1318,7 +1146,7 @@ skip claiming, still return quiz data for pre-population).
 - Live marketplace queries for recommendations (replace static config data)
 - Live social queries for nearby families and mentor suggestions `[S§6.6]`
 - Co-parent invite suggestion during wizard (once `iam::` co-parent flow is implemented)
-- Full quiz claiming flow (once `discover::claim_quiz_result` is implemented)
+- Full quiz claiming flow (once `discover.ClaimQuizResult` is implemented)
 
 ### Phase 3+ — Expansion
 
@@ -1341,32 +1169,32 @@ as acceptance criteria for code review and integration testing.
 1. `FamilyCreated` event creates an `onb_wizard_progress` row with status `in_progress` and `current_step = family_profile`
 2. `GET /v1/onboarding/progress` returns 200 with wizard state after family creation
 3. `GET /v1/onboarding/progress` returns 404 for a family with no wizard record
-4. Wizard steps proceed in order: `family_profile` → `children` → `methodology` → `roadmap_review`
+4. Wizard steps proceed in order: `family_profile` -> `children` -> `methodology` -> `roadmap_review`
 5. Completing a step adds it to `completed_steps` and advances `current_step`
 6. Optional steps (`children`, `roadmap_review`) can be skipped without error
 7. Required steps (`family_profile`, `methodology`) must be completed before `POST /v1/onboarding/complete` succeeds
 8. `POST /v1/onboarding/complete` returns 422 if required steps are missing
 9. `POST /v1/onboarding/complete` sets status to `completed` and publishes `OnboardingCompleted`
-10. `POST /v1/onboarding/skip` sets status to `skipped` and publishes `OnboardingCompleted { skipped: true }`
+10. `POST /v1/onboarding/skip` sets status to `skipped` and publishes `OnboardingCompleted { Skipped: true }`
 11. Wizard actions on a completed/skipped wizard return 409 Conflict
 
 ### Family Profile Step
 
-12. `PATCH /v1/onboarding/family-profile` delegates to `iam::IamService::update_family_profile`
+12. `PATCH /v1/onboarding/family-profile` delegates to `iam.IamService.UpdateFamilyProfile`
 13. `PATCH /v1/onboarding/family-profile` with empty `display_name` returns 422
 14. Completing the family profile step advances the wizard to the `children` step
 
 ### Children Step
 
-15. `POST /v1/onboarding/children` delegates to `iam::IamService::create_student`
-16. `DELETE /v1/onboarding/children/:id` delegates to `iam::IamService::delete_student`
-17. `POST /v1/onboarding/children` requires COPPA consent (`RequireCoppaConsent` extractor)
+15. `POST /v1/onboarding/children` delegates to `iam.IamService.CreateStudent`
+16. `DELETE /v1/onboarding/children/:id` delegates to `iam.IamService.DeleteStudent`
+17. `POST /v1/onboarding/children` requires COPPA consent (`RequireCoppaConsent` middleware)
 
 ### Methodology Step
 
-18. `PATCH /v1/onboarding/methodology` validates all methodology IDs via `method::MethodologyService`
+18. `PATCH /v1/onboarding/methodology` validates all methodology IDs via `method.MethodologyService`
 19. `PATCH /v1/onboarding/methodology` with secondary IDs but `explanation_acknowledged: false` returns 422
-20. `PATCH /v1/onboarding/methodology` with `methodology_path: "skip"` uses `method::get_default_methodology_id()`
+20. `PATCH /v1/onboarding/methodology` with `methodology_path: "skip"` uses `method.GetDefaultMethodologyID()`
 21. Completing the methodology step triggers materialization of roadmap, recommendations, and community suggestions
 22. `methodology_path` is recorded on `onb_wizard_progress`
 
@@ -1375,7 +1203,7 @@ as acceptance criteria for code review and integration testing.
 23. `POST /v1/onboarding/methodology/import-quiz` returns quiz result data with methodology recommendations
 24. `POST /v1/onboarding/methodology/import-quiz` with nonexistent `share_id` returns 404
 25. `POST /v1/onboarding/methodology/import-quiz` records `quiz_share_id` on wizard progress
-26. Quiz import gracefully degrades when `discover::claim_quiz_result` is not yet implemented
+26. Quiz import gracefully degrades when `discover.ClaimQuizResult` is not yet implemented
 
 ### Materialization
 
@@ -1389,7 +1217,7 @@ as acceptance criteria for code review and integration testing.
 
 32. All `onb_` queries use `FamilyScope` — cross-family access is impossible
 33. RLS policies on all `onb_` tables enforce family_id matching
-34. No code under `src/onboard/` branches on methodology name/slug
+34. No code under `internal/onboard/` branches on methodology name/slug
 35. All API error responses return generic messages, not SQL or internal details
 36. No PII appears in application logs
 
@@ -1406,41 +1234,41 @@ as acceptance criteria for code review and integration testing.
 - [ ] Create migration: `onb_starter_recommendations` table
 - [ ] Create migration: `onb_community_suggestions` table
 - [ ] Create migration: RLS policies for all `onb_` tables
-- [ ] Regenerate SeaORM entities from migrations
+- [ ] Define GORM models in `internal/onboard/models.go`
 
-#### Ports & Traits
-- [ ] Define `OnboardingService` trait in `src/onboard/ports.rs`
-- [ ] Define `WizardProgressRepository` trait in `src/onboard/ports.rs`
-- [ ] Define `RoadmapRepository` trait in `src/onboard/ports.rs`
-- [ ] Define `RecommendationRepository` trait in `src/onboard/ports.rs`
-- [ ] Define `CommunitySuggestionRepository` trait in `src/onboard/ports.rs`
+#### Ports & Interfaces
+- [ ] Define `OnboardingService` interface in `internal/onboard/ports.go`
+- [ ] Define `WizardProgressRepository` interface in `internal/onboard/ports.go`
+- [ ] Define `RoadmapRepository` interface in `internal/onboard/ports.go`
+- [ ] Define `RecommendationRepository` interface in `internal/onboard/ports.go`
+- [ ] Define `CommunitySuggestionRepository` interface in `internal/onboard/ports.go`
 
 #### Error Types
-- [ ] Define `OnboardError` enum
-- [ ] Implement `From<OnboardError> for AppError` conversion
+- [ ] Define `OnboardError` sentinel errors
+- [ ] Implement HTTP status mapping in error handler
 
 #### Repository Implementations
-- [ ] Implement `PgWizardProgressRepository`
-- [ ] Implement `PgRoadmapRepository`
-- [ ] Implement `PgRecommendationRepository`
-- [ ] Implement `PgCommunitySuggestionRepository`
+- [ ] Implement `GormWizardProgressRepository`
+- [ ] Implement `GormRoadmapRepository`
+- [ ] Implement `GormRecommendationRepository`
+- [ ] Implement `GormCommunitySuggestionRepository`
 
 #### Service Implementation
 - [ ] Implement `OnboardingServiceImpl` with all Phase 1 methods
 - [ ] Implement wizard state machine (step advancement, completion validation)
 - [ ] Implement materialization logic (roadmap, recommendations, community from methodology config)
 - [ ] Implement age-group resolution from student birth_year
-- [ ] Implement quiz import with graceful degradation for missing `claim_quiz_result`
-- [ ] Wire `OnboardingServiceImpl` in `app.rs` with `Arc<dyn OnboardingService>`
+- [ ] Implement quiz import with graceful degradation for missing `ClaimQuizResult`
+- [ ] Wire `OnboardingServiceImpl` in app setup with interface injection
 
 #### Event Handlers
-- [ ] Implement `FamilyCreatedHandler` → `initialize_wizard`
-- [ ] Implement `FamilyMethodologyChangedHandler` → `handle_methodology_changed`
-- [ ] Register event handlers in `app.rs` EventBus wiring
+- [ ] Implement `FamilyCreatedHandler` -> `InitializeWizard`
+- [ ] Implement `FamilyMethodologyChangedHandler` -> `HandleMethodologyChanged`
+- [ ] Register event handlers in app setup EventBus wiring
 
 #### Domain Events
-- [ ] Define `OnboardingCompleted` event in `src/onboard/events.rs`
-- [ ] Publish `OnboardingCompleted` from `complete_wizard` and `skip_wizard`
+- [ ] Define `OnboardingCompleted` event in `internal/onboard/events.go`
+- [ ] Publish `OnboardingCompleted` from `CompleteWizard` and `SkipWizard`
 
 #### API Endpoints
 - [ ] `GET    /v1/onboarding/progress` — wizard progress
@@ -1454,7 +1282,7 @@ as acceptance criteria for code review and integration testing.
 - [ ] `GET    /v1/onboarding/community` — get community suggestions
 - [ ] `POST   /v1/onboarding/complete` — complete wizard
 - [ ] `POST   /v1/onboarding/skip` — skip wizard
-- [ ] Register all endpoints in `authenticated_routes()` (all require auth)
+- [ ] Register all endpoints in authenticated route group (all require auth)
 
 #### Models
 - [ ] Define `UpdateFamilyProfileRequest` request type
@@ -1465,16 +1293,16 @@ as acceptance criteria for code review and integration testing.
 - [ ] Define all internal types (`WizardProgress`, `WizardStep`, `AgeGroup`, etc.)
 
 #### Code Generation
-- [ ] Regenerate OpenAPI spec (`cargo run --bin openapi-gen`)
+- [ ] Regenerate OpenAPI spec (`swag init`)
 - [ ] Regenerate TypeScript types (`cd frontend && npm run generate-types`)
 
 #### Testing
 - [ ] Unit tests for wizard state machine (step advancement, completion validation, skip)
-- [ ] Unit tests for age-group resolution (birth_year → AgeGroup for all 5 brackets)
-- [ ] Unit tests for materialization logic (JSONB config → structured items)
+- [ ] Unit tests for age-group resolution (birth_year -> AgeGroup for all 5 brackets)
+- [ ] Unit tests for materialization logic (JSONB config -> structured items)
 - [ ] Unit tests for age-adapted filtering (items filtered by family's student ages)
-- [ ] Integration test: wizard happy path (create family → complete all steps → complete wizard)
-- [ ] Integration test: wizard skip path (create family → skip wizard)
+- [ ] Integration test: wizard happy path (create family -> complete all steps -> complete wizard)
+- [ ] Integration test: wizard skip path (create family -> skip wizard)
 - [ ] Integration test: methodology selection triggers materialization
 - [ ] Integration test: required step validation on complete
 - [ ] Integration test: quiz import with valid share_id
@@ -1482,31 +1310,30 @@ as acceptance criteria for code review and integration testing.
 
 ### Phase 2
 
-- [ ] Implement `complete_roadmap_item` in service
+- [ ] Implement `CompleteRoadmapItem` in service
 - [ ] Add `PATCH /v1/onboarding/roadmap/:item_id/complete` endpoint
-- [ ] Implement `restart_wizard` in service
+- [ ] Implement `RestartWizard` in service
 - [ ] Add `POST /v1/onboarding/restart` endpoint
 - [ ] Integrate live marketplace queries for recommendations (replace static config data)
 - [ ] Integrate live social queries for nearby families and mentor suggestions
-- [ ] Full quiz claiming integration (once `discover::claim_quiz_result` is available)
+- [ ] Full quiz claiming integration (once `discover.ClaimQuizResult` is available)
 
 ---
 
 ## §16 Module Structure
 
 ```
-src/onboard/
-├── mod.rs              # Re-exports, domain-level doc comments
-├── handlers.rs         # Axum route handlers (all authenticated)
-├── service.rs          # OnboardingServiceImpl — wizard state machine,
+internal/onboard/
+├── handler.go          # Echo route handlers (all authenticated)
+├── service.go          # OnboardingServiceImpl — wizard state machine,
 │                       # materialization, cross-domain orchestration
-├── repository.rs       # PgWizardProgressRepository, PgRoadmapRepository,
-│                       # PgRecommendationRepository, PgCommunitySuggestionRepository
-├── models.rs           # Request/response types, OnboardError enum, internal types
-├── ports.rs            # OnboardingService trait, all repository traits
-├── events.rs           # OnboardingCompleted event definition
-├── event_handlers.rs   # FamilyCreatedHandler, FamilyMethodologyChangedHandler
-└── entities/           # SeaORM-generated entity files (do not hand-edit)
+├── repository.go       # GormWizardProgressRepository, GormRoadmapRepository,
+│                       # GormRecommendationRepository, GormCommunitySuggestionRepository
+├── models.go           # GORM models, request/response types, internal types
+├── ports.go            # OnboardingService interface, all repository interfaces
+├── errors.go           # OnboardError sentinel errors
+├── events.go           # OnboardingCompleted event definition
+└── event_handlers.go   # FamilyCreatedHandler, FamilyMethodologyChangedHandler
 ```
 
 **Note**: No `domain/` subdirectory (non-complex domain — workflow orchestration, no aggregate

@@ -11,11 +11,11 @@ signals), assessment record aggregation, standardized test score entry, portfoli
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/comply/` |
+| **Module path** | `internal/comply/` |
 | **DB prefix** | `comply_` `[ARCH §5.1]` |
 | **Complexity class** | Complex (has `domain/` subdirectory) — attendance thresholds, GPA calculation, state config rules, portfolio/transcript state machines `[ARCH §4.5]` |
 | **CQRS** | Yes — write: attendance mark, assessment record / read: attendance summary, threshold check `[ARCH §4.7]` |
-| **External adapter** | None — in-house PDF generation via `typst` crate; no external compliance vendor |
+| **External adapter** | None — in-house PDF generation via `jung-kurt/gofpdf`; no external compliance vendor |
 | **Key constraint** | All endpoints premium-only via `RequirePremium` (402 for free tier) `[S§15.2]`; every user-data query family-scoped via `FamilyScope` `[CODING §2.4, §2.5]`; state config cached from `discover::`, not duplicated |
 
 **What comply:: owns**: Family compliance configuration (state, school year, schedule), custom
@@ -38,7 +38,7 @@ storage and CDN delivery (owned by `media::`) `[09-media §5]`, search indexing 
 requirements lookup → `discover::DiscoveryService` (service call for `StateGuideRequirements`).
 Learning data for portfolio items → `learn::LearningService` (service call). Student/family
 identity resolution → `iam::IamService` (service call). PDF file storage → `media::MediaService`
-(upload + presigned URLs). Background job scheduling → sidekiq-rs `[ARCH §12]`.
+(upload + presigned URLs). Background job scheduling → asynq `[ARCH §12]`.
 
 ---
 
@@ -127,7 +127,7 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_comply_tables.rs (Phase 1)
+-- Migration: YYYYMMDD_000001_create_comply_tables.sql (goose, Phase 1)
 -- =============================================================================
 
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -215,7 +215,7 @@ CREATE INDEX idx_comply_custom_schedules_family
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000002_create_comply_attendance.rs (Phase 1)
+-- Migration: YYYYMMDD_000002_create_comply_attendance.sql (goose, Phase 1)
 -- =============================================================================
 
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -258,7 +258,7 @@ CREATE INDEX idx_comply_attendance_status
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000003_create_comply_assessment_records.rs (Phase 2)
+-- Migration: YYYYMMDD_000003_create_comply_assessment_records.sql (goose, Phase 2)
 -- =============================================================================
 
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -420,7 +420,7 @@ CREATE UNIQUE INDEX idx_comply_portfolio_items_unique
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000004_create_comply_transcripts.rs (Phase 3)
+-- Migration: YYYYMMDD_000004_create_comply_transcripts.sql (goose, Phase 3)
 -- =============================================================================
 
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -538,7 +538,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 **PUT /v1/compliance/config** — Create or update family compliance configuration.
 - **Auth**: `RequirePremium` + `FamilyScope`
 - **Body**: `UpsertFamilyConfigCommand`
-```rust
+```json
 {
     "state_code": "CA",
     "school_year_start": "2025-08-15",
@@ -553,7 +553,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **GET /v1/compliance/state-requirements** — List all state requirements (from cache).
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Response**: `200 OK` → `Vec<StateConfigSummaryResponse>`
+- **Response**: `200 OK` → `[]StateConfigSummaryResponse`
 
 **GET /v1/compliance/state-requirements/:state_code** — Get requirements for a specific state.
 - **Auth**: `RequirePremium` + `FamilyScope`
@@ -569,7 +569,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **GET /v1/compliance/schedules** — List family's custom schedules.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Response**: `200 OK` → `Vec<ScheduleResponse>`
+- **Response**: `200 OK` → `[]ScheduleResponse`
 
 **PATCH /v1/compliance/schedules/:id** — Update a custom schedule.
 - **Auth**: `RequirePremium` + `FamilyScope`
@@ -587,7 +587,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 **POST /v1/compliance/students/:student_id/attendance** — Record attendance for a day.
 - **Auth**: `RequirePremium` + `FamilyScope`
 - **Body**: `RecordAttendanceCommand`
-```rust
+```json
 {
     "attendance_date": "2025-10-15",
     "status": "present_full",
@@ -609,7 +609,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 - **Auth**: `RequirePremium` + `FamilyScope`
 - **Query**: `AttendanceSummaryParams { start_date, end_date }`
 - **Response**: `200 OK` → `AttendanceSummaryResponse`
-```rust
+```json
 {
     "total_days": 92,
     "present_full": 78,
@@ -637,8 +637,8 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **POST /v1/compliance/students/:student_id/attendance/bulk** — Bulk record attendance.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Body**: `BulkRecordAttendanceCommand { records: Vec<RecordAttendanceCommand> }`
-- **Response**: `201 Created` → `Vec<AttendanceResponse>`
+- **Body**: `BulkRecordAttendanceCommand { Records: []RecordAttendanceCommand }`
+- **Response**: `201 Created` → `[]AttendanceResponse`
 - **Limit**: Max 31 records per request (one month)
 - **Error codes**: `422` (exceeds limit, future dates, invalid statuses)
 
@@ -670,7 +670,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 **POST /v1/compliance/students/:student_id/tests** — Record a test score.
 - **Auth**: `RequirePremium` + `FamilyScope`
 - **Body**: `CreateTestScoreCommand`
-```rust
+```json
 {
     "test_name": "Iowa Assessments",
     "test_date": "2025-10-20",
@@ -707,7 +707,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 **POST /v1/compliance/students/:student_id/portfolios** — Create a portfolio.
 - **Auth**: `RequirePremium` + `FamilyScope`
 - **Body**: `CreatePortfolioCommand`
-```rust
+```json
 {
     "title": "Fall 2025 Portfolio",
     "description": "Overview of fall semester work",
@@ -722,7 +722,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **GET /v1/compliance/students/:student_id/portfolios** — List portfolios.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Response**: `200 OK` → `Vec<PortfolioSummaryResponse>`
+- **Response**: `200 OK` → `[]PortfolioSummaryResponse`
 
 **GET /v1/compliance/students/:student_id/portfolios/:id** — Get portfolio details.
 - **Auth**: `RequirePremium` + `FamilyScope`
@@ -731,8 +731,8 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **POST /v1/compliance/students/:student_id/portfolios/:id/items** — Add items to portfolio.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Body**: `AddPortfolioItemsCommand { items: Vec<PortfolioItemInput> }`
-```rust
+- **Body**: `AddPortfolioItemsCommand { Items: []PortfolioItemInput }`
+```json
 {
     "items": [
         { "source_type": "activity", "source_id": "uuid" },
@@ -740,7 +740,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
     ]
 }
 ```
-- **Response**: `200 OK` → `Vec<PortfolioItemResponse>`
+- **Response**: `200 OK` → `[]PortfolioItemResponse`
 - **Side effects**: Fetches display data from `learn::LearningService` and caches it.
 - **Error codes**: `404` (portfolio not found), `409` (portfolio not in `configuring` status),
   `422` (source item not found in learn::)
@@ -762,7 +762,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 **GET /v1/compliance/dashboard** — Compliance dashboard overview.
 - **Auth**: `RequirePremium` + `FamilyScope`
 - **Response**: `200 OK` → `ComplianceDashboardResponse`
-```rust
+```json
 {
     "family_config": { /* FamilyConfigResponse or null */ },
     "students": [
@@ -790,7 +790,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **GET /v1/compliance/students/:student_id/transcripts** — List transcripts.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Response**: `200 OK` → `Vec<TranscriptSummaryResponse>`
+- **Response**: `200 OK` → `[]TranscriptSummaryResponse`
 
 **GET /v1/compliance/students/:student_id/transcripts/:id** — Get transcript details.
 - **Auth**: `RequirePremium` + `FamilyScope`
@@ -835,7 +835,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 - **Auth**: `RequirePremium` + `FamilyScope`
 - **Query**: `GpaParams { scale?, grade_levels? }`
 - **Response**: `200 OK` → `GpaResponse`
-```rust
+```json
 {
     "unweighted_gpa": 3.65,
     "weighted_gpa": 3.85,
@@ -850,12 +850,12 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **GET /v1/compliance/students/:student_id/gpa/what-if** — GPA what-if calculator.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Query**: `GpaWhatIfParams { additional_courses: Vec<WhatIfCourse> }`
+- **Query**: `GpaWhatIfParams { AdditionalCourses: []WhatIfCourse }`
 - **Response**: `200 OK` → `GpaResponse` (projected GPA with hypothetical courses)
 
 **GET /v1/compliance/students/:student_id/gpa/history** — GPA history by term.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Response**: `200 OK` → `Vec<GpaTermResponse>`
+- **Response**: `200 OK` → `[]GpaTermResponse`
 
 ---
 
@@ -864,400 +864,195 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 The `ComplianceService` trait defines all use cases. CQRS separation: command methods (writes
 with side effects) are separated from query methods (reads). `[ARCH §4.7, CODING §8.2]`
 
-```rust
-// src/comply/ports.rs
+```go
+// internal/comply/ports.go
 
-use crate::shared::types::{FamilyId, FamilyScope, StudentId};
-use crate::shared::error::AppError;
+import (
+    "context"
 
-#[async_trait]
-pub trait ComplianceService: Send + Sync {
+    "github.com/google/uuid"
+    "homegrown-academy/internal/shared"
+)
+
+// ComplianceService defines all compliance use cases.
+// CQRS separation: command methods (writes) vs query methods (reads).
+type ComplianceService interface {
 
     // ─── Command side (writes, side effects) ────────────────────────────
 
-    /// Create or update family compliance configuration.
-    async fn upsert_family_config(
-        &self,
-        cmd: UpsertFamilyConfigCommand,
-        scope: FamilyScope,
-    ) -> Result<FamilyConfigResponse, AppError>;
+    // UpsertFamilyConfig creates or updates family compliance configuration.
+    UpsertFamilyConfig(ctx context.Context, cmd UpsertFamilyConfigCommand, scope shared.FamilyScope) (*FamilyConfigResponse, error)
 
-    /// Create a custom schedule.
-    async fn create_schedule(
-        &self,
-        cmd: CreateScheduleCommand,
-        scope: FamilyScope,
-    ) -> Result<ScheduleResponse, AppError>;
+    // CreateSchedule creates a custom schedule.
+    CreateSchedule(ctx context.Context, cmd CreateScheduleCommand, scope shared.FamilyScope) (*ScheduleResponse, error)
 
-    /// Update a custom schedule.
-    async fn update_schedule(
-        &self,
-        schedule_id: Uuid,
-        cmd: UpdateScheduleCommand,
-        scope: FamilyScope,
-    ) -> Result<ScheduleResponse, AppError>;
+    // UpdateSchedule updates a custom schedule.
+    UpdateSchedule(ctx context.Context, scheduleID uuid.UUID, cmd UpdateScheduleCommand, scope shared.FamilyScope) (*ScheduleResponse, error)
 
-    /// Delete a custom schedule.
-    async fn delete_schedule(
-        &self,
-        schedule_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // DeleteSchedule deletes a custom schedule.
+    DeleteSchedule(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) error
 
-    /// Record daily attendance for a student (manual entry).
-    async fn record_attendance(
-        &self,
-        student_id: StudentId,
-        cmd: RecordAttendanceCommand,
-        scope: FamilyScope,
-    ) -> Result<AttendanceResponse, AppError>;
+    // RecordAttendance records daily attendance for a student (manual entry).
+    RecordAttendance(ctx context.Context, studentID uuid.UUID, cmd RecordAttendanceCommand, scope shared.FamilyScope) (*AttendanceResponse, error)
 
-    /// Bulk record attendance for a student.
-    async fn bulk_record_attendance(
-        &self,
-        student_id: StudentId,
-        cmd: BulkRecordAttendanceCommand,
-        scope: FamilyScope,
-    ) -> Result<Vec<AttendanceResponse>, AppError>;
+    // BulkRecordAttendance bulk records attendance for a student.
+    BulkRecordAttendance(ctx context.Context, studentID uuid.UUID, cmd BulkRecordAttendanceCommand, scope shared.FamilyScope) ([]AttendanceResponse, error)
 
-    /// Update an attendance record.
-    async fn update_attendance(
-        &self,
-        student_id: StudentId,
-        attendance_id: Uuid,
-        cmd: UpdateAttendanceCommand,
-        scope: FamilyScope,
-    ) -> Result<AttendanceResponse, AppError>;
+    // UpdateAttendance updates an attendance record.
+    UpdateAttendance(ctx context.Context, studentID uuid.UUID, attendanceID uuid.UUID, cmd UpdateAttendanceCommand, scope shared.FamilyScope) (*AttendanceResponse, error)
 
-    /// Delete an attendance record.
-    async fn delete_attendance(
-        &self,
-        student_id: StudentId,
-        attendance_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // DeleteAttendance deletes an attendance record.
+    DeleteAttendance(ctx context.Context, studentID uuid.UUID, attendanceID uuid.UUID, scope shared.FamilyScope) error
 
-    /// Create an assessment record.
-    async fn create_assessment(
-        &self,
-        student_id: StudentId,
-        cmd: CreateAssessmentCommand,
-        scope: FamilyScope,
-    ) -> Result<AssessmentResponse, AppError>;
+    // CreateAssessment creates an assessment record.
+    CreateAssessment(ctx context.Context, studentID uuid.UUID, cmd CreateAssessmentCommand, scope shared.FamilyScope) (*AssessmentResponse, error)
 
-    /// Update an assessment record.
-    async fn update_assessment(
-        &self,
-        student_id: StudentId,
-        assessment_id: Uuid,
-        cmd: UpdateAssessmentCommand,
-        scope: FamilyScope,
-    ) -> Result<AssessmentResponse, AppError>;
+    // UpdateAssessment updates an assessment record.
+    UpdateAssessment(ctx context.Context, studentID uuid.UUID, assessmentID uuid.UUID, cmd UpdateAssessmentCommand, scope shared.FamilyScope) (*AssessmentResponse, error)
 
-    /// Delete an assessment record.
-    async fn delete_assessment(
-        &self,
-        student_id: StudentId,
-        assessment_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // DeleteAssessment deletes an assessment record.
+    DeleteAssessment(ctx context.Context, studentID uuid.UUID, assessmentID uuid.UUID, scope shared.FamilyScope) error
 
-    /// Record a standardized test score.
-    async fn create_test_score(
-        &self,
-        student_id: StudentId,
-        cmd: CreateTestScoreCommand,
-        scope: FamilyScope,
-    ) -> Result<TestScoreResponse, AppError>;
+    // CreateTestScore records a standardized test score.
+    CreateTestScore(ctx context.Context, studentID uuid.UUID, cmd CreateTestScoreCommand, scope shared.FamilyScope) (*TestScoreResponse, error)
 
-    /// Update a test score.
-    async fn update_test_score(
-        &self,
-        student_id: StudentId,
-        test_id: Uuid,
-        cmd: UpdateTestScoreCommand,
-        scope: FamilyScope,
-    ) -> Result<TestScoreResponse, AppError>;
+    // UpdateTestScore updates a test score.
+    UpdateTestScore(ctx context.Context, studentID uuid.UUID, testID uuid.UUID, cmd UpdateTestScoreCommand, scope shared.FamilyScope) (*TestScoreResponse, error)
 
-    /// Delete a test score.
-    async fn delete_test_score(
-        &self,
-        student_id: StudentId,
-        test_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // DeleteTestScore deletes a test score.
+    DeleteTestScore(ctx context.Context, studentID uuid.UUID, testID uuid.UUID, scope shared.FamilyScope) error
 
-    /// Create a portfolio.
-    async fn create_portfolio(
-        &self,
-        student_id: StudentId,
-        cmd: CreatePortfolioCommand,
-        scope: FamilyScope,
-    ) -> Result<PortfolioResponse, AppError>;
+    // CreatePortfolio creates a portfolio.
+    CreatePortfolio(ctx context.Context, studentID uuid.UUID, cmd CreatePortfolioCommand, scope shared.FamilyScope) (*PortfolioResponse, error)
 
-    /// Add items to a portfolio (caches display data from learn::).
-    async fn add_portfolio_items(
-        &self,
-        student_id: StudentId,
-        portfolio_id: Uuid,
-        cmd: AddPortfolioItemsCommand,
-        scope: FamilyScope,
-    ) -> Result<Vec<PortfolioItemResponse>, AppError>;
+    // AddPortfolioItems adds items to a portfolio (caches display data from learn::).
+    AddPortfolioItems(ctx context.Context, studentID uuid.UUID, portfolioID uuid.UUID, cmd AddPortfolioItemsCommand, scope shared.FamilyScope) ([]PortfolioItemResponse, error)
 
-    /// Trigger portfolio PDF generation (async — enqueues job).
-    async fn generate_portfolio(
-        &self,
-        student_id: StudentId,
-        portfolio_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<PortfolioResponse, AppError>;
+    // GeneratePortfolio triggers portfolio PDF generation (async — enqueues job).
+    GeneratePortfolio(ctx context.Context, studentID uuid.UUID, portfolioID uuid.UUID, scope shared.FamilyScope) (*PortfolioResponse, error)
 
     // Phase 3: Transcript commands
 
-    /// Create a transcript. (Phase 3)
-    async fn create_transcript(
-        &self,
-        student_id: StudentId,
-        cmd: CreateTranscriptCommand,
-        scope: FamilyScope,
-    ) -> Result<TranscriptResponse, AppError>;
+    // CreateTranscript creates a transcript. (Phase 3)
+    CreateTranscript(ctx context.Context, studentID uuid.UUID, cmd CreateTranscriptCommand, scope shared.FamilyScope) (*TranscriptResponse, error)
 
-    /// Trigger transcript PDF generation (async — enqueues job). (Phase 3)
-    async fn generate_transcript(
-        &self,
-        student_id: StudentId,
-        transcript_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<TranscriptResponse, AppError>;
+    // GenerateTranscript triggers transcript PDF generation (async — enqueues job). (Phase 3)
+    GenerateTranscript(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) (*TranscriptResponse, error)
 
-    /// Delete a transcript. (Phase 3)
-    async fn delete_transcript(
-        &self,
-        student_id: StudentId,
-        transcript_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // DeleteTranscript deletes a transcript. (Phase 3)
+    DeleteTranscript(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) error
 
-    /// Create a course for transcript. (Phase 3)
-    async fn create_course(
-        &self,
-        student_id: StudentId,
-        cmd: CreateCourseCommand,
-        scope: FamilyScope,
-    ) -> Result<CourseResponse, AppError>;
+    // CreateCourse creates a course for transcript. (Phase 3)
+    CreateCourse(ctx context.Context, studentID uuid.UUID, cmd CreateCourseCommand, scope shared.FamilyScope) (*CourseResponse, error)
 
-    /// Update a course. (Phase 3)
-    async fn update_course(
-        &self,
-        student_id: StudentId,
-        course_id: Uuid,
-        cmd: UpdateCourseCommand,
-        scope: FamilyScope,
-    ) -> Result<CourseResponse, AppError>;
+    // UpdateCourse updates a course. (Phase 3)
+    UpdateCourse(ctx context.Context, studentID uuid.UUID, courseID uuid.UUID, cmd UpdateCourseCommand, scope shared.FamilyScope) (*CourseResponse, error)
 
-    /// Delete a course. (Phase 3)
-    async fn delete_course(
-        &self,
-        student_id: StudentId,
-        course_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // DeleteCourse deletes a course. (Phase 3)
+    DeleteCourse(ctx context.Context, studentID uuid.UUID, courseID uuid.UUID, scope shared.FamilyScope) error
 
     // ─── Query side (reads, no side effects) ────────────────────────────
 
-    /// Get family compliance configuration.
-    async fn get_family_config(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Option<FamilyConfigResponse>, AppError>;
+    // GetFamilyConfig gets family compliance configuration.
+    GetFamilyConfig(ctx context.Context, scope shared.FamilyScope) (*FamilyConfigResponse, error)
 
-    /// List all state requirements (from cache).
-    async fn list_state_configs(
-        &self,
-    ) -> Result<Vec<StateConfigSummaryResponse>, AppError>;
+    // ListStateConfigs lists all state requirements (from cache).
+    ListStateConfigs(ctx context.Context) ([]StateConfigSummaryResponse, error)
 
-    /// Get requirements for a specific state.
-    async fn get_state_config(
-        &self,
-        state_code: &str,
-    ) -> Result<StateConfigResponse, AppError>;
+    // GetStateConfig gets requirements for a specific state.
+    GetStateConfig(ctx context.Context, stateCode string) (*StateConfigResponse, error)
 
-    /// List family's custom schedules.
-    async fn list_schedules(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Vec<ScheduleResponse>, AppError>;
+    // ListSchedules lists family's custom schedules.
+    ListSchedules(ctx context.Context, scope shared.FamilyScope) ([]ScheduleResponse, error)
 
-    /// List attendance records for a student.
-    async fn list_attendance(
-        &self,
-        student_id: StudentId,
-        params: AttendanceListParams,
-        scope: FamilyScope,
-    ) -> Result<AttendanceListResponse, AppError>;
+    // ListAttendance lists attendance records for a student.
+    ListAttendance(ctx context.Context, studentID uuid.UUID, params AttendanceListParams, scope shared.FamilyScope) (*AttendanceListResponse, error)
 
-    /// Get attendance summary for a student within a date range.
-    async fn get_attendance_summary(
-        &self,
-        student_id: StudentId,
-        params: AttendanceSummaryParams,
-        scope: FamilyScope,
-    ) -> Result<AttendanceSummaryResponse, AppError>;
+    // GetAttendanceSummary gets attendance summary for a student within a date range.
+    GetAttendanceSummary(ctx context.Context, studentID uuid.UUID, params AttendanceSummaryParams, scope shared.FamilyScope) (*AttendanceSummaryResponse, error)
 
-    /// List assessment records for a student.
-    async fn list_assessments(
-        &self,
-        student_id: StudentId,
-        params: AssessmentListParams,
-        scope: FamilyScope,
-    ) -> Result<AssessmentListResponse, AppError>;
+    // ListAssessments lists assessment records for a student.
+    ListAssessments(ctx context.Context, studentID uuid.UUID, params AssessmentListParams, scope shared.FamilyScope) (*AssessmentListResponse, error)
 
-    /// List standardized test scores for a student.
-    async fn list_test_scores(
-        &self,
-        student_id: StudentId,
-        params: TestListParams,
-        scope: FamilyScope,
-    ) -> Result<TestListResponse, AppError>;
+    // ListTestScores lists standardized test scores for a student.
+    ListTestScores(ctx context.Context, studentID uuid.UUID, params TestListParams, scope shared.FamilyScope) (*TestListResponse, error)
 
-    /// Get portfolio details (includes items).
-    async fn get_portfolio(
-        &self,
-        student_id: StudentId,
-        portfolio_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<PortfolioResponse, AppError>;
+    // GetPortfolio gets portfolio details (includes items).
+    GetPortfolio(ctx context.Context, studentID uuid.UUID, portfolioID uuid.UUID, scope shared.FamilyScope) (*PortfolioResponse, error)
 
-    /// List portfolios for a student.
-    async fn list_portfolios(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-    ) -> Result<Vec<PortfolioSummaryResponse>, AppError>;
+    // ListPortfolios lists portfolios for a student.
+    ListPortfolios(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]PortfolioSummaryResponse, error)
 
-    /// Get presigned download URL for a portfolio PDF.
-    async fn get_portfolio_download_url(
-        &self,
-        student_id: StudentId,
-        portfolio_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<String, AppError>;
+    // GetPortfolioDownloadURL gets presigned download URL for a portfolio PDF.
+    GetPortfolioDownloadURL(ctx context.Context, studentID uuid.UUID, portfolioID uuid.UUID, scope shared.FamilyScope) (string, error)
 
-    /// Get compliance dashboard overview.
-    async fn get_dashboard(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<ComplianceDashboardResponse, AppError>;
+    // GetDashboard gets compliance dashboard overview.
+    GetDashboard(ctx context.Context, scope shared.FamilyScope) (*ComplianceDashboardResponse, error)
 
     // Phase 3: Transcript queries
 
-    /// Get transcript details (includes courses, GPA). (Phase 3)
-    async fn get_transcript(
-        &self,
-        student_id: StudentId,
-        transcript_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<TranscriptResponse, AppError>;
+    // GetTranscript gets transcript details (includes courses, GPA). (Phase 3)
+    GetTranscript(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) (*TranscriptResponse, error)
 
-    /// List transcripts for a student. (Phase 3)
-    async fn list_transcripts(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-    ) -> Result<Vec<TranscriptSummaryResponse>, AppError>;
+    // ListTranscripts lists transcripts for a student. (Phase 3)
+    ListTranscripts(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]TranscriptSummaryResponse, error)
 
-    /// Get presigned download URL for a transcript PDF. (Phase 3)
-    async fn get_transcript_download_url(
-        &self,
-        student_id: StudentId,
-        transcript_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<String, AppError>;
+    // GetTranscriptDownloadURL gets presigned download URL for a transcript PDF. (Phase 3)
+    GetTranscriptDownloadURL(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) (string, error)
 
-    /// List courses for a student. (Phase 3)
-    async fn list_courses(
-        &self,
-        student_id: StudentId,
-        params: CourseListParams,
-        scope: FamilyScope,
-    ) -> Result<CourseListResponse, AppError>;
+    // ListCourses lists courses for a student. (Phase 3)
+    ListCourses(ctx context.Context, studentID uuid.UUID, params CourseListParams, scope shared.FamilyScope) (*CourseListResponse, error)
 
-    /// Calculate current GPA for a student. (Phase 3)
-    async fn calculate_gpa(
-        &self,
-        student_id: StudentId,
-        params: GpaParams,
-        scope: FamilyScope,
-    ) -> Result<GpaResponse, AppError>;
+    // CalculateGPA calculates current GPA for a student. (Phase 3)
+    CalculateGPA(ctx context.Context, studentID uuid.UUID, params GpaParams, scope shared.FamilyScope) (*GpaResponse, error)
 
-    /// Calculate what-if GPA with hypothetical courses. (Phase 3)
-    async fn calculate_gpa_what_if(
-        &self,
-        student_id: StudentId,
-        params: GpaWhatIfParams,
-        scope: FamilyScope,
-    ) -> Result<GpaResponse, AppError>;
+    // CalculateGPAWhatIf calculates what-if GPA with hypothetical courses. (Phase 3)
+    CalculateGPAWhatIf(ctx context.Context, studentID uuid.UUID, params GpaWhatIfParams, scope shared.FamilyScope) (*GpaResponse, error)
 
-    /// GPA history by term. (Phase 3)
-    async fn get_gpa_history(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-    ) -> Result<Vec<GpaTermResponse>, AppError>;
+    // GetGPAHistory returns GPA history by term. (Phase 3)
+    GetGPAHistory(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]GpaTermResponse, error)
 
     // ─── Event handlers ─────────────────────────────────────────────────
 
-    /// Handle ActivityLogged event: auto-record attendance. (Phase 1)
-    /// Consumed from learn::ActivityLogged. [06-learn §18.1]
-    async fn handle_activity_logged(
-        &self,
-        event: &ActivityLogged,
-    ) -> Result<(), AppError>;
+    // HandleActivityLogged handles ActivityLogged event: auto-record attendance. (Phase 1)
+    // Consumed from learn::ActivityLogged. [06-learn §18.1]
+    HandleActivityLogged(ctx context.Context, event *ActivityLogged) error
 
-    /// Handle StudentDeleted event: cascade delete compliance data.
-    /// Consumed from iam::StudentDeleted. [01-iam §13.3]
-    async fn handle_student_deleted(
-        &self,
-        event: &StudentDeleted,
-    ) -> Result<(), AppError>;
+    // HandleStudentDeleted handles StudentDeleted event: cascade delete compliance data.
+    // Consumed from iam::StudentDeleted. [01-iam §13.3]
+    HandleStudentDeleted(ctx context.Context, event *StudentDeleted) error
 
-    /// Handle FamilyDeletionScheduled event: cascade delete all comply:: data.
-    /// Consumed from iam::FamilyDeletionScheduled. [01-iam §13.3]
-    async fn handle_family_deletion_scheduled(
-        &self,
-        event: &FamilyDeletionScheduled,
-    ) -> Result<(), AppError>;
+    // HandleFamilyDeletionScheduled handles FamilyDeletionScheduled event: cascade delete all comply:: data.
+    // Consumed from iam::FamilyDeletionScheduled. [01-iam §13.3]
+    HandleFamilyDeletionScheduled(ctx context.Context, event *FamilyDeletionScheduled) error
 
-    /// Handle SubscriptionCancelled event: mark premium features as read-only.
-    /// Consumed from billing::SubscriptionCancelled. [10-billing §16.3]
-    async fn handle_subscription_cancelled(
-        &self,
-        event: &SubscriptionCancelled,
-    ) -> Result<(), AppError>;
+    // HandleSubscriptionCancelled handles SubscriptionCancelled event: mark premium features as read-only.
+    // Consumed from billing::SubscriptionCancelled. [10-billing §16.3]
+    HandleSubscriptionCancelled(ctx context.Context, event *SubscriptionCancelled) error
 }
 ```
 
 ### `ComplianceServiceImpl`
 
-```rust
-// src/comply/service.rs
+```go
+// internal/comply/service.go
 
-pub struct ComplianceServiceImpl {
-    family_config_repo: Arc<dyn FamilyConfigRepository>,
-    schedule_repo: Arc<dyn ScheduleRepository>,
-    attendance_repo: Arc<dyn AttendanceRepository>,
-    assessment_repo: Arc<dyn AssessmentRepository>,
-    test_repo: Arc<dyn TestScoreRepository>,
-    portfolio_repo: Arc<dyn PortfolioRepository>,
-    portfolio_item_repo: Arc<dyn PortfolioItemRepository>,
-    state_config_repo: Arc<dyn StateConfigRepository>,
-    transcript_repo: Arc<dyn TranscriptRepository>,     // Phase 3
-    course_repo: Arc<dyn CourseRepository>,              // Phase 3
-    discovery_service: Arc<dyn DiscoveryService>,        // state requirements
-    learning_service: Arc<dyn LearningService>,          // portfolio data
-    iam_service: Arc<dyn IamService>,                    // student/family data
-    media_service: Arc<dyn MediaService>,                // PDF storage
-    events: Arc<EventBus>,
+type ComplianceServiceImpl struct {
+    familyConfigRepo FamilyConfigRepository
+    scheduleRepo     ScheduleRepository
+    attendanceRepo   AttendanceRepository
+    assessmentRepo   AssessmentRepository
+    testRepo         TestScoreRepository
+    portfolioRepo    PortfolioRepository
+    portfolioItemRepo PortfolioItemRepository
+    stateConfigRepo  StateConfigRepository
+    transcriptRepo   TranscriptRepository     // Phase 3
+    courseRepo        CourseRepository          // Phase 3
+    discoveryService DiscoveryService          // state requirements
+    learningService  LearningService           // portfolio data
+    iamService       IamService                // student/family data
+    mediaService     MediaService              // PDF storage
+    events           *EventBus
 }
 ```
 
@@ -1265,340 +1060,117 @@ pub struct ComplianceServiceImpl {
 
 ## §6 Repository Interfaces
 
-All repository traits defined in `src/comply/ports.rs`. `StateConfigRepository` is NOT
+All repository interfaces defined in `internal/comply/ports.go`. `StateConfigRepository` is NOT
 family-scoped — it is platform-authored reference data. All other repositories are
 family-scoped via `FamilyScope`. `[CODING §8.2]`
 
-```rust
-// src/comply/ports.rs (continued)
+```go
+// internal/comply/ports.go (continued)
+
+import (
+    "context"
+    "time"
+
+    "github.com/google/uuid"
+    "homegrown-academy/internal/shared"
+)
 
 // ─── StateConfigRepository ──────────────────────────────────────────────
 // NOT family-scoped — platform-authored reference data (51 rows).
-#[async_trait]
-pub trait StateConfigRepository: Send + Sync {
-    /// List all state configs.
-    async fn list_all(&self) -> Result<Vec<ComplyStateConfig>, AppError>;
+type StateConfigRepository interface {
+    // ListAll lists all state configs.
+    ListAll(ctx context.Context) ([]ComplyStateConfig, error)
 
-    /// Get config for a specific state.
-    async fn find_by_state_code(
-        &self,
-        state_code: &str,
-    ) -> Result<Option<ComplyStateConfig>, AppError>;
+    // FindByStateCode gets config for a specific state.
+    FindByStateCode(ctx context.Context, stateCode string) (*ComplyStateConfig, error)
 
-    /// Upsert state config (used by SyncStateConfigsJob).
-    async fn upsert(
-        &self,
-        config: UpsertStateConfigRow,
-    ) -> Result<ComplyStateConfig, AppError>;
+    // Upsert upserts a state config (used by SyncStateConfigsJob).
+    Upsert(ctx context.Context, config UpsertStateConfigRow) (*ComplyStateConfig, error)
 }
 
 // ─── FamilyConfigRepository ─────────────────────────────────────────────
 // Family-scoped (family_id is PK).
-#[async_trait]
-pub trait FamilyConfigRepository: Send + Sync {
-    async fn upsert(
-        &self,
-        scope: FamilyScope,
-        input: UpsertFamilyConfigRow,
-    ) -> Result<ComplyFamilyConfig, AppError>;
-
-    async fn find_by_family(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Option<ComplyFamilyConfig>, AppError>;
-
-    async fn delete_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+type FamilyConfigRepository interface {
+    Upsert(ctx context.Context, scope shared.FamilyScope, input UpsertFamilyConfigRow) (*ComplyFamilyConfig, error)
+    FindByFamily(ctx context.Context, scope shared.FamilyScope) (*ComplyFamilyConfig, error)
+    DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── ScheduleRepository ─────────────────────────────────────────────────
 // Family-scoped.
-#[async_trait]
-pub trait ScheduleRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: FamilyScope,
-        input: CreateScheduleRow,
-    ) -> Result<ComplyCustomSchedule, AppError>;
-
-    async fn find_by_id(
-        &self,
-        schedule_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Option<ComplyCustomSchedule>, AppError>;
-
-    async fn list_by_family(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Vec<ComplyCustomSchedule>, AppError>;
-
-    async fn update(
-        &self,
-        schedule_id: Uuid,
-        scope: FamilyScope,
-        updates: UpdateScheduleRow,
-    ) -> Result<ComplyCustomSchedule, AppError>;
-
-    async fn delete(
-        &self,
-        schedule_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+type ScheduleRepository interface {
+    Create(ctx context.Context, scope shared.FamilyScope, input CreateScheduleRow) (*ComplyCustomSchedule, error)
+    FindByID(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) (*ComplyCustomSchedule, error)
+    ListByFamily(ctx context.Context, scope shared.FamilyScope) ([]ComplyCustomSchedule, error)
+    Update(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope, updates UpdateScheduleRow) (*ComplyCustomSchedule, error)
+    Delete(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) error
 }
 
 // ─── AttendanceRepository ───────────────────────────────────────────────
 // Family-scoped. UNIQUE on (family_id, student_id, attendance_date).
-#[async_trait]
-pub trait AttendanceRepository: Send + Sync {
-    async fn upsert(
-        &self,
-        scope: FamilyScope,
-        input: UpsertAttendanceRow,
-    ) -> Result<ComplyAttendance, AppError>;
-
-    async fn find_by_id(
-        &self,
-        attendance_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Option<ComplyAttendance>, AppError>;
-
-    async fn list_by_student(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-        params: &AttendanceListParams,
-    ) -> Result<Vec<ComplyAttendance>, AppError>;
-
-    async fn summarize(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-        start_date: NaiveDate,
-        end_date: NaiveDate,
-    ) -> Result<AttendanceSummaryRow, AppError>;
-
-    async fn update(
-        &self,
-        attendance_id: Uuid,
-        scope: FamilyScope,
-        updates: UpdateAttendanceRow,
-    ) -> Result<ComplyAttendance, AppError>;
-
-    async fn delete(
-        &self,
-        attendance_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
-
-    async fn delete_by_student(
-        &self,
-        student_id: StudentId,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
-
-    async fn delete_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+type AttendanceRepository interface {
+    Upsert(ctx context.Context, scope shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error)
+    FindByID(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) (*ComplyAttendance, error)
+    ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *AttendanceListParams) ([]ComplyAttendance, error)
+    Summarize(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, startDate time.Time, endDate time.Time) (*AttendanceSummaryRow, error)
+    Update(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope, updates UpdateAttendanceRow) (*ComplyAttendance, error)
+    Delete(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) error
+    DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+    DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── AssessmentRepository ───────────────────────────────────────────────
 // Family-scoped.
-#[async_trait]
-pub trait AssessmentRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: FamilyScope,
-        input: CreateAssessmentRow,
-    ) -> Result<ComplyAssessmentRecord, AppError>;
-
-    async fn find_by_id(
-        &self,
-        assessment_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Option<ComplyAssessmentRecord>, AppError>;
-
-    async fn list_by_student(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-        params: &AssessmentListParams,
-    ) -> Result<Vec<ComplyAssessmentRecord>, AppError>;
-
-    async fn update(
-        &self,
-        assessment_id: Uuid,
-        scope: FamilyScope,
-        updates: UpdateAssessmentRow,
-    ) -> Result<ComplyAssessmentRecord, AppError>;
-
-    async fn delete(
-        &self,
-        assessment_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
-
-    async fn delete_by_student(
-        &self,
-        student_id: StudentId,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+type AssessmentRepository interface {
+    Create(ctx context.Context, scope shared.FamilyScope, input CreateAssessmentRow) (*ComplyAssessmentRecord, error)
+    FindByID(ctx context.Context, assessmentID uuid.UUID, scope shared.FamilyScope) (*ComplyAssessmentRecord, error)
+    ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *AssessmentListParams) ([]ComplyAssessmentRecord, error)
+    Update(ctx context.Context, assessmentID uuid.UUID, scope shared.FamilyScope, updates UpdateAssessmentRow) (*ComplyAssessmentRecord, error)
+    Delete(ctx context.Context, assessmentID uuid.UUID, scope shared.FamilyScope) error
+    DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
 }
 
 // ─── TestScoreRepository ────────────────────────────────────────────────
 // Family-scoped.
-#[async_trait]
-pub trait TestScoreRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: FamilyScope,
-        input: CreateTestScoreRow,
-    ) -> Result<ComplyStandardizedTest, AppError>;
-
-    async fn list_by_student(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-        params: &TestListParams,
-    ) -> Result<Vec<ComplyStandardizedTest>, AppError>;
-
-    async fn update(
-        &self,
-        test_id: Uuid,
-        scope: FamilyScope,
-        updates: UpdateTestScoreRow,
-    ) -> Result<ComplyStandardizedTest, AppError>;
-
-    async fn delete(
-        &self,
-        test_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+type TestScoreRepository interface {
+    Create(ctx context.Context, scope shared.FamilyScope, input CreateTestScoreRow) (*ComplyStandardizedTest, error)
+    ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *TestListParams) ([]ComplyStandardizedTest, error)
+    Update(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope, updates UpdateTestScoreRow) (*ComplyStandardizedTest, error)
+    Delete(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope) error
 }
 
 // ─── PortfolioRepository ────────────────────────────────────────────────
 // Family-scoped.
-#[async_trait]
-pub trait PortfolioRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: FamilyScope,
-        input: CreatePortfolioRow,
-    ) -> Result<ComplyPortfolio, AppError>;
-
-    async fn find_by_id(
-        &self,
-        portfolio_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Option<ComplyPortfolio>, AppError>;
-
-    async fn list_by_student(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-    ) -> Result<Vec<ComplyPortfolio>, AppError>;
-
-    async fn update_status(
-        &self,
-        portfolio_id: Uuid,
-        status: &str,
-        upload_id: Option<Uuid>,
-        error_message: Option<&str>,
-    ) -> Result<ComplyPortfolio, AppError>;
-
-    async fn find_expired(
-        &self,
-        before: DateTime<Utc>,
-    ) -> Result<Vec<ComplyPortfolio>, AppError>;
+type PortfolioRepository interface {
+    Create(ctx context.Context, scope shared.FamilyScope, input CreatePortfolioRow) (*ComplyPortfolio, error)
+    FindByID(ctx context.Context, portfolioID uuid.UUID, scope shared.FamilyScope) (*ComplyPortfolio, error)
+    ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyPortfolio, error)
+    UpdateStatus(ctx context.Context, portfolioID uuid.UUID, status string, uploadID *uuid.UUID, errorMessage *string) (*ComplyPortfolio, error)
+    FindExpired(ctx context.Context, before time.Time) ([]ComplyPortfolio, error)
 }
 
 // ─── PortfolioItemRepository ────────────────────────────────────────────
-#[async_trait]
-pub trait PortfolioItemRepository: Send + Sync {
-    async fn create_batch(
-        &self,
-        items: Vec<CreatePortfolioItemRow>,
-    ) -> Result<Vec<ComplyPortfolioItem>, AppError>;
-
-    async fn list_by_portfolio(
-        &self,
-        portfolio_id: Uuid,
-    ) -> Result<Vec<ComplyPortfolioItem>, AppError>;
-
-    async fn delete_by_portfolio(
-        &self,
-        portfolio_id: Uuid,
-    ) -> Result<(), AppError>;
+type PortfolioItemRepository interface {
+    CreateBatch(ctx context.Context, items []CreatePortfolioItemRow) ([]ComplyPortfolioItem, error)
+    ListByPortfolio(ctx context.Context, portfolioID uuid.UUID) ([]ComplyPortfolioItem, error)
+    DeleteByPortfolio(ctx context.Context, portfolioID uuid.UUID) error
 }
 
 // ─── TranscriptRepository (Phase 3) ────────────────────────────────────
-#[async_trait]
-pub trait TranscriptRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: FamilyScope,
-        input: CreateTranscriptRow,
-    ) -> Result<ComplyTranscript, AppError>;
-
-    async fn find_by_id(
-        &self,
-        transcript_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Option<ComplyTranscript>, AppError>;
-
-    async fn list_by_student(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-    ) -> Result<Vec<ComplyTranscript>, AppError>;
-
-    async fn update_status(
-        &self,
-        transcript_id: Uuid,
-        status: &str,
-        upload_id: Option<Uuid>,
-        gpa_unweighted: Option<f64>,
-        gpa_weighted: Option<f64>,
-        error_message: Option<&str>,
-    ) -> Result<ComplyTranscript, AppError>;
-
-    async fn delete(
-        &self,
-        transcript_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+type TranscriptRepository interface {
+    Create(ctx context.Context, scope shared.FamilyScope, input CreateTranscriptRow) (*ComplyTranscript, error)
+    FindByID(ctx context.Context, transcriptID uuid.UUID, scope shared.FamilyScope) (*ComplyTranscript, error)
+    ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyTranscript, error)
+    UpdateStatus(ctx context.Context, transcriptID uuid.UUID, status string, uploadID *uuid.UUID, gpaUnweighted *float64, gpaWeighted *float64, errorMessage *string) (*ComplyTranscript, error)
+    Delete(ctx context.Context, transcriptID uuid.UUID, scope shared.FamilyScope) error
 }
 
 // ─── CourseRepository (Phase 3) ─────────────────────────────────────────
-#[async_trait]
-pub trait CourseRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: FamilyScope,
-        input: CreateCourseRow,
-    ) -> Result<ComplyCourse, AppError>;
-
-    async fn list_by_student(
-        &self,
-        student_id: StudentId,
-        scope: FamilyScope,
-        params: &CourseListParams,
-    ) -> Result<Vec<ComplyCourse>, AppError>;
-
-    async fn update(
-        &self,
-        course_id: Uuid,
-        scope: FamilyScope,
-        updates: UpdateCourseRow,
-    ) -> Result<ComplyCourse, AppError>;
-
-    async fn delete(
-        &self,
-        course_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+type CourseRepository interface {
+    Create(ctx context.Context, scope shared.FamilyScope, input CreateCourseRow) (*ComplyCourse, error)
+    ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *CourseListParams) ([]ComplyCourse, error)
+    Update(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope, updates UpdateCourseRow) (*ComplyCourse, error)
+    Delete(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope) error
 }
 ```
 
@@ -1606,7 +1178,7 @@ pub trait CourseRepository: Send + Sync {
 
 ## §7 Adapter Interface
 
-N/A — no external adapter. PDF generation is in-house via the `typst` crate. PDF rendering
+N/A — no external adapter. PDF generation is in-house via `jung-kurt/gofpdf`. PDF rendering
 happens within `GeneratePortfolioJob` and `GenerateTranscriptJob` background workers. The
 generated PDF bytes are uploaded to `media::MediaService` for storage and CDN delivery.
 
@@ -1616,530 +1188,493 @@ generated PDF bytes are uploaded to `media::MediaService` for storage and CDN de
 
 ### §8.1 Request Types
 
-```rust
-// src/comply/models.rs
+```go
+// internal/comply/models.go
 
-use serde::Deserialize;
-use chrono::NaiveDate;
+import (
+    "encoding/json"
+    "time"
 
-/// Body for PUT /v1/compliance/config
-#[derive(Debug, Deserialize)]
-pub struct UpsertFamilyConfigCommand {
-    pub state_code: String,
-    pub school_year_start: NaiveDate,
-    pub school_year_end: NaiveDate,
-    pub total_school_days: i16,
-    pub custom_schedule_id: Option<Uuid>,
-    pub gpa_scale: String,                 // "standard_4" | "weighted" | "custom"
-    pub gpa_custom_config: Option<serde_json::Value>,
+    "github.com/google/uuid"
+)
+
+// UpsertFamilyConfigCommand is the body for PUT /v1/compliance/config.
+type UpsertFamilyConfigCommand struct {
+    StateCode        string          `json:"state_code" validate:"required,len=2"`
+    SchoolYearStart  time.Time       `json:"school_year_start" validate:"required"`
+    SchoolYearEnd    time.Time       `json:"school_year_end" validate:"required"`
+    TotalSchoolDays  int16           `json:"total_school_days" validate:"required,gt=0"`
+    CustomScheduleID *uuid.UUID      `json:"custom_schedule_id"`
+    GpaScale         string          `json:"gpa_scale" validate:"required,oneof=standard_4 weighted custom"`
+    GpaCustomConfig  json.RawMessage `json:"gpa_custom_config"`
 }
 
-/// Body for POST /v1/compliance/schedules
-#[derive(Debug, Deserialize)]
-pub struct CreateScheduleCommand {
-    pub name: String,
-    pub school_days: Vec<bool>,            // Mon-Sun, 7 elements
-    pub exclusion_periods: Vec<ExclusionPeriod>,
+// CreateScheduleCommand is the body for POST /v1/compliance/schedules.
+type CreateScheduleCommand struct {
+    Name             string            `json:"name" validate:"required"`
+    SchoolDays       []bool            `json:"school_days" validate:"required,len=7"` // Mon-Sun, 7 elements
+    ExclusionPeriods []ExclusionPeriod `json:"exclusion_periods"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ExclusionPeriod {
-    pub start: NaiveDate,
-    pub end: NaiveDate,
-    pub label: String,
+type ExclusionPeriod struct {
+    Start time.Time `json:"start" validate:"required"`
+    End   time.Time `json:"end" validate:"required"`
+    Label string    `json:"label" validate:"required"`
 }
 
-/// Body for PATCH /v1/compliance/schedules/:id
-#[derive(Debug, Deserialize)]
-pub struct UpdateScheduleCommand {
-    pub name: Option<String>,
-    pub school_days: Option<Vec<bool>>,
-    pub exclusion_periods: Option<Vec<ExclusionPeriod>>,
+// UpdateScheduleCommand is the body for PATCH /v1/compliance/schedules/:id.
+type UpdateScheduleCommand struct {
+    Name             *string            `json:"name"`
+    SchoolDays       *[]bool            `json:"school_days"`
+    ExclusionPeriods *[]ExclusionPeriod `json:"exclusion_periods"`
 }
 
-/// Body for POST /v1/compliance/students/:id/attendance
-#[derive(Debug, Deserialize)]
-pub struct RecordAttendanceCommand {
-    pub attendance_date: NaiveDate,
-    pub status: String,                    // "present_full" | "present_partial" | "absent" | "not_applicable"
-    pub duration_minutes: Option<i16>,
-    pub notes: Option<String>,
+// RecordAttendanceCommand is the body for POST /v1/compliance/students/:id/attendance.
+type RecordAttendanceCommand struct {
+    AttendanceDate  time.Time `json:"attendance_date" validate:"required"`
+    Status          string    `json:"status" validate:"required,oneof=present_full present_partial absent not_applicable"`
+    DurationMinutes *int16    `json:"duration_minutes"`
+    Notes           *string   `json:"notes"`
 }
 
-/// Body for POST /v1/compliance/students/:id/attendance/bulk
-#[derive(Debug, Deserialize)]
-pub struct BulkRecordAttendanceCommand {
-    pub records: Vec<RecordAttendanceCommand>,
+// BulkRecordAttendanceCommand is the body for POST /v1/compliance/students/:id/attendance/bulk.
+type BulkRecordAttendanceCommand struct {
+    Records []RecordAttendanceCommand `json:"records" validate:"required,max=31,dive"`
 }
 
-/// Body for PATCH /v1/compliance/students/:id/attendance/:id
-#[derive(Debug, Deserialize)]
-pub struct UpdateAttendanceCommand {
-    pub status: Option<String>,
-    pub duration_minutes: Option<Option<i16>>,
-    pub notes: Option<Option<String>>,
+// UpdateAttendanceCommand is the body for PATCH /v1/compliance/students/:id/attendance/:id.
+type UpdateAttendanceCommand struct {
+    Status          *string `json:"status"`
+    DurationMinutes *int16  `json:"duration_minutes"`
+    Notes           *string `json:"notes"`
 }
 
-/// Body for POST /v1/compliance/students/:id/assessments
-#[derive(Debug, Deserialize)]
-pub struct CreateAssessmentCommand {
-    pub title: String,
-    pub subject: String,
-    pub assessment_type: String,
-    pub score: Option<f64>,
-    pub max_score: Option<f64>,
-    pub grade_letter: Option<String>,
-    pub grade_points: Option<f64>,
-    pub is_passing: Option<bool>,
-    pub source_activity_id: Option<Uuid>,
-    pub assessment_date: NaiveDate,
-    pub notes: Option<String>,
+// CreateAssessmentCommand is the body for POST /v1/compliance/students/:id/assessments.
+type CreateAssessmentCommand struct {
+    Title            string     `json:"title" validate:"required"`
+    Subject          string     `json:"subject" validate:"required"`
+    AssessmentType   string     `json:"assessment_type" validate:"required,oneof=test quiz project assignment presentation portfolio_piece other"`
+    Score            *float64   `json:"score"`
+    MaxScore         *float64   `json:"max_score"`
+    GradeLetter      *string    `json:"grade_letter"`
+    GradePoints      *float64   `json:"grade_points"`
+    IsPassing        *bool      `json:"is_passing"`
+    SourceActivityID *uuid.UUID `json:"source_activity_id"`
+    AssessmentDate   time.Time  `json:"assessment_date" validate:"required"`
+    Notes            *string    `json:"notes"`
 }
 
-/// Body for PATCH /v1/compliance/students/:id/assessments/:id
-#[derive(Debug, Deserialize)]
-pub struct UpdateAssessmentCommand {
-    pub title: Option<String>,
-    pub subject: Option<String>,
-    pub score: Option<Option<f64>>,
-    pub max_score: Option<Option<f64>>,
-    pub grade_letter: Option<Option<String>>,
-    pub grade_points: Option<Option<f64>>,
-    pub is_passing: Option<Option<bool>>,
-    pub assessment_date: Option<NaiveDate>,
-    pub notes: Option<Option<String>>,
+// UpdateAssessmentCommand is the body for PATCH /v1/compliance/students/:id/assessments/:id.
+type UpdateAssessmentCommand struct {
+    Title          *string    `json:"title"`
+    Subject        *string    `json:"subject"`
+    Score          *float64   `json:"score"`
+    MaxScore       *float64   `json:"max_score"`
+    GradeLetter    *string    `json:"grade_letter"`
+    GradePoints    *float64   `json:"grade_points"`
+    IsPassing      *bool      `json:"is_passing"`
+    AssessmentDate *time.Time `json:"assessment_date"`
+    Notes          *string    `json:"notes"`
 }
 
-/// Body for POST /v1/compliance/students/:id/tests
-#[derive(Debug, Deserialize)]
-pub struct CreateTestScoreCommand {
-    pub test_name: String,
-    pub test_date: NaiveDate,
-    pub grade_level: Option<i16>,
-    pub scores: serde_json::Value,
-    pub composite_score: Option<f64>,
-    pub percentile: Option<i16>,
-    pub notes: Option<String>,
+// CreateTestScoreCommand is the body for POST /v1/compliance/students/:id/tests.
+type CreateTestScoreCommand struct {
+    TestName       string          `json:"test_name" validate:"required"`
+    TestDate       time.Time       `json:"test_date" validate:"required"`
+    GradeLevel     *int16          `json:"grade_level"`
+    Scores         json.RawMessage `json:"scores" validate:"required"`
+    CompositeScore *float64        `json:"composite_score"`
+    Percentile     *int16          `json:"percentile"`
+    Notes          *string         `json:"notes"`
 }
 
-/// Body for PATCH /v1/compliance/students/:id/tests/:id
-#[derive(Debug, Deserialize)]
-pub struct UpdateTestScoreCommand {
-    pub test_name: Option<String>,
-    pub test_date: Option<NaiveDate>,
-    pub scores: Option<serde_json::Value>,
-    pub composite_score: Option<Option<f64>>,
-    pub percentile: Option<Option<i16>>,
-    pub notes: Option<Option<String>>,
+// UpdateTestScoreCommand is the body for PATCH /v1/compliance/students/:id/tests/:id.
+type UpdateTestScoreCommand struct {
+    TestName       *string          `json:"test_name"`
+    TestDate       *time.Time       `json:"test_date"`
+    Scores         *json.RawMessage `json:"scores"`
+    CompositeScore *float64         `json:"composite_score"`
+    Percentile     *int16           `json:"percentile"`
+    Notes          *string          `json:"notes"`
 }
 
-/// Body for POST /v1/compliance/students/:id/portfolios
-#[derive(Debug, Deserialize)]
-pub struct CreatePortfolioCommand {
-    pub title: String,
-    pub description: Option<String>,
-    pub organization: String,             // "by_subject" | "chronological" | "by_student"
-    pub date_range_start: NaiveDate,
-    pub date_range_end: NaiveDate,
-    pub include_attendance: bool,
-    pub include_assessments: bool,
+// CreatePortfolioCommand is the body for POST /v1/compliance/students/:id/portfolios.
+type CreatePortfolioCommand struct {
+    Title              string    `json:"title" validate:"required"`
+    Description        *string   `json:"description"`
+    Organization       string    `json:"organization" validate:"required,oneof=by_subject chronological by_student"`
+    DateRangeStart     time.Time `json:"date_range_start" validate:"required"`
+    DateRangeEnd       time.Time `json:"date_range_end" validate:"required"`
+    IncludeAttendance  bool      `json:"include_attendance"`
+    IncludeAssessments bool      `json:"include_assessments"`
 }
 
-/// Body for POST /v1/compliance/students/:id/portfolios/:id/items
-#[derive(Debug, Deserialize)]
-pub struct AddPortfolioItemsCommand {
-    pub items: Vec<PortfolioItemInput>,
+// AddPortfolioItemsCommand is the body for POST /v1/compliance/students/:id/portfolios/:id/items.
+type AddPortfolioItemsCommand struct {
+    Items []PortfolioItemInput `json:"items" validate:"required,dive"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct PortfolioItemInput {
-    pub source_type: String,               // "activity" | "journal" | "project" | "reading_list" | "assessment"
-    pub source_id: Uuid,
+type PortfolioItemInput struct {
+    SourceType string    `json:"source_type" validate:"required,oneof=activity journal project reading_list assessment"`
+    SourceID   uuid.UUID `json:"source_id" validate:"required"`
 }
 
-/// Body for POST /v1/compliance/students/:id/transcripts (Phase 3)
-#[derive(Debug, Deserialize)]
-pub struct CreateTranscriptCommand {
-    pub title: String,
-    pub grade_levels: Vec<String>,         // e.g., ["9", "10", "11"]
+// CreateTranscriptCommand is the body for POST /v1/compliance/students/:id/transcripts (Phase 3).
+type CreateTranscriptCommand struct {
+    Title       string   `json:"title" validate:"required"`
+    GradeLevels []string `json:"grade_levels" validate:"required"` // e.g., ["9", "10", "11"]
 }
 
-/// Body for POST /v1/compliance/students/:id/courses (Phase 3)
-#[derive(Debug, Deserialize)]
-pub struct CreateCourseCommand {
-    pub title: String,
-    pub subject: String,
-    pub grade_level: i16,
-    pub credits: f64,
-    pub grade_letter: Option<String>,
-    pub grade_points: Option<f64>,
-    pub level: String,                     // "regular" | "honors" | "ap"
-    pub school_year: String,
-    pub semester: Option<String>,
+// CreateCourseCommand is the body for POST /v1/compliance/students/:id/courses (Phase 3).
+type CreateCourseCommand struct {
+    Title       string   `json:"title" validate:"required"`
+    Subject     string   `json:"subject" validate:"required"`
+    GradeLevel  int16    `json:"grade_level" validate:"required"`
+    Credits     float64  `json:"credits" validate:"required,gt=0"`
+    GradeLetter *string  `json:"grade_letter"`
+    GradePoints *float64 `json:"grade_points"`
+    Level       string   `json:"level" validate:"required,oneof=regular honors ap"`
+    SchoolYear  string   `json:"school_year" validate:"required"`
+    Semester    *string  `json:"semester" validate:"omitempty,oneof=fall spring summer full_year"`
 }
 
-/// Body for PATCH /v1/compliance/students/:id/courses/:id (Phase 3)
-#[derive(Debug, Deserialize)]
-pub struct UpdateCourseCommand {
-    pub title: Option<String>,
-    pub subject: Option<String>,
-    pub credits: Option<f64>,
-    pub grade_letter: Option<Option<String>>,
-    pub grade_points: Option<Option<f64>>,
-    pub level: Option<String>,
-    pub semester: Option<Option<String>>,
+// UpdateCourseCommand is the body for PATCH /v1/compliance/students/:id/courses/:id (Phase 3).
+type UpdateCourseCommand struct {
+    Title       *string  `json:"title"`
+    Subject     *string  `json:"subject"`
+    Credits     *float64 `json:"credits"`
+    GradeLetter *string  `json:"grade_letter"`
+    GradePoints *float64 `json:"grade_points"`
+    Level       *string  `json:"level"`
+    Semester    *string  `json:"semester"`
 }
 
-/// Query params for GET /v1/compliance/students/:id/attendance
-#[derive(Debug, Deserialize)]
-pub struct AttendanceListParams {
-    pub start_date: NaiveDate,
-    pub end_date: NaiveDate,
-    pub status: Option<String>,
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,                 // Default 31, max 366
+// AttendanceListParams holds query params for GET /v1/compliance/students/:id/attendance.
+type AttendanceListParams struct {
+    StartDate time.Time `query:"start_date" validate:"required"`
+    EndDate   time.Time `query:"end_date" validate:"required"`
+    Status    *string   `query:"status"`
+    Cursor    *string   `query:"cursor"`
+    Limit     *uint8    `query:"limit"` // Default 31, max 366
 }
 
-/// Query params for GET /v1/compliance/students/:id/attendance/summary
-#[derive(Debug, Deserialize)]
-pub struct AttendanceSummaryParams {
-    pub start_date: NaiveDate,
-    pub end_date: NaiveDate,
+// AttendanceSummaryParams holds query params for GET /v1/compliance/students/:id/attendance/summary.
+type AttendanceSummaryParams struct {
+    StartDate time.Time `query:"start_date" validate:"required"`
+    EndDate   time.Time `query:"end_date" validate:"required"`
 }
 
-/// Query params for GET /v1/compliance/students/:id/assessments
-#[derive(Debug, Deserialize)]
-pub struct AssessmentListParams {
-    pub subject: Option<String>,
-    pub start_date: Option<NaiveDate>,
-    pub end_date: Option<NaiveDate>,
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,                 // Default 20, max 100
+// AssessmentListParams holds query params for GET /v1/compliance/students/:id/assessments.
+type AssessmentListParams struct {
+    Subject   *string    `query:"subject"`
+    StartDate *time.Time `query:"start_date"`
+    EndDate   *time.Time `query:"end_date"`
+    Cursor    *string    `query:"cursor"`
+    Limit     *uint8     `query:"limit"` // Default 20, max 100
 }
 
-/// Query params for GET /v1/compliance/students/:id/tests
-#[derive(Debug, Deserialize)]
-pub struct TestListParams {
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
+// TestListParams holds query params for GET /v1/compliance/students/:id/tests.
+type TestListParams struct {
+    Cursor *string `query:"cursor"`
+    Limit  *uint8  `query:"limit"`
 }
 
-/// Query params for GET /v1/compliance/students/:id/courses (Phase 3)
-#[derive(Debug, Deserialize)]
-pub struct CourseListParams {
-    pub grade_level: Option<i16>,
-    pub school_year: Option<String>,
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
+// CourseListParams holds query params for GET /v1/compliance/students/:id/courses (Phase 3).
+type CourseListParams struct {
+    GradeLevel *int16  `query:"grade_level"`
+    SchoolYear *string `query:"school_year"`
+    Cursor     *string `query:"cursor"`
+    Limit      *uint8  `query:"limit"`
 }
 
-/// Query params for GET /v1/compliance/students/:id/gpa (Phase 3)
-#[derive(Debug, Deserialize)]
-pub struct GpaParams {
-    pub scale: Option<String>,             // "standard_4" | "weighted" | "custom"
-    pub grade_levels: Option<Vec<i16>>,    // filter by grade levels
+// GpaParams holds query params for GET /v1/compliance/students/:id/gpa (Phase 3).
+type GpaParams struct {
+    Scale       *string `query:"scale"`        // "standard_4" | "weighted" | "custom"
+    GradeLevels []int16 `query:"grade_levels"` // filter by grade levels
 }
 
-/// Query params for GET /v1/compliance/students/:id/gpa/what-if (Phase 3)
-#[derive(Debug, Deserialize)]
-pub struct GpaWhatIfParams {
-    pub additional_courses: Vec<WhatIfCourse>,
+// GpaWhatIfParams holds query params for GET /v1/compliance/students/:id/gpa/what-if (Phase 3).
+type GpaWhatIfParams struct {
+    AdditionalCourses []WhatIfCourse `json:"additional_courses" validate:"required,dive"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct WhatIfCourse {
-    pub credits: f64,
-    pub grade_points: f64,
-    pub level: String,                     // "regular" | "honors" | "ap"
+type WhatIfCourse struct {
+    Credits     float64 `json:"credits" validate:"required,gt=0"`
+    GradePoints float64 `json:"grade_points" validate:"required,gte=0"`
+    Level       string  `json:"level" validate:"required,oneof=regular honors ap"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-use serde::Serialize;
+```go
+// internal/comply/models.go (continued — response types)
 
-/// Family compliance configuration.
-#[derive(Debug, Serialize)]
-pub struct FamilyConfigResponse {
-    pub family_id: Uuid,
-    pub state_code: String,
-    pub state_name: String,
-    pub school_year_start: NaiveDate,
-    pub school_year_end: NaiveDate,
-    pub total_school_days: i16,
-    pub custom_schedule_id: Option<Uuid>,
-    pub gpa_scale: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+import (
+    "encoding/json"
+    "time"
+
+    "github.com/google/uuid"
+)
+
+// FamilyConfigResponse represents family compliance configuration.
+type FamilyConfigResponse struct {
+    FamilyID         uuid.UUID  `json:"family_id"`
+    StateCode        string     `json:"state_code"`
+    StateName        string     `json:"state_name"`
+    SchoolYearStart  time.Time  `json:"school_year_start"`
+    SchoolYearEnd    time.Time  `json:"school_year_end"`
+    TotalSchoolDays  int16      `json:"total_school_days"`
+    CustomScheduleID *uuid.UUID `json:"custom_schedule_id"`
+    GpaScale         string     `json:"gpa_scale"`
+    CreatedAt        time.Time  `json:"created_at"`
+    UpdatedAt        time.Time  `json:"updated_at"`
 }
 
-/// State compliance requirements (from cache).
-#[derive(Debug, Serialize)]
-pub struct StateConfigResponse {
-    pub state_code: String,
-    pub state_name: String,
-    pub notification_required: bool,
-    pub notification_details: Option<String>,
-    pub required_subjects: Vec<String>,
-    pub assessment_required: bool,
-    pub assessment_details: Option<String>,
-    pub record_keeping_required: bool,
-    pub record_keeping_details: Option<String>,
-    pub attendance_required: bool,
-    pub attendance_days: Option<i16>,
-    pub attendance_hours: Option<i16>,
-    pub attendance_details: Option<String>,
-    pub regulation_level: String,
+// StateConfigResponse represents state compliance requirements (from cache).
+type StateConfigResponse struct {
+    StateCode             string   `json:"state_code"`
+    StateName             string   `json:"state_name"`
+    NotificationRequired  bool     `json:"notification_required"`
+    NotificationDetails   *string  `json:"notification_details"`
+    RequiredSubjects      []string `json:"required_subjects"`
+    AssessmentRequired    bool     `json:"assessment_required"`
+    AssessmentDetails     *string  `json:"assessment_details"`
+    RecordKeepingRequired bool     `json:"record_keeping_required"`
+    RecordKeepingDetails  *string  `json:"record_keeping_details"`
+    AttendanceRequired    bool     `json:"attendance_required"`
+    AttendanceDays        *int16   `json:"attendance_days"`
+    AttendanceHours       *int16   `json:"attendance_hours"`
+    AttendanceDetails     *string  `json:"attendance_details"`
+    RegulationLevel       string   `json:"regulation_level"`
 }
 
-/// State config summary (for listing).
-#[derive(Debug, Serialize)]
-pub struct StateConfigSummaryResponse {
-    pub state_code: String,
-    pub state_name: String,
-    pub regulation_level: String,
-    pub attendance_required: bool,
-    pub attendance_days: Option<i16>,
+// StateConfigSummaryResponse represents state config summary (for listing).
+type StateConfigSummaryResponse struct {
+    StateCode          string `json:"state_code"`
+    StateName          string `json:"state_name"`
+    RegulationLevel    string `json:"regulation_level"`
+    AttendanceRequired bool   `json:"attendance_required"`
+    AttendanceDays     *int16 `json:"attendance_days"`
 }
 
-/// Custom schedule.
-#[derive(Debug, Serialize)]
-pub struct ScheduleResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub school_days: Vec<bool>,
-    pub exclusion_periods: Vec<ExclusionPeriod>,
-    pub created_at: DateTime<Utc>,
+// ScheduleResponse represents a custom schedule.
+type ScheduleResponse struct {
+    ID               uuid.UUID         `json:"id"`
+    Name             string            `json:"name"`
+    SchoolDays       []bool            `json:"school_days"`
+    ExclusionPeriods []ExclusionPeriod `json:"exclusion_periods"`
+    CreatedAt        time.Time         `json:"created_at"`
 }
 
-/// Single attendance record.
-#[derive(Debug, Serialize)]
-pub struct AttendanceResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub attendance_date: NaiveDate,
-    pub status: String,
-    pub duration_minutes: Option<i16>,
-    pub notes: Option<String>,
-    pub is_auto: bool,
-    pub manual_override: bool,
-    pub created_at: DateTime<Utc>,
+// AttendanceResponse represents a single attendance record.
+type AttendanceResponse struct {
+    ID              uuid.UUID `json:"id"`
+    StudentID       uuid.UUID `json:"student_id"`
+    AttendanceDate  time.Time `json:"attendance_date"`
+    Status          string    `json:"status"`
+    DurationMinutes *int16    `json:"duration_minutes"`
+    Notes           *string   `json:"notes"`
+    IsAuto          bool      `json:"is_auto"`
+    ManualOverride  bool      `json:"manual_override"`
+    CreatedAt       time.Time `json:"created_at"`
 }
 
-/// Paginated attendance list.
-#[derive(Debug, Serialize)]
-pub struct AttendanceListResponse {
-    pub records: Vec<AttendanceResponse>,
-    pub next_cursor: Option<String>,
+// AttendanceListResponse represents a paginated attendance list.
+type AttendanceListResponse struct {
+    Records    []AttendanceResponse `json:"records"`
+    NextCursor *string              `json:"next_cursor"`
 }
 
-/// Attendance summary with pace calculation.
-#[derive(Debug, Serialize)]
-pub struct AttendanceSummaryResponse {
-    pub total_days: i32,
-    pub present_full: i32,
-    pub present_partial: i32,
-    pub absent: i32,
-    pub not_applicable: i32,
-    pub total_hours: f64,
-    pub state_required_days: Option<i16>,
-    pub state_required_hours: Option<i16>,
-    pub pace_status: Option<String>,       // "on_track" | "at_risk" | "behind"
-    pub projected_total_days: Option<i32>,
+// AttendanceSummaryResponse represents attendance summary with pace calculation.
+type AttendanceSummaryResponse struct {
+    TotalDays          int32   `json:"total_days"`
+    PresentFull        int32   `json:"present_full"`
+    PresentPartial     int32   `json:"present_partial"`
+    Absent             int32   `json:"absent"`
+    NotApplicable      int32   `json:"not_applicable"`
+    TotalHours         float64 `json:"total_hours"`
+    StateRequiredDays  *int16  `json:"state_required_days"`
+    StateRequiredHours *int16  `json:"state_required_hours"`
+    PaceStatus         *string `json:"pace_status"` // "on_track" | "at_risk" | "behind"
+    ProjectedTotalDays *int32  `json:"projected_total_days"`
 }
 
-/// Single assessment record.
-#[derive(Debug, Serialize)]
-pub struct AssessmentResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub title: String,
-    pub subject: String,
-    pub assessment_type: String,
-    pub score: Option<f64>,
-    pub max_score: Option<f64>,
-    pub grade_letter: Option<String>,
-    pub grade_points: Option<f64>,
-    pub is_passing: Option<bool>,
-    pub assessment_date: NaiveDate,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
+// AssessmentResponse represents a single assessment record.
+type AssessmentResponse struct {
+    ID             uuid.UUID `json:"id"`
+    StudentID      uuid.UUID `json:"student_id"`
+    Title          string    `json:"title"`
+    Subject        string    `json:"subject"`
+    AssessmentType string    `json:"assessment_type"`
+    Score          *float64  `json:"score"`
+    MaxScore       *float64  `json:"max_score"`
+    GradeLetter    *string   `json:"grade_letter"`
+    GradePoints    *float64  `json:"grade_points"`
+    IsPassing      *bool     `json:"is_passing"`
+    AssessmentDate time.Time `json:"assessment_date"`
+    Notes          *string   `json:"notes"`
+    CreatedAt      time.Time `json:"created_at"`
 }
 
-/// Paginated assessment list.
-#[derive(Debug, Serialize)]
-pub struct AssessmentListResponse {
-    pub records: Vec<AssessmentResponse>,
-    pub next_cursor: Option<String>,
+// AssessmentListResponse represents a paginated assessment list.
+type AssessmentListResponse struct {
+    Records    []AssessmentResponse `json:"records"`
+    NextCursor *string              `json:"next_cursor"`
 }
 
-/// Single test score.
-#[derive(Debug, Serialize)]
-pub struct TestScoreResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub test_name: String,
-    pub test_date: NaiveDate,
-    pub grade_level: Option<i16>,
-    pub scores: serde_json::Value,
-    pub composite_score: Option<f64>,
-    pub percentile: Option<i16>,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
+// TestScoreResponse represents a single test score.
+type TestScoreResponse struct {
+    ID             uuid.UUID       `json:"id"`
+    StudentID      uuid.UUID       `json:"student_id"`
+    TestName       string          `json:"test_name"`
+    TestDate       time.Time       `json:"test_date"`
+    GradeLevel     *int16          `json:"grade_level"`
+    Scores         json.RawMessage `json:"scores"`
+    CompositeScore *float64        `json:"composite_score"`
+    Percentile     *int16          `json:"percentile"`
+    Notes          *string         `json:"notes"`
+    CreatedAt      time.Time       `json:"created_at"`
 }
 
-/// Paginated test list.
-#[derive(Debug, Serialize)]
-pub struct TestListResponse {
-    pub tests: Vec<TestScoreResponse>,
-    pub next_cursor: Option<String>,
+// TestListResponse represents a paginated test list.
+type TestListResponse struct {
+    Tests      []TestScoreResponse `json:"tests"`
+    NextCursor *string             `json:"next_cursor"`
 }
 
-/// Portfolio details.
-#[derive(Debug, Serialize)]
-pub struct PortfolioResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub organization: String,
-    pub date_range_start: NaiveDate,
-    pub date_range_end: NaiveDate,
-    pub include_attendance: bool,
-    pub include_assessments: bool,
-    pub status: String,
-    pub item_count: i32,
-    pub generated_at: Option<DateTime<Utc>>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub items: Option<Vec<PortfolioItemResponse>>,
-    pub created_at: DateTime<Utc>,
+// PortfolioResponse represents portfolio details.
+type PortfolioResponse struct {
+    ID                 uuid.UUID               `json:"id"`
+    StudentID          uuid.UUID               `json:"student_id"`
+    Title              string                  `json:"title"`
+    Description        *string                 `json:"description"`
+    Organization       string                  `json:"organization"`
+    DateRangeStart     time.Time               `json:"date_range_start"`
+    DateRangeEnd       time.Time               `json:"date_range_end"`
+    IncludeAttendance  bool                    `json:"include_attendance"`
+    IncludeAssessments bool                    `json:"include_assessments"`
+    Status             string                  `json:"status"`
+    ItemCount          int32                   `json:"item_count"`
+    GeneratedAt        *time.Time              `json:"generated_at"`
+    ExpiresAt          *time.Time              `json:"expires_at"`
+    Items              []PortfolioItemResponse `json:"items,omitempty"`
+    CreatedAt          time.Time               `json:"created_at"`
 }
 
-/// Portfolio summary (for listing).
-#[derive(Debug, Serialize)]
-pub struct PortfolioSummaryResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub status: String,
-    pub item_count: i32,
-    pub date_range_start: NaiveDate,
-    pub date_range_end: NaiveDate,
-    pub generated_at: Option<DateTime<Utc>>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+// PortfolioSummaryResponse represents portfolio summary (for listing).
+type PortfolioSummaryResponse struct {
+    ID             uuid.UUID  `json:"id"`
+    Title          string     `json:"title"`
+    Status         string     `json:"status"`
+    ItemCount      int32      `json:"item_count"`
+    DateRangeStart time.Time  `json:"date_range_start"`
+    DateRangeEnd   time.Time  `json:"date_range_end"`
+    GeneratedAt    *time.Time `json:"generated_at"`
+    ExpiresAt      *time.Time `json:"expires_at"`
+    CreatedAt      time.Time  `json:"created_at"`
 }
 
-/// Portfolio item (cached display data).
-#[derive(Debug, Serialize)]
-pub struct PortfolioItemResponse {
-    pub id: Uuid,
-    pub source_type: String,
-    pub source_id: Uuid,
-    pub display_order: i16,
-    pub cached_title: String,
-    pub cached_subject: Option<String>,
-    pub cached_date: NaiveDate,
-    pub cached_description: Option<String>,
+// PortfolioItemResponse represents a portfolio item (cached display data).
+type PortfolioItemResponse struct {
+    ID                uuid.UUID `json:"id"`
+    SourceType        string    `json:"source_type"`
+    SourceID          uuid.UUID `json:"source_id"`
+    DisplayOrder      int16     `json:"display_order"`
+    CachedTitle       string    `json:"cached_title"`
+    CachedSubject     *string   `json:"cached_subject"`
+    CachedDate        time.Time `json:"cached_date"`
+    CachedDescription *string   `json:"cached_description"`
 }
 
-/// GPA calculation result. (Phase 3)
-#[derive(Debug, Serialize)]
-pub struct GpaResponse {
-    pub unweighted_gpa: f64,
-    pub weighted_gpa: f64,
-    pub total_credits: f64,
-    pub total_courses: i32,
-    pub by_grade_level: Vec<GpaGradeLevelResponse>,
+// GpaResponse represents a GPA calculation result. (Phase 3)
+type GpaResponse struct {
+    UnweightedGPA float64                 `json:"unweighted_gpa"`
+    WeightedGPA   float64                 `json:"weighted_gpa"`
+    TotalCredits  float64                 `json:"total_credits"`
+    TotalCourses  int32                   `json:"total_courses"`
+    ByGradeLevel  []GpaGradeLevelResponse `json:"by_grade_level"`
 }
 
-#[derive(Debug, Serialize)]
-pub struct GpaGradeLevelResponse {
-    pub grade_level: i16,
-    pub unweighted: f64,
-    pub weighted: f64,
-    pub credits: f64,
+type GpaGradeLevelResponse struct {
+    GradeLevel int16   `json:"grade_level"`
+    Unweighted float64 `json:"unweighted"`
+    Weighted   float64 `json:"weighted"`
+    Credits    float64 `json:"credits"`
 }
 
-/// GPA history by term. (Phase 3)
-#[derive(Debug, Serialize)]
-pub struct GpaTermResponse {
-    pub school_year: String,
-    pub semester: Option<String>,
-    pub unweighted_gpa: f64,
-    pub weighted_gpa: f64,
-    pub credits: f64,
-    pub course_count: i32,
+// GpaTermResponse represents GPA history by term. (Phase 3)
+type GpaTermResponse struct {
+    SchoolYear    string  `json:"school_year"`
+    Semester      *string `json:"semester"`
+    UnweightedGPA float64 `json:"unweighted_gpa"`
+    WeightedGPA   float64 `json:"weighted_gpa"`
+    Credits       float64 `json:"credits"`
+    CourseCount   int32   `json:"course_count"`
 }
 
-/// Transcript details. (Phase 3)
-#[derive(Debug, Serialize)]
-pub struct TranscriptResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub title: String,
-    pub student_name: String,
-    pub grade_levels: Vec<String>,
-    pub status: String,
-    pub gpa_unweighted: Option<f64>,
-    pub gpa_weighted: Option<f64>,
-    pub courses: Option<Vec<CourseResponse>>,
-    pub generated_at: Option<DateTime<Utc>>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+// TranscriptResponse represents transcript details. (Phase 3)
+type TranscriptResponse struct {
+    ID             uuid.UUID        `json:"id"`
+    StudentID      uuid.UUID        `json:"student_id"`
+    Title          string           `json:"title"`
+    StudentName    string           `json:"student_name"`
+    GradeLevels    []string         `json:"grade_levels"`
+    Status         string           `json:"status"`
+    GPAUnweighted  *float64         `json:"gpa_unweighted"`
+    GPAWeighted    *float64         `json:"gpa_weighted"`
+    Courses        []CourseResponse `json:"courses,omitempty"`
+    GeneratedAt    *time.Time       `json:"generated_at"`
+    ExpiresAt      *time.Time       `json:"expires_at"`
+    CreatedAt      time.Time        `json:"created_at"`
 }
 
-/// Transcript summary. (Phase 3)
-#[derive(Debug, Serialize)]
-pub struct TranscriptSummaryResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub status: String,
-    pub grade_levels: Vec<String>,
-    pub generated_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+// TranscriptSummaryResponse represents transcript summary. (Phase 3)
+type TranscriptSummaryResponse struct {
+    ID          uuid.UUID  `json:"id"`
+    Title       string     `json:"title"`
+    Status      string     `json:"status"`
+    GradeLevels []string   `json:"grade_levels"`
+    GeneratedAt *time.Time `json:"generated_at"`
+    CreatedAt   time.Time  `json:"created_at"`
 }
 
-/// Course record. (Phase 3)
-#[derive(Debug, Serialize)]
-pub struct CourseResponse {
-    pub id: Uuid,
-    pub student_id: Uuid,
-    pub title: String,
-    pub subject: String,
-    pub grade_level: i16,
-    pub credits: f64,
-    pub grade_letter: Option<String>,
-    pub grade_points: Option<f64>,
-    pub level: String,
-    pub school_year: String,
-    pub semester: Option<String>,
-    pub created_at: DateTime<Utc>,
+// CourseResponse represents a course record. (Phase 3)
+type CourseResponse struct {
+    ID          uuid.UUID `json:"id"`
+    StudentID   uuid.UUID `json:"student_id"`
+    Title       string    `json:"title"`
+    Subject     string    `json:"subject"`
+    GradeLevel  int16     `json:"grade_level"`
+    Credits     float64   `json:"credits"`
+    GradeLetter *string   `json:"grade_letter"`
+    GradePoints *float64  `json:"grade_points"`
+    Level       string    `json:"level"`
+    SchoolYear  string    `json:"school_year"`
+    Semester    *string   `json:"semester"`
+    CreatedAt   time.Time `json:"created_at"`
 }
 
-/// Paginated course list. (Phase 3)
-#[derive(Debug, Serialize)]
-pub struct CourseListResponse {
-    pub courses: Vec<CourseResponse>,
-    pub next_cursor: Option<String>,
+// CourseListResponse represents a paginated course list. (Phase 3)
+type CourseListResponse struct {
+    Courses    []CourseResponse `json:"courses"`
+    NextCursor *string          `json:"next_cursor"`
 }
 
-/// Compliance dashboard overview.
-#[derive(Debug, Serialize)]
-pub struct ComplianceDashboardResponse {
-    pub family_config: Option<FamilyConfigResponse>,
-    pub students: Vec<StudentComplianceSummary>,
+// ComplianceDashboardResponse represents the compliance dashboard overview.
+type ComplianceDashboardResponse struct {
+    FamilyConfig *FamilyConfigResponse      `json:"family_config"`
+    Students     []StudentComplianceSummary `json:"students"`
 }
 
-#[derive(Debug, Serialize)]
-pub struct StudentComplianceSummary {
-    pub student_id: Uuid,
-    pub student_name: String,
-    pub attendance_summary: AttendanceSummaryResponse,
-    pub recent_assessments_count: i32,
-    pub recent_tests_count: i32,
-    pub active_portfolios: Vec<PortfolioSummaryResponse>,
-    pub pace_status: Option<String>,
+type StudentComplianceSummary struct {
+    StudentID              uuid.UUID                  `json:"student_id"`
+    StudentName            string                     `json:"student_name"`
+    AttendanceSummary      AttendanceSummaryResponse   `json:"attendance_summary"`
+    RecentAssessmentsCount int32                       `json:"recent_assessments_count"`
+    RecentTestsCount       int32                       `json:"recent_tests_count"`
+    ActivePortfolios       []PortfolioSummaryResponse `json:"active_portfolios"`
+    PaceStatus             *string                    `json:"pace_status"`
 }
 ```
 
@@ -2147,25 +1682,29 @@ pub struct StudentComplianceSummary {
 
 ## §9 Background Jobs
 
-All comply:: background jobs use sidekiq-rs `[ARCH §12]`.
+All comply:: background jobs use asynq `[ARCH §12]`.
 
 ### §9.1 SyncStateConfigsJob
 
 Syncs state compliance requirements from `discover::DiscoveryService` into
 `comply_state_configs`. Runs daily to pick up any updates to state legal guides.
 
-```rust
-/// Sync state configs from discover:: into comply_state_configs.
-/// Queue: Low. Schedule: daily at 4:00 AM UTC.
-pub struct SyncStateConfigsJob;
+```go
+// internal/comply/jobs.go
 
-impl SyncStateConfigsJob {
-    async fn perform(&self, ctx: &JobContext) -> Result<(), JobError> {
-        // 1. Call discover::DiscoveryService.list_state_guides()
-        // 2. For each state, call discover::DiscoveryService.get_state_requirements(state_code)
-        // 3. Upsert into comply_state_configs
-        // 4. Log count of updated/inserted rows
-    }
+// SyncStateConfigsJob syncs state configs from discover:: into comply_state_configs.
+// Queue: Low. Schedule: daily at 4:00 AM UTC.
+type SyncStateConfigsJob struct {
+    stateConfigRepo  StateConfigRepository
+    discoveryService DiscoveryService
+}
+
+func (j *SyncStateConfigsJob) ProcessTask(ctx context.Context, t *asynq.Task) error {
+    // 1. Call discover::DiscoveryService.ListStateGuides()
+    // 2. For each state, call discover::DiscoveryService.GetStateRequirements(stateCode)
+    // 3. Upsert into comply_state_configs
+    // 4. Log count of updated/inserted rows
+    return nil
 }
 ```
 
@@ -2173,28 +1712,29 @@ impl SyncStateConfigsJob {
 
 ### §9.2 GeneratePortfolioJob
 
-Generates a portfolio PDF asynchronously using the `typst` crate.
+Generates a portfolio PDF asynchronously using `jung-kurt/gofpdf`.
 
-```rust
-/// Generate a portfolio PDF.
-/// Queue: Default. Trigger: on-demand (POST .../generate).
-pub struct GeneratePortfolioJob {
-    pub portfolio_id: Uuid,
-    pub family_id: FamilyId,
+```go
+// internal/comply/jobs.go (continued)
+
+// GeneratePortfolioJob generates a portfolio PDF.
+// Queue: Default. Trigger: on-demand (POST .../generate).
+type GeneratePortfolioJob struct {
+    PortfolioID uuid.UUID
+    FamilyID    uuid.UUID
 }
 
-impl GeneratePortfolioJob {
-    async fn perform(&self, ctx: &JobContext) -> Result<(), JobError> {
-        // 1. Load portfolio + items from repository
-        // 2. Load attendance summary (if include_attendance)
-        // 3. Load assessment records (if include_assessments)
-        // 4. Load student + family info from iam::IamService
-        // 5. Render PDF via typst crate (cover page, TOC, body, summaries)
-        // 6. Upload PDF to media::MediaService
-        // 7. Update portfolio status: generating → ready (or failed)
-        // 8. Set expires_at = now() + 90 days
-        // 9. Publish PortfolioGenerated event
-    }
+func (j *GeneratePortfolioJob) ProcessTask(ctx context.Context, t *asynq.Task) error {
+    // 1. Load portfolio + items from repository
+    // 2. Load attendance summary (if include_attendance)
+    // 3. Load assessment records (if include_assessments)
+    // 4. Load student + family info from iam::IamService
+    // 5. Render PDF via gofpdf (cover page, TOC, body, summaries)
+    // 6. Upload PDF to media::MediaService
+    // 7. Update portfolio status: generating → ready (or failed)
+    // 8. Set expires_at = now() + 90 days
+    // 9. Publish PortfolioGenerated event
+    return nil
 }
 ```
 
@@ -2205,25 +1745,26 @@ status = `failed` with error_message.
 
 Generates a transcript PDF asynchronously.
 
-```rust
-/// Generate a transcript PDF.
-/// Queue: Default. Trigger: on-demand (POST .../generate). Phase 3.
-pub struct GenerateTranscriptJob {
-    pub transcript_id: Uuid,
-    pub family_id: FamilyId,
+```go
+// internal/comply/jobs.go (continued)
+
+// GenerateTranscriptJob generates a transcript PDF.
+// Queue: Default. Trigger: on-demand (POST .../generate). Phase 3.
+type GenerateTranscriptJob struct {
+    TranscriptID uuid.UUID
+    FamilyID     uuid.UUID
 }
 
-impl GenerateTranscriptJob {
-    async fn perform(&self, ctx: &JobContext) -> Result<(), JobError> {
-        // 1. Load transcript + courses from repository
-        // 2. Calculate GPA (snapshot at generation time)
-        // 3. Load student info from iam::IamService
-        // 4. Render PDF via typst crate (standard transcript format)
-        // 5. Upload PDF to media::MediaService
-        // 6. Update transcript: status → ready, snapshot GPA values
-        // 7. Set expires_at = now() + 90 days
-        // 8. Publish TranscriptGenerated event
-    }
+func (j *GenerateTranscriptJob) ProcessTask(ctx context.Context, t *asynq.Task) error {
+    // 1. Load transcript + courses from repository
+    // 2. Calculate GPA (snapshot at generation time)
+    // 3. Load student info from iam::IamService
+    // 4. Render PDF via gofpdf (standard transcript format)
+    // 5. Upload PDF to media::MediaService
+    // 6. Update transcript: status → ready, snapshot GPA values
+    // 7. Set expires_at = now() + 90 days
+    // 8. Publish TranscriptGenerated event
+    return nil
 }
 ```
 
@@ -2231,19 +1772,26 @@ impl GenerateTranscriptJob {
 
 Checks attendance pace against state requirements for all configured families.
 
-```rust
-/// Check attendance pace against state requirements.
-/// Queue: Low. Schedule: weekly on Sundays at 5:00 AM UTC.
-pub struct AttendanceThresholdCheckJob;
+```go
+// internal/comply/jobs.go (continued)
 
-impl AttendanceThresholdCheckJob {
-    async fn perform(&self, ctx: &JobContext) -> Result<(), JobError> {
-        // 1. Load all comply_family_configs
-        // 2. For each family + student:
-        //    a. Load comply_state_configs for family's state
-        //    b. Calculate pace (§12)
-        //    c. If at_risk or behind → publish AttendanceThresholdWarning event
-    }
+// AttendanceThresholdCheckJob checks attendance pace against state requirements.
+// Queue: Low. Schedule: weekly on Sundays at 5:00 AM UTC.
+type AttendanceThresholdCheckJob struct {
+    familyConfigRepo FamilyConfigRepository
+    stateConfigRepo  StateConfigRepository
+    attendanceRepo   AttendanceRepository
+    iamService       IamService
+    events           *EventBus
+}
+
+func (j *AttendanceThresholdCheckJob) ProcessTask(ctx context.Context, t *asynq.Task) error {
+    // 1. Load all comply_family_configs
+    // 2. For each family + student:
+    //    a. Load comply_state_configs for family's state
+    //    b. Calculate pace (§12)
+    //    c. If at_risk or behind → publish AttendanceThresholdWarning event
+    return nil
 }
 ```
 
@@ -2299,58 +1847,59 @@ GPA is computed **on-the-fly** from `comply_courses` — it is NOT stored as a p
 column. This is O(n) where n = number of courses (typically < 50 for a high school student).
 GPA is snapshotted only during transcript generation (stored in `comply_transcripts.snapshot_gpa_*`).
 
-```rust
-// src/comply/domain/gpa.rs
+```go
+// internal/comply/domain/gpa.go
 
-/// Pure computation — no database access, no side effects.
-pub struct GpaCalculator;
+import "encoding/json"
 
-impl GpaCalculator {
-    /// Calculate GPA from a list of courses.
-    pub fn calculate(
-        courses: &[ComplyCourse],
-        scale: GpaScale,
-        custom_config: Option<&serde_json::Value>,
-    ) -> GpaResult {
-        let mut total_weighted_points = 0.0;
-        let mut total_unweighted_points = 0.0;
-        let mut total_credits = 0.0;
+// GpaCalculator is a pure computation — no database access, no side effects.
 
-        for course in courses {
-            if let Some(gp) = course.grade_points {
-                let credits = course.credits as f64;
-                total_unweighted_points += gp as f64 * credits;
+// CalculateGPA calculates GPA from a list of courses.
+func CalculateGPA(courses []ComplyCourse, scale GpaScale, customConfig json.RawMessage) GpaResult {
+    var totalWeightedPoints float64
+    var totalUnweightedPoints float64
+    var totalCredits float64
 
-                let boost = match course.level.as_str() {
-                    "honors" => 0.5,
-                    "ap" => 1.0,
-                    _ => 0.0,
-                };
-                total_weighted_points += (gp as f64 + boost) * credits;
-                total_credits += credits;
-            }
+    for _, course := range courses {
+        if course.GradePoints == nil {
+            continue
         }
+        gp := *course.GradePoints
+        credits := course.Credits
+        totalUnweightedPoints += gp * credits
 
-        if total_credits == 0.0 {
-            return GpaResult {
-                unweighted: 0.0,
-                weighted: 0.0,
-                total_credits: 0.0,
-            };
+        var boost float64
+        switch course.Level {
+        case "honors":
+            boost = 0.5
+        case "ap":
+            boost = 1.0
+        default:
+            boost = 0.0
         }
+        totalWeightedPoints += (gp + boost) * credits
+        totalCredits += credits
+    }
 
-        GpaResult {
-            unweighted: total_unweighted_points / total_credits,
-            weighted: total_weighted_points / total_credits,
-            total_credits,
+    if totalCredits == 0.0 {
+        return GpaResult{
+            Unweighted:   0.0,
+            Weighted:     0.0,
+            TotalCredits: 0.0,
         }
+    }
+
+    return GpaResult{
+        Unweighted:   totalUnweightedPoints / totalCredits,
+        Weighted:     totalWeightedPoints / totalCredits,
+        TotalCredits: totalCredits,
     }
 }
 
-pub struct GpaResult {
-    pub unweighted: f64,
-    pub weighted: f64,
-    pub total_credits: f64,
+type GpaResult struct {
+    Unweighted   float64
+    Weighted     float64
+    TotalCredits float64
 }
 ```
 
@@ -2379,7 +1928,7 @@ pub struct GpaResult {
    b. Load attendance summary for date range (if include_attendance)
    c. Load assessment records for date range (if include_assessments)
    d. Load student name + family info from iam::IamService
-   e. Render PDF via typst crate:
+   e. Render PDF via gofpdf:
       - Cover page: student name, family name, date range, school year
       - Table of contents
       - Body sections (organized by portfolio.organization):
@@ -2426,7 +1975,7 @@ pub struct GpaResult {
 
 ### PDF Format
 
-Generated via the `typst` crate (Rust-native typesetting):
+Generated via `jung-kurt/gofpdf` (Go PDF library):
 
 1. **Cover page**: Student name, family name, date range, school name (if configured),
    state, school year
@@ -2460,43 +2009,47 @@ State requirements come from `comply_state_configs` (synced from `discover::`):
 
 ### Pace Calculation
 
-```rust
-// src/comply/domain/attendance.rs
+```go
+// internal/comply/domain/attendance.go
 
-/// Calculate attendance pace against state requirements.
-pub fn calculate_pace(
-    actual_present_days: i32,
-    elapsed_school_days: i32,
-    total_school_days: i32,
-    state_required_days: Option<i16>,
-) -> PaceStatus {
-    let required = match state_required_days {
-        Some(r) => r as i32,
-        None => return PaceStatus::NotApplicable,
-    };
+import "math"
 
-    if elapsed_school_days == 0 {
-        return PaceStatus::OnTrack; // school year hasn't started
+// PaceStatus represents attendance pace relative to state requirements.
+type PaceStatus string
+
+const (
+    PaceStatusOnTrack       PaceStatus = "on_track"
+    PaceStatusAtRisk        PaceStatus = "at_risk"        // projected total within 10% of requirement
+    PaceStatusBehind        PaceStatus = "behind"          // projected total below 90% of requirement
+    PaceStatusNotApplicable PaceStatus = "not_applicable"  // state has no attendance requirement
+)
+
+// CalculatePace calculates attendance pace against state requirements.
+func CalculatePace(
+    actualPresentDays int32,
+    elapsedSchoolDays int32,
+    totalSchoolDays int32,
+    stateRequiredDays *int16,
+) PaceStatus {
+    if stateRequiredDays == nil {
+        return PaceStatusNotApplicable
+    }
+    required := int32(*stateRequiredDays)
+
+    if elapsedSchoolDays == 0 {
+        return PaceStatusOnTrack // school year hasn't started
     }
 
     // Project total present days based on current pace
-    let pace_rate = actual_present_days as f64 / elapsed_school_days as f64;
-    let projected_total = (pace_rate * total_school_days as f64).round() as i32;
+    paceRate := float64(actualPresentDays) / float64(elapsedSchoolDays)
+    projectedTotal := int32(math.Round(paceRate * float64(totalSchoolDays)))
 
-    if projected_total >= required {
-        PaceStatus::OnTrack
-    } else if projected_total >= (required as f64 * 0.9).round() as i32 {
-        PaceStatus::AtRisk // within 10% of requirement
-    } else {
-        PaceStatus::Behind
+    if projectedTotal >= required {
+        return PaceStatusOnTrack
+    } else if projectedTotal >= int32(math.Round(float64(required)*0.9)) {
+        return PaceStatusAtRisk
     }
-}
-
-pub enum PaceStatus {
-    OnTrack,
-    AtRisk,   // projected total within 10% of requirement
-    Behind,   // projected total below 90% of requirement
-    NotApplicable, // state has no attendance requirement
+    return PaceStatusBehind
 }
 ```
 
@@ -2505,24 +2058,26 @@ pub enum PaceStatus {
 When a family has a custom schedule, `elapsed_school_days` is computed by counting
 school days according to the schedule:
 
-```rust
-/// Count school days between two dates using a custom schedule.
-pub fn count_school_days(
-    start: NaiveDate,
-    end: NaiveDate,
-    school_days: &[bool; 7],         // Mon=0 through Sun=6
-    exclusion_periods: &[ExclusionPeriod],
-) -> i32 {
-    let mut count = 0;
-    let mut date = start;
-    while date <= end {
-        let weekday = date.weekday().num_days_from_monday() as usize;
-        if school_days[weekday] && !is_excluded(date, exclusion_periods) {
-            count += 1;
+```go
+// internal/comply/domain/attendance.go (continued)
+
+// CountSchoolDays counts school days between two dates using a custom schedule.
+func CountSchoolDays(
+    start time.Time,
+    end time.Time,
+    schoolDays [7]bool,              // Mon=0 through Sun=6
+    exclusionPeriods []ExclusionPeriod,
+) int32 {
+    var count int32
+    date := start
+    for !date.After(end) {
+        weekday := int(date.Weekday()+6) % 7 // convert Sunday=0 to Mon=0..Sun=6
+        if schoolDays[weekday] && !isExcluded(date, exclusionPeriods) {
+            count++
         }
-        date += chrono::Duration::days(1);
+        date = date.AddDate(0, 0, 1)
     }
-    count
+    return count
 }
 ```
 
@@ -2583,127 +2138,107 @@ aggregate roots and value objects that enforce invariants structurally.
 
 ### §14.1 Attendance Aggregate
 
-```rust
-// src/comply/domain/attendance.rs
+```go
+// internal/comply/domain/attendance.go (continued)
 
-/// Attendance aggregate — enforces attendance recording invariants.
-pub struct Attendance;
+import "time"
 
-impl Attendance {
-    /// Validate a new attendance record.
-    pub fn validate_record(
-        date: NaiveDate,
-        status: &str,
-        duration_minutes: Option<i16>,
-        today: NaiveDate,
-    ) -> Result<(), ComplianceError> {
-        // No future dates
-        if date > today {
-            return Err(ComplianceError::FutureAttendanceDate);
-        }
-
-        // Valid status
-        if !["present_full", "present_partial", "absent", "not_applicable"].contains(&status) {
-            return Err(ComplianceError::InvalidAttendanceStatus);
-        }
-
-        // Duration required for partial attendance
-        if status == "present_partial" && duration_minutes.is_none() {
-            return Err(ComplianceError::DurationRequiredForPartial);
-        }
-
-        // No negative duration
-        if let Some(d) = duration_minutes {
-            if d < 0 {
-                return Err(ComplianceError::NegativeDuration);
-            }
-        }
-
-        Ok(())
+// ValidateAttendanceRecord validates a new attendance record.
+func ValidateAttendanceRecord(
+    date time.Time,
+    status string,
+    durationMinutes *int16,
+    today time.Time,
+) error {
+    // No future dates
+    if date.After(today) {
+        return ErrFutureAttendanceDate
     }
 
-    /// Determine precedence: manual entries override auto-generated ones.
-    pub fn should_override(existing_is_auto: bool, new_is_manual: bool) -> bool {
-        // Manual always wins. Auto never overrides manual.
-        new_is_manual || existing_is_auto
+    // Valid status
+    validStatuses := map[string]bool{
+        "present_full": true, "present_partial": true,
+        "absent": true, "not_applicable": true,
     }
+    if !validStatuses[status] {
+        return ErrInvalidAttendanceStatus
+    }
+
+    // Duration required for partial attendance
+    if status == "present_partial" && durationMinutes == nil {
+        return ErrDurationRequiredForPartial
+    }
+
+    // No negative duration
+    if durationMinutes != nil && *durationMinutes < 0 {
+        return ErrNegativeDuration
+    }
+
+    return nil
+}
+
+// ShouldOverride determines precedence: manual entries override auto-generated ones.
+// Manual always wins. Auto never overrides manual.
+func ShouldOverride(existingIsAuto bool, newIsManual bool) bool {
+    return newIsManual || existingIsAuto
 }
 ```
 
 ### §14.2 Portfolio Aggregate
 
-```rust
-// src/comply/domain/portfolio.rs
+```go
+// internal/comply/domain/portfolio.go
 
-/// Portfolio aggregate — state machine with invariant enforcement.
-pub struct Portfolio;
-
-impl Portfolio {
-    /// Validate state transition.
-    pub fn validate_transition(
-        current_status: &str,
-        target_status: &str,
-    ) -> Result<(), ComplianceError> {
-        let valid = match (current_status, target_status) {
-            ("configuring", "generating") => true,
-            ("generating", "ready") => true,
-            ("generating", "failed") => true,
-            ("failed", "generating") => true,    // retry
-            ("ready", "expired") => true,
-            _ => false,
-        };
-
-        if !valid {
-            return Err(ComplianceError::InvalidPortfolioTransition {
-                from: current_status.to_string(),
-                to: target_status.to_string(),
-            });
-        }
-
-        Ok(())
+// ValidatePortfolioTransition validates a portfolio state transition.
+func ValidatePortfolioTransition(currentStatus, targetStatus string) error {
+    valid := false
+    switch {
+    case currentStatus == "configuring" && targetStatus == "generating":
+        valid = true
+    case currentStatus == "generating" && targetStatus == "ready":
+        valid = true
+    case currentStatus == "generating" && targetStatus == "failed":
+        valid = true
+    case currentStatus == "failed" && targetStatus == "generating": // retry
+        valid = true
+    case currentStatus == "ready" && targetStatus == "expired":
+        valid = true
     }
 
-    /// Validate portfolio can be generated.
-    pub fn validate_generate(
-        status: &str,
-        item_count: i32,
-        retry_count: i16,
-        max_retries: i16,
-    ) -> Result<(), ComplianceError> {
-        if status != "configuring" && status != "failed" {
-            return Err(ComplianceError::PortfolioNotConfiguring);
-        }
-
-        if item_count == 0 {
-            return Err(ComplianceError::EmptyPortfolio);
-        }
-
-        if status == "failed" && retry_count >= max_retries {
-            return Err(ComplianceError::MaxRetriesExceeded);
-        }
-
-        Ok(())
+    if !valid {
+        return &InvalidPortfolioTransitionError{From: currentStatus, To: targetStatus}
     }
+
+    return nil
+}
+
+// ValidatePortfolioGenerate validates that a portfolio can be generated.
+func ValidatePortfolioGenerate(status string, itemCount int32, retryCount int16, maxRetries int16) error {
+    if status != "configuring" && status != "failed" {
+        return ErrPortfolioNotConfiguring
+    }
+
+    if itemCount == 0 {
+        return ErrEmptyPortfolio
+    }
+
+    if status == "failed" && retryCount >= maxRetries {
+        return ErrMaxRetriesExceeded
+    }
+
+    return nil
 }
 ```
 
 ### §14.3 Transcript Aggregate (Phase 3)
 
-```rust
-// src/comply/domain/transcript.rs
+```go
+// internal/comply/domain/transcript.go
 
-/// Transcript aggregate — state machine (same pattern as Portfolio). Phase 3.
-pub struct Transcript;
-
-impl Transcript {
-    /// Validate state transition (same transitions as Portfolio).
-    pub fn validate_transition(
-        current_status: &str,
-        target_status: &str,
-    ) -> Result<(), ComplianceError> {
-        // Same valid transitions as Portfolio
-        Portfolio::validate_transition(current_status, target_status)
-    }
+// ValidateTranscriptTransition validates a transcript state transition (same pattern as Portfolio). Phase 3.
+// Delegates to ValidatePortfolioTransition since transitions are identical.
+func ValidateTranscriptTransition(currentStatus, targetStatus string) error {
+    return ValidatePortfolioTransition(currentStatus, targetStatus)
 }
 ```
 
@@ -2715,175 +2250,161 @@ Defined in §10. Pure computation function with no side effects or state.
 
 ## §15 Events comply:: Publishes
 
-Defined in `src/comply/events.rs`. `[CODING §8.4]`
+Defined in `internal/comply/events.go`. `[CODING §8.4]`
 
-```rust
-// src/comply/events.rs
+```go
+// internal/comply/events.go
 
-use crate::shared::types::{FamilyId, StudentId};
-use uuid::Uuid;
+import "github.com/google/uuid"
 
-/// Published when a portfolio PDF has been generated and is ready for download.
-/// Consumed by notify:: (in-app notification + optional email).
-#[derive(Clone, Debug)]
-pub struct PortfolioGenerated {
-    pub family_id: FamilyId,
-    pub student_id: StudentId,
-    pub portfolio_id: Uuid,
-    pub portfolio_title: String,
+// PortfolioGenerated is published when a portfolio PDF has been generated and is ready for download.
+// Consumed by notify:: (in-app notification + optional email).
+type PortfolioGenerated struct {
+    FamilyID       uuid.UUID `json:"family_id"`
+    StudentID      uuid.UUID `json:"student_id"`
+    PortfolioID    uuid.UUID `json:"portfolio_id"`
+    PortfolioTitle string    `json:"portfolio_title"`
 }
-impl DomainEvent for PortfolioGenerated {}
 
-/// Published when a transcript PDF has been generated and is ready for download. (Phase 3)
-/// Consumed by notify:: (in-app notification + optional email).
-#[derive(Clone, Debug)]
-pub struct TranscriptGenerated {
-    pub family_id: FamilyId,
-    pub student_id: StudentId,
-    pub transcript_id: Uuid,
-}
-impl DomainEvent for TranscriptGenerated {}
+func (e PortfolioGenerated) EventName() string { return "comply.portfolio_generated" }
 
-/// Published when a student's attendance pace falls below state requirements.
-/// Consumed by notify:: (in-app + email warning to parent).
-#[derive(Clone, Debug)]
-pub struct AttendanceThresholdWarning {
-    pub family_id: FamilyId,
-    pub student_id: StudentId,
-    pub student_name: String,
-    pub pace_status: String,               // "at_risk" | "behind"
-    pub actual_days: i32,
-    pub expected_days: i32,
-    pub required_days: i16,
+// TranscriptGenerated is published when a transcript PDF has been generated and is ready for download. (Phase 3)
+// Consumed by notify:: (in-app notification + optional email).
+type TranscriptGenerated struct {
+    FamilyID     uuid.UUID `json:"family_id"`
+    StudentID    uuid.UUID `json:"student_id"`
+    TranscriptID uuid.UUID `json:"transcript_id"`
 }
-impl DomainEvent for AttendanceThresholdWarning {}
+
+func (e TranscriptGenerated) EventName() string { return "comply.transcript_generated" }
+
+// AttendanceThresholdWarning is published when a student's attendance pace falls below state requirements.
+// Consumed by notify:: (in-app + email warning to parent).
+type AttendanceThresholdWarning struct {
+    FamilyID     uuid.UUID `json:"family_id"`
+    StudentID    uuid.UUID `json:"student_id"`
+    StudentName  string    `json:"student_name"`
+    PaceStatus   string    `json:"pace_status"` // "at_risk" | "behind"
+    ActualDays   int32     `json:"actual_days"`
+    ExpectedDays int32     `json:"expected_days"`
+    RequiredDays int16     `json:"required_days"`
+}
+
+func (e AttendanceThresholdWarning) EventName() string { return "comply.attendance_threshold_warning" }
 ```
 
 ---
 
 ## §16 Error Types + HTTP Mapping
 
-All compliance errors use `thiserror` and map to HTTP status codes via `AppError`. Internal
-details are logged but never exposed in API responses. `[CODING §2.2, §5.2]`
+All compliance errors use custom Go error types with `errors.Is`/`errors.As` and map to HTTP
+status codes via `AppError`. Internal details are logged but never exposed in API
+responses. `[CODING §2.2, §5.2]`
 
-```rust
-// src/comply/errors.rs
+```go
+// internal/comply/errors.go
 
-use thiserror::Error;
+import (
+    "errors"
+    "fmt"
+)
 
-#[derive(Debug, Error)]
-pub enum ComplianceError {
-    // ─── Configuration Errors ──────────────────────────────────────────
+// ─── Configuration Errors ──────────────────────────────────────────
 
-    #[error("Family config not found")]
-    FamilyConfigNotFound,
+var (
+    ErrFamilyConfigNotFound = errors.New("family config not found")
+    ErrInvalidStateCode     = errors.New("invalid state code")
+    ErrStateConfigNotFound  = errors.New("state config not found")
+    ErrInvalidSchoolYearRange = errors.New("invalid school year date range")
+)
 
-    #[error("Invalid state code")]
-    InvalidStateCode,
+// ─── Schedule Errors ───────────────────────────────────────────────
 
-    #[error("State config not found")]
-    StateConfigNotFound,
+var (
+    ErrScheduleNotFound      = errors.New("schedule not found")
+    ErrScheduleInUse         = errors.New("schedule in use by family config")
+    ErrInvalidSchoolDaysArray = errors.New("invalid school days array — must have 7 elements")
+)
 
-    #[error("Invalid school year date range")]
-    InvalidSchoolYearRange,
+// ─── Attendance Errors ─────────────────────────────────────────────
 
-    // ─── Schedule Errors ───────────────────────────────────────────────
+var (
+    ErrAttendanceNotFound          = errors.New("attendance record not found")
+    ErrFutureAttendanceDate        = errors.New("cannot record attendance for a future date")
+    ErrInvalidAttendanceStatus     = errors.New("invalid attendance status")
+    ErrDurationRequiredForPartial  = errors.New("duration is required for partial attendance")
+    ErrNegativeDuration            = errors.New("duration cannot be negative")
+    ErrBulkAttendanceLimitExceeded = errors.New("bulk attendance exceeds maximum of 31 records")
+)
 
-    #[error("Schedule not found")]
-    ScheduleNotFound,
+// ─── Assessment Errors ─────────────────────────────────────────────
 
-    #[error("Schedule in use by family config")]
-    ScheduleInUse,
+var (
+    ErrAssessmentNotFound  = errors.New("assessment record not found")
+    ErrInvalidAssessmentType = errors.New("invalid assessment type")
+)
 
-    #[error("Invalid school days array — must have 7 elements")]
-    InvalidSchoolDaysArray,
+// ─── Test Score Errors ─────────────────────────────────────────────
 
-    // ─── Attendance Errors ─────────────────────────────────────────────
+var ErrTestScoreNotFound = errors.New("test score not found")
 
-    #[error("Attendance record not found")]
-    AttendanceNotFound,
+// ─── Portfolio Errors ──────────────────────────────────────────────
 
-    #[error("Cannot record attendance for a future date")]
-    FutureAttendanceDate,
+var (
+    ErrPortfolioNotFound          = errors.New("portfolio not found")
+    ErrPortfolioNotConfiguring    = errors.New("portfolio is not in configuring status")
+    ErrEmptyPortfolio             = errors.New("cannot generate an empty portfolio")
+    ErrPortfolioExpired           = errors.New("portfolio has expired")
+    ErrMaxRetriesExceeded         = errors.New("maximum retry attempts exceeded")
+    ErrPortfolioItemSourceNotFound = errors.New("portfolio item source not found in learn::")
+    ErrDuplicatePortfolioItem     = errors.New("duplicate item in portfolio")
+)
 
-    #[error("Invalid attendance status")]
-    InvalidAttendanceStatus,
-
-    #[error("Duration is required for partial attendance")]
-    DurationRequiredForPartial,
-
-    #[error("Duration cannot be negative")]
-    NegativeDuration,
-
-    #[error("Bulk attendance exceeds maximum of 31 records")]
-    BulkAttendanceLimitExceeded,
-
-    // ─── Assessment Errors ─────────────────────────────────────────────
-
-    #[error("Assessment record not found")]
-    AssessmentNotFound,
-
-    #[error("Invalid assessment type")]
-    InvalidAssessmentType,
-
-    // ─── Test Score Errors ─────────────────────────────────────────────
-
-    #[error("Test score not found")]
-    TestScoreNotFound,
-
-    // ─── Portfolio Errors ──────────────────────────────────────────────
-
-    #[error("Portfolio not found")]
-    PortfolioNotFound,
-
-    #[error("Portfolio is not in configuring status")]
-    PortfolioNotConfiguring,
-
-    #[error("Cannot generate an empty portfolio")]
-    EmptyPortfolio,
-
-    #[error("Invalid portfolio status transition")]
-    InvalidPortfolioTransition { from: String, to: String },
-
-    #[error("Portfolio has expired")]
-    PortfolioExpired,
-
-    #[error("Maximum retry attempts exceeded")]
-    MaxRetriesExceeded,
-
-    #[error("Portfolio item source not found in learn::")]
-    PortfolioItemSourceNotFound,
-
-    #[error("Duplicate item in portfolio")]
-    DuplicatePortfolioItem,
-
-    // ─── Transcript Errors (Phase 3) ───────────────────────────────────
-
-    #[error("Transcript not found")]
-    TranscriptNotFound,
-
-    #[error("Course not found")]
-    CourseNotFound,
-
-    #[error("Invalid course level")]
-    InvalidCourseLevel,
-
-    // ─── Student Errors ────────────────────────────────────────────────
-
-    #[error("Student not found in family")]
-    StudentNotInFamily,
-
-    // ─── Infrastructure ────────────────────────────────────────────────
-
-    #[error("Database error")]
-    DbError(#[from] sea_orm::DbErr),       // internal — NOT exposed in API
-
-    #[error("PDF generation failed")]
-    PdfGenerationFailed(String),           // internal — NOT exposed in API
-
-    #[error("Media service error")]
-    MediaServiceError(String),             // internal — NOT exposed in API
+// InvalidPortfolioTransitionError represents an invalid portfolio status transition.
+type InvalidPortfolioTransitionError struct {
+    From string
+    To   string
 }
+
+func (e *InvalidPortfolioTransitionError) Error() string {
+    return fmt.Sprintf("invalid portfolio status transition from %s to %s", e.From, e.To)
+}
+
+// ─── Transcript Errors (Phase 3) ───────────────────────────────────
+
+var (
+    ErrTranscriptNotFound = errors.New("transcript not found")
+    ErrCourseNotFound     = errors.New("course not found")
+    ErrInvalidCourseLevel = errors.New("invalid course level")
+)
+
+// ─── Student Errors ────────────────────────────────────────────────
+
+var ErrStudentNotInFamily = errors.New("student not found in family")
+
+// ─── Infrastructure ────────────────────────────────────────────────
+
+// DbError wraps a database error — internal, NOT exposed in API.
+type DbError struct {
+    Err error
+}
+
+func (e *DbError) Error() string { return fmt.Sprintf("database error: %v", e.Err) }
+func (e *DbError) Unwrap() error { return e.Err }
+
+// PdfGenerationError wraps a PDF generation failure — internal, NOT exposed in API.
+type PdfGenerationError struct {
+    Detail string
+}
+
+func (e *PdfGenerationError) Error() string { return fmt.Sprintf("PDF generation failed: %s", e.Detail) }
+
+// MediaServiceError wraps a media service error — internal, NOT exposed in API.
+type MediaServiceError struct {
+    Detail string
+}
+
+func (e *MediaServiceError) Error() string { return fmt.Sprintf("media service error: %s", e.Detail) }
 ```
 
 ### Error-to-HTTP Mapping
@@ -2962,61 +2483,53 @@ See §15 for full event definitions.
 | `FamilyDeletionScheduled { family_id, delete_after }` | `iam::` | Cascade delete: remove `comply_family_configs`, all student compliance data. Data is permanently deleted (no soft-delete). `[01-iam §13.3]` |
 | `SubscriptionCancelled { family_id, effective_at }` | `billing::` | No data deletion. Existing data is preserved (read-only). Generated PDFs remain downloadable until they expire. New compliance operations are blocked by `RequirePremium` extractor. `[10-billing §16.3, S§15.3]` |
 
-```rust
-// src/comply/event_handlers.rs
+```go
+// internal/comply/event_handlers.go
 
-use crate::learn::events::ActivityLogged;
-use crate::iam::events::{StudentDeleted, FamilyDeletionScheduled};
-use crate::billing::events::SubscriptionCancelled;
+import (
+    "context"
+
+    "homegrown-academy/internal/learn"
+    "homegrown-academy/internal/iam"
+    "homegrown-academy/internal/billing"
+)
 
 // ─── learn:: events ────────────────────────────────────────────────────
 
-pub struct ActivityLoggedHandler {
-    compliance_service: Arc<dyn ComplianceService>,
+type ActivityLoggedHandler struct {
+    complianceService ComplianceService
 }
 
-#[async_trait]
-impl DomainEventHandler<ActivityLogged> for ActivityLoggedHandler {
-    async fn handle(&self, event: &ActivityLogged) -> Result<(), AppError> {
-        self.compliance_service.handle_activity_logged(event).await
-    }
+func (h *ActivityLoggedHandler) Handle(ctx context.Context, event *learn.ActivityLogged) error {
+    return h.complianceService.HandleActivityLogged(ctx, event)
 }
 
 // ─── iam:: events ──────────────────────────────────────────────────────
 
-pub struct StudentDeletedHandler {
-    compliance_service: Arc<dyn ComplianceService>,
+type StudentDeletedHandler struct {
+    complianceService ComplianceService
 }
 
-#[async_trait]
-impl DomainEventHandler<StudentDeleted> for StudentDeletedHandler {
-    async fn handle(&self, event: &StudentDeleted) -> Result<(), AppError> {
-        self.compliance_service.handle_student_deleted(event).await
-    }
+func (h *StudentDeletedHandler) Handle(ctx context.Context, event *iam.StudentDeleted) error {
+    return h.complianceService.HandleStudentDeleted(ctx, event)
 }
 
-pub struct FamilyDeletionScheduledHandler {
-    compliance_service: Arc<dyn ComplianceService>,
+type FamilyDeletionScheduledHandler struct {
+    complianceService ComplianceService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.compliance_service.handle_family_deletion_scheduled(event).await
-    }
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *iam.FamilyDeletionScheduled) error {
+    return h.complianceService.HandleFamilyDeletionScheduled(ctx, event)
 }
 
 // ─── billing:: events ──────────────────────────────────────────────────
 
-pub struct SubscriptionCancelledHandler {
-    compliance_service: Arc<dyn ComplianceService>,
+type SubscriptionCancelledHandler struct {
+    complianceService ComplianceService
 }
 
-#[async_trait]
-impl DomainEventHandler<SubscriptionCancelled> for SubscriptionCancelledHandler {
-    async fn handle(&self, event: &SubscriptionCancelled) -> Result<(), AppError> {
-        self.compliance_service.handle_subscription_cancelled(event).await
-    }
+func (h *SubscriptionCancelledHandler) Handle(ctx context.Context, event *billing.SubscriptionCancelled) error {
+    return h.complianceService.HandleSubscriptionCancelled(ctx, event)
 }
 ```
 
@@ -3048,7 +2561,7 @@ records, standardized tests, portfolios, transcripts, courses, GPA, dashboard.
   `SubscriptionCancelled`)
 - 2 additional background jobs (`GeneratePortfolioJob`, `AttendanceThresholdCheckJob`)
 - Domain events: `PortfolioGenerated`, `AttendanceThresholdWarning`
-- Portfolio generation pipeline (typst PDF)
+- Portfolio generation pipeline (gofpdf PDF)
 - Attendance threshold checking
 - **~28 endpoints, +6 tables, +3 event handlers, +2 background jobs**
 
@@ -3060,7 +2573,7 @@ records, standardized tests, portfolios, transcripts, courses, GPA, dashboard.
 - 1 additional background job (`GenerateTranscriptJob`)
 - Domain event: `TranscriptGenerated`
 - GPA calculation (standard, weighted, custom)
-- Transcript generation pipeline (typst PDF)
+- Transcript generation pipeline (gofpdf PDF)
 - GPA what-if calculator
 - **~14 endpoints, +2 tables, +1 background job**
 
@@ -3141,8 +2654,8 @@ Each item is a testable assertion. Implementation is not complete until all asse
 
 ### Error Handling
 
-43. Zero `.unwrap()` / `.expect()` in production code `[CODING §2.2]`
-44. All errors use `ComplianceError` with `thiserror` `[CODING §2.2, §5.2]`
+43. All errors checked (`if err != nil`) in production code `[CODING §2.2]`
+44. All errors use `ComplianceError` types with `errors.Is`/`errors.As` `[CODING §2.2, §5.2]`
 45. Internal error details (PDF generation errors, DB errors) are logged but never exposed in API responses
 
 ### Family-Scoping
@@ -3156,50 +2669,47 @@ Each item is a testable assertion. Implementation is not complete until all asse
 ## §20 Module Structure
 
 ```
-src/comply/
-├── mod.rs                    # Re-exports, domain-level doc comments
-├── handlers.rs               # ~28 Phase 2 + ~14 Phase 3 Axum route handlers
+internal/comply/
+├── handler.go                # ~28 Phase 2 + ~14 Phase 3 Echo route handlers
 │                             #   (thin layer: extractors → service → response)
-├── service.rs                # ComplianceServiceImpl — attendance recording,
+├── service.go                # ComplianceServiceImpl — attendance recording,
 │                             #   assessment aggregation, portfolio/transcript
 │                             #   orchestration, threshold checking, event handling
-├── repository.rs             # PgStateConfigRepo, PgFamilyConfigRepo,
+├── repository.go             # PgStateConfigRepo, PgFamilyConfigRepo,
 │                             #   PgScheduleRepo, PgAttendanceRepo,
 │                             #   PgAssessmentRepo, PgTestScoreRepo,
 │                             #   PgPortfolioRepo, PgPortfolioItemRepo,
 │                             #   PgTranscriptRepo (Phase 3), PgCourseRepo (Phase 3)
 │                             #   All user-data queries family-scoped via FamilyScope
-├── models.rs                 # Request/response types (serde + utoipa derives),
-│                             #   internal types, config types
-├── ports.rs                  # ComplianceService trait, all repository traits
+├── models.go                 # Request/response types (struct tags + swag annotations),
+│                             #   GORM models, internal types, config types
+├── ports.go                  # ComplianceService interface, all repository interfaces
 │                             #   (CQRS separation: commands vs queries)
-├── errors.rs                 # ComplianceError thiserror enum (~25 variants)
-├── events.rs                 # PortfolioGenerated, TranscriptGenerated,
+├── errors.go                 # ComplianceError sentinel errors + custom error types (~25 variants)
+├── events.go                 # PortfolioGenerated, TranscriptGenerated,
 │                             #   AttendanceThresholdWarning [ARCH §4.6]
-├── event_handlers.rs         # 4 DomainEventHandler structs:
+├── event_handlers.go         # 4 DomainEventHandler structs:
 │                             #   ActivityLoggedHandler,
 │                             #   StudentDeletedHandler,
 │                             #   FamilyDeletionScheduledHandler,
 │                             #   SubscriptionCancelledHandler [ARCH §4.6]
-├── jobs.rs                   # SyncStateConfigsJob, GeneratePortfolioJob,
+├── jobs.go                   # SyncStateConfigsJob, GeneratePortfolioJob,
 │                             #   GenerateTranscriptJob (Phase 3),
 │                             #   AttendanceThresholdCheckJob [ARCH §12]
-├── domain/                   # Complex domain — aggregate roots + value objects
-│   ├── mod.rs                #   [ARCH §4.5]
-│   ├── attendance.rs         # Attendance aggregate: date validation, override
-│   │                         #   precedence, pace calculation, school day counting
-│   ├── portfolio.rs          # Portfolio aggregate: state machine, generate
-│   │                         #   validation, item invariants
-│   ├── transcript.rs         # Transcript aggregate: state machine (Phase 3)
-│   ├── gpa.rs                # GpaCalculator value object: pure GPA computation
-│   │                         #   (unweighted, weighted, custom) (Phase 3)
-│   └── errors.rs             # Domain-layer error variants (if separated from
-│                             #   top-level ComplianceError — optional)
-└── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
+└── domain/                   # Complex domain — aggregate roots + value objects
+    │                         #   [ARCH §4.5]
+    ├── attendance.go         # Attendance aggregate: date validation, override
+    │                         #   precedence, pace calculation, school day counting
+    ├── portfolio.go          # Portfolio aggregate: state machine, generate
+    │                         #   validation, item invariants
+    ├── transcript.go         # Transcript aggregate: state machine (Phase 3)
+    ├── gpa.go                # GpaCalculator value object: pure GPA computation
+    │                         #   (unweighted, weighted, custom) (Phase 3)
+    └── errors.go             # Domain-layer error variants (if separated from
+                              #   top-level ComplianceError — optional)
 ```
 
 > **Complexity class**: Complex (has `domain/` subdirectory). `comply::` has attendance
 > threshold invariants, portfolio/transcript state machines, GPA calculation rules, and
 > manual-override-auto precedence logic that warrant structural enforcement via aggregate
 > roots. `[ARCH §4.5]`
-```

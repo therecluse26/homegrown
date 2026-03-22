@@ -9,11 +9,11 @@ defaults to **friends-only** visibility — there is no public visibility option
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/social/` |
+| **Module path** | `internal/social/` |
 | **DB prefix** | `soc_` |
 | **Complexity class** | Complex (has `domain/` subdirectory) `[ARCH §4.5]` |
 | **CQRS** | Yes — feed reads separated from post writes `[ARCH §4.7]` |
-| **External adapter** | None (Redis is shared infrastructure, WebSocket is Axum built-in) |
+| **External adapter** | None (Redis is shared infrastructure, WebSocket via gorilla/websocket) |
 | **Key constraint** | No public visibility; blocking maps to 404 (silent); friends-only messaging `[V§7]` |
 
 **What social:: owns**: Family social profiles (1:1 with `iam_families`), friendships
@@ -121,7 +121,7 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_soc_tables.rs
+-- Migration: YYYYMMDD_000001_create_soc_tables.sql (goose migration)
 -- =============================================================================
 
 -- Family social profiles [S§7.1]
@@ -447,7 +447,7 @@ CREATE POLICY soc_event_rsvps_family_policy ON soc_event_rsvps
 ## §4 API Endpoints
 
 All social endpoints require authentication unless otherwise noted. All social features
-are available to free-tier users — no `RequirePremium` extractor. `[S§3.2, S§15.1]`
+are available to free-tier users — no `RequirePremium` middleware. `[S§3.2, S§15.1]`
 
 ### §4.1 Phase 1 Endpoints
 
@@ -523,14 +523,14 @@ Rejects (deletes) a pending friend request.
 Lists pending friend requests received by the authenticated family.
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<FriendRequestResponse>` (200 OK)
+- **Response**: `[]FriendRequestResponse` (200 OK)
 
 ##### `GET /v1/social/friends/requests/outgoing`
 
 Lists pending friend requests sent by the authenticated family.
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<FriendRequestResponse>` (200 OK)
+- **Response**: `[]FriendRequestResponse` (200 OK)
 
 ##### `DELETE /v1/social/friends/:family_id`
 
@@ -562,7 +562,7 @@ Unblocks a family.
 Lists families blocked by the authenticated family.
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<BlockedFamilyResponse>` (200 OK)
+- **Response**: `[]BlockedFamilyResponse` (200 OK)
 
 #### Feed & Posts
 
@@ -705,14 +705,14 @@ Reports a message for moderation review. `[S§7.5, S§12.3]`
 Lists groups the authenticated family is a member of.
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<GroupSummaryResponse>` (200 OK)
+- **Response**: `[]GroupSummaryResponse` (200 OK)
 
 ##### `GET /v1/social/groups/platform`
 
 Lists platform-managed methodology groups. `[S§7.6]`
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<GroupSummaryResponse>` (200 OK)
+- **Response**: `[]GroupSummaryResponse` (200 OK)
 
 ##### `GET /v1/social/groups/:group_id`
 
@@ -858,7 +858,7 @@ Deletes a user-created group. Owner only. Platform groups cannot be deleted.
 Lists group members. Requires membership.
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `Vec<GroupMemberResponse>` (200 OK)
+- **Response**: `[]GroupMemberResponse` (200 OK)
 
 ##### `POST /v1/social/groups/:group_id/members/:family_id/approve`
 
@@ -904,7 +904,7 @@ Discovers nearby families (opt-in location). `[S§7.8]`
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?methodology_id=<uuid>&radius_km=50`
-- **Response**: `Vec<DiscoverableFamilyResponse>` (200 OK)
+- **Response**: `[]DiscoverableFamilyResponse` (200 OK)
 
 ##### `GET /v1/social/discover/events`
 
@@ -912,7 +912,7 @@ Discovers events by location and/or methodology. `[S§7.7]`
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?methodology_id=<uuid>&location_region=<string>`
-- **Response**: `Vec<EventSummaryResponse>` (200 OK)
+- **Response**: `[]EventSummaryResponse` (200 OK)
 
 ##### `GET /v1/social/discover/groups`
 
@@ -920,7 +920,7 @@ Discovers groups by methodology. `[S§7.6]`
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?methodology_id=<uuid>`
-- **Response**: `Vec<GroupSummaryResponse>` (200 OK)
+- **Response**: `[]GroupSummaryResponse` (200 OK)
 
 #### Post Editing
 
@@ -959,1045 +959,519 @@ additional capabilities).
 
 ## §5 Service Interface
 
-The `SocialService` trait defines all use cases exposed to handlers and other domains.
-Defined in `src/social/ports.rs`. Methods are organized with CQRS separation: command
+The `SocialService` interface defines all use cases exposed to handlers and other domains.
+Defined in `internal/social/ports.go`. Methods are organized with CQRS separation: command
 methods (writes with side effects) are separated from query methods (reads). `[CODING §8.2, ARCH §4.7]`
 
-```rust
-// src/social/ports.rs
-
-#[async_trait]
-pub trait SocialService: Send + Sync {
-    // ═══ COMMAND SIDE (writes with side effects) ════════════════════════
-
-    // ─── Profile Commands ────────────────────────────────────────────────
-
-    /// Creates a social profile for a new family.
-    /// Called by FamilyCreated event handler. [S§7.1]
-    async fn create_profile(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
-
-    /// Updates the authenticated family's social profile. [S§7.1]
-    async fn update_profile(
-        &self,
-        scope: &FamilyScope,
-        cmd: UpdateProfileRequest,
-    ) -> Result<ProfileResponse, AppError>;
-
-    // ─── Friend Commands ─────────────────────────────────────────────────
-
-    /// Sends a friend request. [S§7.4]
-    async fn send_friend_request(
-        &self,
-        scope: &FamilyScope,
-        cmd: SendFriendRequestCommand,
-    ) -> Result<FriendshipResponse, AppError>;
-
-    /// Accepts a pending friend request. [S§7.4]
-    async fn accept_friend_request(
-        &self,
-        scope: &FamilyScope,
-        friendship_id: Uuid,
-    ) -> Result<FriendshipResponse, AppError>;
-
-    /// Rejects (deletes) a pending friend request. [S§7.4]
-    async fn reject_friend_request(
-        &self,
-        scope: &FamilyScope,
-        friendship_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Removes an existing friendship. Silent, no notification. [S§7.4]
-    async fn unfriend(
-        &self,
-        scope: &FamilyScope,
-        target_family_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Blocks a family. Removes friendship if exists, purges feed. [S§7.4]
-    async fn block_family(
-        &self,
-        scope: &FamilyScope,
-        cmd: BlockFamilyCommand,
-    ) -> Result<(), AppError>;
-
-    /// Unblocks a family. [S§7.4]
-    async fn unblock_family(
-        &self,
-        scope: &FamilyScope,
-        target_family_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    // ─── Post Commands ───────────────────────────────────────────────────
-
-    /// Creates a post and triggers feed fan-out. [S§7.2]
-    async fn create_post(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreatePostCommand,
-    ) -> Result<PostResponse, AppError>;
-
-    /// Deletes a post. Author's family only. [S§7.2]
-    async fn delete_post(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Likes a post. Idempotent. [S§7.2]
-    async fn like_post(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Unlikes a post. [S§7.2]
-    async fn unlike_post(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    // ─── Comment Commands ────────────────────────────────────────────────
-
-    /// Creates a comment on a post. [S§7.3]
-    async fn create_comment(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-        cmd: CreateCommentCommand,
-    ) -> Result<CommentResponse, AppError>;
-
-    /// Deletes a comment. Author or post author can delete. [S§7.3]
-    async fn delete_comment(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-        comment_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    // ─── Messaging Commands ──────────────────────────────────────────────
-
-    /// Creates or retrieves a conversation. Friends-only guard. [S§7.5]
-    async fn create_conversation(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateConversationCommand,
-    ) -> Result<ConversationResponse, AppError>;
-
-    /// Sends a message in a conversation. [S§7.5]
-    async fn send_message(
-        &self,
-        scope: &FamilyScope,
-        conversation_id: Uuid,
-        cmd: SendMessageCommand,
-    ) -> Result<MessageResponse, AppError>;
-
-    /// Marks a conversation as read. [S§7.5]
-    async fn mark_conversation_read(
-        &self,
-        scope: &FamilyScope,
-        conversation_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Soft-deletes a conversation for the authenticated user. [S§7.5]
-    async fn delete_conversation(
-        &self,
-        scope: &FamilyScope,
-        conversation_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Reports a message for moderation review. [S§7.5, S§12.3]
-    async fn report_message(
-        &self,
-        scope: &FamilyScope,
-        message_id: Uuid,
-        cmd: ReportMessageCommand,
-    ) -> Result<(), AppError>;
-
-    // ─── Group Commands ──────────────────────────────────────────────────
-
-    /// Joins a group or submits join request based on join_policy. [S§7.6]
-    async fn join_group(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-    ) -> Result<GroupMemberResponse, AppError>;
-
-    /// Leaves a group. [S§7.6]
-    async fn leave_group(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Creates a user-created group. (Phase 2) [S§7.6]
-    async fn create_group(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateGroupCommand,
-    ) -> Result<GroupDetailResponse, AppError>;
-
-    /// Updates group settings. Moderator/owner only. (Phase 2) [S§7.6]
-    async fn update_group(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-        cmd: UpdateGroupCommand,
-    ) -> Result<GroupDetailResponse, AppError>;
-
-    /// Deletes a user-created group. Owner only. (Phase 2) [S§7.6]
-    async fn delete_group(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Approves a pending join request. Moderator/owner only. (Phase 2)
-    async fn approve_member(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<GroupMemberResponse, AppError>;
-
-    /// Rejects a pending join request. Moderator/owner only. (Phase 2)
-    async fn reject_member(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Bans a member. Moderator/owner only. (Phase 2)
-    async fn ban_member(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Promotes a member to moderator. Owner only. (Phase 2)
-    async fn promote_member(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<GroupMemberResponse, AppError>;
-
-    /// Invites a family to an invite-only group. Moderator/owner only. (Phase 2)
-    async fn invite_to_group(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-        cmd: InviteToGroupCommand,
-    ) -> Result<GroupMemberResponse, AppError>;
-
-    // ─── Event Commands ──────────────────────────────────────────────────
-
-    /// Creates an event. [S§7.7]
-    async fn create_event(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateEventCommand,
-    ) -> Result<EventResponse, AppError>;
-
-    /// Updates an event. Creator only. [S§7.7]
-    async fn update_event(
-        &self,
-        scope: &FamilyScope,
-        event_id: Uuid,
-        cmd: UpdateEventCommand,
-    ) -> Result<EventResponse, AppError>;
-
-    /// Cancels an event. Creator only. Notifies attendees. [S§7.7]
-    async fn cancel_event(
-        &self,
-        scope: &FamilyScope,
-        event_id: Uuid,
-    ) -> Result<EventResponse, AppError>;
-
-    /// RSVPs to an event. [S§7.7]
-    async fn rsvp_event(
-        &self,
-        scope: &FamilyScope,
-        event_id: Uuid,
-        cmd: RsvpCommand,
-    ) -> Result<RsvpResponse, AppError>;
-
-    /// Removes RSVP from an event. [S§7.7]
-    async fn remove_rsvp(
-        &self,
-        scope: &FamilyScope,
-        event_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    // ─── Event Handlers ──────────────────────────────────────────────────
-
-    /// Handles FamilyCreated event — creates social profile.
-    async fn handle_family_created(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
-
-    /// Handles CoParentRemoved event — disassociates posts from family.
-    async fn handle_co_parent_removed(
-        &self,
-        family_id: FamilyId,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    /// Handles MilestoneAchieved event — creates optional milestone post.
-    async fn handle_milestone_achieved(
-        &self,
-        family_id: FamilyId,
-        milestone: MilestoneData,
-    ) -> Result<(), AppError>;
-
-    /// Handles FamilyDeletionScheduled event — prepares for cascade.
-    async fn handle_family_deletion_scheduled(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
-
-    // ═══ QUERY SIDE (reads, no side effects) ════════════════════════════
-
-    // ─── Profile Queries ─────────────────────────────────────────────────
-
-    /// Returns the authenticated family's profile. [S§7.1]
-    async fn get_own_profile(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<ProfileResponse, AppError>;
-
-    /// Returns another family's profile, filtered by privacy settings. [S§7.1]
-    /// CROSS-FAMILY read.
-    async fn get_family_profile(
-        &self,
-        scope: &FamilyScope,
-        target_family_id: Uuid,
-    ) -> Result<ProfileResponse, AppError>;
-
-    // ─── Friend Queries ──────────────────────────────────────────────────
-
-    /// Lists the authenticated family's friends.
-    async fn list_friends(
-        &self,
-        scope: &FamilyScope,
-        pagination: PaginationParams,
-    ) -> Result<PaginatedResponse<FriendResponse>, AppError>;
-
-    /// Lists incoming friend requests.
-    async fn list_incoming_requests(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<FriendRequestResponse>, AppError>;
-
-    /// Lists outgoing friend requests.
-    async fn list_outgoing_requests(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<FriendRequestResponse>, AppError>;
-
-    /// Lists blocked families.
-    async fn list_blocks(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<BlockedFamilyResponse>, AppError>;
-
-    // ─── Feed Queries ────────────────────────────────────────────────────
-
-    /// Returns the authenticated family's timeline feed. [S§7.2.3]
-    async fn get_feed(
-        &self,
-        scope: &FamilyScope,
-        pagination: CursorPaginationParams,
-    ) -> Result<PaginatedResponse<PostResponse>, AppError>;
-
-    /// Returns a single post with comments. Visibility-checked.
-    async fn get_post(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-    ) -> Result<PostDetailResponse, AppError>;
-
-    // ─── Messaging Queries ───────────────────────────────────────────────
-
-    /// Lists the authenticated parent's conversations. [S§7.5]
-    async fn list_conversations(
-        &self,
-        scope: &FamilyScope,
-        pagination: CursorPaginationParams,
-    ) -> Result<PaginatedResponse<ConversationSummaryResponse>, AppError>;
-
-    /// Returns messages in a conversation. [S§7.5]
-    async fn get_conversation_messages(
-        &self,
-        scope: &FamilyScope,
-        conversation_id: Uuid,
-        pagination: CursorPaginationParams,
-    ) -> Result<PaginatedResponse<MessageResponse>, AppError>;
-
-    // ─── Group Queries ───────────────────────────────────────────────────
-
-    /// Lists groups the authenticated family is a member of. [S§7.6]
-    async fn list_my_groups(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<GroupSummaryResponse>, AppError>;
-
-    /// Lists platform-managed methodology groups. [S§7.6]
-    async fn list_platform_groups(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<GroupSummaryResponse>, AppError>;
-
-    /// Returns group details. Membership check for user-created groups. [S§7.6]
-    async fn get_group(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-    ) -> Result<GroupDetailResponse, AppError>;
-
-    /// Lists posts in a group. Requires membership. [S§7.6]
-    async fn list_group_posts(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-        pagination: CursorPaginationParams,
-    ) -> Result<PaginatedResponse<PostResponse>, AppError>;
-
-    /// Lists group members. (Phase 2)
-    async fn list_group_members(
-        &self,
-        scope: &FamilyScope,
-        group_id: Uuid,
-    ) -> Result<Vec<GroupMemberResponse>, AppError>;
-
-    // ─── Event Queries ───────────────────────────────────────────────────
-
-    /// Lists events visible to the authenticated family. [S§7.7]
-    async fn list_events(
-        &self,
-        scope: &FamilyScope,
-        filter: EventFilter,
-        pagination: CursorPaginationParams,
-    ) -> Result<PaginatedResponse<EventSummaryResponse>, AppError>;
-
-    /// Returns event details with RSVP list. [S§7.7]
-    async fn get_event(
-        &self,
-        scope: &FamilyScope,
-        event_id: Uuid,
-    ) -> Result<EventDetailResponse, AppError>;
-
-    // ─── Discovery Queries (Phase 2) ─────────────────────────────────────
-
-    /// Discovers nearby families with location sharing enabled. [S§7.8]
-    async fn discover_families(
-        &self,
-        scope: &FamilyScope,
-        query: DiscoverFamiliesQuery,
-    ) -> Result<Vec<DiscoverableFamilyResponse>, AppError>;
-
-    /// Discovers events by location/methodology. [S§7.7]
-    async fn discover_events(
-        &self,
-        scope: &FamilyScope,
-        query: DiscoverEventsQuery,
-    ) -> Result<Vec<EventSummaryResponse>, AppError>;
-
-    /// Discovers groups by methodology. [S§7.6]
-    async fn discover_groups(
-        &self,
-        scope: &FamilyScope,
-        query: DiscoverGroupsQuery,
-    ) -> Result<Vec<GroupSummaryResponse>, AppError>;
+```go
+// internal/social/ports.go
+
+type SocialService interface {
+    // === COMMAND SIDE (writes with side effects) ========================
+
+    // --- Profile Commands -----------------------------------------------
+
+    // CreateProfile creates a social profile for a new family.
+    // Called by FamilyCreated event handler. [S§7.1]
+    CreateProfile(ctx context.Context, familyID FamilyID) error
+
+    // UpdateProfile updates the authenticated family's social profile. [S§7.1]
+    UpdateProfile(ctx context.Context, scope *FamilyScope, cmd UpdateProfileRequest) (*ProfileResponse, error)
+
+    // --- Friend Commands ------------------------------------------------
+
+    // SendFriendRequest sends a friend request. [S§7.4]
+    SendFriendRequest(ctx context.Context, scope *FamilyScope, cmd SendFriendRequestCommand) (*FriendshipResponse, error)
+
+    // AcceptFriendRequest accepts a pending friend request. [S§7.4]
+    AcceptFriendRequest(ctx context.Context, scope *FamilyScope, friendshipID uuid.UUID) (*FriendshipResponse, error)
+
+    // RejectFriendRequest rejects (deletes) a pending friend request. [S§7.4]
+    RejectFriendRequest(ctx context.Context, scope *FamilyScope, friendshipID uuid.UUID) error
+
+    // Unfriend removes an existing friendship. Silent, no notification. [S§7.4]
+    Unfriend(ctx context.Context, scope *FamilyScope, targetFamilyID uuid.UUID) error
+
+    // BlockFamily blocks a family. Removes friendship if exists, purges feed. [S§7.4]
+    BlockFamily(ctx context.Context, scope *FamilyScope, cmd BlockFamilyCommand) error
+
+    // UnblockFamily unblocks a family. [S§7.4]
+    UnblockFamily(ctx context.Context, scope *FamilyScope, targetFamilyID uuid.UUID) error
+
+    // --- Post Commands --------------------------------------------------
+
+    // CreatePost creates a post and triggers feed fan-out. [S§7.2]
+    CreatePost(ctx context.Context, scope *FamilyScope, cmd CreatePostCommand) (*PostResponse, error)
+
+    // DeletePost deletes a post. Author's family only. [S§7.2]
+    DeletePost(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
+
+    // LikePost likes a post. Idempotent. [S§7.2]
+    LikePost(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
+
+    // UnlikePost unlikes a post. [S§7.2]
+    UnlikePost(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
+
+    // --- Comment Commands ------------------------------------------------
+
+    // CreateComment creates a comment on a post. [S§7.3]
+    CreateComment(ctx context.Context, scope *FamilyScope, postID uuid.UUID, cmd CreateCommentCommand) (*CommentResponse, error)
+
+    // DeleteComment deletes a comment. Author or post author can delete. [S§7.3]
+    DeleteComment(ctx context.Context, scope *FamilyScope, postID uuid.UUID, commentID uuid.UUID) error
+
+    // --- Messaging Commands ----------------------------------------------
+
+    // CreateConversation creates or retrieves a conversation. Friends-only guard. [S§7.5]
+    CreateConversation(ctx context.Context, scope *FamilyScope, cmd CreateConversationCommand) (*ConversationResponse, error)
+
+    // SendMessage sends a message in a conversation. [S§7.5]
+    SendMessage(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID, cmd SendMessageCommand) (*MessageResponse, error)
+
+    // MarkConversationRead marks a conversation as read. [S§7.5]
+    MarkConversationRead(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID) error
+
+    // DeleteConversation soft-deletes a conversation for the authenticated user. [S§7.5]
+    DeleteConversation(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID) error
+
+    // ReportMessage reports a message for moderation review. [S§7.5, S§12.3]
+    ReportMessage(ctx context.Context, scope *FamilyScope, messageID uuid.UUID, cmd ReportMessageCommand) error
+
+    // --- Group Commands ------------------------------------------------──
+
+    // JoinGroup joins a group or submits join request based on join_policy. [S§7.6]
+    JoinGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) (*GroupMemberResponse, error)
+
+    // LeaveGroup leaves a group. [S§7.6]
+    LeaveGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) error
+
+    // CreateGroup creates a user-created group. (Phase 2) [S§7.6]
+    CreateGroup(ctx context.Context, scope *FamilyScope, cmd CreateGroupCommand) (*GroupDetailResponse, error)
+
+    // UpdateGroup updates group settings. Moderator/owner only. (Phase 2) [S§7.6]
+    UpdateGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, cmd UpdateGroupCommand) (*GroupDetailResponse, error)
+
+    // DeleteGroup deletes a user-created group. Owner only. (Phase 2) [S§7.6]
+    DeleteGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) error
+
+    // ApproveMember approves a pending join request. Moderator/owner only. (Phase 2)
+    ApproveMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) (*GroupMemberResponse, error)
+
+    // RejectMember rejects a pending join request. Moderator/owner only. (Phase 2)
+    RejectMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) error
+
+    // BanMember bans a member. Moderator/owner only. (Phase 2)
+    BanMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) error
+
+    // PromoteMember promotes a member to moderator. Owner only. (Phase 2)
+    PromoteMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) (*GroupMemberResponse, error)
+
+    // InviteToGroup invites a family to an invite-only group. Moderator/owner only. (Phase 2)
+    InviteToGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, cmd InviteToGroupCommand) (*GroupMemberResponse, error)
+
+    // --- Event Commands ------------------------------------------------──
+
+    // CreateEvent creates an event. [S§7.7]
+    CreateEvent(ctx context.Context, scope *FamilyScope, cmd CreateEventCommand) (*EventResponse, error)
+
+    // UpdateEvent updates an event. Creator only. [S§7.7]
+    UpdateEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error)
+
+    // CancelEvent cancels an event. Creator only. Notifies attendees. [S§7.7]
+    CancelEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) (*EventResponse, error)
+
+    // RsvpEvent RSVPs to an event. [S§7.7]
+    RsvpEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID, cmd RsvpCommand) (*RsvpResponse, error)
+
+    // RemoveRsvp removes RSVP from an event. [S§7.7]
+    RemoveRsvp(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) error
+
+    // --- Event Handlers ------------------------------------------------──
+
+    // HandleFamilyCreated handles FamilyCreated event — creates social profile.
+    HandleFamilyCreated(ctx context.Context, familyID FamilyID) error
+
+    // HandleCoParentRemoved handles CoParentRemoved event — disassociates posts from family.
+    HandleCoParentRemoved(ctx context.Context, familyID FamilyID, parentID uuid.UUID) error
+
+    // HandleMilestoneAchieved handles MilestoneAchieved event — creates optional milestone post.
+    HandleMilestoneAchieved(ctx context.Context, familyID FamilyID, milestone MilestoneData) error
+
+    // HandleFamilyDeletionScheduled handles FamilyDeletionScheduled event — prepares for cascade.
+    HandleFamilyDeletionScheduled(ctx context.Context, familyID FamilyID) error
+
+    // === QUERY SIDE (reads, no side effects) ════════════════════════════
+
+    // --- Profile Queries ------------------------------------------------─
+
+    // GetOwnProfile returns the authenticated family's profile. [S§7.1]
+    GetOwnProfile(ctx context.Context, scope *FamilyScope) (*ProfileResponse, error)
+
+    // GetFamilyProfile returns another family's profile, filtered by privacy settings. [S§7.1]
+    // CROSS-FAMILY read.
+    GetFamilyProfile(ctx context.Context, scope *FamilyScope, targetFamilyID uuid.UUID) (*ProfileResponse, error)
+
+    // --- Friend Queries ------------------------------------------------──
+
+    // ListFriends lists the authenticated family's friends.
+    ListFriends(ctx context.Context, scope *FamilyScope, pagination *PaginationParams) (*PaginatedResponse[FriendResponse], error)
+
+    // ListIncomingRequests lists incoming friend requests.
+    ListIncomingRequests(ctx context.Context, scope *FamilyScope) ([]FriendRequestResponse, error)
+
+    // ListOutgoingRequests lists outgoing friend requests.
+    ListOutgoingRequests(ctx context.Context, scope *FamilyScope) ([]FriendRequestResponse, error)
+
+    // ListBlocks lists blocked families.
+    ListBlocks(ctx context.Context, scope *FamilyScope) ([]BlockedFamilyResponse, error)
+
+    // --- Feed Queries ------------------------------------------------────
+
+    // GetFeed returns the authenticated family's timeline feed. [S§7.2.3]
+    GetFeed(ctx context.Context, scope *FamilyScope, pagination *CursorPaginationParams) (*PaginatedResponse[PostResponse], error)
+
+    // GetPost returns a single post with comments. Visibility-checked.
+    GetPost(ctx context.Context, scope *FamilyScope, postID uuid.UUID) (*PostDetailResponse, error)
+
+    // --- Messaging Queries -----------------------------------------------
+
+    // ListConversations lists the authenticated parent's conversations. [S§7.5]
+    ListConversations(ctx context.Context, scope *FamilyScope, pagination *CursorPaginationParams) (*PaginatedResponse[ConversationSummaryResponse], error)
+
+    // GetConversationMessages returns messages in a conversation. [S§7.5]
+    GetConversationMessages(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID, pagination *CursorPaginationParams) (*PaginatedResponse[MessageResponse], error)
+
+    // --- Group Queries ------------------------------------------------───
+
+    // ListMyGroups lists groups the authenticated family is a member of. [S§7.6]
+    ListMyGroups(ctx context.Context, scope *FamilyScope) ([]GroupSummaryResponse, error)
+
+    // ListPlatformGroups lists platform-managed methodology groups. [S§7.6]
+    ListPlatformGroups(ctx context.Context, scope *FamilyScope) ([]GroupSummaryResponse, error)
+
+    // GetGroup returns group details. Membership check for user-created groups. [S§7.6]
+    GetGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) (*GroupDetailResponse, error)
+
+    // ListGroupPosts lists posts in a group. Requires membership. [S§7.6]
+    ListGroupPosts(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, pagination *CursorPaginationParams) (*PaginatedResponse[PostResponse], error)
+
+    // ListGroupMembers lists group members. (Phase 2)
+    ListGroupMembers(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) ([]GroupMemberResponse, error)
+
+    // --- Event Queries ------------------------------------------------───
+
+    // ListEvents lists events visible to the authenticated family. [S§7.7]
+    ListEvents(ctx context.Context, scope *FamilyScope, filter *EventFilter, pagination *CursorPaginationParams) (*PaginatedResponse[EventSummaryResponse], error)
+
+    // GetEvent returns event details with RSVP list. [S§7.7]
+    GetEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) (*EventDetailResponse, error)
+
+    // --- Discovery Queries (Phase 2) -------------------------------------
+
+    // DiscoverFamilies discovers nearby families with location sharing enabled. [S§7.8]
+    DiscoverFamilies(ctx context.Context, scope *FamilyScope, query DiscoverFamiliesQuery) ([]DiscoverableFamilyResponse, error)
+
+    // DiscoverEvents discovers events by location/methodology. [S§7.7]
+    DiscoverEvents(ctx context.Context, scope *FamilyScope, query DiscoverEventsQuery) ([]EventSummaryResponse, error)
+
+    // DiscoverGroups discovers groups by methodology. [S§7.6]
+    DiscoverGroups(ctx context.Context, scope *FamilyScope, query DiscoverGroupsQuery) ([]GroupSummaryResponse, error)
 }
 ```
 
-**Implementation**: `SocialServiceImpl` in `src/social/service.rs`. Constructor receives:
-- `Arc<dyn ProfileRepository>`
-- `Arc<dyn FriendshipRepository>`
-- `Arc<dyn BlockRepository>`
-- `Arc<dyn PostRepository>`
-- `Arc<dyn CommentRepository>`
-- `Arc<dyn PostLikeRepository>`
-- `Arc<dyn ConversationRepository>`
-- `Arc<dyn MessageRepository>`
-- `Arc<dyn GroupRepository>`
-- `Arc<dyn GroupMemberRepository>`
-- `Arc<dyn EventRepository>`
-- `Arc<dyn EventRsvpRepository>`
-- `Arc<dyn IamService>` (for family/parent data lookup)
-- `Arc<RedisPool>` (for feed fan-out, caching, WebSocket pub/sub)
-- `Arc<EventBus>`
+**Implementation**: `SocialServiceImpl` in `internal/social/service.go`. Constructor receives:
+- `ProfileRepository (interface)`
+- `FriendshipRepository (interface)`
+- `BlockRepository (interface)`
+- `PostRepository (interface)`
+- `CommentRepository (interface)`
+- `PostLikeRepository (interface)`
+- `ConversationRepository (interface)`
+- `MessageRepository (interface)`
+- `GroupRepository (interface)`
+- `GroupMemberRepository (interface)`
+- `EventRepository (interface)`
+- `EventRsvpRepository (interface)`
+- `IamService (interface)` (for family/parent data lookup)
+- `RedisPool` (for feed fan-out, caching, WebSocket pub/sub)
+- `EventBus (interface)`
 
 ---
 
 ## §6 Repository Interfaces
 
-Defined in `src/social/ports.rs`. Social repositories are unique in that several methods
+Defined in `internal/social/ports.go`. Social repositories are unique in that several methods
 perform **cross-family reads** — friendships, conversations, and feed queries by design
 access data from multiple families. These methods are explicitly marked with
 `// CROSS-FAMILY:` comments. `[CODING §2.4, CODING §8.2]`
 
-```rust
-// src/social/ports.rs (continued)
+```go
+// internal/social/ports.go (continued)
 
-#[async_trait]
-pub trait ProfileRepository: Send + Sync {
-    /// Creates a social profile. Called during FamilyCreated handling.
-    async fn create(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<Profile, AppError>;
+type ProfileRepository interface {
+    // Create creates a social profile. Called during FamilyCreated handling.
+    Create(ctx context.Context, familyID FamilyID) (*Profile, error)
 
-    /// Finds profile by family_id. Family-scoped for own profile.
-    async fn find_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Option<Profile>, AppError>;
+    // FindByFamily finds profile by family_id. Family-scoped for own profile.
+    FindByFamily(ctx context.Context, scope *FamilyScope) (*Profile, error)
 
-    /// Finds profile by family_id without family scope.
-    /// CROSS-FAMILY: Used to view another family's profile (visibility filtered in service).
-    async fn find_by_family_id(
-        &self,
-        family_id: Uuid,
-    ) -> Result<Option<Profile>, AppError>;
+    // FindByFamilyID finds profile by family_id without family scope.
+    // CROSS-FAMILY: Used to view another family's profile (visibility filtered in service).
+    FindByFamilyID(ctx context.Context, familyID uuid.UUID) (*Profile, error)
 
-    /// Updates a profile.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        profile: &Profile,
-    ) -> Result<Profile, AppError>;
+    // Update updates a profile.
+    Update(ctx context.Context, scope *FamilyScope, profile *Profile) (*Profile, error)
 }
 
-#[async_trait]
-pub trait FriendshipRepository: Send + Sync {
-    /// Creates a friendship record (status = pending).
-    async fn create(
-        &self,
-        requester_family_id: Uuid,
-        accepter_family_id: Uuid,
-    ) -> Result<Friendship, AppError>;
+type FriendshipRepository interface {
+    // Create creates a friendship record (status = pending).
+    Create(ctx context.Context, requesterFamilyID uuid.UUID, accepterFamilyID uuid.UUID) (*Friendship, error)
 
-    /// Finds a friendship between two families (either direction).
-    /// CROSS-FAMILY: Friendship involves two families.
-    async fn find_between(
-        &self,
-        family_a: Uuid,
-        family_b: Uuid,
-    ) -> Result<Option<Friendship>, AppError>;
+    // FindBetween finds a friendship between two families (either direction).
+    // CROSS-FAMILY: Friendship involves two families.
+    FindBetween(ctx context.Context, familyA uuid.UUID, familyB uuid.UUID) (*Friendship, error)
 
-    /// Finds a friendship by ID.
-    /// CROSS-FAMILY: Either participant can access.
-    async fn find_by_id(
-        &self,
-        friendship_id: Uuid,
-    ) -> Result<Option<Friendship>, AppError>;
+    // FindByID finds a friendship by ID.
+    // CROSS-FAMILY: Either participant can access.
+    FindByID(ctx context.Context, friendshipID uuid.UUID) (*Friendship, error)
 
-    /// Updates friendship status.
-    async fn update_status(
-        &self,
-        friendship_id: Uuid,
-        status: &str,
-    ) -> Result<Friendship, AppError>;
+    // UpdateStatus updates friendship status.
+    UpdateStatus(ctx context.Context, friendshipID uuid.UUID, status string) (*Friendship, error)
 
-    /// Deletes a friendship (unfriend or pre-block cleanup).
-    async fn delete_between(
-        &self,
-        family_a: Uuid,
-        family_b: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteBetween deletes a friendship (unfriend or pre-block cleanup).
+    DeleteBetween(ctx context.Context, familyA uuid.UUID, familyB uuid.UUID) error
 
-    /// Lists accepted friends for a family, paginated.
-    async fn list_friends(
-        &self,
-        scope: &FamilyScope,
-        pagination: &PaginationParams,
-    ) -> Result<Vec<Friendship>, AppError>;
+    // ListFriends lists accepted friends for a family, paginated.
+    ListFriends(ctx context.Context, scope *FamilyScope, pagination *PaginationParams) ([]Friendship, error)
 
-    /// Lists incoming pending requests.
-    async fn list_incoming_pending(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<Friendship>, AppError>;
+    // ListIncomingPending lists incoming pending requests.
+    ListIncomingPending(ctx context.Context, scope *FamilyScope) ([]Friendship, error)
 
-    /// Lists outgoing pending requests.
-    async fn list_outgoing_pending(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<Friendship>, AppError>;
+    // ListOutgoingPending lists outgoing pending requests.
+    ListOutgoingPending(ctx context.Context, scope *FamilyScope) ([]Friendship, error)
 
-    /// Returns all accepted friend family_ids for a family.
-    /// Used by feed fan-out and visibility checks.
-    async fn list_friend_family_ids(
-        &self,
-        family_id: Uuid,
-    ) -> Result<Vec<Uuid>, AppError>;
+    // ListFriendFamilyIDs returns all accepted friend family_ids for a family.
+    // Used by feed fan-out and visibility checks.
+    ListFriendFamilyIDs(ctx context.Context, familyID uuid.UUID) ([]uuid.UUID, error)
 }
 
-#[async_trait]
-pub trait BlockRepository: Send + Sync {
-    /// Creates a block record.
-    async fn create(
-        &self,
-        blocker_family_id: Uuid,
-        blocked_family_id: Uuid,
-    ) -> Result<Block, AppError>;
+type BlockRepository interface {
+    // Creates a block record.
+    Create(ctx context.Context, blockerFamilyID uuid.UUID, blockedFamilyID uuid.UUID) (Block, error)
 
-    /// Checks if family_a has blocked family_b. O(1) lookup.
-    async fn is_blocked(
-        &self,
-        blocker_family_id: Uuid,
-        blocked_family_id: Uuid,
-    ) -> Result<bool, AppError>;
+    // Checks if family_a has blocked family_b. O(1) lookup.
+    IsBlocked(ctx context.Context, blockerFamilyID uuid.UUID, blockedFamilyID uuid.UUID) (bool, error)
 
-    /// Checks if either family has blocked the other (bidirectional check).
-    /// CROSS-FAMILY: Used for visibility checks.
-    async fn is_either_blocked(
-        &self,
-        family_a: Uuid,
-        family_b: Uuid,
-    ) -> Result<bool, AppError>;
+    // Checks if either family has blocked the other (bidirectional check).
+    // CROSS-FAMILY: Used for visibility checks.
+    IsEitherBlocked(ctx context.Context, familyA uuid.UUID, familyB uuid.UUID) (bool, error)
 
-    /// Deletes a block record (unblock).
-    async fn delete(
-        &self,
-        blocker_family_id: Uuid,
-        blocked_family_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Deletes a block record (unblock).
+    Delete(ctx context.Context, blockerFamilyID uuid.UUID, blockedFamilyID uuid.UUID) error
 
-    /// Lists all families blocked by a family.
-    async fn list_blocked_by(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<Block>, AppError>;
+    // Lists all families blocked by a family.
+    ListBlockedBy(ctx context.Context, scope *FamilyScope) ([]Block, error)
 
-    /// Returns all family_ids blocked by or blocking a family.
-    /// Used by feed filtering.
-    async fn list_all_blocked_family_ids(
-        &self,
-        family_id: Uuid,
-    ) -> Result<Vec<Uuid>, AppError>;
+    // Returns all family_ids blocked by or blocking a family.
+    // Used by feed filtering.
+    ListAllBlockedFamilyIDs(ctx context.Context, familyID uuid.UUID) ([]uuid.UUID, error)
 }
 
-#[async_trait]
-pub trait PostRepository: Send + Sync {
-    /// Creates a post.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        post: &CreatePostRecord,
-    ) -> Result<Post, AppError>;
+type PostRepository interface {
+    // Creates a post.
+    Create(ctx context.Context, scope *FamilyScope, post CreatePostRecord) (Post, error)
 
-    /// Finds a post by ID.
-    /// CROSS-FAMILY: Post may belong to another family (visibility checked in service).
-    async fn find_by_id(
-        &self,
-        post_id: Uuid,
-    ) -> Result<Option<Post>, AppError>;
+    // Finds a post by ID.
+    // CROSS-FAMILY: Post may belong to another family (visibility checked in service).
+    FindByID(ctx context.Context, postID uuid.UUID) (*Post, error)
 
-    /// Deletes a post. Family-scoped (author's family only).
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Deletes a post. Family-scoped (author's family only).
+    Delete(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
 
-    /// Updates a post (editing). Family-scoped.
-    async fn update(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-        content: &str,
-        attachments: &serde_json::Value,
-    ) -> Result<Post, AppError>;
+    // Updates a post (editing). Family-scoped.
+    Update(ctx context.Context, scope *FamilyScope, postID uuid.UUID, content string, attachments json.RawMessage) (Post, error)
 
-    /// Increments likes_count.
-    async fn increment_likes(
-        &self,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Increments likes_count.
+    IncrementLikes(ctx context.Context, postID uuid.UUID) error
 
-    /// Decrements likes_count.
-    async fn decrement_likes(
-        &self,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Decrements likes_count.
+    DecrementLikes(ctx context.Context, postID uuid.UUID) error
 
-    /// Increments comments_count.
-    async fn increment_comments(
-        &self,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Increments comments_count.
+    IncrementComments(ctx context.Context, postID uuid.UUID) error
 
-    /// Decrements comments_count.
-    async fn decrement_comments(
-        &self,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Decrements comments_count.
+    DecrementComments(ctx context.Context, postID uuid.UUID) error
 
-    /// Lists posts by family_ids (for feed hydration from Redis post IDs).
-    /// CROSS-FAMILY: Feed contains posts from multiple families.
-    async fn find_by_ids(
-        &self,
-        post_ids: &[Uuid],
-    ) -> Result<Vec<Post>, AppError>;
+    // Lists posts by family_ids (for feed hydration from Redis post IDs).
+    // CROSS-FAMILY: Feed contains posts from multiple families.
+    FindByIDs(ctx context.Context, postIDs []uuid.UUID) ([]Post, error)
 
-    /// Lists posts by group, paginated.
-    async fn list_by_group(
-        &self,
-        group_id: Uuid,
-        pagination: &CursorPaginationParams,
-    ) -> Result<Vec<Post>, AppError>;
+    // Lists posts by group, paginated.
+    ListByGroup(ctx context.Context, groupID uuid.UUID, pagination *CursorPaginationParams) ([]Post, error)
 
-    /// Fallback feed query: recent posts from friend family_ids.
-    /// CROSS-FAMILY: Reads posts from multiple friend families.
-    async fn list_friends_posts(
-        &self,
-        friend_family_ids: &[Uuid],
-        pagination: &CursorPaginationParams,
-    ) -> Result<Vec<Post>, AppError>;
+    // Fallback feed query: recent posts from friend family_ids.
+    // CROSS-FAMILY: Reads posts from multiple friend families.
+    ListFriendsPosts(ctx context.Context, friendFamilyIDs []uuid.UUID, pagination *CursorPaginationParams) ([]Post, error)
 }
 
-#[async_trait]
-pub trait CommentRepository: Send + Sync {
-    /// Creates a comment.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        comment: &CreateCommentRecord,
-    ) -> Result<Comment, AppError>;
+type CommentRepository interface {
+    // Creates a comment.
+    Create(ctx context.Context, scope *FamilyScope, comment CreateCommentRecord) (Comment, error)
 
-    /// Finds a comment by ID.
-    async fn find_by_id(
-        &self,
-        comment_id: Uuid,
-    ) -> Result<Option<Comment>, AppError>;
+    // Finds a comment by ID.
+    FindByID(ctx context.Context, commentID uuid.UUID) (*Comment, error)
 
-    /// Lists comments for a post, ordered by created_at.
-    /// CROSS-FAMILY: Comments come from multiple families.
-    async fn list_by_post(
-        &self,
-        post_id: Uuid,
-    ) -> Result<Vec<Comment>, AppError>;
+    // Lists comments for a post, ordered by created_at.
+    // CROSS-FAMILY: Comments come from multiple families.
+    ListByPost(ctx context.Context, postID uuid.UUID) ([]Comment, error)
 
-    /// Deletes a comment.
-    async fn delete(
-        &self,
-        comment_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Deletes a comment.
+    Delete(ctx context.Context, commentID uuid.UUID) error
 }
 
-#[async_trait]
-pub trait PostLikeRepository: Send + Sync {
-    /// Creates a like (idempotent via UNIQUE constraint).
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
+type PostLikeRepository interface {
+    // Creates a like (idempotent via UNIQUE constraint).
+    Create(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
 
-    /// Deletes a like.
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        post_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Deletes a like.
+    Delete(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
 
-    /// Checks if a family has liked a post.
-    async fn exists(
-        &self,
-        family_id: Uuid,
-        post_id: Uuid,
-    ) -> Result<bool, AppError>;
+    // Checks if a family has liked a post.
+    Exists(ctx context.Context, familyID uuid.UUID, postID uuid.UUID) (bool, error)
 }
 
-#[async_trait]
-pub trait ConversationRepository: Send + Sync {
-    /// Creates a conversation with two participants.
-    async fn create_with_participants(
-        &self,
-        participant_a_parent_id: Uuid,
-        participant_a_family_id: Uuid,
-        participant_b_parent_id: Uuid,
-        participant_b_family_id: Uuid,
-    ) -> Result<Conversation, AppError>;
+type ConversationRepository interface {
+    // Creates a conversation with two participants.
+    CreateWithParticipants(ctx context.Context, participantAParentID uuid.UUID, participantAFamilyID uuid.UUID, participantBParentID uuid.UUID, participantBFamilyID uuid.UUID) (Conversation, error)
 
-    /// Finds an existing conversation between two parents.
-    /// CROSS-FAMILY: Conversations span two families.
-    async fn find_between_parents(
-        &self,
-        parent_a: Uuid,
-        parent_b: Uuid,
-    ) -> Result<Option<Conversation>, AppError>;
+    // Finds an existing conversation between two parents.
+    // CROSS-FAMILY: Conversations span two families.
+    FindBetweenParents(ctx context.Context, parentA uuid.UUID, parentB uuid.UUID) (*Conversation, error)
 
-    /// Lists conversations for a parent (excludes soft-deleted).
-    async fn list_by_parent(
-        &self,
-        parent_id: Uuid,
-        pagination: &CursorPaginationParams,
-    ) -> Result<Vec<ConversationWithParticipants>, AppError>;
+    // Lists conversations for a parent (excludes soft-deleted).
+    ListByParent(ctx context.Context, parentID uuid.UUID, pagination *CursorPaginationParams) ([]ConversationWithParticipants, error)
 
-    /// Marks conversation read for a participant.
-    async fn mark_read(
-        &self,
-        conversation_id: Uuid,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Marks conversation read for a participant.
+    MarkRead(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
 
-    /// Soft-deletes a conversation for a participant.
-    async fn soft_delete_for_participant(
-        &self,
-        conversation_id: Uuid,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Soft-deletes a conversation for a participant.
+    SoftDeleteForParticipant(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
 
-    /// Clears deleted_at for a participant (new message restores conversation).
-    async fn restore_for_participant(
-        &self,
-        conversation_id: Uuid,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Clears deleted_at for a participant (new message restores conversation).
+    RestoreForParticipant(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
 
-    /// Checks if a parent is a participant in a conversation.
-    async fn is_participant(
-        &self,
-        conversation_id: Uuid,
-        parent_id: Uuid,
-    ) -> Result<bool, AppError>;
+    // Checks if a parent is a participant in a conversation.
+    IsParticipant(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) (bool, error)
 }
 
-#[async_trait]
-pub trait MessageRepository: Send + Sync {
-    /// Creates a message.
-    async fn create(
-        &self,
-        message: &CreateMessageRecord,
-    ) -> Result<Message, AppError>;
+type MessageRepository interface {
+    // Creates a message.
+    Create(ctx context.Context, message CreateMessageRecord) (Message, error)
 
-    /// Lists messages in a conversation, respecting participant's deleted_at.
-    /// CROSS-FAMILY: Messages from both participants are returned.
-    async fn list_by_conversation(
-        &self,
-        conversation_id: Uuid,
-        participant_deleted_at: Option<DateTime<Utc>>,
-        pagination: &CursorPaginationParams,
-    ) -> Result<Vec<Message>, AppError>;
+    // Lists messages in a conversation, respecting participant's deleted_at.
+    // CROSS-FAMILY: Messages from both participants are returned.
+    ListByConversation(ctx context.Context, conversationID uuid.UUID, participantDeletedAt *time.Time, pagination *CursorPaginationParams) ([]Message, error)
 
-    /// Finds a message by ID.
-    async fn find_by_id(
-        &self,
-        message_id: Uuid,
-    ) -> Result<Option<Message>, AppError>;
+    // Finds a message by ID.
+    FindByID(ctx context.Context, messageID uuid.UUID) (*Message, error)
 }
 
-#[async_trait]
-pub trait GroupRepository: Send + Sync {
-    /// Creates a group.
-    async fn create(
-        &self,
-        group: &CreateGroupRecord,
-    ) -> Result<Group, AppError>;
+type GroupRepository interface {
+    // Creates a group.
+    Create(ctx context.Context, group CreateGroupRecord) (Group, error)
 
-    /// Finds a group by ID.
-    async fn find_by_id(
-        &self,
-        group_id: Uuid,
-    ) -> Result<Option<Group>, AppError>;
+    // Finds a group by ID.
+    FindByID(ctx context.Context, groupID uuid.UUID) (*Group, error)
 
-    /// Updates a group.
-    async fn update(
-        &self,
-        group_id: Uuid,
-        group: &UpdateGroupRecord,
-    ) -> Result<Group, AppError>;
+    // Updates a group.
+    Update(ctx context.Context, groupID uuid.UUID, group UpdateGroupRecord) (Group, error)
 
-    /// Deletes a group.
-    async fn delete(
-        &self,
-        group_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Deletes a group.
+    Delete(ctx context.Context, groupID uuid.UUID) error
 
-    /// Lists platform-managed groups.
-    async fn list_platform_groups(
-    ) -> Result<Vec<Group>, AppError>;
+    // Lists platform-managed groups.
+    ListPlatformGroups(ctx context.Context) ([]Group, error)
 
-    /// Increments member_count.
-    async fn increment_member_count(
-        &self,
-        group_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Increments member_count.
+    IncrementMemberCount(ctx context.Context, groupID uuid.UUID) error
 
-    /// Decrements member_count.
-    async fn decrement_member_count(
-        &self,
-        group_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Decrements member_count.
+    DecrementMemberCount(ctx context.Context, groupID uuid.UUID) error
 
-    /// Lists groups by methodology_id. Used for discovery.
-    async fn list_by_methodology(
-        &self,
-        methodology_id: Uuid,
-    ) -> Result<Vec<Group>, AppError>;
+    // Lists groups by methodology_id. Used for discovery.
+    ListByMethodology(ctx context.Context, methodologyID uuid.UUID) ([]Group, error)
 }
 
-#[async_trait]
-pub trait GroupMemberRepository: Send + Sync {
-    /// Creates a group membership record.
-    async fn create(
-        &self,
-        membership: &CreateGroupMemberRecord,
-    ) -> Result<GroupMember, AppError>;
+type GroupMemberRepository interface {
+    // Creates a group membership record.
+    Create(ctx context.Context, membership CreateGroupMemberRecord) (GroupMember, error)
 
-    /// Finds membership by group and family.
-    async fn find_by_group_and_family(
-        &self,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<Option<GroupMember>, AppError>;
+    // Finds membership by group and family.
+    FindByGroupAndFamily(ctx context.Context, groupID uuid.UUID, familyID uuid.UUID) (*GroupMember, error)
 
-    /// Updates membership status or role.
-    async fn update(
-        &self,
-        membership_id: Uuid,
-        status: Option<&str>,
-        role: Option<&str>,
-    ) -> Result<GroupMember, AppError>;
+    // Updates membership status or role.
+    Update(ctx context.Context, membershipID uuid.UUID, status *string, role *string) (GroupMember, error)
 
-    /// Deletes a membership record (leave or reject).
-    async fn delete(
-        &self,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Deletes a membership record (leave or reject).
+    Delete(ctx context.Context, groupID uuid.UUID, familyID uuid.UUID) error
 
-    /// Lists active members of a group.
-    async fn list_active_by_group(
-        &self,
-        group_id: Uuid,
-    ) -> Result<Vec<GroupMember>, AppError>;
+    // Lists active members of a group.
+    ListActiveByGroup(ctx context.Context, groupID uuid.UUID) ([]GroupMember, error)
 
-    /// Lists groups a family is an active member of.
-    async fn list_groups_for_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<Uuid>, AppError>;
+    // Lists groups a family is an active member of.
+    ListGroupsForFamily(ctx context.Context, scope *FamilyScope) ([]uuid.UUID, error)
 
-    /// Checks if a family is an active member of a group.
-    async fn is_active_member(
-        &self,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<bool, AppError>;
+    // Checks if a family is an active member of a group.
+    IsActiveMember(ctx context.Context, groupID uuid.UUID, familyID uuid.UUID) (bool, error)
 
-    /// Checks if a family is a moderator or owner of a group.
-    async fn is_moderator_or_owner(
-        &self,
-        group_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<bool, AppError>;
+    // Checks if a family is a moderator or owner of a group.
+    IsModeratorOrOwner(ctx context.Context, groupID uuid.UUID, familyID uuid.UUID) (bool, error)
 }
 
-#[async_trait]
-pub trait EventRepository: Send + Sync {
-    /// Creates an event.
-    async fn create(
-        &self,
-        event: &CreateEventRecord,
-    ) -> Result<Event, AppError>;
+type EventRepository interface {
+    // Creates an event.
+    Create(ctx context.Context, event CreateEventRecord) (Event, error)
 
-    /// Finds an event by ID.
-    async fn find_by_id(
-        &self,
-        event_id: Uuid,
-    ) -> Result<Option<Event>, AppError>;
+    // Finds an event by ID.
+    FindByID(ctx context.Context, eventID uuid.UUID) (*Event, error)
 
-    /// Updates an event.
-    async fn update(
-        &self,
-        event_id: Uuid,
-        event: &UpdateEventRecord,
-    ) -> Result<Event, AppError>;
+    // Updates an event.
+    Update(ctx context.Context, eventID uuid.UUID, event UpdateEventRecord) (Event, error)
 
-    /// Updates event status (e.g., cancel).
-    async fn update_status(
-        &self,
-        event_id: Uuid,
-        status: &str,
-    ) -> Result<Event, AppError>;
+    // Updates event status (e.g., cancel).
+    UpdateStatus(ctx context.Context, eventID uuid.UUID, status string) (Event, error)
 
-    /// Lists events visible to a family (own, friends', group, discoverable).
-    /// CROSS-FAMILY: Events from friends and discoverable events.
-    async fn list_visible(
-        &self,
-        family_id: Uuid,
-        friend_family_ids: &[Uuid],
-        group_ids: &[Uuid],
-        filter: &EventFilter,
-        pagination: &CursorPaginationParams,
-    ) -> Result<Vec<Event>, AppError>;
+    // Lists events visible to a family (own, friends', group, discoverable).
+    // CROSS-FAMILY: Events from friends and discoverable events.
+    ListVisible(ctx context.Context, familyID uuid.UUID, friendFamilyIDs []uuid.UUID, groupIDs []uuid.UUID, filter *EventFilter, pagination *CursorPaginationParams) ([]Event, error)
 
-    /// Lists discoverable events by location/methodology.
-    async fn list_discoverable(
-        &self,
-        methodology_id: Option<Uuid>,
-        location_region: Option<&str>,
-    ) -> Result<Vec<Event>, AppError>;
+    // Lists discoverable events by location/methodology.
+    ListDiscoverable(ctx context.Context, methodologyID *uuid.UUID, locationRegion *string) ([]Event, error)
 
-    /// Increments attendee_count.
-    async fn increment_attendee_count(
-        &self,
-        event_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Increments attendee_count.
+    IncrementAttendeeCount(ctx context.Context, eventID uuid.UUID) error
 
-    /// Decrements attendee_count.
-    async fn decrement_attendee_count(
-        &self,
-        event_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Decrements attendee_count.
+    DecrementAttendeeCount(ctx context.Context, eventID uuid.UUID) error
 }
 
-#[async_trait]
-pub trait EventRsvpRepository: Send + Sync {
-    /// Creates or updates an RSVP.
-    async fn upsert(
-        &self,
-        scope: &FamilyScope,
-        event_id: Uuid,
-        status: &str,
-    ) -> Result<EventRsvp, AppError>;
+type EventRsvpRepository interface {
+    // Creates or updates an RSVP.
+    Upsert(ctx context.Context, scope *FamilyScope, eventID uuid.UUID, status string) (EventRsvp, error)
 
-    /// Deletes an RSVP.
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        event_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Deletes an RSVP.
+    Delete(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) error
 
-    /// Lists RSVPs for an event.
-    /// CROSS-FAMILY: RSVPs come from multiple families.
-    async fn list_by_event(
-        &self,
-        event_id: Uuid,
-    ) -> Result<Vec<EventRsvp>, AppError>;
+    // Lists RSVPs for an event.
+    // CROSS-FAMILY: RSVPs come from multiple families.
+    ListByEvent(ctx context.Context, eventID uuid.UUID) ([]EventRsvp, error)
 
-    /// Counts "going" RSVPs for capacity checking.
-    async fn count_going(
-        &self,
-        event_id: Uuid,
-    ) -> Result<i64, AppError>;
+    // Counts "going" RSVPs for capacity checking.
+    CountGoing(ctx context.Context, eventID uuid.UUID) (int64, error)
 
-    /// Lists family_ids with "going" RSVPs (for cancellation notification).
-    async fn list_going_family_ids(
-        &self,
-        event_id: Uuid,
-    ) -> Result<Vec<Uuid>, AppError>;
+    // Lists family_ids with "going" RSVPs (for cancellation notification).
+    ListGoingFamilyIDs(ctx context.Context, eventID uuid.UUID) ([]uuid.UUID, error)
 }
 ```
 
@@ -2006,659 +1480,635 @@ pub trait EventRsvpRepository: Send + Sync {
 ## §7 Adapter Interfaces
 
 None. The social domain has no external third-party service dependencies. Redis is
-shared infrastructure (`src/shared/redis.rs`). WebSocket is Axum built-in
-(`tokio-tungstenite`). Content scanning and notification delivery are handled via
+shared infrastructure (`internal/shared/redis.go`). WebSocket is handled via gorilla/websocket.
+Content scanning and notification delivery are handled via
 domain events to `safety::` and `notify::` respectively. `[CODING §8.1]`
 
 ---
 
 ## §8 Models (DTOs)
 
-All types defined in `src/social/models.rs`. API-facing types derive `serde::Serialize`,
-`serde::Deserialize`, and `utoipa::ToSchema`. Request types additionally derive
-`validator::Validate`. `[CODING §2.3]`
+All types defined in `internal/social/models.go`. API-facing types use `json:"field"` struct tags and swaggo/swag annotations.
+Request types additionally use go-playground/validator tags. `[CODING §2.3]`
 
 ### §8.1 Request Types
 
-```rust
-// src/social/models.rs
+```go
+// internal/social/models.go
 
-/// Profile update. [S§7.1]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateProfileRequest {
-    #[validate(length(max = 2000))]
-    pub bio: Option<String>,
-    pub profile_photo_url: Option<String>,
-    /// Per-field privacy settings. Values: "friends" | "hidden". [S§7.1]
-    pub privacy_settings: Option<serde_json::Value>,
-    pub location_visible: Option<bool>,
+// Profile update. [S§7.1]
+
+type UpdateProfileRequest struct {
+    Bio *string `json:"bio"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
+    // / Per-field privacy settings. Values: "friends" | "hidden". [S§7.1]
+    PrivacySettings *json.RawMessage `json:"privacy_settings"`
+    LocationVisible *bool `json:"location_visible"`
 }
 
-/// Send friend request. [S§7.4]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SendFriendRequestCommand {
-    pub target_family_id: Uuid,
+// Send friend request. [S§7.4]
+
+type SendFriendRequestCommand struct {
+    TargetFamilyID uuid.UUID `json:"target_family_id"`
 }
 
-/// Block a family. [S§7.4]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct BlockFamilyCommand {
-    pub target_family_id: Uuid,
+// Block a family. [S§7.4]
+
+type BlockFamilyCommand struct {
+    TargetFamilyID uuid.UUID `json:"target_family_id"`
 }
 
-/// Create a post. [S§7.2]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreatePostCommand {
-    pub post_type: String,      // validated against allowed values in service
-    #[validate(length(max = 10000))]
-    pub content: Option<String>,
-    #[serde(default)]
-    pub attachments: Vec<AttachmentInput>,
-    pub group_id: Option<Uuid>,
+// Create a post. [S§7.2]
+
+type CreatePostCommand struct {
+    PostType string `json:"post_type"` // validated against allowed values in service
+    Content *string `json:"content"`
+    Attachments []AttachmentInput `json:"attachments"`
+    GroupID *uuid.UUID `json:"group_id"`
 }
 
-/// Update a post (Phase 2). [S§7.2]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdatePostCommand {
-    #[validate(length(max = 10000))]
-    pub content: Option<String>,
-    pub attachments: Option<Vec<AttachmentInput>>,
+// Update a post (Phase 2). [S§7.2]
+
+type UpdatePostCommand struct {
+    Content *string `json:"content"`
+    Attachments *[]AttachmentInput `json:"attachments"`
 }
 
-/// Attachment input for posts and messages.
-#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
-pub struct AttachmentInput {
-    pub url: String,
-    pub content_type: String,    // MIME type
-    pub filename: Option<String>,
+// Attachment input for posts and messages.
+
+type AttachmentInput struct {
+    URL string `json:"url"`
+    ContentType string `json:"content_type"` // MIME type
+    Filename *string `json:"filename"`
 }
 
-/// Create a comment. [S§7.3]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateCommentCommand {
-    #[validate(length(min = 1, max = 5000))]
-    pub content: String,
-    pub parent_comment_id: Option<Uuid>,
+// Create a comment. [S§7.3]
+
+type CreateCommentCommand struct {
+    Content string `json:"content"`
+    ParentCommentID *uuid.UUID `json:"parent_comment_id"`
 }
 
-/// Create or get a conversation. [S§7.5]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateConversationCommand {
-    pub recipient_parent_id: Uuid,
+// Create or get a conversation. [S§7.5]
+
+type CreateConversationCommand struct {
+    RecipientParentID uuid.UUID `json:"recipient_parent_id"`
 }
 
-/// Send a message. [S§7.5]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct SendMessageCommand {
-    #[validate(length(min = 1, max = 10000))]
-    pub content: String,
-    #[serde(default)]
-    pub attachments: Vec<AttachmentInput>,
+// Send a message. [S§7.5]
+
+type SendMessageCommand struct {
+    Content string `json:"content"`
+    Attachments []AttachmentInput `json:"attachments"`
 }
 
-/// Report a message. [S§12.3]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct ReportMessageCommand {
-    #[validate(length(min = 1, max = 2000))]
-    pub reason: String,
+// Report a message. [S§12.3]
+
+type ReportMessageCommand struct {
+    Reason string `json:"reason"`
 }
 
-/// Create a group (Phase 2). [S§7.6]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateGroupCommand {
-    #[validate(length(min = 1, max = 200))]
-    pub name: String,
-    #[validate(length(max = 2000))]
-    pub description: Option<String>,
-    pub join_policy: Option<String>,   // defaults to "open"
-    pub methodology_id: Option<Uuid>,
+// Create a group (Phase 2). [S§7.6]
+
+type CreateGroupCommand struct {
+    Name string `json:"name"`
+    Description *string `json:"description"`
+    JoinPolicy *string `json:"join_policy"` // defaults to "open"
+    MethodologyID *uuid.UUID `json:"methodology_id"`
 }
 
-/// Update a group (Phase 2). [S§7.6]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateGroupCommand {
-    #[validate(length(min = 1, max = 200))]
-    pub name: Option<String>,
-    #[validate(length(max = 2000))]
-    pub description: Option<String>,
-    pub join_policy: Option<String>,
-    pub cover_photo_url: Option<String>,
+// Update a group (Phase 2). [S§7.6]
+
+type UpdateGroupCommand struct {
+    Name *string `json:"name"`
+    Description *string `json:"description"`
+    JoinPolicy *string `json:"join_policy"`
+    CoverPhotoURL *string `json:"cover_photo_url"`
 }
 
-/// Invite to group (Phase 2). [S§7.6]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct InviteToGroupCommand {
-    pub family_id: Uuid,
+// Invite to group (Phase 2). [S§7.6]
+
+type InviteToGroupCommand struct {
+    FamilyID uuid.UUID `json:"family_id"`
 }
 
-/// Create an event. [S§7.7]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateEventCommand {
-    #[validate(length(min = 1, max = 200))]
-    pub title: String,
-    #[validate(length(max = 5000))]
-    pub description: Option<String>,
-    pub event_date: DateTime<Utc>,
-    pub end_date: Option<DateTime<Utc>>,
-    #[validate(length(max = 500))]
-    pub location_name: Option<String>,
-    #[validate(length(max = 200))]
-    pub location_region: Option<String>,
-    pub is_virtual: bool,
-    pub virtual_url: Option<String>,
-    pub capacity: Option<i32>,
-    pub visibility: String,           // "friends" | "group" | "discoverable"
-    pub group_id: Option<Uuid>,
-    pub methodology_id: Option<Uuid>,
+// Create an event. [S§7.7]
+
+type CreateEventCommand struct {
+    Title string `json:"title"`
+    Description *string `json:"description"`
+    EventDate time.Time `json:"event_date"`
+    EndDate *time.Time `json:"end_date"`
+    LocationName *string `json:"location_name"`
+    LocationRegion *string `json:"location_region"`
+    IsVirtual bool `json:"is_virtual"`
+    VirtualURL *string `json:"virtual_url"`
+    Capacity *int32 `json:"capacity"`
+    Visibility string `json:"visibility"` // "friends" | "group" | "discoverable"
+    GroupID *uuid.UUID `json:"group_id"`
+    MethodologyID *uuid.UUID `json:"methodology_id"`
 }
 
-/// Update an event. [S§7.7]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct UpdateEventCommand {
-    #[validate(length(min = 1, max = 200))]
-    pub title: Option<String>,
-    #[validate(length(max = 5000))]
-    pub description: Option<String>,
-    pub event_date: Option<DateTime<Utc>>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub location_name: Option<String>,
-    pub location_region: Option<String>,
-    pub is_virtual: Option<bool>,
-    pub virtual_url: Option<String>,
-    pub capacity: Option<i32>,
+// Update an event. [S§7.7]
+
+type UpdateEventCommand struct {
+    Title *string `json:"title"`
+    Description *string `json:"description"`
+    EventDate *time.Time `json:"event_date"`
+    EndDate *time.Time `json:"end_date"`
+    LocationName *string `json:"location_name"`
+    LocationRegion *string `json:"location_region"`
+    IsVirtual *bool `json:"is_virtual"`
+    VirtualURL *string `json:"virtual_url"`
+    Capacity *int32 `json:"capacity"`
 }
 
-/// RSVP to an event. [S§7.7]
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct RsvpCommand {
-    pub status: String,               // "going" | "interested" | "not_going"
+// RSVP to an event. [S§7.7]
+
+type RsvpCommand struct {
+    Status string `json:"status"` // "going" | "interested" | "not_going"
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-/// Social profile response. [S§7.1]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ProfileResponse {
-    pub family_id: Uuid,
-    pub display_name: Option<String>,    // from iam_families; hidden if privacy = "hidden"
-    pub parent_names: Option<Vec<String>>, // from iam_parents; hidden if privacy = "hidden"
-    pub children: Option<Vec<ProfileChildResponse>>, // hidden if privacy = "hidden"
-    pub methodology_names: Option<Vec<String>>,      // hidden if privacy = "hidden"
-    pub location_region: Option<String>, // hidden if privacy = "hidden" or not location_visible
-    pub bio: Option<String>,
-    pub profile_photo_url: Option<String>,
-    pub privacy_settings: Option<serde_json::Value>, // only included for own profile
-    pub location_visible: Option<bool>,              // only included for own profile
-    pub is_friend: bool,
-    pub friendship_status: Option<String>,           // "pending" | "accepted" | null
+```go
+// Social profile response. [S§7.1]
+
+type ProfileResponse struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    DisplayName *string `json:"display_name"` // from iam_families; hidden if privacy = "hidden"
+    ParentNames *[]string `json:"parent_names"` // from iam_parents; hidden if privacy = "hidden"
+    Children *[]ProfileChildResponse `json:"children"` // hidden if privacy = "hidden"
+    MethodologyNames *[]string `json:"methodology_names"` // hidden if privacy = "hidden"
+    LocationRegion *string `json:"location_region"` // hidden if privacy = "hidden" or not location_visible
+    Bio *string `json:"bio"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
+    PrivacySettings *json.RawMessage `json:"privacy_settings"` // only included for own profile
+    LocationVisible *bool `json:"location_visible"` // only included for own profile
+    IsFriend bool `json:"is_friend"`
+    FriendshipStatus *string `json:"friendship_status"` // "pending" | "accepted" | null
 }
 
-/// Child info in profile (generic avatar default). [S§7.1]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ProfileChildResponse {
-    pub display_name: String,
-    pub age: Option<i16>,            // computed from birth_year
-    pub avatar_url: Option<String>,  // defaults to generic avatar
+// Child info in profile (generic avatar default). [S§7.1]
+
+type ProfileChildResponse struct {
+    DisplayName string `json:"display_name"`
+    Age *int16 `json:"age"` // computed from birth_year
+    AvatarURL *string `json:"avatar_url"` // defaults to generic avatar
 }
 
-/// Friendship response.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct FriendshipResponse {
-    pub id: Uuid,
-    pub requester_family_id: Uuid,
-    pub accepter_family_id: Uuid,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
+// Friendship response.
+
+type FriendshipResponse struct {
+    ID uuid.UUID `json:"id"`
+    RequesterFamilyID uuid.UUID `json:"requester_family_id"`
+    AccepterFamilyID uuid.UUID `json:"accepter_family_id"`
+    Status string `json:"status"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Friend list item.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct FriendResponse {
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub profile_photo_url: Option<String>,
-    pub methodology_names: Vec<String>,
-    pub friends_since: DateTime<Utc>,
+// Friend list item.
+
+type FriendResponse struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    DisplayName string `json:"display_name"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
+    MethodologyNames []string `json:"methodology_names"`
+    FriendsSince time.Time `json:"friends_since"`
 }
 
-/// Incoming/outgoing friend request.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct FriendRequestResponse {
-    pub friendship_id: Uuid,
-    pub family_id: Uuid,         // the other family
-    pub display_name: String,
-    pub profile_photo_url: Option<String>,
-    pub created_at: DateTime<Utc>,
+// Incoming/outgoing friend request.
+
+type FriendRequestResponse struct {
+    FriendshipID uuid.UUID `json:"friendship_id"`
+    FamilyID uuid.UUID `json:"family_id"` // the other family
+    DisplayName string `json:"display_name"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Blocked family.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct BlockedFamilyResponse {
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub blocked_at: DateTime<Utc>,
+// Blocked family.
+
+type BlockedFamilyResponse struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    DisplayName string `json:"display_name"`
+    BlockedAt time.Time `json:"blocked_at"`
 }
 
-/// Post response. [S§7.2]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PostResponse {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub author_name: String,
-    pub author_photo_url: Option<String>,
-    pub post_type: String,
-    pub content: Option<String>,
-    pub attachments: Vec<AttachmentInput>,
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
-    pub visibility: String,
-    pub likes_count: i32,
-    pub comments_count: i32,
-    pub is_liked_by_me: bool,
-    pub is_edited: bool,
-    pub created_at: DateTime<Utc>,
+// Post response. [S§7.2]
+
+type PostResponse struct {
+    ID uuid.UUID `json:"id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    AuthorName string `json:"author_name"`
+    AuthorPhotoURL *string `json:"author_photo_url"`
+    PostType string `json:"post_type"`
+    Content *string `json:"content"`
+    Attachments []AttachmentInput `json:"attachments"`
+    GroupID *uuid.UUID `json:"group_id"`
+    GroupName *string `json:"group_name"`
+    Visibility string `json:"visibility"`
+    LikesCount int32 `json:"likes_count"`
+    CommentsCount int32 `json:"comments_count"`
+    IsLikedByMe bool `json:"is_liked_by_me"`
+    IsEdited bool `json:"is_edited"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Post detail with comments. [S§7.2, S§7.3]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PostDetailResponse {
-    #[serde(flatten)]
-    pub post: PostResponse,
-    pub comments: Vec<CommentResponse>,
+// Post detail with comments. [S§7.2, S§7.3]
+
+type PostDetailResponse struct {
+    Post PostResponse `json:"post"`
+    Comments []CommentResponse `json:"comments"`
 }
 
-/// Comment response. [S§7.3]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CommentResponse {
-    pub id: Uuid,
-    pub post_id: Uuid,
-    pub family_id: Uuid,
-    pub author_name: String,
-    pub author_photo_url: Option<String>,
-    pub parent_comment_id: Option<Uuid>,
-    pub content: String,
-    pub created_at: DateTime<Utc>,
-    pub replies: Vec<CommentResponse>,   // one level only
+// Comment response. [S§7.3]
+
+type CommentResponse struct {
+    ID uuid.UUID `json:"id"`
+    PostID uuid.UUID `json:"post_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    AuthorName string `json:"author_name"`
+    AuthorPhotoURL *string `json:"author_photo_url"`
+    ParentCommentID *uuid.UUID `json:"parent_comment_id"`
+    Content string `json:"content"`
+    CreatedAt time.Time `json:"created_at"`
+    Replies []CommentResponse `json:"replies"` // one level only
 }
 
-/// Conversation summary. [S§7.5]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ConversationSummaryResponse {
-    pub id: Uuid,
-    pub other_parent_name: String,
-    pub other_parent_photo_url: Option<String>,
-    pub other_family_id: Uuid,
-    pub last_message_preview: Option<String>,
-    pub last_message_at: Option<DateTime<Utc>>,
-    pub unread_count: i64,
-    pub updated_at: DateTime<Utc>,
+// Conversation summary. [S§7.5]
+
+type ConversationSummaryResponse struct {
+    ID uuid.UUID `json:"id"`
+    OtherParentName string `json:"other_parent_name"`
+    OtherParentPhotoURL *string `json:"other_parent_photo_url"`
+    OtherFamilyID uuid.UUID `json:"other_family_id"`
+    LastMessagePreview *string `json:"last_message_preview"`
+    LastMessageAt *time.Time `json:"last_message_at"`
+    UnreadCount int64 `json:"unread_count"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Conversation response. [S§7.5]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ConversationResponse {
-    pub id: Uuid,
-    pub participants: Vec<ConversationParticipantResponse>,
-    pub created_at: DateTime<Utc>,
+// Conversation response. [S§7.5]
+
+type ConversationResponse struct {
+    ID uuid.UUID `json:"id"`
+    Participants []ConversationParticipantResponse `json:"participants"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Conversation participant.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ConversationParticipantResponse {
-    pub parent_id: Uuid,
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub profile_photo_url: Option<String>,
+// Conversation participant.
+
+type ConversationParticipantResponse struct {
+    ParentID uuid.UUID `json:"parent_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    DisplayName string `json:"display_name"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
 }
 
-/// Message response. [S§7.5]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct MessageResponse {
-    pub id: Uuid,
-    pub conversation_id: Uuid,
-    pub sender_parent_id: Uuid,
-    pub sender_name: String,
-    pub content: String,
-    pub attachments: Vec<AttachmentInput>,
-    pub created_at: DateTime<Utc>,
+// Message response. [S§7.5]
+
+type MessageResponse struct {
+    ID uuid.UUID `json:"id"`
+    ConversationID uuid.UUID `json:"conversation_id"`
+    SenderParentID uuid.UUID `json:"sender_parent_id"`
+    SenderName string `json:"sender_name"`
+    Content string `json:"content"`
+    Attachments []AttachmentInput `json:"attachments"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Group summary. [S§7.6]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct GroupSummaryResponse {
-    pub id: Uuid,
-    pub group_type: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub cover_photo_url: Option<String>,
-    pub methodology_name: Option<String>,
-    pub member_count: i32,
-    pub join_policy: String,
-    pub is_member: bool,
+// Group summary. [S§7.6]
+
+type GroupSummaryResponse struct {
+    ID uuid.UUID `json:"id"`
+    GroupType string `json:"group_type"`
+    Name string `json:"name"`
+    Description *string `json:"description"`
+    CoverPhotoURL *string `json:"cover_photo_url"`
+    MethodologyName *string `json:"methodology_name"`
+    MemberCount int32 `json:"member_count"`
+    JoinPolicy string `json:"join_policy"`
+    IsMember bool `json:"is_member"`
 }
 
-/// Group detail. [S§7.6]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct GroupDetailResponse {
-    #[serde(flatten)]
-    pub summary: GroupSummaryResponse,
-    pub creator_family_id: Option<Uuid>,
-    pub my_role: Option<String>,       // member/moderator/owner — null if not a member
-    pub my_status: Option<String>,     // active/pending/invited — null if not a member
-    pub created_at: DateTime<Utc>,
+// Group detail. [S§7.6]
+
+type GroupDetailResponse struct {
+    Summary GroupSummaryResponse `json:"summary"`
+    CreatorFamilyID *uuid.UUID `json:"creator_family_id"`
+    MyRole *string `json:"my_role"` // member/moderator/owner — null if not a member
+    MyStatus *string `json:"my_status"` // active/pending/invited — null if not a member
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Group member response. [S§7.6]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct GroupMemberResponse {
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub profile_photo_url: Option<String>,
-    pub role: String,
-    pub status: String,
-    pub joined_at: Option<DateTime<Utc>>,
+// Group member response. [S§7.6]
+
+type GroupMemberResponse struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    DisplayName string `json:"display_name"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
+    Role string `json:"role"`
+    Status string `json:"status"`
+    JoinedAt *time.Time `json:"joined_at"`
 }
 
-/// Event summary. [S§7.7]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EventSummaryResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub event_date: DateTime<Utc>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub location_name: Option<String>,
-    pub is_virtual: bool,
-    pub creator_family_name: String,
-    pub attendee_count: i32,
-    pub capacity: Option<i32>,
-    pub visibility: String,
-    pub status: String,
-    pub my_rsvp: Option<String>,
+// Event summary. [S§7.7]
+
+type EventSummaryResponse struct {
+    ID uuid.UUID `json:"id"`
+    Title string `json:"title"`
+    EventDate time.Time `json:"event_date"`
+    EndDate *time.Time `json:"end_date"`
+    LocationName *string `json:"location_name"`
+    IsVirtual bool `json:"is_virtual"`
+    CreatorFamilyName string `json:"creator_family_name"`
+    AttendeeCount int32 `json:"attendee_count"`
+    Capacity *int32 `json:"capacity"`
+    Visibility string `json:"visibility"`
+    Status string `json:"status"`
+    MyRsvp *string `json:"my_rsvp"`
 }
 
-/// Event detail with RSVPs. [S§7.7]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EventDetailResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub event_date: DateTime<Utc>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub location_name: Option<String>,
-    pub location_region: Option<String>,
-    pub is_virtual: bool,
-    pub virtual_url: Option<String>,
-    pub capacity: Option<i32>,
-    pub visibility: String,
-    pub status: String,
-    pub creator_family_id: Uuid,
-    pub creator_family_name: String,
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
-    pub methodology_name: Option<String>,
-    pub attendee_count: i32,
-    pub my_rsvp: Option<String>,
-    pub rsvps: Vec<EventRsvpResponse>,
-    pub created_at: DateTime<Utc>,
+// Event detail with RSVPs. [S§7.7]
+
+type EventDetailResponse struct {
+    ID uuid.UUID `json:"id"`
+    Title string `json:"title"`
+    Description *string `json:"description"`
+    EventDate time.Time `json:"event_date"`
+    EndDate *time.Time `json:"end_date"`
+    LocationName *string `json:"location_name"`
+    LocationRegion *string `json:"location_region"`
+    IsVirtual bool `json:"is_virtual"`
+    VirtualURL *string `json:"virtual_url"`
+    Capacity *int32 `json:"capacity"`
+    Visibility string `json:"visibility"`
+    Status string `json:"status"`
+    CreatorFamilyID uuid.UUID `json:"creator_family_id"`
+    CreatorFamilyName string `json:"creator_family_name"`
+    GroupID *uuid.UUID `json:"group_id"`
+    GroupName *string `json:"group_name"`
+    MethodologyName *string `json:"methodology_name"`
+    AttendeeCount int32 `json:"attendee_count"`
+    MyRsvp *string `json:"my_rsvp"`
+    Rsvps []EventRsvpResponse `json:"rsvps"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Event response (for create/update). [S§7.7]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EventResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub event_date: DateTime<Utc>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub location_name: Option<String>,
-    pub location_region: Option<String>,
-    pub is_virtual: bool,
-    pub virtual_url: Option<String>,
-    pub capacity: Option<i32>,
-    pub visibility: String,
-    pub status: String,
-    pub attendee_count: i32,
-    pub created_at: DateTime<Utc>,
+// Event response (for create/update). [S§7.7]
+
+type EventResponse struct {
+    ID uuid.UUID `json:"id"`
+    Title string `json:"title"`
+    Description *string `json:"description"`
+    EventDate time.Time `json:"event_date"`
+    EndDate *time.Time `json:"end_date"`
+    LocationName *string `json:"location_name"`
+    LocationRegion *string `json:"location_region"`
+    IsVirtual bool `json:"is_virtual"`
+    VirtualURL *string `json:"virtual_url"`
+    Capacity *int32 `json:"capacity"`
+    Visibility string `json:"visibility"`
+    Status string `json:"status"`
+    AttendeeCount int32 `json:"attendee_count"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// RSVP response. [S§7.7]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RsvpResponse {
-    pub event_id: Uuid,
-    pub family_id: Uuid,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
+// RSVP response. [S§7.7]
+
+type RsvpResponse struct {
+    EventID uuid.UUID `json:"event_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    Status string `json:"status"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Event RSVP in event detail.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EventRsvpResponse {
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub status: String,
+// Event RSVP in event detail.
+
+type EventRsvpResponse struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    DisplayName string `json:"display_name"`
+    Status string `json:"status"`
 }
 
-/// Discoverable family (Phase 2). [S§7.8]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct DiscoverableFamilyResponse {
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub profile_photo_url: Option<String>,
-    pub methodology_names: Vec<String>,
-    pub location_region: Option<String>,
+// Discoverable family (Phase 2). [S§7.8]
+
+type DiscoverableFamilyResponse struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    DisplayName string `json:"display_name"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
+    MethodologyNames []string `json:"methodology_names"`
+    LocationRegion *string `json:"location_region"`
 }
 ```
 
 ### §8.3 Internal Types
 
-```rust
-/// Internal profile model (maps to soc_profiles row + iam data).
-#[derive(Debug, Clone)]
-pub struct Profile {
-    pub family_id: Uuid,
-    pub bio: Option<String>,
-    pub profile_photo_url: Option<String>,
-    pub privacy_settings: serde_json::Value,
-    pub location_visible: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+```go
+// Internal profile model (maps to soc_profiles row + iam data).
+
+type Profile struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    Bio *string `json:"bio"`
+    ProfilePhotoURL *string `json:"profile_photo_url"`
+    PrivacySettings json.RawMessage `json:"privacy_settings"`
+    LocationVisible bool `json:"location_visible"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal friendship record.
-#[derive(Debug, Clone)]
-pub struct Friendship {
-    pub id: Uuid,
-    pub requester_family_id: Uuid,
-    pub accepter_family_id: Uuid,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal friendship record.
+
+type Friendship struct {
+    ID uuid.UUID `json:"id"`
+    RequesterFamilyID uuid.UUID `json:"requester_family_id"`
+    AccepterFamilyID uuid.UUID `json:"accepter_family_id"`
+    Status string `json:"status"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal block record.
-#[derive(Debug, Clone)]
-pub struct Block {
-    pub id: Uuid,
-    pub blocker_family_id: Uuid,
-    pub blocked_family_id: Uuid,
-    pub created_at: DateTime<Utc>,
+// Internal block record.
+
+type Block struct {
+    ID uuid.UUID `json:"id"`
+    BlockerFamilyID uuid.UUID `json:"blocker_family_id"`
+    BlockedFamilyID uuid.UUID `json:"blocked_family_id"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Internal post record.
-#[derive(Debug, Clone)]
-pub struct Post {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub author_parent_id: Uuid,
-    pub post_type: String,
-    pub content: Option<String>,
-    pub attachments: serde_json::Value,
-    pub group_id: Option<Uuid>,
-    pub visibility: String,
-    pub likes_count: i32,
-    pub comments_count: i32,
-    pub is_edited: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal post record.
+
+type Post struct {
+    ID uuid.UUID `json:"id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    AuthorParentID uuid.UUID `json:"author_parent_id"`
+    PostType string `json:"post_type"`
+    Content *string `json:"content"`
+    Attachments json.RawMessage `json:"attachments"`
+    GroupID *uuid.UUID `json:"group_id"`
+    Visibility string `json:"visibility"`
+    LikesCount int32 `json:"likes_count"`
+    CommentsCount int32 `json:"comments_count"`
+    IsEdited bool `json:"is_edited"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal comment record.
-#[derive(Debug, Clone)]
-pub struct Comment {
-    pub id: Uuid,
-    pub post_id: Uuid,
-    pub family_id: Uuid,
-    pub author_parent_id: Uuid,
-    pub parent_comment_id: Option<Uuid>,
-    pub content: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal comment record.
+
+type Comment struct {
+    ID uuid.UUID `json:"id"`
+    PostID uuid.UUID `json:"post_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    AuthorParentID uuid.UUID `json:"author_parent_id"`
+    ParentCommentID *uuid.UUID `json:"parent_comment_id"`
+    Content string `json:"content"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal conversation with participant data.
-#[derive(Debug, Clone)]
-pub struct ConversationWithParticipants {
-    pub id: Uuid,
-    pub participants: Vec<ConversationParticipant>,
-    pub last_message: Option<Message>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal conversation with participant data.
+
+type ConversationWithParticipants struct {
+    ID uuid.UUID `json:"id"`
+    Participants []ConversationParticipant `json:"participants"`
+    LastMessage *Message `json:"last_message"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal conversation participant.
-#[derive(Debug, Clone)]
-pub struct ConversationParticipant {
-    pub conversation_id: Uuid,
-    pub parent_id: Uuid,
-    pub family_id: Uuid,
-    pub last_read_at: Option<DateTime<Utc>>,
-    pub deleted_at: Option<DateTime<Utc>>,
+// Internal conversation participant.
+
+type ConversationParticipant struct {
+    ConversationID uuid.UUID `json:"conversation_id"`
+    ParentID uuid.UUID `json:"parent_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    LastReadAt *time.Time `json:"last_read_at"`
+    DeletedAt *time.Time `json:"deleted_at"`
 }
 
-/// Internal conversation record.
-#[derive(Debug, Clone)]
-pub struct Conversation {
-    pub id: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal conversation record.
+
+type Conversation struct {
+    ID uuid.UUID `json:"id"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal message record.
-#[derive(Debug, Clone)]
-pub struct Message {
-    pub id: Uuid,
-    pub conversation_id: Uuid,
-    pub sender_parent_id: Uuid,
-    pub sender_family_id: Uuid,
-    pub content: String,
-    pub attachments: serde_json::Value,
-    pub created_at: DateTime<Utc>,
+// Internal message record.
+
+type Message struct {
+    ID uuid.UUID `json:"id"`
+    ConversationID uuid.UUID `json:"conversation_id"`
+    SenderParentID uuid.UUID `json:"sender_parent_id"`
+    SenderFamilyID uuid.UUID `json:"sender_family_id"`
+    Content string `json:"content"`
+    Attachments json.RawMessage `json:"attachments"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
-/// Internal group record.
-#[derive(Debug, Clone)]
-pub struct Group {
-    pub id: Uuid,
-    pub group_type: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub cover_photo_url: Option<String>,
-    pub creator_family_id: Option<Uuid>,
-    pub methodology_id: Option<Uuid>,
-    pub join_policy: String,
-    pub member_count: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal group record.
+
+type Group struct {
+    ID uuid.UUID `json:"id"`
+    GroupType string `json:"group_type"`
+    Name string `json:"name"`
+    Description *string `json:"description"`
+    CoverPhotoURL *string `json:"cover_photo_url"`
+    CreatorFamilyID *uuid.UUID `json:"creator_family_id"`
+    MethodologyID *uuid.UUID `json:"methodology_id"`
+    JoinPolicy string `json:"join_policy"`
+    MemberCount int32 `json:"member_count"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal group member record.
-#[derive(Debug, Clone)]
-pub struct GroupMember {
-    pub id: Uuid,
-    pub group_id: Uuid,
-    pub family_id: Uuid,
-    pub role: String,
-    pub status: String,
-    pub joined_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal group member record.
+
+type GroupMember struct {
+    ID uuid.UUID `json:"id"`
+    GroupID uuid.UUID `json:"group_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    Role string `json:"role"`
+    Status string `json:"status"`
+    JoinedAt *time.Time `json:"joined_at"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal event record.
-#[derive(Debug, Clone)]
-pub struct Event {
-    pub id: Uuid,
-    pub creator_family_id: Uuid,
-    pub creator_parent_id: Uuid,
-    pub group_id: Option<Uuid>,
-    pub title: String,
-    pub description: Option<String>,
-    pub event_date: DateTime<Utc>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub location_name: Option<String>,
-    pub location_region: Option<String>,
-    pub is_virtual: bool,
-    pub virtual_url: Option<String>,
-    pub capacity: Option<i32>,
-    pub visibility: String,
-    pub status: String,
-    pub methodology_id: Option<Uuid>,
-    pub attendee_count: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal event record.
+
+type Event struct {
+    ID uuid.UUID `json:"id"`
+    CreatorFamilyID uuid.UUID `json:"creator_family_id"`
+    CreatorParentID uuid.UUID `json:"creator_parent_id"`
+    GroupID *uuid.UUID `json:"group_id"`
+    Title string `json:"title"`
+    Description *string `json:"description"`
+    EventDate time.Time `json:"event_date"`
+    EndDate *time.Time `json:"end_date"`
+    LocationName *string `json:"location_name"`
+    LocationRegion *string `json:"location_region"`
+    IsVirtual bool `json:"is_virtual"`
+    VirtualURL *string `json:"virtual_url"`
+    Capacity *int32 `json:"capacity"`
+    Visibility string `json:"visibility"`
+    Status string `json:"status"`
+    MethodologyID *uuid.UUID `json:"methodology_id"`
+    AttendeeCount int32 `json:"attendee_count"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Internal event RSVP record.
-#[derive(Debug, Clone)]
-pub struct EventRsvp {
-    pub id: Uuid,
-    pub event_id: Uuid,
-    pub family_id: Uuid,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// Internal event RSVP record.
+
+type EventRsvp struct {
+    ID uuid.UUID `json:"id"`
+    EventID uuid.UUID `json:"event_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    Status string `json:"status"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
-/// Event filter for list queries.
-#[derive(Debug, Clone)]
-pub struct EventFilter {
-    pub upcoming_only: bool,
-    pub past_only: bool,
+// Event filter for list queries.
+
+type EventFilter struct {
+    UpcomingOnly bool `json:"upcoming_only"`
+    PastOnly bool `json:"past_only"`
 }
 
-/// Milestone data from learn:: domain events.
-#[derive(Debug, Clone)]
-pub struct MilestoneData {
-    pub student_name: String,
-    pub milestone_type: String,
-    pub description: String,
+// Milestone data from learn:: domain events.
+
+type MilestoneData struct {
+    StudentName string `json:"student_name"`
+    MilestoneType string `json:"milestone_type"`
+    Description string `json:"description"`
 }
 
-/// WebSocket message frame.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WsMessage {
-    pub msg_type: String,    // "new_message" | "typing" | "read_receipt" | "notification"
-    pub payload: serde_json::Value,
+// WebSocket message frame.
+type WsMessage struct {
+    MsgType string `json:"msg_type"` // "new_message" | "typing" | "read_receipt" | "notification"
+    Payload json.RawMessage `json:"payload"`
 }
 
-/// Discovery query params.
-#[derive(Debug, Clone)]
-pub struct DiscoverFamiliesQuery {
-    pub methodology_id: Option<Uuid>,
-    pub radius_km: Option<f64>,
+// Discovery query params.
+
+type DiscoverFamiliesQuery struct {
+    MethodologyID *uuid.UUID `json:"methodology_id"`
+    RadiusKm *float64 `json:"radius_km"`
 }
 
-#[derive(Debug, Clone)]
-pub struct DiscoverEventsQuery {
-    pub methodology_id: Option<Uuid>,
-    pub location_region: Option<String>,
+type DiscoverEventsQuery struct {
+    MethodologyID *uuid.UUID `json:"methodology_id"`
+    LocationRegion *string `json:"location_region"`
 }
 
-#[derive(Debug, Clone)]
-pub struct DiscoverGroupsQuery {
-    pub methodology_id: Option<Uuid>,
+type DiscoverGroupsQuery struct {
+    MethodologyID *uuid.UUID `json:"methodology_id"`
 }
 ```
 
@@ -2727,12 +2177,12 @@ The feed pipeline applies visibility filtering at two levels:
 
 1. **Structural** (Redis): Feed sorted set contains only post IDs from accepted friends
    (via fan-out-on-write). Non-friends' posts never enter the feed.
-2. **Application** (Rust): After hydrating posts from PostgreSQL, a block filter removes
+2. **Application** (Go): After hydrating posts from PostgreSQL, a block filter removes
    any posts from families in the viewer's block list (either direction).
 
 ### §9.5 Centralized Visibility Module
 
-All visibility logic lives in `src/social/domain/visibility.rs` (see §20). This module
+All visibility logic lives in `internal/social/domain/visibility.go` (see §20). This module
 exports pure functions that take content, viewer context, and relationship data, and
 return a boolean (visible/not-visible) or filtered content. Service methods delegate
 all visibility decisions to this module rather than embedding checks inline.
@@ -2743,7 +2193,7 @@ all visibility decisions to this module rather than embedding checks inline.
 
 ### §10.1 Aggregate Root
 
-The `Friendship` aggregate root lives in `src/social/domain/friendship.rs`. It enforces
+The `Friendship` aggregate root lives in `internal/social/domain/friendship.go`. It enforces
 all friendship state transitions and invariants. `[ARCH §4.5]`
 
 ### §10.2 State Diagram
@@ -2802,7 +2252,7 @@ to each friend's Redis feed sorted set. `[ARCH §2.7]`
 Post Created
     │
     ▼
-FanOutPostJob (sidekiq-rs)
+FanOutPostJob (hibiken/asynq)
     │
     ├── Get author's friend list (FriendshipRepository::list_friend_family_ids)
     │
@@ -2913,7 +2363,7 @@ When a user deletes a conversation:
 
 ### §12.3 WebSocket Integration
 
-Real-time message delivery uses Axum's built-in WebSocket support with Redis pub/sub
+Real-time message delivery uses gorilla/websocket with Redis pub/sub
 for multi-connection distribution. `[ARCH §2.16]`
 
 ```
@@ -3076,193 +2526,120 @@ and `location_region` matches or `methodology_id` matches.
 
 ## §16 Error Types
 
-`SocialError` enum defined in `src/social/domain/errors.rs`. Maps to `AppError` via
-`From<SocialError> for AppError` `[00-core §6.4]`. `[CODING §2.2, CODING §8.3]`
+`SocialError` enum defined in `internal/social/domain/errors.go`. Maps to `AppError` via
+the `ToAppError()` method `[00-core §6.4]`. `[CODING §2.2, CODING §8.3]`
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum SocialError {
-    // ─── Profile ─────────────────────────────────────────────────────────
-    #[error("profile not found")]
-    ProfileNotFound,
+```go
+// Sentinel errors — use errors.Is(err, ErrXxx) for matching
+var (
+    // --- Profile ------------------------------------------------─────────
+    ErrProfileNotFound      = errors.New("social: profile not found")
+    ErrInvalidPrivacySetting = errors.New("social: invalid privacy setting value")
 
-    #[error("invalid privacy setting value: {0}")]
-    InvalidPrivacySetting(String),
+    // --- Friendship ------------------------------------------------─────
+    ErrCannotFriendSelf = errors.New("social: cannot send friend request to self")
+    ErrAlreadyFriends   = errors.New("social: already friends with this family")
+    ErrAlreadyPending   = errors.New("social: friend request already pending")
+    ErrFriendshipNotFound = errors.New("social: friendship not found")
+    ErrNotAccepter      = errors.New("social: not the accepter of this friend request")
+    ErrNotPending       = errors.New("social: friendship is not pending")
+    ErrNotFriends       = errors.New("social: not friends with this family")
 
-    // ─── Friendship ─────────────────────────────────────────────────────
-    #[error("cannot send friend request to self")]
-    CannotFriendSelf,
+    // --- Block ------------------------------------------------───────────
+    ErrBlockedByTarget  = errors.New("social: blocked by target family")
+    ErrTargetBlocked    = errors.New("social: target family is blocked")
+    ErrCannotBlockSelf  = errors.New("social: cannot block self")
+    ErrAlreadyBlocked   = errors.New("social: already blocked")
+    ErrBlockNotFound    = errors.New("social: block not found")
 
-    #[error("already friends with this family")]
-    AlreadyFriends,
+    // --- Post ------------------------------------------------────────────
+    ErrPostNotFound     = errors.New("social: post not found")
+    ErrContentNotVisible = errors.New("social: content not visible")
+    ErrNotPostAuthor    = errors.New("social: not the post author")
+    ErrInvalidPostType  = errors.New("social: invalid post type")
+    ErrContentRequired  = errors.New("social: content required for text posts")
+    ErrAttachmentsRequired = errors.New("social: attachments required for photo posts")
 
-    #[error("friend request already pending")]
-    AlreadyPending,
+    // --- Comment ------------------------------------------------─────────
+    ErrCommentNotFound  = errors.New("social: comment not found")
+    ErrNotCommentAuthorOrPostAuthor = errors.New("social: not comment author or post author")
+    ErrCannotReplyToReply = errors.New("social: cannot reply to a reply (one level only)")
 
-    #[error("friendship not found")]
-    FriendshipNotFound,
+    // --- Messaging ------------------------------------------------───────
+    ErrConversationNotFound = errors.New("social: conversation not found")
+    ErrNotParticipant   = errors.New("social: not a conversation participant")
+    ErrMessageNotFound  = errors.New("social: message not found")
 
-    #[error("not the accepter of this friend request")]
-    NotAccepter,
+    // --- Group ------------------------------------------------───────────
+    ErrGroupNotFound    = errors.New("social: group not found")
+    ErrAlreadyGroupMember = errors.New("social: already a group member")
+    ErrInviteOnly       = errors.New("social: group is invite only")
+    ErrBannedFromGroup  = errors.New("social: banned from group")
+    ErrNotGroupMember   = errors.New("social: not a group member")
+    ErrOwnerCannotLeave = errors.New("social: owner cannot leave without transferring ownership")
+    ErrInsufficientGroupPermissions = errors.New("social: insufficient group permissions")
+    ErrCannotDeletePlatformGroup = errors.New("social: cannot delete platform group")
 
-    #[error("friendship is not pending")]
-    NotPending,
+    // --- Event ------------------------------------------------───────────
+    ErrEventNotFound    = errors.New("social: event not found")
+    ErrNotEventCreator  = errors.New("social: not the event creator")
+    ErrEventCancelled   = errors.New("social: event is cancelled")
+    ErrEventAtCapacity  = errors.New("social: event is at capacity")
+    ErrEventDateInPast  = errors.New("social: event date must be in the future")
+    ErrGroupVisibilityRequiresGroup = errors.New("social: group visibility requires group_id")
 
-    #[error("not friends with this family")]
-    NotFriends,
-
-    // ─── Block ───────────────────────────────────────────────────────────
-    #[error("blocked by target family")]
-    BlockedByTarget,
-
-    #[error("target family is blocked")]
-    TargetBlocked,
-
-    #[error("cannot block self")]
-    CannotBlockSelf,
-
-    #[error("already blocked")]
-    AlreadyBlocked,
-
-    #[error("block not found")]
-    BlockNotFound,
-
-    // ─── Post ────────────────────────────────────────────────────────────
-    #[error("post not found")]
-    PostNotFound,
-
-    #[error("content not visible")]
-    ContentNotVisible,
-
-    #[error("not the post author")]
-    NotPostAuthor,
-
-    #[error("invalid post type: {0}")]
-    InvalidPostType(String),
-
-    #[error("content required for text posts")]
-    ContentRequired,
-
-    #[error("attachments required for photo posts")]
-    AttachmentsRequired,
-
-    // ─── Comment ─────────────────────────────────────────────────────────
-    #[error("comment not found")]
-    CommentNotFound,
-
-    #[error("not comment author or post author")]
-    NotCommentAuthorOrPostAuthor,
-
-    #[error("cannot reply to a reply (one level only)")]
-    CannotReplyToReply,
-
-    // ─── Messaging ───────────────────────────────────────────────────────
-    #[error("conversation not found")]
-    ConversationNotFound,
-
-    #[error("not a conversation participant")]
-    NotParticipant,
-
-    #[error("message not found")]
-    MessageNotFound,
-
-    // ─── Group ───────────────────────────────────────────────────────────
-    #[error("group not found")]
-    GroupNotFound,
-
-    #[error("already a group member")]
-    AlreadyGroupMember,
-
-    #[error("group is invite only")]
-    InviteOnly,
-
-    #[error("banned from group")]
-    BannedFromGroup,
-
-    #[error("not a group member")]
-    NotGroupMember,
-
-    #[error("owner cannot leave without transferring ownership")]
-    OwnerCannotLeave,
-
-    #[error("insufficient group permissions")]
-    InsufficientGroupPermissions,
-
-    #[error("cannot delete platform group")]
-    CannotDeletePlatformGroup,
-
-    // ─── Event ───────────────────────────────────────────────────────────
-    #[error("event not found")]
-    EventNotFound,
-
-    #[error("not the event creator")]
-    NotEventCreator,
-
-    #[error("event is cancelled")]
-    EventCancelled,
-
-    #[error("event is at capacity")]
-    EventAtCapacity,
-
-    #[error("event date must be in the future")]
-    EventDateInPast,
-
-    #[error("group visibility requires group_id")]
-    GroupVisibilityRequiresGroup,
-
-    // ─── Infrastructure ──────────────────────────────────────────────────
-    #[error("database error")]
-    DatabaseError(#[from] sea_orm::DbErr),
-}
+    // --- Infrastructure ------------------------------------------------──
+    ErrDatabase         = errors.New("social: database error")
+)
 ```
 
 ### §16.1 Error-to-HTTP Mapping
 
-| SocialError Variant | HTTP Status | Error Code | Notes |
+| SocialError Type | HTTP Status | Error Code | Notes |
 |--------------------|-------------|------------|-------|
-| `ProfileNotFound` | 404 | `profile_not_found` | |
-| `InvalidPrivacySetting` | 422 | `invalid_privacy_setting` | |
-| `CannotFriendSelf` | 422 | `cannot_friend_self` | |
-| `AlreadyFriends` | 409 | `already_friends` | |
-| `AlreadyPending` | 409 | `already_pending` | |
-| `FriendshipNotFound` | 404 | `friendship_not_found` | |
-| `NotAccepter` | 403 | `not_accepter` | |
-| `NotPending` | 409 | `not_pending` | |
-| `NotFriends` | 403 | `not_friends` | |
-| `BlockedByTarget` | **404** | `not_found` | **Silent blocking** — maps to 404, not 403 |
-| `TargetBlocked` | **404** | `not_found` | **Silent blocking** — maps to 404, not 403 |
-| `CannotBlockSelf` | 422 | `cannot_block_self` | |
-| `AlreadyBlocked` | 409 | `already_blocked` | |
-| `BlockNotFound` | 404 | `block_not_found` | |
-| `PostNotFound` | 404 | `post_not_found` | |
-| `ContentNotVisible` | **404** | `not_found` | Maps to 404 to avoid revealing existence |
-| `NotPostAuthor` | 403 | `not_post_author` | |
-| `InvalidPostType` | 422 | `invalid_post_type` | |
-| `ContentRequired` | 422 | `content_required` | |
-| `AttachmentsRequired` | 422 | `attachments_required` | |
-| `CommentNotFound` | 404 | `comment_not_found` | |
-| `NotCommentAuthorOrPostAuthor` | 403 | `not_comment_author_or_post_author` | |
-| `CannotReplyToReply` | 422 | `cannot_reply_to_reply` | |
-| `ConversationNotFound` | 404 | `conversation_not_found` | |
-| `NotParticipant` | 403 | `not_participant` | |
-| `MessageNotFound` | 404 | `message_not_found` | |
-| `GroupNotFound` | 404 | `group_not_found` | |
-| `AlreadyGroupMember` | 409 | `already_group_member` | |
-| `InviteOnly` | 403 | `invite_only` | |
-| `BannedFromGroup` | 403 | `banned_from_group` | |
-| `NotGroupMember` | 404 | `not_group_member` | |
-| `OwnerCannotLeave` | 422 | `owner_cannot_leave` | |
-| `InsufficientGroupPermissions` | 403 | `insufficient_group_permissions` | |
-| `CannotDeletePlatformGroup` | 403 | `cannot_delete_platform_group` | |
-| `EventNotFound` | 404 | `event_not_found` | |
-| `NotEventCreator` | 403 | `not_event_creator` | |
-| `EventCancelled` | 409 | `event_cancelled` | |
-| `EventAtCapacity` | 422 | `event_at_capacity` | |
-| `EventDateInPast` | 422 | `event_date_in_past` | |
-| `GroupVisibilityRequiresGroup` | 422 | `group_visibility_requires_group` | |
-| `DatabaseError` | 500 | `internal_error` | |
+| `ErrProfileNotFound` | 404 | `profile_not_found` | |
+| `ErrInvalidPrivacySetting` | 422 | `invalid_privacy_setting` | |
+| `ErrCannotFriendSelf` | 422 | `cannot_friend_self` | |
+| `ErrAlreadyFriends` | 409 | `already_friends` | |
+| `ErrAlreadyPending` | 409 | `already_pending` | |
+| `ErrFriendshipNotFound` | 404 | `friendship_not_found` | |
+| `ErrNotAccepter` | 403 | `not_accepter` | |
+| `ErrNotPending` | 409 | `not_pending` | |
+| `ErrNotFriends` | 403 | `not_friends` | |
+| `ErrBlockedByTarget` | **404** | `not_found` | **Silent blocking** — maps to 404, not 403 |
+| `ErrTargetBlocked` | **404** | `not_found` | **Silent blocking** — maps to 404, not 403 |
+| `ErrCannotBlockSelf` | 422 | `cannot_block_self` | |
+| `ErrAlreadyBlocked` | 409 | `already_blocked` | |
+| `ErrBlockNotFound` | 404 | `block_not_found` | |
+| `ErrPostNotFound` | 404 | `post_not_found` | |
+| `ErrContentNotVisible` | **404** | `not_found` | Maps to 404 to avoid revealing existence |
+| `ErrNotPostAuthor` | 403 | `not_post_author` | |
+| `ErrInvalidPostType` | 422 | `invalid_post_type` | |
+| `ErrContentRequired` | 422 | `content_required` | |
+| `ErrAttachmentsRequired` | 422 | `attachments_required` | |
+| `ErrCommentNotFound` | 404 | `comment_not_found` | |
+| `ErrNotCommentAuthorOrPostAuthor` | 403 | `not_comment_author_or_post_author` | |
+| `ErrCannotReplyToReply` | 422 | `cannot_reply_to_reply` | |
+| `ErrConversationNotFound` | 404 | `conversation_not_found` | |
+| `ErrNotParticipant` | 403 | `not_participant` | |
+| `ErrMessageNotFound` | 404 | `message_not_found` | |
+| `ErrGroupNotFound` | 404 | `group_not_found` | |
+| `ErrAlreadyGroupMember` | 409 | `already_group_member` | |
+| `ErrInviteOnly` | 403 | `invite_only` | |
+| `ErrBannedFromGroup` | 403 | `banned_from_group` | |
+| `ErrNotGroupMember` | 404 | `not_group_member` | |
+| `ErrOwnerCannotLeave` | 422 | `owner_cannot_leave` | |
+| `ErrInsufficientGroupPermissions` | 403 | `insufficient_group_permissions` | |
+| `ErrCannotDeletePlatformGroup` | 403 | `cannot_delete_platform_group` | |
+| `ErrEventNotFound` | 404 | `event_not_found` | |
+| `ErrNotEventCreator` | 403 | `not_event_creator` | |
+| `ErrEventCancelled` | 409 | `event_cancelled` | |
+| `ErrEventAtCapacity` | 422 | `event_at_capacity` | |
+| `ErrEventDateInPast` | 422 | `event_date_in_past` | |
+| `ErrGroupVisibilityRequiresGroup` | 422 | `group_visibility_requires_group` | |
+| `ErrDatabase` / GORM errors | 500 | `internal_error` | |
 
-**Critical**: `BlockedByTarget`, `TargetBlocked`, and `ContentNotVisible` all map to
+**Critical**: `ErrBlockedByTarget`, `ErrTargetBlocked`, and `ErrContentNotVisible` all map to
 HTTP 404 with a generic `not_found` error code. This prevents information leakage about
 whether a block exists or content is being hidden. `[S§7.4]`
 
@@ -3274,7 +2651,7 @@ whether a block exists or content is being hidden. `[S§7.4]`
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `SocialService` trait methods | `onboard::` (Phase 2) | `Arc<dyn SocialService>` via AppState |
+| `SocialService` interface methods | `onboard::` (Phase 2) | `SocialService (interface)` via AppState |
 | `PostCreated` event | `safety::`, `search::` | Domain event — content scan, search index |
 | `FriendRequestAccepted` event | `notify::` | Domain event — notification to requester |
 | `FriendRequestSent` event | `notify::` | Domain event — notification to target |
@@ -3293,68 +2670,62 @@ whether a block exists or content is being hidden. `[S§7.4]`
 
 ### §17.3 Events social:: Publishes
 
-Defined in `src/social/events.rs`. `[CODING §8.4]`
+Defined in `internal/social/events.go`. `[CODING §8.4]`
 
-```rust
-// src/social/events.rs
+```go
+// internal/social/events.go
 
-#[derive(Clone, Debug)]
-pub struct PostCreated {
-    pub post_id: Uuid,
-    pub family_id: FamilyId,
-    pub post_type: String,
-    pub content: Option<String>,
-    pub attachments: serde_json::Value,
-    pub group_id: Option<Uuid>,
+type PostCreated struct {
+    PostID uuid.UUID `json:"post_id"`
+    FamilyID FamilyID `json:"family_id"`
+    PostType string `json:"post_type"`
+    Content *string `json:"content"`
+    Attachments json.RawMessage `json:"attachments"`
+    GroupID *uuid.UUID `json:"group_id"`
 }
-impl DomainEvent for PostCreated {}
+// Implements DomainEvent interface
 
-#[derive(Clone, Debug)]
-pub struct FriendRequestSent {
-    pub friendship_id: Uuid,
-    pub requester_family_id: FamilyId,
-    pub target_family_id: FamilyId,
+type FriendRequestSent struct {
+    FriendshipID uuid.UUID `json:"friendship_id"`
+    RequesterFamilyID FamilyID `json:"requester_family_id"`
+    TargetFamilyID FamilyID `json:"target_family_id"`
 }
-impl DomainEvent for FriendRequestSent {}
+// Implements DomainEvent interface
 
-#[derive(Clone, Debug)]
-pub struct FriendRequestAccepted {
-    pub friendship_id: Uuid,
-    pub requester_family_id: FamilyId,
-    pub accepter_family_id: FamilyId,
+type FriendRequestAccepted struct {
+    FriendshipID uuid.UUID `json:"friendship_id"`
+    RequesterFamilyID FamilyID `json:"requester_family_id"`
+    AccepterFamilyID FamilyID `json:"accepter_family_id"`
 }
-impl DomainEvent for FriendRequestAccepted {}
+// Implements DomainEvent interface
 
-#[derive(Clone, Debug)]
-pub struct MessageSent {
-    pub message_id: Uuid,
-    pub conversation_id: Uuid,
-    pub sender_parent_id: Uuid,
-    pub sender_family_id: FamilyId,
-    pub recipient_parent_id: Uuid,
-    pub recipient_family_id: FamilyId,
+type MessageSent struct {
+    MessageID uuid.UUID `json:"message_id"`
+    ConversationID uuid.UUID `json:"conversation_id"`
+    SenderParentID uuid.UUID `json:"sender_parent_id"`
+    SenderFamilyID FamilyID `json:"sender_family_id"`
+    RecipientParentID uuid.UUID `json:"recipient_parent_id"`
+    RecipientFamilyID FamilyID `json:"recipient_family_id"`
 }
-impl DomainEvent for MessageSent {}
+// Implements DomainEvent interface
 
-#[derive(Clone, Debug)]
-pub struct EventCancelled {
-    pub event_id: Uuid,
-    pub creator_family_id: FamilyId,
-    pub title: String,
-    pub event_date: DateTime<Utc>,
-    pub going_family_ids: Vec<FamilyId>,
+type EventCancelled struct {
+    EventID uuid.UUID `json:"event_id"`
+    CreatorFamilyID FamilyID `json:"creator_family_id"`
+    Title string `json:"title"`
+    EventDate time.Time `json:"event_date"`
+    GoingFamilyIDs []FamilyID `json:"going_family_ids"`
 }
-impl DomainEvent for EventCancelled {}
+// Implements DomainEvent interface
 
-#[derive(Clone, Debug)]
-pub struct MessageReported {
-    pub message_id: Uuid,
-    pub reporter_family_id: FamilyId,
-    pub reported_message_sender_id: Uuid,
-    pub conversation_id: Uuid,
-    pub reason: String,
+type MessageReported struct {
+    MessageID uuid.UUID `json:"message_id"`
+    ReporterFamilyID FamilyID `json:"reporter_family_id"`
+    ReportedMessageSenderID uuid.UUID `json:"reported_message_sender_id"`
+    ConversationID uuid.UUID `json:"conversation_id"`
+    Reason string `json:"reason"`
 }
-impl DomainEvent for MessageReported {}
+// Implements DomainEvent interface
 ```
 
 ### §17.4 Events social:: Subscribes To
@@ -3366,64 +2737,46 @@ impl DomainEvent for MessageReported {}
 | `CoParentRemoved { family_id, parent_id }` | `iam::` | Disassociate removed parent's posts from family — retain content but clear `author_parent_id` reference `[S§3.4]` |
 | `FamilyDeletionScheduled { family_id, delete_after }` | `iam::` | Mark social data for cascade deletion after grace period `[S§16.3]` |
 
-```rust
-// src/social/event_handlers.rs
+```go
+// internal/social/event_handlers.go
 
-use crate::iam::events::{FamilyCreated, CoParentRemoved, FamilyDeletionScheduled};
-use crate::learn::events::MilestoneAchieved;
+// import "homegrown-academy/internal/iam"
+// import "homegrown-academy/internal/learn"
 
-pub struct FamilyCreatedHandler {
-    social_service: Arc<dyn SocialService>,
+type FamilyCreatedHandler struct {
+    socialService SocialService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyCreated> for FamilyCreatedHandler {
-    async fn handle(&self, event: &FamilyCreated) -> Result<(), AppError> {
-        self.social_service.handle_family_created(event.family_id).await
-    }
+func (h *FamilyCreatedHandler) Handle(ctx context.Context, event *FamilyCreated) error {
+    return h.socialService.HandleFamilyCreated(ctx, event.FamilyID)
 }
 
-pub struct CoParentRemovedHandler {
-    social_service: Arc<dyn SocialService>,
+type CoParentRemovedHandler struct {
+    socialService SocialService
 }
 
-#[async_trait]
-impl DomainEventHandler<CoParentRemoved> for CoParentRemovedHandler {
-    async fn handle(&self, event: &CoParentRemoved) -> Result<(), AppError> {
-        self.social_service.handle_co_parent_removed(
-            event.family_id,
-            event.parent_id,
-        ).await
-    }
+func (h *CoParentRemovedHandler) Handle(ctx context.Context, event *CoParentRemoved) error {
+    return h.socialService.HandleCoParentRemoved(ctx, event.FamilyID, event.ParentID)
 }
 
-pub struct MilestoneAchievedHandler {
-    social_service: Arc<dyn SocialService>,
+type MilestoneAchievedHandler struct {
+    socialService SocialService
 }
 
-#[async_trait]
-impl DomainEventHandler<MilestoneAchieved> for MilestoneAchievedHandler {
-    async fn handle(&self, event: &MilestoneAchieved) -> Result<(), AppError> {
-        self.social_service.handle_milestone_achieved(
-            event.family_id,
-            MilestoneData {
-                student_name: event.student_name.clone(),
-                milestone_type: event.milestone_type.clone(),
-                description: event.description.clone(),
-            },
-        ).await
-    }
+func (h *MilestoneAchievedHandler) Handle(ctx context.Context, event *MilestoneAchieved) error {
+    return h.socialService.HandleMilestoneAchieved(ctx, event.FamilyID, MilestoneData{
+        StudentName:   event.StudentName,
+        MilestoneType: event.MilestoneType,
+        Description:   event.Description,
+    })
 }
 
-pub struct FamilyDeletionScheduledHandler {
-    social_service: Arc<dyn SocialService>,
+type FamilyDeletionScheduledHandler struct {
+    socialService SocialService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.social_service.handle_family_deletion_scheduled(event.family_id).await
-    }
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *FamilyDeletionScheduled) error {
+    return h.socialService.HandleFamilyDeletionScheduled(ctx, event.FamilyID)
 }
 ```
 
@@ -3446,17 +2799,17 @@ impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHand
 - WebSocket endpoint for real-time messaging
 - Block enforcement (silent → 404)
 - ~39 Phase 1 endpoints
-- `SocialService` trait + `SocialServiceImpl`
-- 12 repository traits + PostgreSQL implementations
-- Domain `domain/` subdirectory: friendship.rs, post.rs, group_membership.rs,
-  visibility.rs, errors.rs
-- `SocialError` enum + HTTP mapping
+- `SocialService` interface + `SocialServiceImpl`
+- 12 repository interfaces + PostgreSQL implementations
+- Domain `domain/` subdirectory: friendship.go, post.go, group_membership.go,
+  visibility.go, errors.go
+- `SocialError` types + HTTP mapping
 - Domain events: `PostCreated`, `FriendRequestSent`, `FriendRequestAccepted`,
   `MessageSent`, `EventCancelled`, `MessageReported`
 - Event handlers: `FamilyCreatedHandler`, `CoParentRemovedHandler`,
   `MilestoneAchievedHandler`, `FamilyDeletionScheduledHandler`
 - All Phase 1 models (request, response, internal)
-- OpenAPI spec + TypeScript type generation
+- OpenAPI spec (swaggo/swag) + TypeScript type generation
 
 ### Phase 2 — Depth
 
@@ -3522,7 +2875,7 @@ community detection), PostgreSQL handles everything else:
 - **Content storage** — Post body (`content`), message text, comment text, `attachments`
   JSONB all stay in relational tables. AGE nodes hold only identifiers and metadata needed
   for traversal.
-- **RLS policies** — AGE does not support row-level security. `domain/visibility.rs`
+- **RLS policies** — AGE does not support row-level security. `domain/visibility.go`
   application-layer enforcement is already the primary access-control gate (RLS is
   defense-in-depth per §3.3), so this transitions cleanly.
 - **CASCADE deletion** — AGE has no FK cascades. `FamilyDeletionScheduledHandler` already
@@ -3537,7 +2890,7 @@ community detection), PostgreSQL handles everything else:
 |---|-------|------------|
 | 1 | **Friendship asymmetry** — `(requester_family_id, accepter_family_id)` stores a symmetric relationship asymmetrically. | Preserve as edge properties `{requested_by, created_at, updated_at}` on a single undirected `[:FRIENDS_WITH]` edge. Query both directions with `()-[:FRIENDS_WITH]-()`. |
 | 2 | **Conversation participant soft-delete** — `deleted_at` on `soc_conversation_participants` is a soft-delete pattern with no AGE equivalent. | Store as edge property. Filter `WHERE rel.deleted_at IS NULL` in Cypher queries. Restore by setting `rel.deleted_at = NULL`. |
-| 3 | **Comment 1-level threading** — AGE supports unlimited `[:REPLY_TO]` depth natively, which could silently relax the threading constraint. | Enforce 1-level limit in `domain/post.rs` validation (application layer), not in the graph schema. Document this constraint explicitly so it is not accidentally relaxed after migration. |
+| 3 | **Comment 1-level threading** — AGE supports unlimited `[:REPLY_TO]` depth natively, which could silently relax the threading constraint. | Enforce 1-level limit in `domain/post.go` validation (application layer), not in the graph schema. Document this constraint explicitly so it is not accidentally relaxed after migration. |
 
 #### Edge Property Preservation Guarantee
 
@@ -3678,32 +3031,29 @@ as acceptance criteria for code review and integration testing.
 ## §20 Module Structure
 
 ```
-src/social/
-├── mod.rs                    # Re-exports, domain-level doc comments
-├── handlers.rs               # Axum route handlers (thin layer only)
-├── service.rs                # SocialServiceImpl — orchestration
-├── repository.rs             # PgProfileRepository, PgFriendshipRepository,
+internal/social/
+├── handlers.go               # Echo route handlers (thin layer only)
+├── service.go                # SocialServiceImpl — orchestration
+├── repository.go             # PgProfileRepository, PgFriendshipRepository,
 │                             # PgBlockRepository, PgPostRepository,
 │                             # PgCommentRepository, PgPostLikeRepository,
 │                             # PgConversationRepository, PgMessageRepository,
 │                             # PgGroupRepository, PgGroupMemberRepository,
 │                             # PgEventRepository, PgEventRsvpRepository
-├── models.rs                 # Request/response types, internal types
-├── ports.rs                  # SocialService trait, all 12 repository traits
-├── events.rs                 # PostCreated, FriendRequestSent, FriendRequestAccepted,
+├── models.go                 # Request/response types, internal types, GORM models
+├── ports.go                  # SocialService interface, all 12 repository interfaces
+├── events.go                 # PostCreated, FriendRequestSent, FriendRequestAccepted,
 │                             # MessageSent, EventCancelled, MessageReported
-├── event_handlers.rs         # FamilyCreatedHandler, CoParentRemovedHandler,
+├── event_handlers.go         # FamilyCreatedHandler, CoParentRemovedHandler,
 │                             # MilestoneAchievedHandler, FamilyDeletionScheduledHandler
-├── websocket.rs              # WebSocket upgrade handler, Redis pub/sub integration,
-│                             # WsMessage frame handling
-├── feed.rs                   # FanOutPostJob, feed read path, feed rebuild,
+├── websocket.go              # WebSocket upgrade handler (gorilla/websocket),
+│                             # Redis pub/sub integration, WsMessage frame handling
+├── feed.go                   # FanOutPostJob, feed read path, feed rebuild,
 │                             # Redis sorted set operations
-├── domain/
-│   ├── mod.rs
-│   ├── friendship.rs         # Friendship aggregate root — state machine, invariants
-│   ├── post.rs               # Post aggregate — type validation, visibility enforcement
-│   ├── group_membership.rs   # GroupMembership aggregate — role transitions, ban logic
-│   ├── visibility.rs         # Centralized visibility logic — all access checks
-│   └── errors.rs             # SocialError enum
-└── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
+└── domain/
+    ├── friendship.go         # Friendship aggregate root — state machine, invariants
+    ├── post.go               # Post aggregate — type validation, visibility enforcement
+    ├── group_membership.go   # GroupMembership aggregate — role transitions, ban logic
+    ├── visibility.go         # Centralized visibility logic — all access checks
+    └── errors.go             # SocialError sentinel errors
 ```

@@ -8,16 +8,16 @@ Six principles govern every technical decision. They are ordered by priority —
 
 The codebase is primarily generated and maintained by AI (Claude). This inverts traditional technology selection criteria:
 
-- **Learning curve is irrelevant** — AI generates idiomatic Rust, TypeScript, SQL, and configuration equally well. The "difficulty" of a language is not a cost.
-- **Compiler strictness is a free safety net** — Rust's borrow checker, lifetime system, and type system catch entire categories of bugs at compile time. For AI-generated code, this is pure upside: the compiler reviews every line before it runs.
+- **Learning curve is irrelevant** — AI generates idiomatic Go, TypeScript, SQL, and configuration equally well. The "difficulty" of a language is not a cost.
+- **Static analysis is a free safety net** — Go's compiler, `golangci-lint`, and the race detector catch entire categories of bugs before production. For AI-generated code, this is pure upside: the toolchain reviews every line before it runs.
 - **Explicitness over magic** — AI generates better code when patterns are explicit and consistent. Convention-over-configuration frameworks (Rails, Laravel) rely on implicit knowledge that AI may misapply. Explicit configuration and typed contracts produce more reliable generated code.
-- **Strong type systems reduce review burden** — When the compiler enforces correctness, the human developer (solo) can focus review on business logic and architecture rather than null checks and type mismatches.
+- **Strong type systems reduce review burden** — When the compiler and linter enforce correctness, the human developer (solo) can focus review on business logic and architecture rather than null checks and type mismatches.
 
 ### 1.2 Monolith-First
 
 A single deployable unit until proven otherwise. `[S§17.4]`
 
-- **14 spec domains → Rust modules** within one binary, not 14 services.
+- **17 spec domains → Go packages** within one binary, not 17 services.
 - **One PostgreSQL database** with schema prefixes per domain.
 - **One deployment target** — a single Docker container on a single server.
 - **Microservice extraction is a scaling decision**, not an architecture decision. Extract only when a domain has demonstrably different scaling needs (e.g., media processing) that cannot be solved by adding capacity.
@@ -28,11 +28,11 @@ A single deployable unit until proven otherwise. `[S§17.4]`
 
 Types flow from database schema to API response to React component. `[S§17.1]`
 
-- **Rust structs** define API request/response shapes.
-- **SeaORM entities** are generated from database migrations — the schema is the source of truth.
-- **OpenAPI 3.1** spec is generated from Rust types.
+- **Go structs** define API request/response shapes via struct tags (`json:"field"`).
+- **GORM models** are hand-written in `models.go` — the schema is the source of truth.
+- **OpenAPI 3.1** spec is generated from Go types via swaggo/swag annotations.
 - **TypeScript client types** are generated from OpenAPI spec.
-- Zero `any` in TypeScript. Zero `.unwrap()` in production Rust (use `?` or explicit error handling).
+- Zero `any` in TypeScript. All errors MUST be checked in production Go (`if err != nil`).
 
 ### 1.4 Progressive Complexity
 
@@ -49,7 +49,7 @@ Every "simple first" choice includes a documented **revision trigger** — the s
 
 Privacy is enforced structurally, not by policy. `[S§17.2]`
 
-- **Family-scoped queries** — a Rust trait enforces that every database query includes a `family_id` filter. Cross-family data access is structurally impossible without explicit opt-in (social sharing).
+- **Family-scoped queries** — a Go interface enforces that every database query includes a `family_id` filter. Cross-family data access is structurally impossible without explicit opt-in (social sharing).
 - **Default-deny visibility** — social content defaults to friends-only at the database level. There is no "public" visibility enum variant for user-generated content. `[S§7.2.2]`
 - **Coarse location only** — the database stores city/region identifiers, never coordinates. `[S§7.8]`
 - **COPPA by construction** — student profiles have no credentials, no independent sessions, and no direct messaging capability. The data model makes COPPA violations structurally difficult. `[S§17.2]`
@@ -69,44 +69,45 @@ Methodologies are data, not code. `[S§4.1]`
 
 Every selection references the spec requirement it satisfies, names rejected alternatives, and defines a revision trigger.
 
-### 2.1 Backend: Rust + Axum + Tokio
+### 2.1 Backend: Go + Echo
 
 **Satisfies**: `[S§17.3]` performance targets, `[S§17.1]` security, `[S§17.4]` scalability
 
 | Attribute | Value |
 |-----------|-------|
-| **Language** | Rust (latest stable) |
-| **Web framework** | Axum 0.8+ |
-| **Async runtime** | Tokio (multi-threaded) |
-| **Expected throughput** | 32,000-52,000 requests/sec with DB (single server) |
-| **Memory footprint** | 8-20MB per instance |
+| **Language** | Go (latest stable, 1.23+) |
+| **Web framework** | Echo v4 |
+| **Concurrency** | goroutines (built-in) |
+| **Expected throughput** | 10,000-30,000 requests/sec with DB (single server) |
+| **Memory footprint** | 20-60MB per instance |
 
-**Rationale**: AI generates Rust code; the borrow checker catches memory safety, data races, and null pointer errors at compile time — for free. A solo developer cannot manually review every line. Rust's compiler is the second reviewer. Performance means Phase 1-2 runs comfortably on a ~$110/mo AWS setup (§2.11), keeping infrastructure costs minimal.
+**Rationale**: AI generates Go code equally well; Go's compiler, `golangci-lint`, and the built-in race detector catch categories of bugs before production. A solo developer cannot manually review every line — static analysis and the type system serve as the second reviewer. Go's simplicity (one way to do things, minimal abstraction) produces highly readable AI-generated code. Performance means Phase 1-2 runs comfortably on a ~$110/mo AWS setup (§2.11), keeping infrastructure costs minimal. Go's garbage collector eliminates manual memory management, and the race detector catches data races in tests.
 
 **Rejected alternatives**:
-- **TypeScript (Node.js)**: 3-5x lower throughput, no compile-time safety beyond types, `null`/`undefined` hazards, need for runtime validation libraries. Reasonable choice, but Rust's compile-time guarantees are more valuable for AI-generated code.
-- **Go**: Strong performance and simplicity, but the user finds the language unpleasant to work in daily. Developer satisfaction matters for a multi-year solo project.
-- **Ruby on Rails**: No type safety, 10-20x slower than Rust, magic conventions conflict with AI-first development principle.
+- **TypeScript (Node.js)**: 3-5x lower throughput, no compile-time safety beyond types, `null`/`undefined` hazards, need for runtime validation libraries. Reasonable choice, but Go's compile-time guarantees and goroutine concurrency model are more valuable.
+- **Rust**: Stronger compile-time guarantees but significantly higher complexity (borrow checker, lifetimes). The additional safety margins do not justify the cognitive overhead for a solo developer who values simplicity and fast iteration.
+- **Ruby on Rails**: No type safety, 10-20x slower than Go, magic conventions conflict with AI-first development principle.
 
-**Revision trigger**: Never — Rust is the "never rewrite" choice. Individual crates may be replaced, but the language stays.
+**Revision trigger**: Never — Go is the foundational language choice. Individual dependencies may be replaced, but the language stays.
 
-### 2.2 ORM: SeaORM
+### 2.2 ORM: GORM v2
 
 **Satisfies**: `[S§16]` data architecture, `[S§17.3]` performance
 
 | Attribute | Value |
 |-----------|-------|
-| **Crate** | `sea-orm` (latest stable) |
-| **Migration tool** | `sea-orm-migration` |
-| **Query style** | Compile-time checked, async-native |
+| **Library** | GORM v2 (latest stable) |
+| **Migration tool** | goose |
+| **Query style** | Chainable, struct-tag-based mapping |
 
-**Rationale**: Most mature async Rust ORM. Supports PostgreSQL JSONB and array types natively (needed for methodology config `[S§4.1]`). Migration system handles schema evolution. Compile-time query checking catches SQL errors before runtime.
+**Rationale**: Most mature and widely-used Go ORM. Supports PostgreSQL JSONB and array types natively (needed for methodology config `[S§4.1]`). Goose handles schema evolution with plain SQL migrations. GORM models are hand-written Go structs with struct tags, keeping the schema close to the code.
 
 **Rejected alternatives**:
-- **Diesel**: Synchronous, poor async story. Mature but doesn't fit Tokio ecosystem.
-- **SQLx**: Not an ORM — raw SQL with compile-time checking. Good for complex queries but lacks migration system and entity relationships that a 14-domain app needs.
+- **sqlc**: SQL-first with generated Go code. Good type safety but lacks the relationship management and query-building ergonomics that a 17-domain app needs.
+- **Ent (entgo.io)**: Schema-as-code approach with code generation. More opinionated than needed, and the generated code is harder for AI to reason about.
+- **sqlx (jmoiron/sqlx)**: Not an ORM — thin wrapper over `database/sql`. Good for raw SQL but lacks relationship handling and migration tooling.
 
-**Revision trigger**: If SeaORM's async performance becomes a bottleneck (unlikely), supplement specific hot-path queries with raw SQLx.
+**Revision trigger**: If GORM's query performance becomes a bottleneck, supplement specific hot-path queries with raw `database/sql`.
 
 ### 2.3 Application Frontend: React (Vite SPA)
 
@@ -121,7 +122,7 @@ Every selection references the spec requirement it satisfies, names rejected alt
 | **Styling** | Tailwind CSS v4 |
 | **Type checking** | TypeScript (strict mode) |
 
-**Rationale**: The platform has 14 domains with extensive interactivity — messaging, social feeds, learning tool interactions, marketplace browse/purchase, quiz flows. React's component ecosystem (rich text editors, file uploaders, drag-and-drop, data visualization) is unmatched. SPA architecture keeps real-time features (messaging, notifications) simple — no SSR hydration complexity.
+**Rationale**: The platform has 17 domains with extensive interactivity — messaging, social feeds, learning tool interactions, marketplace browse/purchase, quiz flows. React's component ecosystem (rich text editors, file uploaders, drag-and-drop, data visualization) is unmatched. SPA architecture keeps real-time features (messaging, notifications) simple — no SSR hydration complexity.
 
 **Rejected alternatives**:
 - **SvelteKit**: Smaller ecosystem. Fewer production-grade component libraries for the breadth needed (messaging, rich text, charts, file upload).
@@ -141,10 +142,10 @@ Every selection references the spec requirement it satisfies, names rejected alt
 | **Content** | Methodology explorer, state guides, Homeschooling 101, blog |
 | **Rendering** | Static Site Generation (SSG) |
 
-**Rationale**: Discovery content `[S§5]` must be SEO-indexable and fast. Astro generates static HTML with perfect Lighthouse scores. Cloudflare Pages hosts static sites for free with global CDN. This completely eliminates SSR as a backend concern — the Rust API serves JSON only.
+**Rationale**: Discovery content `[S§5]` must be SEO-indexable and fast. Astro generates static HTML with perfect Lighthouse scores. Cloudflare Pages hosts static sites for free with global CDN. This completely eliminates SSR as a backend concern — the Go API serves JSON only.
 
 **Rejected alternatives**:
-- **SSR from Rust backend**: Adds template rendering complexity to the API server. Mixes concerns (API + HTML rendering). Rust's template ecosystem (Askama, Tera) is functional but unnecessary.
+- **SSR from Go backend**: Adds template rendering complexity to the API server. Mixes concerns (API + HTML rendering). Go's template ecosystem (`html/template`) is functional but unnecessary.
 - **Next.js static export**: Heavier runtime than Astro for content-focused pages. Astro's island architecture is better suited for mostly-static content with optional interactive components.
 
 **Revision trigger**: None. Static site generation is the correct pattern for SEO content.
@@ -157,7 +158,7 @@ Every selection references the spec requirement it satisfies, names rejected alt
 |-----------|-------|
 | **Version** | PostgreSQL 16+ |
 | **Extensions** | `pg_trgm`, `PostGIS`, `pgcrypto`, `uuid-ossp` |
-| **Connection pooling** | RDS manages server-side connections; SeaORM's built-in pool handles app-side pooling |
+| **Connection pooling** | RDS manages server-side connections; GORM's built-in pool (via `database/sql`) handles app-side pooling |
 
 **Capabilities used**:
 - **JSONB**: Methodology configuration, tool registry, quiz scoring weights `[S§4.1]`
@@ -168,7 +169,7 @@ Every selection references the spec requirement it satisfies, names rejected alt
 
 **Rejected alternatives**:
 - **MySQL**: No JSONB, no PostGIS, weaker full-text search. PostgreSQL is strictly superior for this use case.
-- **MongoDB**: Loses relational integrity across 14 interconnected domains. The data model `[S§16.1]` is fundamentally relational.
+- **MongoDB**: Loses relational integrity across 17 interconnected domains. The data model `[S§16.1]` is fundamentally relational.
 
 **Revision trigger**: Never for the primary database. Add read replicas when write throughput exceeds single-server capacity (~Phase 3).
 
@@ -187,14 +188,14 @@ Every selection references the spec requirement it satisfies, names rejected alt
 
 **Revision trigger**: Migrate to Meilisearch when marketplace exceeds ~100K listings or search latency exceeds 500ms p95 `[S§17.3]`.
 
-### 2.7 Background Jobs: Redis + sidekiq-rs
+### 2.7 Background Jobs: Redis + asynq
 
 **Satisfies**: `[S§13]` notifications, `[S§12]` moderation pipeline, `[S§14]` search indexing
 
 | Attribute | Value |
 |-----------|-------|
 | **Queue backend** | Redis 7+ |
-| **Job processor** | `sidekiq-rs` (Rust port of Sidekiq) |
+| **Job processor** | hibiken/asynq |
 | **Priority tiers** | Critical, Default, Low |
 
 Redis also serves as:
@@ -215,11 +216,11 @@ Redis also serves as:
 | **MFA** | TOTP + WebAuthn `[S§17.1]` |
 | **Session management** | Kratos cookie-based sessions |
 
-**Rationale**: Building auth from scratch in Rust means implementing password hashing, session management, OIDC flows, MFA, account recovery, and email verification. Kratos handles all of this as a battle-tested, self-hosted identity service. Custom COPPA consent flow `[S§17.2]` is built on top of Kratos hooks.
+**Rationale**: Building auth from scratch in Go means implementing password hashing, session management, OIDC flows, MFA, account recovery, and email verification. Kratos handles all of this as a battle-tested, self-hosted identity service. Custom COPPA consent flow `[S§17.2]` is built on top of Kratos hooks.
 
 **Rejected alternatives**:
 - **Auth0 / Firebase Auth**: SaaS dependency, per-MAU pricing becomes expensive at scale. At 100K+ families, Auth0 costs $1,000+/mo vs. self-hosted Kratos at $0.
-- **Custom Rust auth**: Months of development for a solved problem. Security-critical code that should not be custom-written by a solo developer.
+- **Custom Go auth**: Months of development for a solved problem. Security-critical code that should not be custom-written by a solo developer.
 
 **Revision trigger**: None. Kratos is open-source and self-hosted — no vendor lock-in.
 
@@ -238,7 +239,7 @@ Redis also serves as:
 
 **Rationale**: Hyperswitch provides processor-agnostic payment orchestration. The platform talks to Hyperswitch (self-hosted), which talks to Stripe as the underlying processor. This gives us the compliance benefits of Stripe (creator KYC, identity verification, 1099-K filing, sales tax) while adding the flexibility to swap or add processors without application code changes. Marketplace payments (split payments, creator sub-merchants, payouts) are managed through Hyperswitch's payment orchestration layer. See `specs/domains/07-mkt.md §7` for full marketplace payment details and `§18.5` for the Hyperswitch deployment architecture.
 
-**Note**: COPPA micro-charge verification `[S§1.4]` uses the `billing::` adapter, which wraps Hyperswitch for one-time payments. See `10-billing.md §13` for the full COPPA flow.
+**Note**: COPPA micro-charge verification `[S§1.4]` uses the `billing` adapter, which wraps Hyperswitch for one-time payments. See `10-billing.md §13` for the full COPPA flow.
 
 **Revision trigger**: Swap Stripe connector for another processor if pricing or features change — only Hyperswitch connector configuration changes, no application code impact.
 
@@ -271,7 +272,7 @@ Redis also serves as:
 | **Region** | us-east-1 (N. Virginia) |
 | **Est. cost** | ~$100-120/mo |
 
-**Rationale**: A solo developer building a COPPA-regulated platform handling children's data cannot afford the operational risk of self-managing PostgreSQL (backups, upgrades, replication), Redis, TLS certificates, firewall rules, and OS patching. AWS managed services (RDS, ElastiCache, ACM, ALB) shift this operational burden to AWS. Rust's minimal resource profile (8-20MB memory, steady CPU) keeps managed service costs predictable. ECS on EC2 with Graviton provides the best price-performance: t4g.small at ~$12/mo vs. Fargate's ~$25-35/mo for equivalent compute.
+**Rationale**: A solo developer building a COPPA-regulated platform handling children's data cannot afford the operational risk of self-managing PostgreSQL (backups, upgrades, replication), Redis, TLS certificates, firewall rules, and OS patching. AWS managed services (RDS, ElastiCache, ACM, ALB) shift this operational burden to AWS. Go's efficient resource profile (20-60MB memory, steady CPU) keeps managed service costs predictable. ECS on EC2 with Graviton provides the best price-performance: t4g.small at ~$12/mo vs. Fargate's ~$25-35/mo for equivalent compute.
 
 **Rejected alternatives**:
 - **Hetzner dedicated server ($60/mo)**: ~50% cheaper, but requires self-managing PostgreSQL backups/PITR, Redis persistence, TLS certificates (Let's Encrypt), firewall rules (UFW), and OS patching. Operational burden and risk outweigh cost savings for a solo developer with COPPA obligations. (See ADR-010.)
@@ -320,7 +321,7 @@ Redis also serves as:
 
 | Component | Service | Purpose |
 |-----------|---------|---------|
-| **Error tracking** | Sentry | Rust + React error capture, performance monitoring, release health |
+| **Error tracking** | Sentry | Go + React error capture, performance monitoring, release health |
 | **Uptime** | UptimeRobot | External availability monitoring, alerting (5-min interval) |
 | **Infrastructure** | CloudWatch | ECS, RDS, ElastiCache metrics, alarms, and log aggregation |
 
@@ -362,26 +363,26 @@ Redis also serves as:
 **Satisfies**: `[S§17.1]` security (dependency scanning)
 
 Pipeline stages:
-1. `cargo clippy` — lint
-2. `cargo test` — unit + integration tests
-3. `cargo audit` — dependency vulnerability scan
+1. `golangci-lint run` — lint
+2. `go test ./...` — unit + integration tests
+3. `govulncheck ./...` — dependency vulnerability scan
 4. `npm audit` — frontend dependency scan
 5. Docker multi-stage build
 6. Push image to Amazon ECR, update ECS service (rolling deployment)
 
 **Revision trigger**: None. GitHub Actions is sufficient for any scale of this project.
 
-### 2.16 Real-Time: WebSockets via Axum
+### 2.16 Real-Time: WebSockets via gorilla/websocket
 
 **Satisfies**: `[S§7.5]` direct messaging, `[S§13]` notifications
 
 | Attribute | Value |
 |-----------|-------|
 | **Protocol** | WebSocket (RFC 6455) |
-| **Server** | Axum's built-in WebSocket support |
+| **Server** | gorilla/websocket integrated with Echo |
 | **Pub/sub** | Redis pub/sub for multi-connection distribution |
 
-**Rationale**: Axum has native async WebSocket support via `tokio-tungstenite`. Redis pub/sub distributes messages across WebSocket connections (and across servers when scaling horizontally).
+**Rationale**: gorilla/websocket is the de facto Go WebSocket library with a clean API for upgrading HTTP connections. Each WebSocket connection runs in its own goroutine. Redis pub/sub distributes messages across WebSocket connections (and across servers when scaling horizontally).
 
 **Revision trigger**: None for the WebSocket layer. Redis pub/sub scales to the connection counts needed through Phase 3.
 
@@ -435,29 +436,29 @@ Pipeline stages:
                           └───────────────────┼────────────────────┘
                                               │
                                      ┌────────▼────────┐
-                                     │   Rust API      │
-                                     │   (Axum)        │
+                                     │   Go API        │
+                                     │   (Echo)        │
                                      │                 │
                                      │  ┌───────────┐  │
                                      │  │  Domains  │  │
                                      │  │           │  │
-                                     │  │ iam::     │  │
-                                     │  │ social::  │  │
-                                     │  │ learn::   │  │
-                                     │  │ mkt::     │  │
-                                     │  │ method::  │  │
-                                     │  │ discover::│  │
-                                     │  │ onboard:: │  │
-                                     │  │ billing:: │  │
-                                     │  │ notify::  │  │
-                                     │  │ search::  │  │
-                                     │  │ comply::  │  │
-                                     │  │ safety::  │  │
-                                     │  │ ai::      │  │
-                                     │  │ media::   │  │
-                                     │  │ lifecycle:│  │
-                                     │  │ admin::   │  │
-                                     │  │ plan::    │  │
+                                     │  │ iam       │  │
+                                     │  │ social    │  │
+                                     │  │ learn     │  │
+                                     │  │ mkt       │  │
+                                     │  │ method    │  │
+                                     │  │ discover  │  │
+                                     │  │ onboard   │  │
+                                     │  │ billing   │  │
+                                     │  │ notify    │  │
+                                     │  │ search    │  │
+                                     │  │ comply    │  │
+                                     │  │ safety    │  │
+                                     │  │ ai        │  │
+                                     │  │ media     │  │
+                                     │  │ lifecycle │  │
+                                     │  │ admin     │  │
+                                     │  │ plan      │  │
                                      │  └───────────┘  │
                                      │                 │
                                      │  WebSocket ─────┤
@@ -479,27 +480,27 @@ Pipeline stages:
 
 ### 3.2 Domain-to-Module Mapping
 
-Each spec domain `[S§2.1]` maps to a Rust module within the monolith:
+Each spec domain `[S§2.1]` maps to a Go package within the monolith:
 
-| Spec Domain | Rust Module | Spec Reference | Key Responsibilities |
-|-------------|-------------|----------------|---------------------|
-| Identity & Access | `iam::` | `[S§3]` | Users, families, roles, permissions, sessions |
-| Methodology | `method::` | `[S§4]` | Definitions, tool registry, config propagation |
-| Discovery | `discover::` | `[S§5]` | Quiz engine, explorer content, state guides |
-| Onboarding | `onboard::` | `[S§6]` | Account setup wizard, roadmaps, recommendations |
-| Social | `social::` | `[S§7]` | Profiles, feed, friends, messaging, groups, events |
-| Learning | `learn::` | `[S§8]` | Tools, activities, journals, progress tracking, interactive assessments, lesson sequences, student assignments |
-| Marketplace | `mkt::` | `[S§9]` | Listings, purchases, reviews, creator dashboard |
-| AI & Recommendations | `ai::` | `[S§10]` | Recommendation engine, content suggestions |
-| Compliance & Reporting | `comply::` | `[S§11]` | Attendance, assessments, portfolios, transcripts |
-| Trust & Safety | `safety::` | `[S§12]` | CSAM, moderation, reporting, bot prevention |
-| Billing & Subscriptions | `billing::` | `[S§15]` | Subscriptions, transactions, payouts |
-| Notifications | `notify::` | `[S§13]` | In-app, email, digests, preferences |
-| Search | `search::` | `[S§14]` | Full-text search, autocomplete, faceted filtering |
-| Content & Media | `media::` | `[S§2.1]` | Upload, processing, storage, delivery |
-| Data Lifecycle | `lifecycle::` | `[S§16.3]` | Data export, account deletion, retention, recovery |
-| Administration | `admin::` | `[S§3.1.5]` | Admin dashboard, user management, feature flags, system health |
-| Planning & Scheduling | `plan::` | `[S§18.9]` | Calendar views, schedule items, recurring plans |
+| Spec Domain | Go Package | Spec Reference | Key Responsibilities |
+|-------------|------------|----------------|---------------------|
+| Identity & Access | `iam` | `[S§3]` | Users, families, roles, permissions, sessions |
+| Methodology | `method` | `[S§4]` | Definitions, tool registry, config propagation |
+| Discovery | `discover` | `[S§5]` | Quiz engine, explorer content, state guides |
+| Onboarding | `onboard` | `[S§6]` | Account setup wizard, roadmaps, recommendations |
+| Social | `social` | `[S§7]` | Profiles, feed, friends, messaging, groups, events |
+| Learning | `learn` | `[S§8]` | Tools, activities, journals, progress tracking, interactive assessments, lesson sequences, student assignments |
+| Marketplace | `mkt` | `[S§9]` | Listings, purchases, reviews, creator dashboard |
+| AI & Recommendations | `ai` | `[S§10]` | Recommendation engine, content suggestions |
+| Compliance & Reporting | `comply` | `[S§11]` | Attendance, assessments, portfolios, transcripts |
+| Trust & Safety | `safety` | `[S§12]` | CSAM, moderation, reporting, bot prevention |
+| Billing & Subscriptions | `billing` | `[S§15]` | Subscriptions, transactions, payouts |
+| Notifications | `notify` | `[S§13]` | In-app, email, digests, preferences |
+| Search | `search` | `[S§14]` | Full-text search, autocomplete, faceted filtering |
+| Content & Media | `media` | `[S§2.1]` | Upload, processing, storage, delivery |
+| Data Lifecycle | `lifecycle` | `[S§16.3]` | Data export, account deletion, retention, recovery |
+| Administration | `admin` | `[S§3.1.5]` | Admin dashboard, user management, feature flags, system health |
+| Planning & Scheduling | `plan` | `[S§18.9]` | Calendar views, schedule items, recurring plans |
 
 ### 3.3 Request Flow
 
@@ -510,7 +511,7 @@ HTTP Request
     │
     ▼
 ┌─────────────────────┐
-│ Axum Router         │  Route matching
+│ Echo Router         │  Route matching
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
@@ -526,7 +527,7 @@ HTTP Request
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Domain Handler      │  Business logic (e.g., social::create_post)
+│ Domain Handler      │  Business logic (e.g., social.CreatePost)
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
@@ -534,7 +535,7 @@ HTTP Request
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Repository Layer    │  SeaORM queries (always family-scoped)
+│ Repository Layer    │  GORM queries (always family-scoped)
 └─────────────────────┘
 ```
 
@@ -543,41 +544,44 @@ HTTP Request
 Each domain module follows a consistent internal structure:
 
 ```
-src/
-├── main.rs
-├── app.rs              # Axum app builder, router composition
-├── config.rs           # Environment configuration
-├── error.rs            # Application error types
+cmd/
+└── server/
+    └── main.go             # Entry point
+internal/
+├── app/
+│   └── app.go              # Echo app builder, router composition
+├── config/
+│   └── config.go           # Environment configuration
 ├── middleware/
-│   ├── auth.rs         # Kratos session validation
-│   ├── family_scope.rs # Family context extraction
-│   └── rate_limit.rs   # Rate limiting
-├── domains/
-│   ├── iam/
-│   │   ├── mod.rs
-│   │   ├── handlers.rs     # Axum handlers (HTTP layer)
-│   │   ├── service.rs      # Business logic
-│   │   ├── repository.rs   # Database queries
-│   │   ├── models.rs       # Request/response types
-│   │   └── entities/       # SeaORM entities
-│   ├── social/
-│   │   ├── mod.rs
-│   │   ├── handlers.rs
-│   │   ├── service.rs
-│   │   ├── repository.rs
-│   │   ├── models.rs
-│   │   └── entities/
-│   ├── learn/
-│   │   └── ...
-│   ├── mkt/
-│   │   └── ...
-│   └── ... (all 14 domains)
+│   ├── auth.go             # Kratos session validation
+│   ├── family_scope.go     # Family context extraction
+│   └── rate_limit.go       # Rate limiting
+├── iam/
+│   ├── handler.go          # Echo handlers (HTTP layer)
+│   ├── service.go          # Business logic
+│   ├── repository.go       # Database queries
+│   ├── models.go           # GORM models + request/response types
+│   └── ports.go            # Service + repository interfaces
+├── social/
+│   ├── handler.go
+│   ├── service.go
+│   ├── repository.go
+│   ├── models.go
+│   └── ports.go
+├── learn/
+│   └── ...
+├── mkt/
+│   └── ...
+├── ... (all 17 domains)
 └── shared/
-    ├── db.rs           # Database pool, transaction helpers
-    ├── redis.rs        # Redis connection pool
-    ├── pagination.rs   # Cursor-based pagination
-    ├── family_scope.rs # FamilyScoped trait
-    └── types.rs        # Shared types (Uuid, DateTime, etc.)
+    ├── db.go               # Database pool, transaction helpers
+    ├── redis.go            # Redis connection pool
+    ├── pagination.go       # Cursor-based pagination
+    ├── family_scope.go     # FamilyScope type
+    ├── errors.go           # AppError and error-to-HTTP mapping
+    └── types.go            # Shared types (type aliases, newtypes)
+migrations/
+└── *.sql                   # goose SQL migrations
 ```
 
 ---
@@ -585,7 +589,7 @@ src/
 ## 4. Internal Architecture Patterns
 
 This section defines the named, coherent pattern stack used inside the monolith. It bridges
-the gap between "we use Rust + Axum + SeaORM" (§2) and "here are the file naming rules"
+the gap between "we use Go + Echo + GORM" (§2) and "here are the file naming rules"
 (CODING_STANDARDS.md §2.1). Without explicit patterns, AI-assisted code generation defaults
 to whatever pattern the LLM has seen most — typically anemic domain models with god-services,
 or over-engineered hexagonal abstractions. Naming the patterns here makes intent unambiguous.
@@ -605,30 +609,30 @@ specific project characteristics, not generic "best practices."
 | Cross-domain | In-Process Domain Event Bus | System-wide | Cross-domain decoupling, no circular imports |
 | Read-heavy | Lightweight CQRS | 6 domains | Separation of write/read path optimization |
 
-### 4.2 Bounded Contexts (the 14 Modules)
+### 4.2 Bounded Contexts (the 17 Modules)
 
-The 14 Rust modules (`iam::`, `social::`, `learn::`, etc.) are **Bounded Contexts** in
+The 17 Go packages (`iam`, `social`, `learn`, etc.) are **Bounded Contexts** in
 Domain-Driven Design terminology. This is already committed to — this section names it
 explicitly so the intent is clear to all contributors (human and AI).
 
-**Why bounded contexts fit this project**: 14 distinct problem domains with their own
+**Why bounded contexts fit this project**: 17 distinct problem domains with their own
 vocabulary, rules, and data ownership. All share infrastructure (one PostgreSQL database,
 one Redis instance) but must not share implementation. The extraction path to microservices
 (§1.2) is possible only if domain boundaries are respected from the start.
 
-**Shared Kernel** — `src/shared/` contains the minimal cross-cutting types all domains
+**Shared Kernel** — `internal/shared/` contains the minimal cross-cutting types all domains
 need. Every addition to `shared/` is a deliberate decision, not a convenience refactor.
 The shared kernel is strictly limited to:
 
 | File | Contents |
 |------|----------|
-| `shared/family_scope.rs` | `FamilyScope` type for privacy-enforcing queries |
-| `shared/types.rs` | Newtypes (`FamilyId`, `UserId`, `StudentId`, etc.) |
-| `shared/db.rs` | Database pool and transaction helpers |
-| `shared/redis.rs` | Redis connection pool and caching helpers |
-| `shared/pagination.rs` | Cursor-based and offset pagination |
-| `shared/events.rs` | `EventBus` and `DomainEvent` trait (§4.6) |
-| `shared/error.rs` | `AppError` and error-to-HTTP mapping |
+| `shared/family_scope.go` | `FamilyScope` type for privacy-enforcing queries |
+| `shared/types.go` | Type aliases (`FamilyID`, `UserID`, `StudentID`, etc.) |
+| `shared/db.go` | Database pool and transaction helpers |
+| `shared/redis.go` | Redis connection pool and caching helpers |
+| `shared/pagination.go` | Cursor-based and offset pagination |
+| `shared/events.go` | `EventBus` and `DomainEvent` interface (§4.6) |
+| `shared/errors.go` | `AppError` and error-to-HTTP mapping |
 
 **Anti-Corruption Layers (ACLs)** — External services (Hyperswitch, Ory Kratos, S3/R2,
 Thorn Safer, Postmark) are wrapped in Adapter modules within the domain that owns the
@@ -636,165 +640,152 @@ interaction. No raw SDK calls exist outside these adapters:
 
 | External Service | Owning Domain | Adapter Location |
 |-----------------|---------------|-----------------|
-| Hyperswitch (payments) | `mkt::` | `src/mkt/adapters/payment.rs` |
-| Hyperswitch (billing) | `billing::` | `src/billing/adapters/payment.rs` |
-| Ory Kratos (auth) | `iam::` | `src/iam/adapters/kratos.rs` |
-| Cloudflare R2 | `media::` | `src/media/adapters/r2.rs` |
-| Thorn Safer (CSAM) | `safety::` | `src/safety/adapters/thorn.rs` |
-| AWS Rekognition | `safety::` | `src/safety/adapters/rekognition.rs` |
-| Postmark (email) | `notify::` | `src/notify/adapters/postmark.rs` |
+| Hyperswitch (payments) | `mkt` | `internal/mkt/adapters/payment.go` |
+| Hyperswitch (billing) | `billing` | `internal/billing/adapters/payment.go` |
+| Ory Kratos (auth) | `iam` | `internal/iam/adapters/kratos.go` |
+| Cloudflare R2 | `media` | `internal/media/adapters/r2.go` |
+| Thorn Safer (CSAM) | `safety` | `internal/safety/adapters/thorn.go` |
+| AWS Rekognition | `safety` | `internal/safety/adapters/rekognition.go` |
+| Postmark (email) | `notify` | `internal/notify/adapters/postmark.go` |
 
-> **Note**: Both `mkt::` and `billing::` payment adapters talk to the same self-hosted
+> **Note**: Both `mkt` and `billing` payment adapters talk to the same self-hosted
 > Hyperswitch instance but use different Hyperswitch profiles (marketplace vs. subscription
 > billing). Stripe is the underlying processor configured as a Hyperswitch connector.
 
 **What bounded contexts rule out**:
 - Domain A writing directly to domain B's prefixed tables
-- Domain A calling domain B's `repository.rs` directly
-- Raw SDK calls scattered through `service.rs` files
+- Domain A calling domain B's `repository.go` directly
+- Raw SDK calls scattered through `service.go` files
 - Utility modules that don't belong to a domain or `shared/`
 
 ### 4.3 Application Service Layer
 
-The `handlers.rs / service.rs / repository.rs` file split is a Ports & Adapters
-implementation. The port is the `service.rs` interface; handlers and repositories are
+The `handler.go / service.go / repository.go` file split is a Ports & Adapters
+implementation. The port is the `service.go` interface; handlers and repositories are
 adapters on each side:
 
 ```
-HTTP Request  →  handlers.rs      (Inbound Adapter)
+HTTP Request  →  handler.go       (Inbound Adapter)
                       ↓
-               service.rs         (Application / Use-Case Layer — the "port")
+               service.go         (Application / Use-Case Layer — the "port")
                       ↓
-               repository.rs      (Outbound Adapter — database)
-               adapters/*.rs      (Outbound Adapter — third-party APIs)
+               repository.go      (Outbound Adapter — database)
+               adapters/*.go      (Outbound Adapter — third-party APIs)
 ```
 
 **External service adapter pattern** — Integrations with third-party APIs MUST go through
-dedicated `adapters/` files, not inline in `service.rs`:
+dedicated `adapters/` files, not inline in `service.go`:
 
 ```
-src/billing/
-├── handlers.rs
-├── service.rs
-├── repository.rs
-├── models.rs
-├── adapters/
-│   ├── mod.rs
-│   └── payment.rs    ← wraps Hyperswitch SDK, returns domain types only
-└── entities/
+internal/billing/
+├── handler.go
+├── service.go
+├── repository.go
+├── models.go
+├── ports.go
+└── adapters/
+    └── payment.go    ← wraps Hyperswitch SDK, returns domain types only
 ```
 
-Services call `billing::adapters::payment::create_subscription(...)` which returns
-`Result<SubscriptionId, BillingError>`. Hyperswitch already provides processor-agnostic
+Services call the billing adapter's `CreateSubscription(...)` method which returns
+`(SubscriptionID, error)`. Hyperswitch already provides processor-agnostic
 flexibility — swapping the underlying payment processor (e.g., Stripe → Adyen) requires
 only a Hyperswitch connector configuration change, no application code impact. The adapter
 layer adds a second level of isolation: if Hyperswitch itself were ever replaced, only
-`adapters/payment.rs` changes.
+`adapters/payment.go` changes.
 
 **Why this fits**: The existing split is 95% of the way there. Making external adapters
 explicit prevents the common pattern of SDK calls proliferating through service methods,
 which makes testing and future vendor swaps painful.
 
-### 4.4 Ports & Adapters (Full — Service and Repository Traits)
+### 4.4 Ports & Adapters (Full — Service and Repository Interfaces)
 
-Every domain service and every repository MUST be defined as a Rust trait before the
-implementation. This makes both inbound and outbound ports explicit and compiler-checked.
+Every domain service and every repository MUST be defined as a Go interface before the
+implementation. This makes both inbound and outbound ports explicit and enforced by the type system.
 
-#### Inbound Ports — Service Traits
+#### Inbound Ports — Service Interfaces
 
-Handlers receive `Arc<dyn DomainService>` via Axum State, never the concrete type:
+Handlers receive service interfaces via dependency injection, never the concrete type:
 
-```rust
-// src/learn/ports.rs  (or at the top of service.rs)
-#[async_trait]
-pub trait LearningService: Send + Sync {
-    async fn log_activity(
-        &self,
-        cmd: LogActivityCommand,
-        scope: FamilyScope,
-    ) -> Result<ActivityId, AppError>;
-
-    async fn get_progress_summary(
-        &self,
-        query: ProgressSummaryQuery,
-        scope: FamilyScope,
-    ) -> Result<ProgressSummary, AppError>;
+```go
+// internal/learn/ports.go
+type LearningService interface {
+    LogActivity(ctx context.Context, cmd LogActivityCommand, scope shared.FamilyScope) (uuid.UUID, error)
+    GetProgressSummary(ctx context.Context, query ProgressSummaryQuery, scope shared.FamilyScope) (*ProgressSummary, error)
     // ... all use cases exposed to other layers
 }
 
-// src/learn/service.rs
-pub struct LearningServiceImpl {
-    activities: Arc<dyn ActivityRepository>,
-    events: Arc<EventBus>,
+// internal/learn/service.go
+type learningService struct {
+    activities ActivityRepository
+    events     *shared.EventBus
 }
 
-impl LearningService for LearningServiceImpl { ... }
-```
+func NewLearningService(activities ActivityRepository, events *shared.EventBus) LearningService {
+    return &learningService{activities: activities, events: events}
+}
 
-Axum state wires the concrete type behind the trait:
-
-```rust
-// In app setup (app.rs or main.rs)
-let app_state = AppState {
-    learning: Arc::new(LearningServiceImpl::new(...)) as Arc<dyn LearningService>,
+func (s *learningService) LogActivity(ctx context.Context, cmd LogActivityCommand, scope shared.FamilyScope) (uuid.UUID, error) {
     // ...
-};
+}
 ```
 
-#### Outbound Ports — Repository Traits
+App setup wires the concrete type behind the interface:
 
-Services receive `Arc<dyn RepositoryTrait>`, not the concrete `Pg*Repository`:
+```go
+// In app setup (internal/app/app.go or cmd/server/main.go)
+appState := &AppState{
+    Learning: learn.NewLearningService(activityRepo, eventBus),
+    // ...
+}
+```
 
-```rust
-// src/learn/ports.rs  (or at the top of repository.rs)
-#[async_trait]
-pub trait ActivityRepository: Send + Sync {
-    async fn create(
-        &self,
-        cmd: CreateActivity,
-        scope: FamilyScope,
-    ) -> Result<Activity, AppError>;
+#### Outbound Ports — Repository Interfaces
 
-    async fn list(
-        &self,
-        query: ActivityQuery,
-        scope: FamilyScope,
-    ) -> Result<Vec<Activity>, AppError>;
+Services receive repository interfaces, not the concrete `pg*Repository`:
 
-    async fn get_progress_summary(
-        &self,
-        query: ProgressQuery,
-        scope: FamilyScope,
-    ) -> Result<ProgressSummary, AppError>;
+```go
+// internal/learn/ports.go
+type ActivityRepository interface {
+    Create(ctx context.Context, cmd CreateActivity, scope shared.FamilyScope) (*Activity, error)
+    List(ctx context.Context, query ActivityQuery, scope shared.FamilyScope) ([]Activity, error)
+    GetProgressSummary(ctx context.Context, query ProgressQuery, scope shared.FamilyScope) (*ProgressSummary, error)
 }
 
-// src/learn/repository.rs
-pub struct PgActivityRepository {
-    pool: DbPool,
+// internal/learn/repository.go
+type pgActivityRepository struct {
+    db *gorm.DB
 }
 
-impl ActivityRepository for PgActivityRepository { ... }
+func NewActivityRepository(db *gorm.DB) ActivityRepository {
+    return &pgActivityRepository{db: db}
+}
+
+func (r *pgActivityRepository) Create(ctx context.Context, cmd CreateActivity, scope shared.FamilyScope) (*Activity, error) {
+    // ...
+}
 ```
 
 **Naming conventions**:
-- Trait: `{Domain}Service` / `{Domain}Repository` (e.g., `LearningService`, `ActivityRepository`)
-- Implementation: `{Domain}ServiceImpl` / `Pg{Entity}Repository` (e.g., `LearningServiceImpl`, `PgActivityRepository`)
-- Trait file: `ports.rs` within the domain directory (or colocated at the top of `service.rs` / `repository.rs` for simple domains — team decides, must be consistent)
+- Interface: `{Domain}Service` / `{Entity}Repository` (e.g., `LearningService`, `ActivityRepository`)
+- Implementation: unexported struct `{domain}Service` / `pg{Entity}Repository` (e.g., `learningService`, `pgActivityRepository`)
+- Constructor: `New{Domain}Service(...)` / `New{Entity}Repository(...)` returns the interface type
+- Interface file: `ports.go` within the domain package
 
 **Why all domains, not just complex ones**:
 
 1. **Extraction path** — When a domain is extracted as a microservice, only the adapter
-   changes: `LearningServiceImpl` → `LearningServiceHttpClient`. Handlers are untouched.
+   changes: swap `learningService` for `learningServiceHTTPClient`. Handlers are untouched.
    This seam must exist *before* extraction, not added during it.
 
 2. **Consistent rule** — AI-generated code benefits from one rule ("all domains have a
-   service trait") rather than a conditional rule ("complex domains get traits"). Conditional
+   service interface") rather than a conditional rule ("complex domains get interfaces"). Conditional
    rules create ambiguity that leads to inconsistency.
 
-3. **Minimal overhead** — With `async fn in trait` stable since Rust 1.75, there is no
-   meaningful ergonomic friction. A service trait is ~15-20 lines per domain.
+3. **Minimal overhead** — Go interfaces are implicitly satisfied (no `implements` keyword).
+   A service interface is ~10-15 lines per domain. No boilerplate.
 
-4. **Authoritative contract** — The trait is the compiler-checked documentation of a
+4. **Authoritative contract** — The interface is the type-checked documentation of a
    domain's public use cases. Without it, there is no single place to see what a domain
    exposes to handlers or other domains.
 
@@ -802,11 +793,11 @@ impl ActivityRepository for PgActivityRepository { ... }
 
 ```
 Phase 1 (monolith):
-  AppState { learning: Arc::new(LearningServiceImpl::new(pool, bus)) as Arc<dyn LearningService> }
+  appState.Learning = learn.NewLearningService(activityRepo, eventBus)
 
 Phase 2 (extracted service):
-  AppState { learning: Arc::new(LearningServiceHttpClient::new(base_url)) as Arc<dyn LearningService> }
-  // Handlers are identical — they only see Arc<dyn LearningService>
+  appState.Learning = learn.NewLearningServiceHTTPClient(baseURL)
+  // Handlers are identical — they only see learn.LearningService interface
 ```
 
 ### 4.5 Domain Model Layer (Complex Domains Only)
@@ -838,96 +829,90 @@ that enforce invariants structurally (not by convention):
 **Module structure for complex domains**:
 
 ```
-src/mkt/
-├── mod.rs
-├── handlers.rs
-├── service.rs
-├── repository.rs
-├── models.rs
+internal/mkt/
+├── handler.go
+├── service.go
+├── repository.go
+├── models.go
+├── ports.go
 ├── adapters/
-│   └── payment.rs
-├── domain/
-│   ├── mod.rs
-│   ├── listing.rs      ← Aggregate Root: MarketplaceListing
-│   └── value_objects.rs
-└── entities/
+│   └── payment.go
+└── domain/
+    ├── listing.go       ← Aggregate Root: MarketplaceListing
+    └── value_objects.go
 ```
 
-**Aggregate Root pattern** (Rust-specific — private fields, state changes via methods only):
+**Aggregate Root pattern** (Go-specific — unexported fields, state changes via methods only):
 
-```rust
-// src/mkt/domain/listing.rs
-#[derive(Debug)]
-pub struct MarketplaceListing {
-    id: ListingId,
-    state: ListingState,      // enum: Draft | UnderReview | Published | Archived
-    creator_id: CreatorId,
-    title: ListingTitle,      // value object with validation
-    price_cents: u32,
-    // All fields private — state only changes via the methods below
+```go
+// internal/mkt/domain/listing.go
+package domain
+
+type ListingState string
+
+const (
+    ListingStateDraft       ListingState = "draft"
+    ListingStateUnderReview ListingState = "under_review"
+    ListingStatePublished   ListingState = "published"
+    ListingStateArchived    ListingState = "archived"
+)
+
+type MarketplaceListing struct {
+    id        uuid.UUID     // unexported — state only changes via methods below
+    state     ListingState
+    creatorID uuid.UUID
+    title     string
+    priceCents uint32
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ListingState {
-    Draft,
-    UnderReview,
-    Published,
-    Archived,
+func (l *MarketplaceListing) SubmitForReview() (*ListingSubmittedEvent, error) {
+    if l.state != ListingStateDraft {
+        return nil, &DomainError{
+            From:   string(l.state),
+            Action: "submit_for_review",
+        }
+    }
+    l.state = ListingStateUnderReview
+    return &ListingSubmittedEvent{ListingID: l.id, CreatorID: l.creatorID}, nil
 }
 
-impl MarketplaceListing {
-    pub fn submit_for_review(&mut self) -> Result<ListingSubmittedEvent, DomainError> {
-        match self.state {
-            ListingState::Draft => {
-                self.state = ListingState::UnderReview;
-                Ok(ListingSubmittedEvent { listing_id: self.id, creator_id: self.creator_id })
-            }
-            other => Err(DomainError::InvalidStateTransition {
-                from: other,
-                action: "submit_for_review",
-            }),
+func (l *MarketplaceListing) Publish(reviewerID uuid.UUID) (*ListingPublishedEvent, error) {
+    if l.state != ListingStateUnderReview {
+        return nil, &DomainError{
+            From:   string(l.state),
+            Action: "publish",
         }
     }
-
-    pub fn publish(&mut self, reviewer_id: UserId) -> Result<ListingPublishedEvent, DomainError> {
-        match self.state {
-            ListingState::UnderReview => {
-                self.state = ListingState::Published;
-                Ok(ListingPublishedEvent { listing_id: self.id, reviewer_id })
-            }
-            other => Err(DomainError::InvalidStateTransition {
-                from: other,
-                action: "publish",
-            }),
-        }
-    }
+    l.state = ListingStatePublished
+    return &ListingPublishedEvent{ListingID: l.id, ReviewerID: reviewerID}, nil
 }
 ```
 
 The service layer loads the aggregate from the repository, calls methods (which enforce
 invariants and return domain events), then persists the updated aggregate and publishes events:
 
-```rust
-// src/mkt/service.rs
-impl MarketplaceService for MarketplaceServiceImpl {
-    async fn submit_listing_for_review(
-        &self,
-        cmd: SubmitListingCommand,
-        scope: FamilyScope,
-    ) -> Result<(), AppError> {
-        let mut listing = self.listings.get(cmd.listing_id, scope).await?;
-        let event = listing.submit_for_review()?;           // invariant enforced here
-        self.listings.save(&listing, scope).await?;
-        self.events.publish(event)?;                        // domain event emitted
-        Ok(())
+```go
+// internal/mkt/service.go
+func (s *marketplaceService) SubmitListingForReview(ctx context.Context, cmd SubmitListingCommand, scope shared.FamilyScope) error {
+    listing, err := s.listings.Get(ctx, cmd.ListingID, scope)
+    if err != nil {
+        return err
     }
+    event, err := listing.SubmitForReview()        // invariant enforced here
+    if err != nil {
+        return err
+    }
+    if err := s.listings.Save(ctx, listing, scope); err != nil {
+        return err
+    }
+    return s.events.Publish(event)                 // domain event emitted
 }
 ```
 
 **Why it fits**: State machines (listing lifecycle, moderation pipeline, attendance
-thresholds) MUST be enforced somewhere. An aggregate root with private fields and
-method-only state transitions makes invalid states unrepresentable in Rust's type system.
-A fat service method could be bypassed. A Rust aggregate cannot.
+thresholds) MUST be enforced somewhere. An aggregate root with unexported fields and
+method-only state transitions makes invalid transitions impossible from outside the package.
+A fat service method could be bypassed. A Go aggregate with unexported fields cannot.
 
 ### 4.6 Domain Event Bus
 
@@ -937,81 +922,86 @@ and domain B subscribes to it.
 
 **Implementation** — a lightweight in-process event bus, wired at application startup:
 
-```rust
-// src/shared/events.rs
+```go
+// internal/shared/events.go
 
-pub trait DomainEvent: Send + Sync + 'static {}
-
-#[async_trait]
-pub trait DomainEventHandler<E: DomainEvent>: Send + Sync {
-    async fn handle(&self, event: &E) -> Result<(), AppError>;
+// DomainEvent is a marker interface for all domain events.
+type DomainEvent interface {
+    EventName() string
 }
 
-pub struct EventBus {
-    // Internal dispatch map: TypeId → Vec<Box<dyn ErasedHandler>>
-    // Implementation detail; callers use only publish() and subscribe()
+// DomainEventHandler handles a specific type of domain event.
+type DomainEventHandler interface {
+    Handle(ctx context.Context, event DomainEvent) error
 }
 
-impl EventBus {
-    pub fn publish<E: DomainEvent>(&self, event: E) -> Result<(), AppError>;
-    pub fn subscribe<E: DomainEvent, H: DomainEventHandler<E>>(
-        &mut self,
-        handler: Arc<H>,
-    );
+// EventBus dispatches domain events to registered handlers.
+type EventBus struct {
+    // Internal dispatch map: reflect.Type → []DomainEventHandler
+    // Implementation detail; callers use only Publish() and Subscribe()
+    handlers map[reflect.Type][]DomainEventHandler
+    mu       sync.RWMutex
 }
+
+func (b *EventBus) Publish(ctx context.Context, event DomainEvent) error { /* ... */ }
+func (b *EventBus) Subscribe(eventType DomainEvent, handler DomainEventHandler) { /* ... */ }
 ```
 
 **Cross-domain event flows**:
 
 | Event (defined in) | Subscribing Domains | Effect |
 |---|---|---|
-| `ActivityLogged` (`learn::events`) | `comply::`, `ai::`, `notify::` | Attendance tracking, recommendation signal, streak milestone check |
-| `PostCreated` (`social::events`) | `safety::`, `search::` | Content scan, search index update |
-| `PurchaseCompleted` (`mkt::events`) | `learn::`, `billing::`, `notify::` | Tool access grant, creator earnings credit, receipt email |
-| `ContentFlagged` (`safety::events`) | `notify::` | Moderation queue alert |
-| `MethodologyConfigUpdated` (`method::events`) | All domains | Config cache invalidation |
-| `MilestoneAchieved` (`learn::events`) | `notify::`, `social::` | In-app + email notification, optional milestone post |
-| `QuizCompleted` (`learn::events`) | `notify::`, `ai::` | Score notification, recommendation signal |
-| `SequenceAdvanced` (`learn::events`) | `ai::` | Recommendation signal for sequence engagement |
-| `SequenceCompleted` (`learn::events`) | `notify::`, `ai::` | Completion notification, recommendation signal |
-| `AssignmentCompleted` (`learn::events`) | `notify::` | Notify parent of assignment completion |
+| `ActivityLogged` (`learn/events`) | `comply`, `ai`, `notify` | Attendance tracking, recommendation signal, streak milestone check |
+| `PostCreated` (`social/events`) | `safety`, `search` | Content scan, search index update |
+| `PurchaseCompleted` (`mkt/events`) | `learn`, `billing`, `notify` | Tool access grant, creator earnings credit, receipt email |
+| `ContentFlagged` (`safety/events`) | `notify` | Moderation queue alert |
+| `MethodologyConfigUpdated` (`method/events`) | All domains | Config cache invalidation |
+| `MilestoneAchieved` (`learn/events`) | `notify`, `social` | In-app + email notification, optional milestone post |
+| `QuizCompleted` (`learn/events`) | `notify`, `ai` | Score notification, recommendation signal |
+| `SequenceAdvanced` (`learn/events`) | `ai` | Recommendation signal for sequence engagement |
+| `SequenceCompleted` (`learn/events`) | `notify`, `ai` | Completion notification, recommendation signal |
+| `AssignmentCompleted` (`learn/events`) | `notify` | Notify parent of assignment completion |
 
-**Event ownership rule** — Event types are defined in the *emitting* domain's `events.rs`
+**Event ownership rule** — Event types are defined in the *emitting* domain's `events.go`
 file. The consuming domain imports the event type, never the emitting domain's service:
 
-```rust
-// src/learn/events.rs  — defined here, consumed elsewhere
-#[derive(Clone, Debug)]
-pub struct ActivityLogged {
-    pub family_id: FamilyId,
-    pub student_id: StudentId,
-    pub activity_id: ActivityId,
-    pub subject: Subject,
-    pub duration_minutes: u32,
+```go
+// internal/learn/events.go  — defined here, consumed elsewhere
+package learn
+
+type ActivityLogged struct {
+    FamilyID        uuid.UUID
+    StudentID       uuid.UUID
+    ActivityID      uuid.UUID
+    Subject         string
+    DurationMinutes uint32
 }
-impl DomainEvent for ActivityLogged {}
 
-// src/comply/handlers/activity_handler.rs  — subscribes here
-pub struct ActivityLoggedHandler { ... }
+func (e ActivityLogged) EventName() string { return "learn.activity_logged" }
 
-#[async_trait]
-impl DomainEventHandler<ActivityLogged> for ActivityLoggedHandler {
-    async fn handle(&self, event: &ActivityLogged) -> Result<(), AppError> {
-        self.comply_service.record_attendance(event).await
-    }
+// internal/comply/event_handlers.go  — subscribes here
+package comply
+
+type ActivityLoggedHandler struct {
+    complyService ComplianceService
+}
+
+func (h *ActivityLoggedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+    e := event.(learn.ActivityLogged)
+    return h.complyService.RecordAttendance(ctx, &e)
 }
 ```
 
 **Phase 1 → Phase 2 transition**:
 
-- **Phase 1** (current): Synchronous dispatch within the same request. `EventBus::publish`
+- **Phase 1** (current): Synchronous dispatch within the same request. `EventBus.Publish`
   calls handlers inline before the request returns. Simple, no message broker needed,
   consistent (event handlers participate in the request's error context).
 
 - **Phase 2** (when async is needed): Handlers that do heavy work (CSAM scanning, search
   indexing, email sending) enqueue a background job instead of executing inline.
-  The event handler's `handle()` method enqueues a job to Redis; the actual work runs
-  in a `sidekiq-rs` worker. The event bus is unchanged; only the handler implementation
+  The event handler's `Handle()` method enqueues a job to Redis; the actual work runs
+  in an asynq worker. The event bus is unchanged; only the handler implementation
   changes.
 
 **What the event bus rules out**: Domain A importing domain B's service to call it directly
@@ -1035,38 +1025,20 @@ optimized for the UI) within the same service and repository.
 | `search/` | Index document, update index | Full-text search, autocomplete |
 | `ai/` | Record learning signal | Fetch pre-computed recommendations |
 
-**Implementation pattern** — command and query functions coexist in the same service trait
+**Implementation pattern** — command and query functions coexist in the same service interface
 but are clearly separated by naming and return type conventions:
 
-```rust
-#[async_trait]
-pub trait LearningService: Send + Sync {
+```go
+// internal/learn/ports.go
+type LearningService interface {
     // --- Command side (write, has side effects) ---
-    // Return only IDs or () — never rich reads after write (no "return what you created")
-    async fn log_activity(
-        &self,
-        cmd: LogActivityCommand,
-        scope: FamilyScope,
-    ) -> Result<ActivityId, AppError>;
-
-    async fn complete_book(
-        &self,
-        cmd: CompleteBookCommand,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // Return only IDs or nothing — never rich reads after write (no "return what you created")
+    LogActivity(ctx context.Context, cmd LogActivityCommand, scope shared.FamilyScope) (uuid.UUID, error)
+    CompleteBook(ctx context.Context, cmd CompleteBookCommand, scope shared.FamilyScope) error
 
     // --- Query side (read, no side effects) ---
-    async fn get_progress_summary(
-        &self,
-        query: ProgressSummaryQuery,
-        scope: FamilyScope,
-    ) -> Result<ProgressSummary, AppError>;
-
-    async fn get_feed(
-        &self,
-        query: FeedQuery,
-        scope: FamilyScope,
-    ) -> Result<FeedPage, AppError>;
+    GetProgressSummary(ctx context.Context, query ProgressSummaryQuery, scope shared.FamilyScope) (*ProgressSummary, error)
+    GetFeed(ctx context.Context, query FeedQuery, scope shared.FamilyScope) (*FeedPage, error)
 }
 ```
 
@@ -1075,7 +1047,7 @@ is measured as insufficient):
 
 | Level | Mechanism | When to use |
 |-------|-----------|-------------|
-| 0 | Standard SeaORM query | Always start here |
+| 0 | Standard GORM query | Always start here |
 | 1 | PostgreSQL aggregate / window functions | Complex analytics (progress trends, subject balance) |
 | 2 | Materialized views | Expensive pre-computations refreshed on schedule |
 | 3 | Redis sorted sets / caches | Feed data, frequently accessed aggregates |
@@ -1094,9 +1066,9 @@ a read replica without restructuring the service interface.
 |---------|----------|-----------|
 | **Full Event Sourcing** | Rejected | Massive operational complexity (append-only log, snapshot management, replay logic). No consistency requirement that demands it. Domain events (§4.6) provide cross-domain decoupling without the overhead. |
 | **Saga Orchestration** | Deferred | Current cross-domain flows (purchase → access + earnings + notification) are simple enough for the event bus. Add sagas only if distributed transactions become a problem after service extraction. |
-| **Actor Model (Actix)** | Rejected | Over-complex for this use case. Tokio + Axum handles concurrency well. The actor model adds message-passing overhead without meaningful benefit for request/response workloads. |
+| **Actor Model** | Rejected | Over-complex for this use case. Goroutines + Echo handle concurrency well. The actor model adds message-passing overhead without meaningful benefit for request/response workloads. |
 | **Anemic Domain Model** | Rejected | Domains with rich invariants (Marketplace, Trust & Safety, Compliance) have state machines that MUST be enforced structurally, not by convention. Anemic models push invariant enforcement into service methods that can be bypassed. |
-| **Redux / Command Bus (MediatR style)** | Rejected | Too much indirection for Rust. Direct method calls on trait objects (§4.4) are idiomatic, explicit, and compiler-checked. MediatR-style patterns obscure data flow in ways that make AI-generated code harder to review. |
+| **Command Bus (MediatR style)** | Rejected | Too much indirection for Go. Direct method calls on interfaces (§4.4) are idiomatic, explicit, and type-checked. MediatR-style patterns obscure data flow in ways that make AI-generated code harder to review. |
 | **Separate Read Model (full CQRS)** | Deferred | Start with query/command separation within the same repository (§4.7). Add a separate read store (e.g., denormalized Redis hashes) only when the progressive optimization ladder (§4.7) is insufficient. |
 
 ---
@@ -1637,7 +1609,7 @@ method_definitions ── N:M ── method_tools (via method_tool_activations)
 
 ### 6.1 Ory Kratos Configuration
 
-Kratos runs as a sidecar container alongside the Rust API, managing the full authentication lifecycle. `[S§3]`
+Kratos runs as a sidecar container alongside the Go API, managing the full authentication lifecycle. `[S§3]`
 
 ```yaml
 # kratos.yml (key configuration)
@@ -1714,83 +1686,88 @@ session:
     same_site: Lax
 ```
 
-### 6.2 Auth Middleware (Rust)
+### 6.2 Auth Middleware (Go)
 
-```rust
-use axum::{extract::State, http::Request, middleware::Next, response::Response};
-use uuid::Uuid;
+```go
+// internal/middleware/auth.go
+package middleware
 
-/// Authenticated user context extracted from Kratos session
-#[derive(Clone, Debug)]
-pub struct AuthContext {
-    pub parent_id: Uuid,
-    pub family_id: Uuid,
-    pub kratos_identity_id: Uuid,
-    pub is_primary_parent: bool,
-    pub subscription_tier: SubscriptionTier,
-    pub email: String,
+import (
+    "net/http"
+
+    "github.com/google/uuid"
+    "github.com/labstack/echo/v4"
+    "gorm.io/gorm"
+)
+
+// AuthContext holds the authenticated user context extracted from Kratos session.
+type AuthContext struct {
+    ParentID         uuid.UUID
+    FamilyID         uuid.UUID
+    KratosIdentityID uuid.UUID
+    IsPrimaryParent  bool
+    SubscriptionTier SubscriptionTier
+    Email            string
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum SubscriptionTier {
-    Free,
-    Premium,
-}
+type SubscriptionTier string
 
-/// Middleware: validates Kratos session cookie and builds AuthContext
-pub async fn auth_middleware(
-    State(state): State<AppState>,
-    mut req: Request<axum::body::Body>,
-    next: Next,
-) -> Result<Response, ApiError> {
-    // Extract session cookie
-    let session_cookie = req
-        .headers()
-        .get("cookie")
-        .and_then(|v| v.to_str().ok())
-        .ok_or(ApiError::Unauthorized)?;
+const (
+    SubscriptionTierFree    SubscriptionTier = "free"
+    SubscriptionTierPremium SubscriptionTier = "premium"
+)
 
-    // Validate with Kratos
-    let kratos_session = state
-        .kratos_client
-        .to_session(Some(session_cookie), None)
-        .await
-        .map_err(|_| ApiError::Unauthorized)?;
+// AuthMiddleware validates Kratos session cookie and builds AuthContext.
+func AuthMiddleware(kratosClient *KratosClient, db *gorm.DB) echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            // Extract session cookie
+            sessionCookie := c.Request().Header.Get("Cookie")
+            if sessionCookie == "" {
+                return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+            }
 
-    let kratos_identity_id: Uuid = kratos_session
-        .identity
-        .id
-        .parse()
-        .map_err(|_| ApiError::Unauthorized)?;
+            // Validate with Kratos
+            kratosSession, err := kratosClient.ToSession(sessionCookie)
+            if err != nil {
+                return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+            }
 
-    // Look up parent + family from our DB
-    let parent = state
-        .db
-        .find_parent_by_kratos_id(kratos_identity_id)
-        .await?
-        .ok_or(ApiError::Unauthorized)?;
+            kratosIdentityID, err := uuid.Parse(kratosSession.Identity.ID)
+            if err != nil {
+                return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+            }
 
-    let family = state
-        .db
-        .find_family(parent.family_id)
-        .await?
-        .ok_or(ApiError::Unauthorized)?;
+            // Look up parent + family from our DB
+            parent, err := findParentByKratosID(db, kratosIdentityID)
+            if err != nil || parent == nil {
+                return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+            }
 
-    let auth_context = AuthContext {
-        parent_id: parent.id,
-        family_id: family.id,
-        kratos_identity_id,
-        is_primary_parent: parent.is_primary,
-        subscription_tier: match family.subscription_tier.as_str() {
-            "premium" => SubscriptionTier::Premium,
-            _ => SubscriptionTier::Free,
-        },
-        email: parent.email,
-    };
+            family, err := findFamily(db, parent.FamilyID)
+            if err != nil || family == nil {
+                return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+            }
 
-    // Insert into request extensions for handlers to extract
-    req.extensions_mut().insert(auth_context);
-    Ok(next.run(req).await)
+            tier := SubscriptionTierFree
+            if family.SubscriptionTier == "premium" {
+                tier = SubscriptionTierPremium
+            }
+
+            authCtx := AuthContext{
+                ParentID:         parent.ID,
+                FamilyID:         family.ID,
+                KratosIdentityID: kratosIdentityID,
+                IsPrimaryParent:  parent.IsPrimary,
+                SubscriptionTier: tier,
+                Email:            parent.Email,
+            }
+
+            // Insert into Echo context for handlers to extract
+            c.Set("auth", authCtx)
+            return next(c)
+        }
+    }
 }
 ```
 
@@ -1831,133 +1808,158 @@ COPPA consent is tracked per family, built on top of Kratos's registration flow:
                                       then deleted [S§16.3]
 ```
 
-```rust
-#[derive(Debug, Clone, PartialEq, sqlx::Type)]
-#[sqlx(type_name = "text")]
-pub enum CoppaConsentStatus {
-    Registered,
-    Noticed,
-    Consented,
-    ReVerified,
-    Withdrawn,
-}
+```go
+// internal/iam/models.go
+type CoppaConsentStatus string
 
-/// Middleware: ensures COPPA consent before accessing student data
-pub async fn require_coppa_consent(
-    auth: AuthContext,
-    State(state): State<AppState>,
-    req: Request<axum::body::Body>,
-    next: Next,
-) -> Result<Response, ApiError> {
-    let family = state.db.find_family(auth.family_id).await?
-        .ok_or(ApiError::NotFound)?;
+const (
+    CoppaRegistered CoppaConsentStatus = "registered"
+    CoppaNoticed    CoppaConsentStatus = "noticed"
+    CoppaConsented  CoppaConsentStatus = "consented"
+    CoppaReVerified CoppaConsentStatus = "re_verified"
+    CoppaWithdrawn  CoppaConsentStatus = "withdrawn"
+)
 
-    match family.coppa_consent_status {
-        CoppaConsentStatus::Consented | CoppaConsentStatus::ReVerified => {
-            Ok(next.run(req).await)
+// RequireCoppaConsent is Echo middleware that ensures COPPA consent before accessing student data.
+func RequireCoppaConsent(db *gorm.DB) echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            authCtx := c.Get("auth").(AuthContext)
+
+            family, err := findFamily(db, authCtx.FamilyID)
+            if err != nil || family == nil {
+                return echo.NewHTTPError(http.StatusNotFound, "resource not found")
+            }
+
+            switch family.CoppaConsentStatus {
+            case CoppaConsented, CoppaReVerified:
+                return next(c)
+            default:
+                return echo.NewHTTPError(http.StatusForbidden, "parental consent required")
+            }
         }
-        _ => Err(ApiError::CoppaConsentRequired),
     }
 }
 ```
 
 ### 6.4 Family Account Model `[S§3.1]`
 
-```rust
-/// Post-registration hook: creates family + parent atomically [S§6.1]
-pub async fn handle_post_registration(
-    State(state): State<AppState>,
-    Json(payload): Json<KratosWebhookPayload>,
-) -> Result<Json<()>, ApiError> {
-    let txn = state.db.begin().await?;
+```go
+// internal/iam/handler.go
 
-    // Create family with default methodology
-    let default_methodology = method::repository::find_by_slug(&txn, "traditional").await?;
+// HandlePostRegistration is a Kratos post-registration webhook that creates family + parent atomically. [S§6.1]
+func HandlePostRegistration(db *gorm.DB) echo.HandlerFunc {
+    return func(c echo.Context) error {
+        var payload KratosWebhookPayload
+        if err := c.Bind(&payload); err != nil {
+            return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+        }
 
-    let family = iam::repository::create_family(
-        &txn,
-        CreateFamily {
-            display_name: payload.traits.name.clone(),
-            primary_methodology_id: default_methodology.id,
+        tx := db.Begin()
+        if tx.Error != nil {
+            return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+        }
+        defer tx.Rollback()
+
+        // Create family with default methodology
+        defaultMethodology, err := findMethodologyBySlug(tx, "traditional")
+        if err != nil {
+            return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+        }
+
+        family := &Family{
+            DisplayName:          payload.Traits.Name,
+            PrimaryMethodologyID: defaultMethodology.ID,
             // Methodology will be properly set during onboarding wizard [S§6.3]
-        },
-    ).await?;
+        }
+        if err := tx.Create(family).Error; err != nil {
+            return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+        }
 
-    // Create parent linked to Kratos identity
-    let parent = iam::repository::create_parent(
-        &txn,
-        CreateParent {
-            family_id: family.id,
-            kratos_identity_id: payload.identity_id,
-            display_name: payload.traits.name,
-            email: payload.traits.email,
-            is_primary: true,
-        },
-    ).await?;
+        // Create parent linked to Kratos identity
+        parent := &Parent{
+            FamilyID:         family.ID,
+            KratosIdentityID: payload.IdentityID,
+            DisplayName:      payload.Traits.Name,
+            Email:            payload.Traits.Email,
+            IsPrimary:        true,
+        }
+        if err := tx.Create(parent).Error; err != nil {
+            return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+        }
 
-    // Set primary parent reference
-    iam::repository::set_primary_parent(&txn, family.id, parent.id).await?;
+        // Set primary parent reference
+        if err := tx.Model(family).Update("primary_parent_id", parent.ID).Error; err != nil {
+            return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+        }
 
-    // Create social profile
-    social::repository::create_profile(&txn, family.id).await?;
+        // Create social profile
+        profile := &SocialProfile{FamilyID: family.ID}
+        if err := tx.Create(profile).Error; err != nil {
+            return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+        }
 
-    txn.commit().await?;
-    Ok(Json(()))
+        if err := tx.Commit().Error; err != nil {
+            return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+        }
+
+        return c.NoContent(http.StatusOK)
+    }
 }
 ```
 
 ### 6.5 Role-Based Access Control `[S§3.2]`
 
-Permission checks are implemented as Axum extractors:
+Permission checks are implemented as Echo middleware and helper functions:
 
-```rust
-/// Extractor: requires premium subscription [S§15.2]
-pub struct RequirePremium(pub AuthContext);
+```go
+// internal/middleware/permissions.go
 
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for RequirePremium
-where
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
-
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth = parts
-            .extensions
-            .get::<AuthContext>()
-            .cloned()
-            .ok_or(ApiError::Unauthorized)?;
-
-        if auth.subscription_tier != SubscriptionTier::Premium {
-            return Err(ApiError::PremiumRequired);
+// RequirePremium is Echo middleware that requires premium subscription. [S§15.2]
+func RequirePremium() echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            authCtx := c.Get("auth").(AuthContext)
+            if authCtx.SubscriptionTier != SubscriptionTierPremium {
+                return echo.NewHTTPError(http.StatusPaymentRequired, "premium subscription required")
+            }
+            return next(c)
         }
-
-        Ok(RequirePremium(auth))
     }
 }
 
-/// Extractor: requires creator role [S§3.1.4]
-pub struct RequireCreator {
-    pub auth: AuthContext,
-    pub creator_id: Uuid,
+// RequireCreator is Echo middleware that requires creator role. [S§3.1.4]
+func RequireCreator(db *gorm.DB) echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            authCtx := c.Get("auth").(AuthContext)
+            creator, err := findCreatorByParentID(db, authCtx.ParentID)
+            if err != nil || creator == nil {
+                return echo.NewHTTPError(http.StatusForbidden, "creator role required")
+            }
+            c.Set("creator_id", creator.ID)
+            return next(c)
+        }
+    }
 }
 
-/// Usage in handlers:
-async fn generate_portfolio(
-    RequirePremium(auth): RequirePremium,  // enforces premium [S§11.4]
-    State(state): State<AppState>,
-    Path(student_id): Path<Uuid>,
-) -> Result<Json<Portfolio>, ApiError> {
+// Usage in handlers:
+// Route: e.GET("/v1/comply/portfolios/:student_id", GeneratePortfolio, RequirePremium())
+func GeneratePortfolio(c echo.Context) error {
+    authCtx := c.Get("auth").(AuthContext)
+    studentID, err := uuid.Parse(c.Param("student_id"))
+    if err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, "invalid student ID")
+    }
+
     // Verify student belongs to this family (family-scoped)
-    let student = learn::repository::find_student(&state.db, auth.family_id, student_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    student, err := findStudentByIDAndFamily(db, studentID, authCtx.FamilyID)
+    if err != nil || student == nil {
+        return echo.NewHTTPError(http.StatusNotFound, "resource not found")
+    }
 
     // Generate portfolio...
-    todo!()
+    return c.JSON(http.StatusOK, portfolio)
 }
 ```
 
@@ -1969,81 +1971,87 @@ async fn generate_portfolio(
 
 The methodology system is the platform's most distinctive architectural pattern. Every methodology-dependent behavior resolves through configuration lookup — never through conditionals.
 
-```rust
-/// Resolves the active tool set for a family based on methodology selections [S§4.2]
-pub async fn resolve_family_tools(
-    db: &DatabaseConnection,
-    family_id: Uuid,
-) -> Result<Vec<ActiveTool>, DbErr> {
+```go
+// internal/method/service.go
+
+// ResolveFamilyTools resolves the active tool set for a family based on methodology selections. [S§4.2]
+func ResolveFamilyTools(ctx context.Context, db *gorm.DB, familyID uuid.UUID) ([]ActiveTool, error) {
     // Get family's methodology selections
-    let family = iam::repository::find_family(db, family_id).await?
-        .ok_or(DbErr::RecordNotFound("family".into()))?;
+    var family Family
+    if err := db.WithContext(ctx).First(&family, "id = ?", familyID).Error; err != nil {
+        return nil, fmt.Errorf("family not found: %w", err)
+    }
 
     // Collect all methodology IDs (primary + secondary) [S§4.3]
-    let mut methodology_ids = vec![family.primary_methodology_id];
-    methodology_ids.extend(family.secondary_methodology_ids.iter());
+    methodologyIDs := []uuid.UUID{family.PrimaryMethodologyID}
+    methodologyIDs = append(methodologyIDs, family.SecondaryMethodologyIDs...)
 
     // Union of all activated tools across selected methodologies [S§4.2]
-    let tools = method_tool_activations::Entity::find()
-        .filter(method_tool_activations::Column::MethodologyId.is_in(methodology_ids))
-        .find_also_related(method_tools::Entity)
-        .all(db)
-        .await?;
+    var activations []MethodToolActivation
+    if err := db.WithContext(ctx).
+        Preload("Tool").
+        Where("methodology_id IN ?", methodologyIDs).
+        Find(&activations).Error; err != nil {
+        return nil, fmt.Errorf("failed to load tool activations: %w", err)
+    }
 
     // Deduplicate (a tool activated by multiple methodologies appears once)
-    let mut seen = std::collections::HashSet::new();
-    let active_tools: Vec<ActiveTool> = tools
-        .into_iter()
-        .filter_map(|(activation, tool)| {
-            let tool = tool?;
-            if seen.insert(tool.id) {
-                Some(ActiveTool {
-                    tool_id: tool.id,
-                    slug: tool.slug,
-                    display_name: tool.display_name,
-                    tier: tool.tier,
-                    config_overrides: activation.config_overrides,
-                })
-            } else {
-                None
-            }
+    seen := make(map[uuid.UUID]bool)
+    var activeTools []ActiveTool
+    for _, activation := range activations {
+        if activation.Tool == nil || seen[activation.Tool.ID] {
+            continue
+        }
+        seen[activation.Tool.ID] = true
+        activeTools = append(activeTools, ActiveTool{
+            ToolID:          activation.Tool.ID,
+            Slug:            activation.Tool.Slug,
+            DisplayName:     activation.Tool.DisplayName,
+            Tier:            activation.Tool.Tier,
+            ConfigOverrides: activation.ConfigOverrides,
         })
-        .collect();
+    }
 
-    Ok(active_tools)
+    return activeTools, nil
 }
 
-/// Resolves tools for a specific student, considering per-student overrides [S§4.6]
-pub async fn resolve_student_tools(
-    db: &DatabaseConnection,
-    family_id: Uuid,
-    student_id: Uuid,
-) -> Result<Vec<ActiveTool>, DbErr> {
-    let student = iam::repository::find_student(db, family_id, student_id).await?
-        .ok_or(DbErr::RecordNotFound("student".into()))?;
-
-    match student.methodology_override_id {
-        // Student has override — use their personal methodology [S§4.6]
-        Some(override_id) => {
-            let tools = method_tool_activations::Entity::find()
-                .filter(method_tool_activations::Column::MethodologyId.eq(override_id))
-                .find_also_related(method_tools::Entity)
-                .all(db)
-                .await?;
-
-            Ok(tools.into_iter().filter_map(|(a, t)| {
-                t.map(|tool| ActiveTool {
-                    tool_id: tool.id,
-                    slug: tool.slug,
-                    display_name: tool.display_name,
-                    tier: tool.tier,
-                    config_overrides: a.config_overrides,
-                })
-            }).collect())
-        }
-        // No override — use family-level tools
-        None => resolve_family_tools(db, family_id).await,
+// ResolveStudentTools resolves tools for a specific student, considering per-student overrides. [S§4.6]
+func ResolveStudentTools(ctx context.Context, db *gorm.DB, familyID, studentID uuid.UUID) ([]ActiveTool, error) {
+    var student Student
+    if err := db.WithContext(ctx).
+        Where("id = ? AND family_id = ?", studentID, familyID).
+        First(&student).Error; err != nil {
+        return nil, fmt.Errorf("student not found: %w", err)
     }
+
+    if student.MethodologyOverrideID != nil {
+        // Student has override — use their personal methodology [S§4.6]
+        var activations []MethodToolActivation
+        if err := db.WithContext(ctx).
+            Preload("Tool").
+            Where("methodology_id = ?", *student.MethodologyOverrideID).
+            Find(&activations).Error; err != nil {
+            return nil, fmt.Errorf("failed to load tool activations: %w", err)
+        }
+
+        var tools []ActiveTool
+        for _, a := range activations {
+            if a.Tool == nil {
+                continue
+            }
+            tools = append(tools, ActiveTool{
+                ToolID:          a.Tool.ID,
+                Slug:            a.Tool.Slug,
+                DisplayName:     a.Tool.DisplayName,
+                Tier:            a.Tool.Tier,
+                ConfigOverrides: a.ConfigOverrides,
+            })
+        }
+        return tools, nil
+    }
+
+    // No override — use family-level tools
+    return ResolveFamilyTools(ctx, db, familyID)
 }
 ```
 
@@ -2051,26 +2059,26 @@ pub async fn resolve_student_tools(
 
 API responses include methodology context so the frontend renders appropriately:
 
-```rust
-/// Dashboard response shaped by methodology [S§4.4]
-#[derive(Serialize)]
-pub struct DashboardResponse {
-    pub family: FamilySummary,
-    pub students: Vec<StudentSummary>,
-    pub active_tools: Vec<ActiveTool>,
-    pub methodology_context: MethodologyContext,
-    pub roadmap_progress: Option<RoadmapProgress>,  // [S§6.4]
+```go
+// internal/method/models.go
+
+// DashboardResponse is shaped by methodology. [S§4.4]
+type DashboardResponse struct {
+    Family            FamilySummary      `json:"family"`
+    Students          []StudentSummary   `json:"students"`
+    ActiveTools       []ActiveTool       `json:"active_tools"`
+    MethodologyContext MethodologyContext `json:"methodology_context"`
+    RoadmapProgress   *RoadmapProgress   `json:"roadmap_progress,omitempty"` // [S§6.4]
 }
 
-#[derive(Serialize)]
-pub struct MethodologyContext {
-    pub primary: MethodologySummary,
-    pub secondary: Vec<MethodologySummary>,
-    /// Methodology-specific terminology overrides
-    /// e.g., Charlotte Mason calls activities "lessons", Unschooling calls them "explorations"
-    pub terminology: serde_json::Value,
-    /// Current mastery path level [S§4.1]
-    pub mastery_level: Option<String>,
+type MethodologyContext struct {
+    Primary     MethodologySummary   `json:"primary"`
+    Secondary   []MethodologySummary `json:"secondary"`
+    // Methodology-specific terminology overrides
+    // e.g., Charlotte Mason calls activities "lessons", Unschooling calls them "explorations"
+    Terminology json.RawMessage      `json:"terminology"`
+    // Current mastery path level [S§4.1]
+    MasteryLevel *string             `json:"mastery_level,omitempty"`
 }
 ```
 
@@ -2162,55 +2170,60 @@ Client                   API                      R2                 Workers
   │                       │     or quarantined     │                    │
 ```
 
-```rust
-/// Upload request handler
-pub async fn request_upload(
-    auth: AuthContext,
-    State(state): State<AppState>,
-    Json(req): Json<UploadRequest>,
-) -> Result<Json<UploadResponse>, ApiError> {
+```go
+// internal/media/handler.go
+
+// RequestUpload handles upload request.
+func RequestUpload(c echo.Context) error {
+    authCtx := c.Get("auth").(AuthContext)
+
+    var req UploadRequest
+    if err := c.Bind(&req); err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+    }
+
     // Validate file type and size limits
-    let max_size = match req.context {
-        UploadContext::ProfilePhoto => 5 * 1024 * 1024,      // 5MB
-        UploadContext::JournalImage => 10 * 1024 * 1024,     // 10MB
-        UploadContext::MarketplaceFile => 500 * 1024 * 1024, // 500MB
-        _ => 10 * 1024 * 1024,
-    };
+    var maxSize int64
+    switch req.Context {
+    case UploadContextProfilePhoto:
+        maxSize = 5 * 1024 * 1024 // 5MB
+    case UploadContextJournalImage:
+        maxSize = 10 * 1024 * 1024 // 10MB
+    case UploadContextMarketplaceFile:
+        maxSize = 500 * 1024 * 1024 // 500MB
+    default:
+        maxSize = 10 * 1024 * 1024
+    }
 
-    let allowed_types = match req.context {
-        UploadContext::ProfilePhoto => vec!["image/jpeg", "image/png", "image/webp"],
-        UploadContext::JournalImage => vec!["image/jpeg", "image/png", "image/webp", "image/gif"],
-        UploadContext::MarketplaceFile => vec!["application/pdf", "video/mp4", "image/jpeg", "image/png"],
-        _ => vec!["image/jpeg", "image/png", "application/pdf"],
-    };
-
-    if !allowed_types.contains(&req.content_type.as_str()) {
-        return Err(ApiError::InvalidFileType);
+    allowedTypes := getAllowedTypes(req.Context)
+    if !contains(allowedTypes, req.ContentType) {
+        return echo.NewHTTPError(http.StatusBadRequest, "file type not allowed")
     }
 
     // Generate upload record
-    let upload = media::repository::create_upload(
-        &state.db,
-        CreateUpload {
-            family_id: auth.family_id,
-            filename: req.filename,
-            content_type: req.content_type.clone(),
-            size_bytes: req.size_bytes,
-            context: req.context,
-            status: UploadStatus::Pending,
-        },
-    ).await?;
+    upload, err := createUpload(db, CreateUpload{
+        FamilyID:    authCtx.FamilyID,
+        Filename:    req.Filename,
+        ContentType: req.ContentType,
+        SizeBytes:   req.SizeBytes,
+        Context:     req.Context,
+        Status:      UploadStatusPending,
+    })
+    if err != nil {
+        return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+    }
 
     // Generate presigned PUT URL for direct upload to R2
-    let presigned_url = state.r2_client
-        .presigned_put(&upload.storage_key(), max_size, &req.content_type)
-        .await?;
+    presignedURL, err := r2Client.PresignedPut(upload.StorageKey(), maxSize, req.ContentType)
+    if err != nil {
+        return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+    }
 
-    Ok(Json(UploadResponse {
-        upload_id: upload.id,
-        presigned_url,
-        expires_in_seconds: 3600,
-    }))
+    return c.JSON(http.StatusOK, UploadResponse{
+        UploadID:         upload.ID,
+        PresignedURL:     presignedURL,
+        ExpiresInSeconds: 3600,
+    })
 }
 ```
 
@@ -2218,47 +2231,61 @@ pub async fn request_upload(
 
 After upload confirmation, a background job handles image processing:
 
-```rust
-/// Background job: process uploaded image
-pub async fn process_image(upload_id: Uuid, state: &AppState) -> Result<(), JobError> {
-    let upload = media::repository::find_upload(&state.db, upload_id).await?
-        .ok_or(JobError::NotFound)?;
+```go
+// internal/media/jobs.go
+
+// ProcessImage is a background job that processes an uploaded image.
+func ProcessImage(ctx context.Context, uploadID uuid.UUID, state *AppState) error {
+    upload, err := findUpload(state.DB, uploadID)
+    if err != nil {
+        return fmt.Errorf("upload not found: %w", err)
+    }
 
     // 1. CSAM scan (all images) [S§12.1]
-    if upload.content_type.starts_with("image/") {
-        let scan_result = state.thorn_client.scan(&upload.storage_key()).await?;
-        if scan_result.is_csam {
+    if strings.HasPrefix(upload.ContentType, "image/") {
+        scanResult, err := state.ThornClient.Scan(ctx, upload.StorageKey())
+        if err != nil {
+            return fmt.Errorf("CSAM scan failed: %w", err)
+        }
+        if scanResult.IsCSAM {
             // Quarantine immediately, report to NCMEC [S§12.1]
-            media::repository::quarantine_upload(&state.db, upload_id).await?;
-            safety::service::report_csam(&state, upload_id, scan_result).await?;
-            return Ok(());
+            if err := quarantineUpload(state.DB, uploadID); err != nil {
+                return err
+            }
+            return reportCSAM(ctx, state, uploadID, scanResult)
         }
     }
 
     // 2. Generate thumbnails for images
-    if upload.content_type.starts_with("image/") {
-        let variants = vec![
-            ImageVariant { suffix: "thumb", max_width: 200, max_height: 200 },
-            ImageVariant { suffix: "medium", max_width: 800, max_height: 800 },
-        ];
-        for variant in variants {
-            let resized = resize_image(&upload, &variant).await?;
-            state.r2_client.put(&variant_key(&upload, &variant), resized).await?;
+    if strings.HasPrefix(upload.ContentType, "image/") {
+        variants := []ImageVariant{
+            {Suffix: "thumb", MaxWidth: 200, MaxHeight: 200},
+            {Suffix: "medium", MaxWidth: 800, MaxHeight: 800},
+        }
+        for _, variant := range variants {
+            resized, err := resizeImage(upload, variant)
+            if err != nil {
+                return fmt.Errorf("resize failed: %w", err)
+            }
+            if err := state.R2Client.Put(ctx, variantKey(upload, variant), resized); err != nil {
+                return fmt.Errorf("upload variant failed: %w", err)
+            }
         }
     }
 
     // 3. General content moderation [S§12.2]
-    if upload.content_type.starts_with("image/") {
-        let moderation = state.rekognition_client.detect_moderation_labels(&upload).await?;
-        if moderation.has_violations() {
-            media::repository::flag_upload(&state.db, upload_id, &moderation).await?;
-            return Ok(());
+    if strings.HasPrefix(upload.ContentType, "image/") {
+        moderation, err := state.RekognitionClient.DetectModerationLabels(ctx, upload)
+        if err != nil {
+            return fmt.Errorf("moderation check failed: %w", err)
+        }
+        if moderation.HasViolations() {
+            return flagUpload(state.DB, uploadID, moderation)
         }
     }
 
     // 4. Mark as published
-    media::repository::publish_upload(&state.db, upload_id).await?;
-    Ok(())
+    return publishUpload(state.DB, uploadID)
 }
 ```
 
@@ -2267,7 +2294,7 @@ pub async fn process_image(upload_id: Uuid, state: &AppState) -> Result<(), JobE
 Creator-uploaded videos are processed into HLS adaptive bitrate streams for in-platform playback:
 
 ```
-Creator Upload                  media::                          R2 Storage
+Creator Upload                  media                           R2 Storage
   │                               │                                │
   │  1. Upload raw video          │                                │
   │  (via presigned PUT)          │                                │
@@ -2298,28 +2325,40 @@ Creator Upload                  media::                          R2 Storage
 
 Purchased marketplace files are delivered via time-limited signed URLs:
 
-```rust
-/// Download purchased marketplace content
-pub async fn download_purchased_file(
-    auth: AuthContext,
-    State(state): State<AppState>,
-    Path((listing_id, file_id)): Path<(Uuid, Uuid)>,
-) -> Result<Json<DownloadResponse>, ApiError> {
-    // Verify purchase exists [S§9.4]
-    let _purchase = mkt::repository::find_purchase(&state.db, auth.family_id, listing_id)
-        .await?
-        .ok_or(ApiError::NotPurchased)?;
+```go
+// internal/mkt/handler.go
 
-    let file = mkt::repository::find_listing_file(&state.db, listing_id, file_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+// DownloadPurchasedFile handles downloading purchased marketplace content.
+func DownloadPurchasedFile(c echo.Context) error {
+    authCtx := c.Get("auth").(AuthContext)
+
+    listingID, err := uuid.Parse(c.Param("listing_id"))
+    if err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, "invalid listing ID")
+    }
+    fileID, err := uuid.Parse(c.Param("file_id"))
+    if err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, "invalid file ID")
+    }
+
+    // Verify purchase exists [S§9.4]
+    _, err = findPurchase(db, authCtx.FamilyID, listingID)
+    if err != nil {
+        return echo.NewHTTPError(http.StatusForbidden, "content not purchased")
+    }
+
+    file, err := findListingFile(db, listingID, fileID)
+    if err != nil {
+        return echo.NewHTTPError(http.StatusNotFound, "resource not found")
+    }
 
     // Generate time-limited signed download URL (1 hour)
-    let signed_url = state.r2_client
-        .presigned_get(&file.storage_key, 3600)
-        .await?;
+    signedURL, err := r2Client.PresignedGet(file.StorageKey, 3600)
+    if err != nil {
+        return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+    }
 
-    Ok(Json(DownloadResponse { download_url: signed_url }))
+    return c.JSON(http.StatusOK, DownloadResponse{DownloadURL: signedURL})
 }
 ```
 
@@ -2436,37 +2475,39 @@ LIMIT 10;
 
 When marketplace exceeds ~100K listings or search latency exceeds 500ms p95:
 
-```rust
-/// Search service with dual-backend support
-pub enum SearchBackend {
-    PostgresFts,
-    Meilisearch(MeilisearchClient),
+```go
+// internal/search/service.go
+
+// SearchBackend represents the search implementation to use.
+type SearchBackend interface {
+    SearchMarketplace(ctx context.Context, query *MarketplaceSearchQuery) (SearchResults, error)
 }
 
-/// Search service routes to appropriate backend
-pub async fn search_marketplace(
-    backend: &SearchBackend,
-    query: &MarketplaceSearchQuery,
-) -> Result<SearchResults, SearchError> {
-    match backend {
-        SearchBackend::PostgresFts => {
-            // Use PostgreSQL FTS queries from §9.1
-            postgres_marketplace_search(query).await
-        }
-        SearchBackend::Meilisearch(client) => {
-            // Meilisearch provides typo tolerance, faceted filtering,
-            // and instant search at any scale [S§14.2]
-            let results = client
-                .index("marketplace_listings")
-                .search()
-                .with_query(&query.text)
-                .with_filter(&build_meilisearch_filter(query))
-                .with_facets(&["methodology_tags", "subject_tags", "content_type", "worldview_tags"])
-                .execute::<MarketplaceListing>()
-                .await?;
-            Ok(results.into())
-        }
+// PostgresFTSBackend uses PostgreSQL full-text search.
+type PostgresFTSBackend struct {
+    db *gorm.DB
+}
+
+func (b *PostgresFTSBackend) SearchMarketplace(ctx context.Context, query *MarketplaceSearchQuery) (SearchResults, error) {
+    // Use PostgreSQL FTS queries from §9.1
+    return postgresMarketplaceSearch(ctx, b.db, query)
+}
+
+// MeilisearchBackend uses Meilisearch for typo tolerance, faceted filtering,
+// and instant search at any scale. [S§14.2]
+type MeilisearchBackend struct {
+    client *meilisearch.Client
+}
+
+func (b *MeilisearchBackend) SearchMarketplace(ctx context.Context, query *MarketplaceSearchQuery) (SearchResults, error) {
+    results, err := b.client.Index("marketplace_listings").Search(query.Text, &meilisearch.SearchRequest{
+        Filter: buildMeilisearchFilter(query),
+        Facets: []string{"methodology_tags", "subject_tags", "content_type", "worldview_tags"},
+    })
+    if err != nil {
+        return SearchResults{}, fmt.Errorf("meilisearch query failed: %w", err)
     }
+    return convertResults(results), nil
 }
 ```
 
@@ -2483,7 +2524,7 @@ pub async fn search_marketplace(
 
 ### 10.1 RESTful JSON API `[S§17.3]`
 
-The API follows REST conventions with consistent patterns across all 14 domains:
+The API follows REST conventions with consistent patterns across all 17 domains:
 
 ```
 Base URL: https://api.homegrown.academy/v1
@@ -2601,73 +2642,77 @@ PATCH  /v1/notifications/preferences            # Update preferences
 
 All list endpoints use cursor-based pagination for consistent performance:
 
-```rust
-#[derive(Deserialize)]
-pub struct PaginationParams {
-    pub cursor: Option<String>,  // opaque cursor (base64-encoded ID + timestamp)
-    pub limit: Option<u32>,      // default 20, max 100
+```go
+// internal/shared/pagination.go
+
+type PaginationParams struct {
+    Cursor *string `query:"cursor"` // opaque cursor (base64-encoded ID + timestamp)
+    Limit  *int    `query:"limit"`  // default 20, max 100
 }
 
-#[derive(Serialize)]
-pub struct PaginatedResponse<T: Serialize> {
-    pub data: Vec<T>,
-    pub next_cursor: Option<String>,
-    pub has_more: bool,
+type PaginatedResponse[T any] struct {
+    Data       []T     `json:"data"`
+    NextCursor *string `json:"next_cursor,omitempty"`
+    HasMore    bool    `json:"has_more"`
 }
 
-/// Cursor encodes the last item's sort key for stable pagination
-fn encode_cursor(id: Uuid, created_at: DateTime<Utc>) -> String {
-    let raw = format!("{}:{}", id, created_at.timestamp_millis());
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw)
+// EncodeCursor encodes the last item's sort key for stable pagination.
+func EncodeCursor(id uuid.UUID, createdAt time.Time) string {
+    raw := fmt.Sprintf("%s:%d", id.String(), createdAt.UnixMilli())
+    return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-fn decode_cursor(cursor: &str) -> Result<(Uuid, DateTime<Utc>), ApiError> {
-    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(cursor)
-        .map_err(|_| ApiError::InvalidCursor)?;
-    let raw = String::from_utf8(raw).map_err(|_| ApiError::InvalidCursor)?;
-    let parts: Vec<&str> = raw.splitn(2, ':').collect();
-    let id = Uuid::parse_str(parts[0]).map_err(|_| ApiError::InvalidCursor)?;
-    let ts = parts[1].parse::<i64>().map_err(|_| ApiError::InvalidCursor)?;
-    let created_at = DateTime::from_timestamp_millis(ts).ok_or(ApiError::InvalidCursor)?;
-    Ok((id, created_at))
+// DecodeCursor decodes a pagination cursor.
+func DecodeCursor(cursor string) (uuid.UUID, time.Time, error) {
+    raw, err := base64.RawURLEncoding.DecodeString(cursor)
+    if err != nil {
+        return uuid.Nil, time.Time{}, fmt.Errorf("invalid cursor: %w", err)
+    }
+    parts := strings.SplitN(string(raw), ":", 2)
+    if len(parts) != 2 {
+        return uuid.Nil, time.Time{}, fmt.Errorf("invalid cursor format")
+    }
+    id, err := uuid.Parse(parts[0])
+    if err != nil {
+        return uuid.Nil, time.Time{}, fmt.Errorf("invalid cursor ID: %w", err)
+    }
+    ts, err := strconv.ParseInt(parts[1], 10, 64)
+    if err != nil {
+        return uuid.Nil, time.Time{}, fmt.Errorf("invalid cursor timestamp: %w", err)
+    }
+    return id, time.UnixMilli(ts), nil
 }
 ```
 
 ### 10.4 OpenAPI & TypeScript Client Generation
 
-```rust
-// Using utoipa for OpenAPI spec generation from Rust types
-use utoipa::ToSchema;
+```go
+// internal/learn/models.go
+// Using swaggo/swag for OpenAPI spec generation from Go types
 
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct CreateActivityRequest {
-    /// Activity title
-    pub title: String,
-    /// Optional description
-    pub description: Option<String>,
-    /// Student this activity is for
-    pub student_id: Uuid,
-    /// Subject tags from taxonomy [S§8.3]
-    pub subject_tags: Vec<String>,
-    /// Activity date
-    pub activity_date: chrono::NaiveDate,
-    /// Duration in minutes
-    pub duration_minutes: Option<i16>,
+// CreateActivityRequest represents a request to create a learning activity.
+// @Summary Create activity
+// @Tags learning
+type CreateActivityRequest struct {
+    Title           string    `json:"title" validate:"required"`
+    Description     *string   `json:"description"`
+    StudentID       uuid.UUID `json:"student_id" validate:"required"`
+    SubjectTags     []string  `json:"subject_tags" validate:"required"`
+    ActivityDate    string    `json:"activity_date" validate:"required"`
+    DurationMinutes *int16    `json:"duration_minutes"`
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct ActivityResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub student_id: Uuid,
-    pub student_name: String,
-    pub subject_tags: Vec<String>,
-    pub activity_date: chrono::NaiveDate,
-    pub duration_minutes: Option<i16>,
-    pub attachments: Vec<MediaAttachment>,
-    pub created_at: DateTime<Utc>,
+type ActivityResponse struct {
+    ID              uuid.UUID         `json:"id"`
+    Title           string            `json:"title"`
+    Description     *string           `json:"description"`
+    StudentID       uuid.UUID         `json:"student_id"`
+    StudentName     string            `json:"student_name"`
+    SubjectTags     []string          `json:"subject_tags"`
+    ActivityDate    string            `json:"activity_date"`
+    DurationMinutes *int16            `json:"duration_minutes"`
+    Attachments     []MediaAttachment `json:"attachments"`
+    CreatedAt       time.Time         `json:"created_at"`
 }
 ```
 
@@ -2683,55 +2728,62 @@ npx openapi-typescript-codegen \
 
 ### 10.5 Error Response Format
 
-```rust
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    pub error: ErrorBody,
+```go
+// internal/error/error.go
+
+type ErrorResponse struct {
+    Error ErrorBody `json:"error"`
 }
 
-#[derive(Serialize)]
-pub struct ErrorBody {
-    pub code: String,           // machine-readable: "PREMIUM_REQUIRED"
-    pub message: String,        // human-readable: "This feature requires a premium subscription"
-    pub details: Option<serde_json::Value>,  // optional structured details
+type ErrorBody struct {
+    Code    string      `json:"code"`              // machine-readable: "PREMIUM_REQUIRED"
+    Message string      `json:"message"`           // human-readable: "This feature requires a premium subscription"
+    Details interface{} `json:"details,omitempty"`  // optional structured details
 }
 
-/// Maps domain errors to HTTP responses
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let (status, code, message) = match self {
-            ApiError::NotFound => (StatusCode::NOT_FOUND, "NOT_FOUND", "Resource not found"),
-            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "Authentication required"),
-            ApiError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN", "Access denied"),
-            ApiError::PremiumRequired => (StatusCode::PAYMENT_REQUIRED, "PREMIUM_REQUIRED", "Premium subscription required"),
-            ApiError::CoppaConsentRequired => (StatusCode::FORBIDDEN, "COPPA_CONSENT_REQUIRED", "Parental consent required"),
-            ApiError::InvalidFileType => (StatusCode::BAD_REQUEST, "INVALID_FILE_TYPE", "File type not allowed"),
-            ApiError::NotPurchased => (StatusCode::FORBIDDEN, "NOT_PURCHASED", "Content not purchased"),
-            ApiError::InvalidCursor => (StatusCode::BAD_REQUEST, "INVALID_CURSOR", "Invalid pagination cursor"),
-            ApiError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "RATE_LIMITED", "Too many requests"),
-            ApiError::Internal(e) => {
-                tracing::error!("Internal error: {e}");
-                (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL", "An internal error occurred")
-            }
-        };
-
-        (status, Json(ErrorResponse {
-            error: ErrorBody { code: code.into(), message: message.into(), details: None },
-        })).into_response()
+// HTTPErrorHandler is a custom Echo error handler that maps domain errors to HTTP responses.
+func HTTPErrorHandler(err error, c echo.Context) {
+    var appErr *AppError
+    if errors.As(err, &appErr) {
+        status, code, message := appErr.HTTPMapping()
+        _ = c.JSON(status, ErrorResponse{
+            Error: ErrorBody{Code: code, Message: message},
+        })
+        return
     }
+
+    var echoErr *echo.HTTPError
+    if errors.As(err, &echoErr) {
+        msg, _ := echoErr.Message.(string)
+        _ = c.JSON(echoErr.Code, ErrorResponse{
+            Error: ErrorBody{Code: "ERROR", Message: msg},
+        })
+        return
+    }
+
+    slog.Error("Internal error", "error", err)
+    _ = c.JSON(http.StatusInternalServerError, ErrorResponse{
+        Error: ErrorBody{Code: "INTERNAL", Message: "an internal error occurred"},
+    })
 }
 ```
 
 ### 10.6 Rate Limiting `[S§2.3]`
 
-```rust
-/// Rate limit configuration per endpoint category
-pub struct RateLimitConfig {
-    pub default: (u32, Duration),          // 100 req/min
-    pub auth: (u32, Duration),             // 10 req/min (login attempts)
-    pub upload: (u32, Duration),           // 20 req/min
-    pub search: (u32, Duration),           // 60 req/min
-    pub messaging: (u32, Duration),        // 30 req/min
+```go
+// internal/middleware/rate_limit.go
+
+type RateLimitConfig struct {
+    Default   RateLimit // 100 req/min
+    Auth      RateLimit // 10 req/min (login attempts)
+    Upload    RateLimit // 20 req/min
+    Search    RateLimit // 60 req/min
+    Messaging RateLimit // 30 req/min
+}
+
+type RateLimit struct {
+    Requests int
+    Window   time.Duration
 }
 ```
 
@@ -2753,26 +2805,21 @@ All endpoints are under `/v1`. The versioning strategy is designed for a monolit
 
 **Deprecation workflow**:
 
-```rust
-/// Middleware that adds deprecation headers to sunset endpoints
-pub async fn deprecation_headers(
-    req: Request,
-    next: Next,
-) -> Response {
-    let mut response = next.run(req).await;
-    // Add Sunset header per RFC 8594
-    response.headers_mut().insert(
-        "Deprecation", HeaderValue::from_static("true"),
-    );
-    response.headers_mut().insert(
-        "Sunset", HeaderValue::from_static("2027-06-01"),
-    );
-    response.headers_mut().insert(
-        "Link", HeaderValue::from_static(
-            "</v2/resource>; rel=\"successor-version\""
-        ),
-    );
-    response
+```go
+// internal/middleware/deprecation.go
+
+// DeprecationHeaders is Echo middleware that adds deprecation headers to sunset endpoints.
+func DeprecationHeaders(sunsetDate string, successorURL string) echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            err := next(c)
+            // Add Sunset header per RFC 8594
+            c.Response().Header().Set("Deprecation", "true")
+            c.Response().Header().Set("Sunset", sunsetDate)
+            c.Response().Header().Set("Link", fmt.Sprintf("<%s>; rel=\"successor-version\"", successorURL))
+            return err
+        }
+    }
 }
 ```
 
@@ -2782,13 +2829,15 @@ pub async fn deprecation_headers(
 
 Critical state-changing operations support idempotency to ensure safe retries:
 
-```rust
-/// Idempotency key middleware for payment and creation endpoints
-/// Client sends `Idempotency-Key: <uuid>` header
-/// Server stores the response and returns the cached response on replay
-pub struct IdempotencyLayer {
-    redis: Arc<RedisPool>,
-    ttl: Duration, // 24 hours default
+```go
+// internal/middleware/idempotency.go
+
+// IdempotencyLayer stores and replays responses for idempotent endpoints.
+// Client sends `Idempotency-Key: <uuid>` header.
+// Server stores the response and returns the cached response on replay.
+type IdempotencyLayer struct {
+    redis *redis.Client
+    ttl   time.Duration // 24 hours default
 }
 
 // Idempotency-protected endpoints:
@@ -2803,6 +2852,8 @@ The idempotency key is stored in Redis with a 24-hour TTL. If a request arrives 
 ---
 
 ## 11. Frontend Architecture
+
+This section is unchanged from the original — the frontend is React/TypeScript and is not affected by the backend language migration. See the full frontend architecture (§11.1 through §11.6) in the spec for: React SPA structure, state management (TanStack Query), routing (React Router v7), WebSocket integration, accessibility (WCAG 2.1 AA), and internationalization readiness.
 
 ### 11.1 React SPA Structure
 
@@ -3095,7 +3146,7 @@ WCAG 2.1 Level AA compliance is enforced through design, implementation, and CI:
 - **Color contrast** — Tailwind config enforces minimum 4.5:1 contrast ratio for text. Design tokens include a `--color-focus-ring` variable for consistent, high-visibility focus indicators.
 - **Screen reader support** — All images have alt text; decorative images use `alt=""`. Dynamic content (feed updates, quiz feedback, notification toasts) uses `aria-live` regions with appropriate politeness levels.
 - **Skip navigation** — Every page includes a visually hidden "Skip to main content" link as the first focusable element.
-- **Touch targets** — All interactive elements have a minimum tap target of 44×44 CSS pixels on viewports under 768px.
+- **Touch targets** — All interactive elements have a minimum tap target of 44x44 CSS pixels on viewports under 768px.
 
 **CI enforcement**:
 
@@ -3156,21 +3207,17 @@ Date, time, and number formatting use `Intl` APIs with locale-aware formatting.
 
 ### 12.1 Job Queue Architecture `[S§13, S§12]`
 
-Redis-backed job queue using `sidekiq-rs` with three priority tiers:
+Redis-backed job queue using `hibiken/asynq` with three priority tiers:
 
-```rust
-/// Job priority tiers
-pub enum JobQueue {
-    /// Safety-critical: CSAM reports, account suspensions, security alerts
-    /// Target: process within 30 seconds
-    Critical,
-    /// Standard: email delivery, notification dispatch, search indexing
-    /// Target: process within 5 minutes
-    Default,
-    /// Bulk/deferrable: digest compilation, analytics aggregation, re-scans
-    /// Target: process within 1 hour
-    Low,
-}
+```go
+// internal/shared/jobs.go
+
+// Job priority queues (asynq)
+const (
+    QueueCritical = "critical" // Safety-critical: CSAM reports, account suspensions, security alerts. Target: process within 30 seconds
+    QueueDefault  = "default"  // Standard: email delivery, notification dispatch, search indexing. Target: process within 5 minutes
+    QueueLow      = "low"      // Bulk/deferrable: digest compilation, analytics aggregation, re-scans. Target: process within 1 hour
+)
 ```
 
 ### 12.2 Key Jobs by Domain
@@ -3194,24 +3241,26 @@ pub enum JobQueue {
 
 ### 12.3 Recurring Schedule
 
-```rust
-/// Recurring jobs (cron-style)
-pub fn register_recurring_jobs(scheduler: &mut Scheduler) {
+```go
+// internal/shared/scheduler.go
+
+// RegisterRecurringJobs sets up cron-style recurring jobs with asynq scheduler.
+func RegisterRecurringJobs(scheduler *asynq.Scheduler) {
     // Daily at 6:00 AM UTC — compile and send daily digests [S§13.3]
-    scheduler.add("0 6 * * *", CompileDigestJob { digest_type: DigestType::Daily });
+    scheduler.Register("0 6 * * *", asynq.NewTask("compile_digest", mustMarshal(DigestParams{Type: "daily"})))
 
     // Weekly on Mondays at 6:00 AM UTC — weekly digests [S§13.3]
-    scheduler.add("0 6 * * 1", CompileDigestJob { digest_type: DigestType::Weekly });
+    scheduler.Register("0 6 * * 1", asynq.NewTask("compile_digest", mustMarshal(DigestParams{Type: "weekly"})))
 
     // Daily at 3:00 AM UTC — check for CSAM hash database updates [S§12.1, 11-safety §10.7]
     // Triggers CsamRescanJob only when new hashes are available (event-driven, not blanket rescan)
-    scheduler.add("0 3 * * *", CheckCsamHashUpdateJob);
+    scheduler.Register("0 3 * * *", asynq.NewTask("check_csam_hash_update", nil))
 
     // Hourly — aggregate progress metrics [S§8.1.7]
-    scheduler.add("0 * * * *", ProgressAggregationJob);
+    scheduler.Register("0 * * * *", asynq.NewTask("progress_aggregation", nil))
 
     // Daily at 2:00 AM UTC — check subscription renewals [S§15.3]
-    scheduler.add("0 2 * * *", SubscriptionRenewalCheckJob);
+    scheduler.Register("0 2 * * *", asynq.NewTask("subscription_renewal_check", nil))
 }
 ```
 
@@ -3219,60 +3268,76 @@ pub fn register_recurring_jobs(scheduler: &mut Scheduler) {
 
 The feed uses a **fan-out-on-write** pattern via Redis sorted sets:
 
-```rust
-/// When a user creates a post, fan it out to all friends' feeds
-pub async fn fan_out_post(
-    redis: &RedisPool,
-    db: &DatabaseConnection,
-    post: &Post,
-) -> Result<(), JobError> {
+```go
+// internal/social/jobs.go
+
+// FanOutPost fans out a new post to all friends' feeds.
+func FanOutPost(ctx context.Context, redisClient *redis.Client, db *gorm.DB, post *Post) error {
     // Get all accepted friends of the post author [S§7.4]
-    let friend_family_ids = social::repository::get_friend_ids(db, post.family_id).await?;
+    friendFamilyIDs, err := getFriendIDs(ctx, db, post.FamilyID)
+    if err != nil {
+        return fmt.Errorf("failed to get friends: %w", err)
+    }
 
     // Add post to each friend's feed (Redis sorted set, scored by timestamp)
-    let score = post.created_at.timestamp_millis() as f64;
-    let member = post.id.to_string();
+    score := float64(post.CreatedAt.UnixMilli())
+    member := post.ID.String()
 
-    for friend_id in friend_family_ids {
-        let feed_key = format!("feed:{}", friend_id);
-        redis.zadd(&feed_key, &member, score).await?;
-
+    for _, friendID := range friendFamilyIDs {
+        feedKey := fmt.Sprintf("feed:%s", friendID)
+        if err := redisClient.ZAdd(ctx, feedKey, redis.Z{Score: score, Member: member}).Err(); err != nil {
+            return fmt.Errorf("feed zadd failed: %w", err)
+        }
         // Trim feed to last 1000 items to bound memory
-        redis.zremrangebyrank(&feed_key, 0, -1001).await?;
+        if err := redisClient.ZRemRangeByRank(ctx, feedKey, 0, -1001).Err(); err != nil {
+            return fmt.Errorf("feed trim failed: %w", err)
+        }
     }
 
     // If post is in a group, also add to group feed [S§7.6]
-    if let Some(group_id) = post.group_id {
-        let group_feed_key = format!("feed:group:{}", group_id);
-        redis.zadd(&group_feed_key, &member, score).await?;
-        redis.zremrangebyrank(&group_feed_key, 0, -1001).await?;
+    if post.GroupID != nil {
+        groupFeedKey := fmt.Sprintf("feed:group:%s", *post.GroupID)
+        if err := redisClient.ZAdd(ctx, groupFeedKey, redis.Z{Score: score, Member: member}).Err(); err != nil {
+            return fmt.Errorf("group feed zadd failed: %w", err)
+        }
+        if err := redisClient.ZRemRangeByRank(ctx, groupFeedKey, 0, -1001).Err(); err != nil {
+            return fmt.Errorf("group feed trim failed: %w", err)
+        }
     }
 
-    Ok(())
+    return nil
 }
 
-/// Read a user's feed [S§7.2.3]
-pub async fn get_feed(
-    redis: &RedisPool,
-    db: &DatabaseConnection,
-    family_id: Uuid,
-    cursor: Option<f64>,
-    limit: usize,
-) -> Result<Vec<Post>, ApiError> {
-    let feed_key = format!("feed:{}", family_id);
+// GetFeed reads a user's feed. [S§7.2.3]
+func GetFeed(ctx context.Context, redisClient *redis.Client, db *gorm.DB, familyID uuid.UUID, cursor *float64, limit int64) ([]Post, error) {
+    feedKey := fmt.Sprintf("feed:%s", familyID)
+
+    maxScore := "+inf"
+    if cursor != nil {
+        maxScore = fmt.Sprintf("%f", *cursor)
+    }
 
     // Get post IDs from Redis sorted set (reverse chronological) [S§7.2.3]
-    let max_score = cursor.unwrap_or(f64::MAX);
-    let post_ids: Vec<String> = redis
-        .zrevrangebyscore_limit(&feed_key, max_score, 0.0, limit)
-        .await?;
+    postIDs, err := redisClient.ZRevRangeByScore(ctx, feedKey, &redis.ZRangeBy{
+        Min:   "0",
+        Max:   maxScore,
+        Count: limit,
+    }).Result()
+    if err != nil {
+        return nil, fmt.Errorf("feed query failed: %w", err)
+    }
 
     // Hydrate post data from PostgreSQL
-    let post_uuids: Vec<Uuid> = post_ids.iter()
-        .filter_map(|id| Uuid::parse_str(id).ok())
-        .collect();
+    postUUIDs := make([]uuid.UUID, 0, len(postIDs))
+    for _, id := range postIDs {
+        uid, err := uuid.Parse(id)
+        if err != nil {
+            continue
+        }
+        postUUIDs = append(postUUIDs, uid)
+    }
 
-    social::repository::find_posts_by_ids(db, &post_uuids).await
+    return findPostsByIDs(ctx, db, postUUIDs)
 }
 ```
 
@@ -3290,20 +3355,24 @@ Dead-letter jobs are surfaced in the admin dashboard (§16-admin) for manual ins
 
 **Circuit breaker for external services**:
 
-```rust
-/// Circuit breaker states for external service calls
-/// Tracks failure count and transitions between states
-pub struct CircuitBreaker {
-    failure_threshold: u32,   // trips after N consecutive failures
-    recovery_timeout: Duration, // how long to stay open before half-open
-    state: CircuitState,
+```go
+// internal/shared/circuit_breaker.go
+
+// CircuitBreaker tracks failure count and transitions between states.
+type CircuitBreaker struct {
+    failureThreshold uint32        // trips after N consecutive failures
+    recoveryTimeout  time.Duration // how long to stay open before half-open
+    state            CircuitState
+    mu               sync.Mutex
 }
 
-pub enum CircuitState {
-    Closed,         // normal operation, requests pass through
-    Open,           // circuit tripped, requests fail fast with fallback
-    HalfOpen,       // testing recovery, one request allowed through
-}
+type CircuitState int
+
+const (
+    CircuitClosed   CircuitState = iota // normal operation, requests pass through
+    CircuitOpen                         // circuit tripped, requests fail fast with fallback
+    CircuitHalfOpen                     // testing recovery, one request allowed through
+)
 
 // Circuit breaker configuration per external service:
 // Thorn Safer:     threshold=5, recovery=60s, fallback=queue for manual review
@@ -3315,17 +3384,18 @@ pub enum CircuitState {
 
 **Webhook idempotency** — all incoming webhook handlers deduplicate by event ID:
 
-```rust
-/// Webhook deduplication via Redis SET with TTL
-pub async fn is_duplicate_webhook(
-    redis: &RedisPool,
-    provider: &str,     // "kratos", "hyperswitch", "thorn"
-    event_id: &str,
-) -> Result<bool, RedisError> {
-    let key = format!("webhook:seen:{}:{}", provider, event_id);
+```go
+// internal/shared/webhook.go
+
+// IsDuplicateWebhook checks if a webhook event has already been processed via Redis SET with TTL.
+func IsDuplicateWebhook(ctx context.Context, redisClient *redis.Client, provider, eventID string) (bool, error) {
+    key := fmt.Sprintf("webhook:seen:%s:%s", provider, eventID)
     // SET NX returns true only if the key was newly created
-    let is_new = redis.set_nx(&key, "1", Duration::from_secs(86400 * 7)).await?;
-    Ok(!is_new)
+    isNew, err := redisClient.SetNX(ctx, key, "1", 7*24*time.Hour).Result()
+    if err != nil {
+        return false, fmt.Errorf("redis setnx failed: %w", err)
+    }
+    return !isNew, nil
 }
 ```
 
@@ -3336,27 +3406,18 @@ pub async fn is_duplicate_webhook(
 ### 13.1 Docker Multi-Stage Build
 
 ```dockerfile
-# Stage 1: Build Rust binary
-FROM rust:1.82 AS builder
+# Stage 1: Build Go binary
+FROM golang:1.23 AS builder
 WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o homegrown-academy ./cmd/server
 
-# Cache dependencies
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main(){}" > src/main.rs
-RUN cargo build --release && rm -rf src target/release/homegrown-academy*
-
-# Build application
-COPY src/ src/
-COPY migrations/ migrations/
-RUN cargo build --release
-
-# Stage 2: Minimal runtime image
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /app/target/release/homegrown-academy /usr/local/bin/
+# Stage 2: Minimal runtime
+FROM gcr.io/distroless/static-debian12
+COPY --from=builder /app/homegrown-academy /usr/local/bin/
 COPY --from=builder /app/migrations/ /app/migrations/
-
 EXPOSE 3000
 CMD ["homegrown-academy"]
 ```
@@ -3377,7 +3438,7 @@ AWS VPC (10.0.0.0/16) — us-east-1
 │   ├── us-east-1a (10.0.10.0/24)
 │   │   ├── EC2 t4g.small (ECS-optimized AMI)
 │   │   │   └── ECS Task
-│   │   │       ├── homegrown-api    (Rust binary, port 3000)
+│   │   │       ├── homegrown-api    (Go binary, port 3000)
 │   │   │       └── ory-kratos       (sidecar, port 4433/4434)
 │   │   ├── RDS PostgreSQL 16       (db.t4g.medium, 20 GB gp3)
 │   │   └── ElastiCache Redis 7     (cache.t4g.micro)
@@ -3402,7 +3463,7 @@ AWS VPC (10.0.0.0/16) — us-east-1
 
 ### 13.3 ALB Configuration + Security Headers
 
-ALB replaces Caddy for TLS termination and request routing. Security headers move into Axum middleware since ALB does not natively inject response headers.
+ALB replaces Caddy for TLS termination and request routing. Security headers move into Echo middleware since ALB does not natively inject response headers.
 
 **ALB configuration**:
 
@@ -3413,44 +3474,28 @@ ALB replaces Caddy for TLS termination and request routing. Security headers mov
 | **Health check** | Interval 30s, healthy threshold 2, unhealthy threshold 3 |
 | **Idle timeout** | 300s (supports long-lived WebSocket connections) |
 | **Stickiness** | Disabled (application is stateless; sessions stored in Redis) |
-| **HTTP→HTTPS** | Redirect rule on port 80 |
+| **HTTP->HTTPS** | Redirect rule on port 80 |
 
-**Security headers** — Axum middleware via `tower-http` `[S§17.1]`:
+**Security headers** — Echo middleware `[S§17.1]`:
 
-```rust
-use axum::http::{HeaderName, HeaderValue};
-use tower_http::set_header::SetResponseHeaderLayer;
+```go
+// internal/middleware/security_headers.go
 
-fn security_headers() -> tower::util::Stack<
-    SetResponseHeaderLayer<HeaderValue>,
-    // ... nested layers
-> {
-    ServiceBuilder::new()
-        .layer(SetResponseHeaderLayer::overriding(
-            HeaderName::from_static("strict-transport-security"),
-            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            HeaderName::from_static("x-content-type-options"),
-            HeaderValue::from_static("nosniff"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            HeaderName::from_static("x-frame-options"),
-            HeaderValue::from_static("DENY"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            HeaderName::from_static("content-security-policy"),
-            HeaderValue::from_static(
-                "default-src 'self'; \
-                 img-src 'self' https://*.r2.cloudflarestorage.com; \
-                 connect-src 'self' wss://api.homegrown.academy"
-            ),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            HeaderName::from_static("referrer-policy"),
-            HeaderValue::from_static("strict-origin-when-cross-origin"),
-        ))
-        .into_inner()
+func SecurityHeaders() echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            h := c.Response().Header()
+            h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+            h.Set("X-Content-Type-Options", "nosniff")
+            h.Set("X-Frame-Options", "DENY")
+            h.Set("Content-Security-Policy",
+                "default-src 'self'; "+
+                    "img-src 'self' https://*.r2.cloudflarestorage.com; "+
+                    "connect-src 'self' wss://api.homegrown.academy")
+            h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+            return next(c)
+        }
+    }
 }
 ```
 
@@ -3484,8 +3529,8 @@ Single-AZ, 1 instance           Multi-AZ, auto-scaling            Managed + dedi
 
 | Metric | Phase 1 Target | Phase 2+ Target |
 |--------|---------------|-----------------|
-| **RPO** (Recovery Point Objective) | ≤ 5 minutes (RDS continuous WAL) | ≤ 1 minute (cross-region replica) |
-| **RTO** (Recovery Time Objective) | ≤ 2 hours (manual restore) | ≤ 30 minutes (automated failover) |
+| **RPO** (Recovery Point Objective) | <= 5 minutes (RDS continuous WAL) | <= 1 minute (cross-region replica) |
+| **RTO** (Recovery Time Objective) | <= 2 hours (manual restore) | <= 30 minutes (automated failover) |
 
 RPO defines the maximum acceptable data loss window. RTO defines the maximum acceptable downtime. Phase 1 targets are achievable with single-AZ RDS and manual intervention. Phase 2 targets require cross-region replication and automated failover.
 
@@ -3494,7 +3539,7 @@ RPO defines the maximum acceptable data loss window. RTO defines the maximum acc
 | Component | Method | Retention | Recovery |
 |-----------|--------|-----------|----------|
 | **RDS PostgreSQL** | Automated daily snapshots + continuous WAL archiving | 30 days | Point-in-Time Recovery (PITR) to any second within retention window |
-| **Off-site backup** | Weekly `pg_dump` via ECS Scheduled Task → Cloudflare R2 | 12 weekly, 12 monthly | Full database restore from portable dump file |
+| **Off-site backup** | Weekly `pg_dump` via ECS Scheduled Task -> Cloudflare R2 | 12 weekly, 12 monthly | Full database restore from portable dump file |
 | **ElastiCache Redis** | Automatic daily snapshots | 7 days | Restore to new cache node |
 | **Redis data** | Ephemeral by design (cache, feeds, rate limits) | N/A | Feeds rebuild from PostgreSQL; cache repopulates on demand |
 | **Cloudflare R2** (media files) | Cloudflare-managed replication (11 nines durability) | Indefinite (lifecycle rules for temp uploads) | Self-healing; R2 is multi-region by default |
@@ -3546,19 +3591,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Go setup
+        uses: actions/setup-go@v5
         with:
-          components: clippy
+          go-version: '1.23'
 
       - name: Lint
-        run: cargo clippy -- -D warnings
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
 
       - name: Test
-        run: cargo test
+        run: go test ./...
 
       - name: Security audit
-        run: cargo install cargo-audit && cargo audit
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
 
       - name: Frontend install
         run: cd frontend && npm ci
@@ -3607,7 +3654,7 @@ jobs:
           aws ecs run-task \
             --cluster homegrown \
             --task-definition homegrown-migrate \
-            --overrides '{"containerOverrides":[{"name":"migrate","command":["sea-orm-cli","migrate","up"]}]}' \
+            --overrides '{"containerOverrides":[{"name":"migrate","command":["goose","-dir","/app/migrations","up"]}]}' \
             --network-configuration "${{ secrets.ECS_NETWORK_CONFIG }}" \
             --launch-type EC2
 
@@ -3648,7 +3695,7 @@ infra/
 │       ├── compute.ts              # ECS cluster, EC2 capacity, task def, service
 │       ├── monitoring.ts           # CloudWatch log groups + alarms
 │       ├── ci-cd.ts                # GitHub Actions OIDC provider + deploy role
-│       └── backup.ts              # ECS scheduled task for weekly pg_dump → R2
+│       └── backup.ts              # ECS scheduled task for weekly pg_dump -> R2
 ├── cdk.json
 ├── tsconfig.json
 └── package.json
@@ -3662,11 +3709,11 @@ infra/
 | Database | `database.ts` | RDS PostgreSQL 16 (db.t4g.medium, 20GB gp3, Single-AZ), auto-generated credentials in Secrets Manager | `dbInstance`, `dbSecret`, `dbEndpoint` |
 | Cache | `cache.ts` | ElastiCache Redis 7 (cache.t4g.micro, 7-day snapshots) | `redisEndpoint` |
 | ContainerRegistry | `container-registry.ts` | ECR repository, lifecycle policy (retain last 10 images) | `repository` |
-| LoadBalancer | `load-balancer.ts` | ALB, ACM certificate, HTTPS listener (TLS 1.3), HTTP→HTTPS redirect, target group with health checks | `alb`, `targetGroup` |
+| LoadBalancer | `load-balancer.ts` | ALB, ACM certificate, HTTPS listener (TLS 1.3), HTTP->HTTPS redirect, target group with health checks | `alb`, `targetGroup` |
 | Compute | `compute.ts` | ECS cluster, EC2 ASG (t4g.small, ECS-optimized ARM AMI), capacity provider, task definition (API + Kratos sidecar), ECS service, IAM task roles | `cluster`, `service` |
 | Monitoring | `monitoring.ts` | CloudWatch log groups (API, Kratos, backup), alarms (CPU, memory, RDS, Redis, ALB 5xx) | log group refs |
 | CiCd | `ci-cd.ts` | GitHub Actions OIDC provider, IAM deploy role scoped to `repo:org/repo:ref:refs/heads/main` | `deployRoleArn` |
-| Backup | `backup.ts` | ECS scheduled task (weekly `pg_dump` → R2), EventBridge cron rule | — |
+| Backup | `backup.ts` | ECS scheduled task (weekly `pg_dump` -> R2), EventBridge cron rule | -- |
 
 **Dependency graph** (composition order in `homegrown-stack.ts`):
 
@@ -3692,7 +3739,7 @@ Monitoring ───────────────────────
 | `ec2InstanceType` | `"t4g.small"` | ECS EC2 instance type |
 | `rdsInstanceType` | `"db.t4g.medium"` | RDS instance type |
 | `redisNodeType` | `"cache.t4g.micro"` | ElastiCache node type |
-| `githubOrg` / `githubRepo` | — | OIDC trust scope |
+| `githubOrg` / `githubRepo` | -- | OIDC trust scope |
 | `placeholderMode` | `true` | Use nginx:alpine until first real image push |
 
 Overrides provided via CDK context (`cdk.json` or `--context` flag).
@@ -3713,7 +3760,7 @@ Overrides provided via CDK context (`cdk.json` or `--context` flag).
 2. cdk bootstrap            # One-time: create CDKToolkit stack in AWS account
 3. cdk synth                # Validate — generates CloudFormation template without deploying
 4. cdk deploy               # Provision all resources (~15-20 min first deploy)
-5. Add ACM CNAME to DNS     # Manual: copy CNAME from deploy output → Cloudflare DNS
+5. Add ACM CNAME to DNS     # Manual: copy CNAME from deploy output -> Cloudflare DNS
 6. Note stack outputs       # ALB DNS name, ECR URI, deploy role ARN, RDS/Redis endpoints
 7. Configure GitHub secrets # AWS_DEPLOY_ROLE_ARN from stack output
 ```
@@ -3746,39 +3793,40 @@ Overrides provided via CDK context (`cdk.json` or `--context` flag).
 | Layer | Control |
 |-------|---------|
 | **VPC isolation** | Compute (ECS) and data (RDS, ElastiCache) run in private subnets with no direct internet access. Only ALB is in public subnets |
-| **Security Groups** | Least-privilege ingress: ALB accepts 443 from internet → ECS accepts 3000 from ALB only → RDS/Redis accept connections from ECS only (§13.2) |
+| **Security Groups** | Least-privilege ingress: ALB accepts 443 from internet -> ECS accepts 3000 from ALB only -> RDS/Redis accept connections from ECS only (§13.2) |
 | **TLS** | ALB terminates TLS 1.3 via ACM-managed certificates (auto-renewing, no manual cert management) `[S§17.1]` |
-| **CSP** | Content Security Policy set in Axum middleware (§13.3) — restricts script sources, image sources, connection targets |
+| **CSP** | Content Security Policy set in Echo middleware (§13.3) — restricts script sources, image sources, connection targets |
 | **CORS** | Strict origin allowlist: `app.homegrown.academy`, `homegrown.academy` |
 | **SSH** | Restricted to admin IPs via Security Group. Key-only authentication on EC2 instances |
 | **Audit** | CloudTrail logs all AWS API calls for security audit trail |
 
 ### 14.2 Application Security (OWASP Top 10) `[S§17.1]`
 
-| OWASP Risk | Rust/Axum Mitigation |
+| OWASP Risk | Go/Echo Mitigation |
 |------------|---------------------|
-| **A01: Broken Access Control** | Family-scoped queries via `FamilyScoped` trait (§6.2). Every handler receives `AuthContext` with verified `family_id`. Permission extractors enforce role checks at compile time. |
+| **A01: Broken Access Control** | Family-scoped queries via `FamilyScope` helper (§6.2). Every handler receives `AuthContext` with verified `family_id`. Permission middleware enforces role checks. |
 | **A02: Cryptographic Failures** | Passwords handled by Ory Kratos (Argon2id). Sensitive data encrypted at rest via PostgreSQL `pgcrypto`. All transit encrypted via TLS. |
-| **A03: Injection** | SeaORM parameterized queries prevent SQL injection. Rust's type system prevents most injection vectors. User input validated via `serde` deserialization with strict types. |
+| **A03: Injection** | GORM parameterized queries prevent SQL injection. Go's type system prevents most injection vectors. User input validated via struct binding with `validator` tags. |
 | **A04: Insecure Design** | Privacy-by-architecture (§1.5). COPPA consent state machine (§6.3). No public user content by design. |
-| **A05: Security Misconfiguration** | Docker containers run as non-root. Minimal base images (Debian slim). Security headers set in Axum middleware (§13.3). ECS-optimized AMI managed by AWS. |
-| **A06: Vulnerable Components** | `cargo audit` + `npm audit` in CI pipeline. Dependabot for automated dependency updates. |
+| **A05: Security Misconfiguration** | Docker containers run as non-root. Minimal base images (distroless). Security headers set in Echo middleware (§13.3). ECS-optimized AMI managed by AWS. |
+| **A06: Vulnerable Components** | `govulncheck` + `npm audit` in CI pipeline. Dependabot for automated dependency updates. |
 | **A07: Auth Failures** | Ory Kratos handles auth — battle-tested implementation. MFA encouraged. Rate-limited login attempts (10/min). Session timeout (30 days, revocable). |
-| **A08: Data Integrity** | All API inputs validated via typed `serde` structs. CSRF protection via SameSite cookies. Webhook signatures verified (Stripe, Kratos). |
-| **A09: Logging Failures** | Security events logged via `tracing` crate. Audit logging for admin actions `[S§2.3]`. Logs shipped to Sentry. |
+| **A08: Data Integrity** | All API inputs validated via typed Go structs with `validator` tags. CSRF protection via SameSite cookies. Webhook signatures verified (Stripe, Kratos). |
+| **A09: Logging Failures** | Security events logged via `slog`. Audit logging for admin actions `[S§2.3]`. Logs shipped to Sentry. |
 | **A10: SSRF** | No user-controlled URL fetching in backend. R2 presigned URLs are generated server-side with controlled parameters. |
 
-### 14.3 Rust's Memory Safety Advantages
+### 14.3 Go's Safety Advantages
 
-Rust eliminates entire categories of vulnerabilities that plague C/C++ and even garbage-collected languages:
+Go eliminates or mitigates several categories of vulnerabilities:
 
-- **No buffer overflows** — Bounds-checked array access.
-- **No use-after-free** — Ownership system prevents dangling references.
-- **No data races** — The borrow checker prevents concurrent mutable access at compile time.
-- **No null pointer dereferences** — `Option<T>` replaces null; must be explicitly handled.
-- **No uninitialized memory** — All variables must be initialized before use.
+- **Garbage collection** eliminates use-after-free and most memory leaks.
+- **Built-in race detector** (`go test -race`) catches data races at test time.
+- **No pointer arithmetic** — pointer operations are bounded and type-safe.
+- **Bounds-checked slice access** — out-of-range access panics rather than corrupting memory.
+- **`nil` handling is explicit** — check before dereference; linters enforce nil checks.
+- **Strong typing** prevents type confusion vulnerabilities.
 
-These guarantees are especially valuable for a platform handling children's data `[S§17.2]` — memory safety vulnerabilities are among the most exploited attack vectors, and Rust makes them structurally impossible.
+These properties are valuable for a platform handling children's data `[S§17.2]` — memory safety vulnerabilities are among the most exploited attack vectors, and Go's garbage collector and type system make the most dangerous classes structurally impossible.
 
 ### 14.4 Data Encryption `[S§17.1]`
 
@@ -3806,14 +3854,14 @@ These guarantees are especially valuable for a platform handling children's data
 
 ```bash
 # Automated via CI/CD (§13.6)
-cargo audit                    # Rust dependency vulnerabilities
+govulncheck ./...              # Go dependency vulnerabilities
 npm audit --production         # Node.js dependency vulnerabilities
 
 # GitHub Dependabot configuration
 # .github/dependabot.yml
 version: 2
 updates:
-  - package-ecosystem: cargo
+  - package-ecosystem: gomod
     directory: "/"
     schedule:
       interval: weekly
@@ -3827,245 +3875,43 @@ updates:
 
 ## 15. Phase 1 (MVP) Scope `[S§19]`
 
-This section maps each Phase 1 domain from `[S§19]` to concrete implementation artifacts.
+This section maps each Phase 1 domain from `[S§19]` to concrete implementation artifacts. The content is identical to the original spec — domain scopes, component tables, API endpoint counts, and React component lists are unchanged. The backend implementation language changes from Rust to Go but the functional scope remains the same.
 
-### 15.1 Identity & Access `[S§3]`
+Refer to the original Phase 1 scope for full details on: Identity & Access (§15.1), Methodology (§15.2), Discovery (§15.3), Onboarding (§15.4), Social (§15.5), Learning (§15.6), Marketplace (§15.7), Trust & Safety (§15.8), Billing (§15.9), Notifications (§15.10), Search (§15.11), Content & Media (§15.12), and Privacy/Compliance (§15.13).
 
-**Scope**: Family accounts, parent users, student profiles, email + OAuth authentication.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Auth** | Ory Kratos: email/password + Google/Facebook/Apple OIDC `[S§6.1]` |
-| **Family accounts** | `iam_families` table, atomic creation with first parent `[S§3.1.1]` |
-| **Parent users** | `iam_parents` table, linked to Kratos identity `[S§3.1.2]` |
-| **Student profiles** | `iam_students` table, parent-mediated `[S§3.1.3]` |
-| **COPPA consent** | Consent state machine in `iam_families.coppa_consent_status` `[S§17.2]` |
-
-**API Endpoints**: 8 endpoints (family CRUD, student CRUD, profile management).
-
-**React Components**: `Login`, `Register`, `FamilySettings`, `StudentManager`.
-
-### 15.2 Methodology `[S§4]`
-
-**Scope**: 6 methodologies, tool registry, philosophy modules.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Definitions** | 6 rows in `method_definitions` (Charlotte Mason, Traditional, Classical, Waldorf, Montessori, Unschooling) `[S§4.5]` |
-| **Tool registry** | `method_tools` + `method_tool_activations` tables `[S§4.2]` |
-| **Philosophy** | JSONB content in `method_definitions.philosophy` `[S§4.1]` |
-| **Tool resolver** | `resolve_family_tools()` + `resolve_student_tools()` functions `[S§4.2, S§4.6]` |
-
-**API Endpoints**: 3 endpoints (list methodologies, get methodology, get family tools).
-
-**React Components**: `MethodologyBadge`, `ToolCard`.
-
-### 15.3 Discovery `[S§5]`
-
-**Scope**: Methodology quiz, methodology explorer pages, state legal guides (all 51), Homeschooling 101, advocacy content.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Quiz engine** | `disc_quiz_definitions` + `disc_quiz_results` tables `[S§5.1]` |
-| **Quiz API** | Rust endpoints serving quiz data to Astro site `[S§5.1]` |
-| **Explorer pages** | Astro static pages generated from methodology data `[S§5.2]` |
-| **State guides** | 51 structured documents in `disc_state_guides` table `[S§5.3]` |
-| **101 content** | Astro static pages `[S§5.4]` |
-| **SEO** | Structured data markup, server-rendered HTML via Astro `[S§5.5]` |
-
-**API Endpoints**: 5 endpoints (quiz CRUD, state guides, methodology explorer data).
-
-**Astro Pages**: Methodology explorer (6 pages), state guides (51 pages), 101 content (~10 pages), quiz page.
-
-### 15.4 Onboarding `[S§6]`
-
-**Scope**: Full onboarding flow — account creation, family setup, methodology wizard, getting-started roadmaps, starter recommendations, community connections.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Account creation** | Kratos registration flow + post-registration webhook `[S§6.1]` |
-| **Family setup** | Multi-step wizard collecting family info `[S§6.2]` |
-| **Methodology wizard** | Three-path selector (quiz-informed, explore, skip) `[S§6.3]` |
-| **Roadmaps** | Methodology-specific checklists from `method_definitions.onboarding_config` `[S§6.4]` |
-| **Starter recs** | Marketplace query filtered by methodology + age `[S§6.5]` |
-| **Community** | Methodology-matched group suggestions `[S§6.6]` |
-
-**API Endpoints**: 4 endpoints (wizard state, roadmap, recommendations, community suggestions).
-
-**React Components**: `OnboardingWizard` (multi-step), `MethodologyWizard`, `FamilySetup`, `GettingStartedRoadmap`.
-
-### 15.5 Social `[S§7]`
-
-**Scope**: Profiles, timeline/feed (reverse-chronological), comments (threaded), friend system, direct messaging (friends-only), platform-managed methodology groups, events (basic), location-based discovery (opt-in).
-
-| Component | Implementation |
-|-----------|---------------|
-| **Profiles** | `soc_profiles` table with per-field privacy `[S§7.1]` |
-| **Feed** | Redis sorted sets + fan-out-on-write + PostgreSQL posts `[S§7.2]` |
-| **Comments** | `soc_comments` table with one-level threading `[S§7.3]` |
-| **Friends** | `soc_friendships` table with request/accept/block flow `[S§7.4]` |
-| **Messaging** | `soc_messages` table + WebSocket real-time delivery `[S§7.5]` |
-| **Groups** | 6 platform-managed methodology groups (user-created groups are Phase 2) `[S§7.6]` |
-| **Events** | `soc_events` table with RSVP (basic, no recurring — full events in Phase 2) `[S§7.7]` |
-| **Location** | PostGIS-based discovery, opt-in, coarse-grained `[S§7.8]` |
-
-**API Endpoints**: ~20 endpoints (feed, posts, comments, friends, messages, groups, events, discovery).
-
-**React Components**: `Feed`, `PostComposer`, `FriendsList`, `DirectMessages`, `GroupDetail`, `EventsList`, `NearbyFamilies`.
-
-### 15.6 Learning `[S§8]`
-
-**Scope**: Activities, Reading Lists, Journaling & Narration, Progress Tracking, Interactive Assessment Engine, In-Platform Content Viewer, Video Player, Lesson Sequences, Supervised Student Views.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Activities** | `learn_activities` table `[S§8.1.1]` |
-| **Reading Lists** | `learn_reading_lists` + `learn_reading_list_items` tables `[S§8.1.3]` |
-| **Journals** | `learn_journals` table (freeform, narration, reflection types) `[S§8.1.4]` |
-| **Progress** | Basic tracking: activity counts, reading completion, hours per subject `[S§8.1.7]` |
-| **Assessment Engine** | `learn_questions`, `learn_quiz_defs`, `learn_quiz_sessions` — question bank, quiz builder, auto-scoring `[S§8.1.9]` |
-| **Content Viewer** | In-platform PDF/document viewer with page tracking, download fallback `[S§8.1.10]` |
-| **Video Player** | Self-hosted HLS (via media:: transcode pipeline) + YouTube/Vimeo embeds, progress tracking `[S§8.1.11]` |
-| **Lesson Sequences** | `learn_sequence_defs`, `learn_sequence_progress` — ordered content paths with linear/recommended modes `[S§8.1.12]` |
-| **Student Assignments** | `learn_student_assignments` — parent assigns content to students with due dates `[S§8.6]` |
-| **Supervised Student Views** | Simplified student-facing interface via `iam_student_sessions` — no social/marketplace access `[S§8.6]` |
-
-**Not in Phase 1**: Projects, methodology-specific tools (Nature Journals, Trivium Tracker, etc.), advanced analytics, content annotations/bookmarks.
-
-**API Endpoints**: ~72 endpoints (CRUD for each tool, assessment engine, sequences, assignments, student sessions).
-
-**React Components**: `LearningDashboard`, `ActivityLog`, `JournalEditor`, `ReadingList`, `ProgressView`, `QuizPlayer`, `VideoPlayer`, `ContentViewer`, `SequenceView`, `StudentDashboard`, `StudentQuiz`, `StudentVideo`, `StudentReader`, `StudentSequence`.
-
-### 15.7 Marketplace `[S§9]`
-
-**Scope**: Creator onboarding, content listings (including interactive quizzes and lesson sequences), browse/search/filter, purchase flow, ratings & reviews (verified-purchaser), basic creator dashboard, authoring tools (quiz builder, sequence builder).
-
-| Component | Implementation |
-|-----------|---------------|
-| **Creator onboarding** | `mkt_creators` table + Stripe Connect Standard onboarding `[S§9.1]` |
-| **Listings** | `mkt_listings` table with full lifecycle `[S§9.2]` |
-| **Search** | PostgreSQL FTS with faceted filtering `[S§9.3]` |
-| **Purchases** | Stripe checkout → `mkt_purchases` table `[S§9.4]` |
-| **Reviews** | `mkt_reviews` table, verified-purchaser only `[S§9.5]` |
-| **Creator dashboard** | Basic: sales history, earnings, listing management `[S§9.6]` |
-
-**Not in Phase 1**: Creator payouts (1099-K processing), advanced creator analytics.
-
-**API Endpoints**: ~15 endpoints (listings CRUD, search, purchase, reviews, creator dashboard).
-
-**React Components**: `MarketplaceBrowse`, `ListingDetail`, `Cart`, `Checkout`, `ReviewForm`, `CreatorDashboard`.
-
-### 15.8 Trust & Safety `[S§12]`
-
-**Scope**: CSAM detection, automated content screening, user reporting, bot prevention, community guidelines, basic moderation dashboard.
-
-| Component | Implementation |
-|-----------|---------------|
-| **CSAM** | Thorn Safer integration for all image uploads `[S§12.1]` |
-| **Screening** | AWS Rekognition for content moderation `[S§12.2]` |
-| **Reporting** | `safety_reports` table with categorized reports `[S§12.3]` |
-| **Bot prevention** | CAPTCHA on registration + rate limiting `[S§12.4]` |
-| **Moderation** | Basic admin dashboard for content review `[S§12.7]` |
-
-**API Endpoints**: ~6 endpoints (report content, moderation queue, mod actions).
-
-### 15.9 Billing `[S§15]`
-
-**Scope**: Free tier default, COPPA micro-charge verification, Hyperswitch webhook skeleton, transaction history. Marketplace payments are owned by `mkt::` — see §15.7.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Free tier** | Default `subscription_tier = 'free'` on all families `[S§15.1]` |
-| **COPPA micro-charge** | $0.50 charge + refund via Hyperswitch one-time payment `[S§1.4, 10-billing §13]` |
-| **Webhook skeleton** | Hyperswitch billing webhook receiver with signature verification and idempotency `[10-billing §14]` |
-
-**Not in Phase 1**: Premium subscriptions, upgrade/downgrade flows, payment method management, invoices, creator payouts.
-
-**API Endpoints**: ~4 endpoints (get subscription status, COPPA verify, webhook receiver, transaction history). See `10-billing.md` for full spec.
-
-### 15.10 Notifications `[S§13]`
-
-**Scope**: In-app notification center, transactional email.
-
-| Component | Implementation |
-|-----------|---------------|
-| **In-app** | `notify_notifications` table + WebSocket push `[S§13.1]` |
-| **Email** | Postmark transactional: verification, password reset, purchase receipts, social notifications `[S§13.2]` |
-| **Preferences** | `notify_preferences` table with per-type, per-channel settings `[S§13.3]` |
-
-**Not in Phase 1**: Digest emails, push notifications.
-
-**API Endpoints**: ~4 endpoints (list, mark read, preferences CRUD).
-
-### 15.11 Search `[S§14]`
-
-**Scope**: Full-text search (social + marketplace), basic autocomplete.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Social search** | PostgreSQL FTS on families, groups, events `[S§14.1]` |
-| **Marketplace search** | PostgreSQL FTS with faceted filtering on listings `[S§14.1]` |
-| **Learning search** | PostgreSQL FTS, family-scoped `[S§14.1]` |
-| **Autocomplete** | `pg_trgm` trigram index on listing titles `[S§14.2]` |
-
-**API Endpoints**: 2 endpoints (search, autocomplete).
-
-### 15.12 Content & Media
-
-**Scope**: Image/file upload, storage, delivery.
-
-| Component | Implementation |
-|-----------|---------------|
-| **Upload** | Presigned URL upload to R2 `[§8.1]` |
-| **Processing** | Background image resize, CSAM scan `[§8.2]`, video transcoding to HLS `[§8.3]` |
-| **Delivery** | Cloudflare CDN via R2; signed HLS URLs for video `[§8.3, §8.4]` |
-
-**API Endpoints**: 3 endpoints (request upload, confirm upload, download).
-
-### 15.13 Privacy/Compliance `[S§17.2]`
-
-**Scope**: COPPA compliance, privacy policy, terms of service, data export.
-
-| Component | Implementation |
-|-----------|---------------|
-| **COPPA** | Consent state machine, student data minimization `[S§17.2]` |
-| **Data export** | JSON/CSV export of all family data `[S§8.5]` |
-| **Privacy policy** | Static page on Astro public site |
-| **Terms of service** | Static page on Astro public site |
-
-**API Endpoints**: 2 endpoints (request data export, download export).
+Key note for §15.6 Learning: Video transcoding is a background job in the existing asynq queue. All other Phase 1 scope details are unchanged.
 
 ---
 
 ## 16. Architecture Decision Records
 
-### ADR-001: Rust over TypeScript for Backend
+### ADR-001: Go over Rust for Backend
 
-**Status**: Accepted
+**Status**: Accepted (supersedes original)
 
-**Context**: The backend must serve a 14-domain application with sub-300ms API responses `[S§17.3]`, scale to 100K concurrent users `[S§17.3]`, handle sensitive children's data `[S§17.2]`, and be primarily written by AI.
+**Context**: The backend must serve a 17-domain application with sub-300ms API responses `[S§17.3]`, scale to 100K concurrent users `[S§17.3]`, handle sensitive children's data `[S§17.2]`, and be primarily written by AI. The project is built by a solo developer + Claude across 17 domains, 80-100 tables, and ~150 endpoints.
 
-**Decision**: Use Rust (Axum + Tokio) instead of TypeScript (Node.js).
+**Decision**: Use Go (Echo + GORM) instead of Rust (Axum + SeaORM).
 
 **Consequences**:
-- **Positive**: Compile-time safety catches bugs before runtime. 3-5x better throughput reduces infrastructure costs. Memory safety eliminates entire vulnerability classes. Single binary deployment. "Never rewrite" — Rust codebases don't hit performance walls.
-- **Negative**: Longer compile times (~2-5 min for full build). Smaller ecosystem of web libraries compared to Node.js. Fewer Rust developers available for future hiring.
-- **Mitigation**: AI generates code (negating learning curve). Incremental compilation + `cargo check` for development. Most needed libraries exist (Axum, SeaORM, Serde, Tokio are mature).
+- **Positive**: Fast iteration — Go compiles in 1-3 seconds vs. Rust's 30-90 seconds. Simple concurrency model (goroutines). Large ecosystem of production-grade libraries. GORM provides automatic CRUD for 80-100+ tables. Go's simplicity reduces cognitive overhead for AI-generated code. Sufficient performance (20-40K req/sec with DB).
+- **Negative**: No borrow checker (use race detector instead via `go test -race`). Slightly lower raw throughput than Rust. No compile-time null safety (use linting and explicit nil checks).
+- **Mitigation**: AI generates idiomatic Go code. Race detector catches concurrency bugs in tests. `golangci-lint` enforces code quality. Performance is more than sufficient for the target scale.
 
-**Revision trigger**: Never. This is a foundational decision.
+**Revision trigger**: Never. Go is the long-term choice.
 
 ### ADR-002: Monolith Architecture
 
 **Status**: Accepted
 
-**Context**: 14 spec domains `[S§2.1]` could be individual microservices. However, a solo developer maintains the system, all domains share the same database, and inter-domain communication is frequent `[S§18]`.
+**Context**: 17 spec domains `[S§2.1]` could be individual microservices. However, a solo developer maintains the system, all domains share the same database, and inter-domain communication is frequent `[S§18]`.
 
-**Decision**: Single Rust binary with domain modules. No microservices.
+**Decision**: Single Go binary with domain packages. No microservices.
 
 **Consequences**:
 - **Positive**: Single deployment unit. No inter-service networking complexity. Shared database with referential integrity. Simpler debugging and tracing. Lower infrastructure cost.
 - **Negative**: All domains scale together (cannot independently scale Search vs. Social). Single point of failure. Larger binary size.
-- **Mitigation**: Rust's efficiency makes "scale together" viable to 100K+ concurrent users on modest hardware. Health checks and graceful degradation `[S§17.5]` mitigate single-point-of-failure risk.
+- **Mitigation**: Go's efficiency makes "scale together" viable to 100K+ concurrent users on modest hardware. Health checks and graceful degradation `[S§17.5]` mitigate single-point-of-failure risk.
 
 **Revision trigger**: Extract a domain as a separate service when it accounts for >40% of system resources or has fundamentally different deployment cadence needs.
 
@@ -4080,7 +3926,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 **Consequences**:
 - **Positive**: Single database to operate, back up, and monitor. PostgreSQL's JSONB is performant enough for methodology config. PostGIS eliminates a separate geo service. FTS eliminates a search service for Phase 1. Strong consistency guarantees.
 - **Negative**: PostgreSQL FTS lacks typo tolerance and instant search capabilities that Meilisearch provides. JSONB queries are less optimized than purpose-built document stores.
-- **Mitigation**: Meilisearch migration path defined (§9.2) with specific trigger (100K listings or 500ms p95 latency). JSONB data volume is small (6 methodologies × ~10KB each).
+- **Mitigation**: Meilisearch migration path defined (§9.2) with specific trigger (100K listings or 500ms p95 latency). JSONB data volume is small (6 methodologies x ~10KB each).
 
 **Revision trigger**: Add Meilisearch when search latency exceeds 500ms p95 or marketplace exceeds 100K listings.
 
@@ -4103,7 +3949,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **Status**: Accepted
 
-**Context**: The application has 14 domains with extensive interactivity — messaging, social feeds, learning tools, marketplace, quizzes. SEO is handled separately by Astro for public content `[S§5]`. The authenticated app does not need SEO.
+**Context**: The application has 17 domains with extensive interactivity — messaging, social feeds, learning tools, marketplace, quizzes. SEO is handled separately by Astro for public content `[S§5]`. The authenticated app does not need SEO.
 
 **Decision**: React SPA (Vite) for the authenticated application. Astro SSG for public content.
 
@@ -4118,12 +3964,12 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **Status**: Superseded by ADR-010
 
-**Context**: Comparable AWS EC2 instances cost $500-2,000/mo. Rust's efficiency means a single dedicated server handles Phase 1-2 workloads comfortably.
+**Context**: Comparable AWS EC2 instances cost $500-2,000/mo. Go's efficiency means a single dedicated server handles Phase 1-2 workloads comfortably.
 
 **Decision**: Hetzner dedicated server (~$60/mo) for Phase 1-2, with documented scaling path.
 
 **Consequences**:
-- **Positive**: ~90% cost savings vs. AWS/GCP for equivalent hardware. Predictable pricing. No vendor lock-in (standard Linux + Docker). Sufficient for 10K-50K concurrent users with Rust.
+- **Positive**: ~90% cost savings vs. AWS/GCP for equivalent hardware. Predictable pricing. No vendor lock-in (standard Linux + Docker). Sufficient for 10K-50K concurrent users with Go.
 - **Negative**: No managed services (must operate PostgreSQL, Redis yourself). No auto-scaling. Single datacenter (no multi-region).
 - **Mitigation**: Automated backups (§13.5). Monitoring (§2.14). Scaling path documented (§13.4). Multi-region is a Phase 4 concern.
 
@@ -4147,7 +3993,7 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **Consequences** *(original, preserved for historical context)*:
 - **Positive**: Stripe handles creator KYC/identity verification. 1099-K filing offloaded to Stripe. Sales tax automated via Stripe Tax. Stripe Connect Standard means creators manage their own Stripe accounts — reduced platform liability. Subscription management with upgrade/downgrade built in.
-- **Negative**: Stripe fees (~2.9% + 30¢ per transaction + Connect fees). Platform doesn't control the payout experience directly.
+- **Negative**: Stripe fees (~2.9% + 30c per transaction + Connect fees). Platform doesn't control the payout experience directly.
 - **Mitigation**: Stripe fees are industry standard and competitive. The alternative (custom payment infrastructure) is not viable for a solo developer.
 
 **Revision trigger**: ~~None. Stripe is the industry standard for this exact use case.~~ Triggered — Hyperswitch provides an orchestration layer that preserves all Stripe benefits while adding processor-agnostic flexibility. See §2.9.
@@ -4158,25 +4004,30 @@ This section maps each Phase 1 domain from `[S§19]` to concrete implementation 
 
 **Context**: The platform handles children's data subject to COPPA `[S§17.2]`. Cross-family data leaks would be both a privacy violation and a regulatory violation. The spec mandates family data ownership `[S§16.2]`.
 
-**Decision**: Enforce family-scoped data isolation at the architecture level through a Rust trait that requires `family_id` on all data-access queries, plus PostgreSQL Row-Level Security as defense-in-depth.
+**Decision**: Enforce family-scoped data isolation at the architecture level through a Go interface/helper that requires `family_id` on all data-access queries, plus PostgreSQL Row-Level Security as defense-in-depth.
 
 **Consequences**:
-- **Positive**: Cross-family data access is structurally impossible without explicit opt-in. The Rust compiler catches missing family_id filters. RLS provides database-level enforcement even if application logic has a bug. COPPA compliance is enforced by architecture, not by developer discipline.
+- **Positive**: Cross-family data access is structurally impossible without explicit opt-in. Go tooling catches missing family_id filters via interface enforcement. RLS provides database-level enforcement even if application logic has a bug. COPPA compliance is enforced by architecture, not by developer discipline.
 - **Negative**: Every query includes a `family_id` filter, even when not logically necessary (e.g., platform-wide analytics). Social features (friends, groups) require explicit cross-family data paths.
 - **Mitigation**: Social cross-family queries use separate, explicitly-defined repository functions that document why cross-family access is needed. Analytics queries use separate read-only database roles that bypass RLS.
 
-```rust
-/// Trait enforcing family-scoped database access
-pub trait FamilyScoped {
-    /// Returns all records belonging to a family
-    fn find_by_family(db: &DatabaseConnection, family_id: Uuid)
-        -> impl Future<Output = Result<Vec<Self>, DbErr>> + Send
-    where Self: Sized;
+```go
+// internal/shared/family_scope.go
 
-    /// Returns a single record if it belongs to the specified family
-    fn find_by_id_and_family(db: &DatabaseConnection, id: Uuid, family_id: Uuid)
-        -> impl Future<Output = Result<Option<Self>, DbErr>> + Send
-    where Self: Sized;
+// FamilyScope enforces family-scoped database access.
+type FamilyScope struct {
+    FamilyID uuid.UUID
+}
+
+// ApplyScope adds a family_id WHERE clause to a GORM query.
+func (s FamilyScope) ApplyScope(db *gorm.DB) *gorm.DB {
+    return db.Where("family_id = ?", s.FamilyID)
+}
+
+// FamilyScopedRepository defines the interface for family-scoped data access.
+type FamilyScopedRepository[T any] interface {
+    FindByFamily(ctx context.Context, scope FamilyScope) ([]T, error)
+    FindByIDAndFamily(ctx context.Context, id uuid.UUID, scope FamilyScope) (*T, error)
 }
 ```
 
@@ -4262,14 +4113,14 @@ WHERE f1.requester_family_id = $1  -- current user
 - **Assessment Engine** — Question bank with 6 question types, quiz builder, auto-scoring for objective types, parent-scored short answers `[S§8.1.9]`
 - **In-Platform Content Viewer** — PDF rendering with page tracking `[S§8.1.10]`
 - **Video Player** — Self-hosted HLS adaptive bitrate streaming + YouTube/Vimeo embed integration `[S§8.1.11]`
-- **Lesson Sequences** — Ordered content paths (reading → quiz → video → activity) with progression tracking `[S§8.1.12]`
+- **Lesson Sequences** — Ordered content paths (reading -> quiz -> video -> activity) with progression tracking `[S§8.1.12]`
 - **Supervised Student Views** — Students 10+ get a simplified, parent-controlled interface `[S§8.6]`
 - **Creator Authoring Tools** — Quiz builder and sequence builder in the marketplace creator dashboard `[S§9.1]`
 
 **Consequences**:
 - **Positive**: Phase 1 delivers the platform's core value from launch — methodology-scoped interactive learning, not just logging. Marketplace content is consumable in-platform, not just downloadable. Supervised student views create a genuine student-facing product.
-- **Negative**: Phase 1 scope increases significantly (~72 learn:: endpoints vs ~12 previously). Video transcoding pipeline requires FFmpeg integration in the media:: domain. Student sessions add an auth pathway (scoped JWT) alongside the existing Kratos parent auth.
-- **Mitigation**: New tables follow the existing three-layer pattern (Layer 1 publisher-scoped, Layer 3 family-scoped with RLS). Assessment engine reuses the methodology-as-configuration pattern — quiz availability is driven by `method_tool_activations`, not code branches. Video transcoding is a background job in the existing `sidekiq-rs` queue. Student sessions are parent-initiated and COPPA-compliant within the existing consent framework.
+- **Negative**: Phase 1 scope increases significantly (~72 learn endpoints vs ~12 previously). Video transcoding pipeline requires FFmpeg integration in the media domain. Student sessions add an auth pathway (scoped JWT) alongside the existing Kratos parent auth.
+- **Mitigation**: New tables follow the existing three-layer pattern (Layer 1 publisher-scoped, Layer 3 family-scoped with RLS). Assessment engine reuses the methodology-as-configuration pattern — quiz availability is driven by `method_tool_activations`, not code branches. Video transcoding is a background job in the existing `asynq` queue. Student sessions are parent-initiated and COPPA-compliant within the existing consent framework.
 
 **Revision trigger**: None. This is a scope decision that aligns Phase 1 with the product's core value proposition.
 
@@ -4279,7 +4130,7 @@ WHERE f1.requester_family_id = $1  -- current user
 
 **Context**: Homeschool families plan their days and weeks around learning activities, co-op days, and social events. The existing spec has Learning (activity logging), Compliance (attendance tracking), and Social (events) as separate domains — but no unified calendar or scheduling view. Competing homeschool platforms (Homeschool Planet, Homeschool Manager) are essentially calendar-first applications. Without scheduling, the platform is a record-keeping tool, not a planning tool.
 
-**Decision**: Add a Planning domain (`plan::`, `specs/domains/17-planning.md`) that provides:
+**Decision**: Add a Planning domain (`plan`, `specs/domains/17-planning.md`) that provides:
 - Unified calendar view synthesizing learning activities, compliance attendance, and social events
 - Weekly/daily schedule creation with recurring patterns
 - Co-op day coordination (link schedules to group events)
@@ -4298,7 +4149,7 @@ WHERE f1.requester_family_id = $1  -- current user
 
 **Context**: Data export and account deletion are mentioned in SPEC.md §16.3 and required by COPPA §17.2, but no domain owns the orchestration of cross-domain data export, retention enforcement, or account deletion workflows. In practice, "delete my family account" requires coordinated action across IAM, Learning, Social, Marketplace, Compliance, Media, Notifications, and Planning — no single existing domain should own this cross-cutting workflow.
 
-**Decision**: Add a Data Lifecycle domain (`lifecycle::`, `specs/domains/15-data-lifecycle.md`) that orchestrates:
+**Decision**: Add a Data Lifecycle domain (`lifecycle`, `specs/domains/15-data-lifecycle.md`) that orchestrates:
 - Family data export (all domains contribute export handlers)
 - Account deletion (grace period, confirmation, cross-domain deletion)
 - COPPA-specific deletion (regulatory timelines)
@@ -4308,12 +4159,12 @@ WHERE f1.requester_family_id = $1  -- current user
 **Consequences**:
 - **Positive**: Clear ownership of cross-domain deletion and export orchestration. Regulatory compliance (COPPA, state privacy laws) has a single enforcement point. Prevents "deletion missed domain X" bugs.
 - **Negative**: Lifecycle must understand what data exists in each domain — tight coupling on the data catalog. Background job orchestration adds complexity.
-- **Mitigation**: Each domain implements an `ExportHandler` and `DeletionHandler` trait. Lifecycle orchestrates but does not access other domains' data directly — it calls their service interfaces. Registration is at startup (like event bus handlers), so missing domains are caught at compile time.
+- **Mitigation**: Each domain implements an `ExportHandler` and `DeletionHandler` interface. Lifecycle orchestrates but does not access other domains' data directly — it calls their service interfaces. Registration is at startup (like event bus handlers), so missing domains are caught immediately.
 
 **Revision trigger**: None. COPPA and privacy regulation make this a legal requirement.
 
 ---
 
-*This architecture document translates the Homegrown Academy specification (`specs/SPEC.md`) into concrete, opinionated technology decisions. Every choice traces back to spec requirements via `[S§n]` references. The document is designed to be practical enough that development can start directly from it — the Rust code examples, SQL schemas, and React patterns are intended as starting templates, not pseudocode.*
+*This architecture document translates the Homegrown Academy specification (`specs/SPEC.md`) into concrete, opinionated technology decisions. Every choice traces back to spec requirements via `[S§n]` references. The document is designed to be practical enough that development can start directly from it — the Go code examples, SQL schemas, and React patterns are intended as starting templates, not pseudocode.*
 
 *Architecture decisions are not permanent. Each ADR includes a revision trigger — the specific condition under which the decision should be revisited. The goal is to build the simplest system that satisfies Phase 1 requirements while ensuring a clear, documented path to Phase 2-4 scale.*

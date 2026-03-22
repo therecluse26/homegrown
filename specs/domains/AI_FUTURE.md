@@ -13,7 +13,7 @@ collaborative filtering, semantic search, learning-to-rank, and LLM-powered tuto
 are planned for Phase 3-4 of the platform roadmap. `[S§19]`
 
 **What this document is NOT**:
-- Not a numbered domain spec (no database schemas, no Rust traits, no API contracts)
+- Not a numbered domain spec (no database schemas, no Go interfaces, no API contracts)
 - Not implementable today — each capability has explicit data prerequisites and decision
   triggers (§6)
 - Not a commitment — these are directional capabilities, subject to product validation
@@ -26,8 +26,8 @@ are planned for Phase 3-4 of the platform roadmap. `[S§19]`
 
 **Relationship to `13-recs.md`**: The `recs::` domain (Phase 1-2) builds the signal pipeline,
 recommendation infrastructure, and anonymized data collection that all Phase 3-4 ML
-capabilities depend on. The `recs_` database prefix, `src/recs/` module path, and
-`RecsService` trait will be extended (not replaced) when ML capabilities are added.
+capabilities depend on. The `recs_` database prefix, `internal/recs/` package path, and
+`RecsService` interface will be extended (not replaced) when ML capabilities are added.
 
 ---
 
@@ -36,7 +36,7 @@ capabilities depend on. The `recs_` database prefix, `src/recs/` module path, an
 | Capability | Model Type | What It Does | Data Source | Prerequisites |
 |-----------|-----------|-------------|------------|---------------|
 | **Collaborative filtering** | Matrix factorization (ALS) or item-based k-NN | "Families like yours liked X" — finds similarity patterns across families with same methodology, similar student ages, overlapping purchase history | `recs_anonymized_interactions`, `recs_popularity_scores` | ~1,000+ active premium families with purchase history from Phase 2 |
-| **Learning-to-rank** | Gradient boosted trees (LightGBM / XGBoost) | Replaces hand-tuned scoring weights (0.35 / 0.25 / 0.25 / 0.10 / 0.05) in `src/recs/algorithm.rs` with weights learned from dismiss/block/click feedback data | `recs_recommendation_feedback`, recommendation view/click tracking (Phase 3 addition) | 10,000+ feedback records in `recs_recommendation_feedback` |
+| **Learning-to-rank** | Gradient boosted trees (LightGBM / XGBoost) | Replaces hand-tuned scoring weights (0.35 / 0.25 / 0.25 / 0.10 / 0.05) in `internal/recs/algorithm.go` with weights learned from dismiss/block/click feedback data | `recs_recommendation_feedback`, recommendation view/click tracking (Phase 3 addition) | 10,000+ feedback records in `recs_recommendation_feedback` |
 | **Content-based filtering** | TF-IDF or sentence embeddings (e.g., all-MiniLM-L6-v2) on listing descriptions | "This listing is semantically similar to ones you've engaged with" — finds content similarity beyond keyword/tag matching | `mkt_listings.description`, `recs_signals` (purchase/activity signals) | Marketplace listings with descriptions; can bootstrap from Phase 1 data |
 | **Semantic search** | Embedding model + pgvector | Natural language curriculum discovery: "find me gentle math for a wiggly 7-year-old" — vector similarity search on listing embeddings | `mkt_listings` content → embedding vectors | pgvector PostgreSQL extension, embedding generation pipeline, 10,000+ marketplace listings |
 
@@ -140,8 +140,8 @@ AI tutoring is the highest-impact and highest-risk capability. It requires:
 - **Model**: all-MiniLM-L6-v2 (384-dim, ~80MB, runs on CPU) or similar
 - **Approach**: Batch processing — new/updated listings are embedded by a background job,
   not real-time. Embeddings stored in pgvector columns.
-- **Infrastructure**: The model runs in-process (Rust `candle` or `ort` crate) or as a
-  sidecar service. No external API dependency.
+- **Infrastructure**: The model runs as a sidecar service (Python with ONNX Runtime or
+  similar) called from Go via gRPC/HTTP. No external API dependency.
 
 ### Model Training Pipeline (Phase 3-4)
 

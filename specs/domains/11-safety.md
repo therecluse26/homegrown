@@ -13,11 +13,11 @@ endpoints. `[S§12, V§7]`
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/safety/` |
+| **Module path** | `internal/safety/` |
 | **DB prefix** | `safety_` `[ARCH §5.1]` |
 | **Complexity class** | Complex (has `domain/` subdirectory) — moderation state machine, CSAM handling pipeline `[ARCH §4.5]` |
 | **CQRS** | No — read and write paths are straightforward; admin queries use the same model |
-| **External adapters** | `src/safety/adapters/thorn.rs` (Thorn Safer — CSAM hash matching + NCMEC reporting) `[ARCH §2.13]`, `src/safety/adapters/rekognition.rs` (AWS Rekognition — content moderation labels) `[ARCH §2.13]` |
+| **External adapters** | `internal/safety/adapters/thorn.go` (Thorn Safer — CSAM hash matching + NCMEC reporting) `[ARCH §2.13]`, `internal/safety/adapters/rekognition.go` (AWS Rekognition — content moderation labels) `[ARCH §2.13]` |
 | **Key constraint** | CSAM reporting is a federal legal obligation `[S§12.1]`; every user-data query family-scoped via `FamilyScope` `[CODING §2.4, §2.5]`; moderation actions are immutable audit records; zero user notification on CSAM detection `[S§12.1]` |
 
 **What safety:: owns**: Content moderation pipeline (automated screening + community reports +
@@ -39,7 +39,7 @@ moderate their own groups) `[S§12.7]`.
 
 **What safety:: delegates**: Notification delivery → `notify::` (via domain events).
 User/family lookup → `iam::IamService`. Session revocation → `iam::KratosAdapter::revoke_sessions()`.
-Background job scheduling → sidekiq-rs `[ARCH §12]`. CSAM hash matching API calls → Thorn Safer
+Background job scheduling → hibiken/asynq `[ARCH §12]`. CSAM hash matching API calls → Thorn Safer
 (external service). Content moderation label detection → AWS Rekognition (external service).
 CAPTCHA enforcement on registration → `iam::` (iam:: implements the CAPTCHA check during
 registration flow per safety:: requirements).
@@ -135,7 +135,7 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_safety_tables.rs
+-- Migration: YYYYMMDD_000001_create_safety_tables.sql (goose)
 -- =============================================================================
 
 -- TABLE 1: safety_reports — User-submitted content reports [S§12.3]
@@ -449,16 +449,16 @@ Submit a content report against any reportable entity. `[S§12.3]`
 
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Body**: `CreateReportCommand`
-```rust
+```json
 {
-    "target_type": "post",                     // reportable entity type
-    "target_id": "uuid",                       // ID of the reported entity
-    "category": "harassment",                  // report category
-    "description": "This post contains..."     // optional free-text
+    "target_type": "post",
+    "target_id": "uuid",
+    "category": "harassment",
+    "description": "This post contains..."
 }
 ```
 - **Response**: `201 Created` → `ReportResponse`
-```rust
+```json
 {
     "id": "uuid",
     "target_type": "post",
@@ -506,7 +506,7 @@ Return the authenticated family's current moderation status (active, suspended, 
 
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Response**: `200 OK` → `AccountStatusResponse`
-```rust
+```json
 {
     "status": "active",
     "suspended_at": null,
@@ -521,10 +521,10 @@ Submit an appeal against a moderation action. `[S§12.2]`
 
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Body**: `CreateAppealCommand`
-```rust
+```json
 {
-    "action_id": "uuid",                       // the moderation action being appealed
-    "appeal_text": "I believe this was..."     // appeal justification
+    "action_id": "uuid",
+    "appeal_text": "I believe this was..."
 }
 ```
 - **Response**: `201 Created` → `AppealResponse`
@@ -553,14 +553,14 @@ status as needed. `[S§12.2, S§12.7]`
 
 - **Auth**: `RequireAdmin`
 - **Body**: `CreateModActionCommand`
-```rust
+```json
 {
     "target_family_id": "uuid",
-    "target_parent_id": "uuid",                // optional — for user-specific actions
+    "target_parent_id": "uuid",
     "action_type": "account_suspended",
     "reason": "Repeated harassment after warning",
-    "report_id": "uuid",                       // optional — originating report
-    "suspension_days": 7                       // required for suspensions
+    "report_id": "uuid",
+    "suspension_days": 7
 }
 ```
 - **Response**: `201 Created` → `ModActionResponse`
@@ -578,11 +578,11 @@ Convenience endpoint for account suspension (wraps `POST /actions`).
 
 - **Auth**: `RequireAdmin`
 - **Body**: `SuspendAccountCommand`
-```rust
+```json
 {
     "reason": "Repeated policy violations",
     "suspension_days": 7,
-    "report_id": "uuid"                        // optional
+    "report_id": "uuid"
 }
 ```
 
@@ -592,10 +592,10 @@ Permanent ban. Irreversible (except via appeal). `[S§12.2]`
 
 - **Auth**: `RequireAdmin`
 - **Body**: `BanAccountCommand`
-```rust
+```json
 {
     "reason": "Severe policy violation",
-    "report_id": "uuid"                        // optional
+    "report_id": "uuid"
 }
 ```
 
@@ -606,9 +606,9 @@ original action. `[S§12.2]`
 
 - **Auth**: `RequireAdmin`
 - **Body**: `ResolveAppealCommand`
-```rust
+```json
 {
-    "status": "granted",                       // or "denied"
+    "status": "granted",
     "resolution_text": "Upon review, the suspension is lifted..."
 }
 ```
@@ -620,238 +620,131 @@ original action. `[S§12.2]`
 
 ## §5 Service Interface
 
-The `SafetyService` trait defines all use cases exposed to handlers, other domains, and background
-jobs. Defined in `src/safety/ports.rs`. `[CODING §8.2]`
+The `SafetyService` interface defines all use cases exposed to handlers, other domains, and background
+jobs. Defined in `internal/safety/ports.go`. `[CODING §8.2]`
 
-```rust
-#[async_trait]
-pub trait SafetyService: Send + Sync {
+```go
+// internal/safety/ports.go
+
+// SafetyService defines all safety and moderation use cases.
+type SafetyService interface {
 
     // ─── User-Facing Queries ────────────────────────────────────────────
 
-    /// List the caller's submitted reports.
-    async fn list_my_reports(
-        &self,
-        scope: &FamilyScope,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResponse<ReportResponse>, AppError>;
+    // ListMyReports lists the caller's submitted reports.
+    ListMyReports(ctx context.Context, scope *shared.FamilyScope, pagination *shared.PaginationParams) (*shared.PaginatedResponse[ReportResponse], error)
 
-    /// Get a specific report (must belong to caller's family).
-    async fn get_my_report(
-        &self,
-        scope: &FamilyScope,
-        report_id: Uuid,
-    ) -> Result<ReportResponse, AppError>;
+    // GetMyReport gets a specific report (must belong to caller's family).
+    GetMyReport(ctx context.Context, scope *shared.FamilyScope, reportID uuid.UUID) (*ReportResponse, error)
 
-    /// Get the caller's account moderation status.
-    async fn get_account_status(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<AccountStatusResponse, AppError>;
+    // GetAccountStatus gets the caller's account moderation status.
+    GetAccountStatus(ctx context.Context, scope *shared.FamilyScope) (*AccountStatusResponse, error)
 
-    /// Get a specific appeal (must belong to caller's family).
-    async fn get_my_appeal(
-        &self,
-        scope: &FamilyScope,
-        appeal_id: Uuid,
-    ) -> Result<AppealResponse, AppError>;
+    // GetMyAppeal gets a specific appeal (must belong to caller's family).
+    GetMyAppeal(ctx context.Context, scope *shared.FamilyScope, appealID uuid.UUID) (*AppealResponse, error)
 
     // ─── User-Facing Commands ───────────────────────────────────────────
 
-    /// Submit a content report.
-    async fn submit_report(
-        &self,
-        scope: &FamilyScope,
-        auth: &AuthContext,
-        cmd: CreateReportCommand,
-    ) -> Result<ReportResponse, AppError>;
+    // SubmitReport submits a content report.
+    SubmitReport(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, cmd CreateReportCommand) (*ReportResponse, error)
 
-    /// Submit an appeal against a moderation action.
-    async fn submit_appeal(
-        &self,
-        scope: &FamilyScope,
-        cmd: CreateAppealCommand,
-    ) -> Result<AppealResponse, AppError>;
+    // SubmitAppeal submits an appeal against a moderation action.
+    SubmitAppeal(ctx context.Context, scope *shared.FamilyScope, cmd CreateAppealCommand) (*AppealResponse, error)
 
     // ─── Admin Queries ──────────────────────────────────────────────────
 
-    /// List reports (admin queue with filters).
-    async fn admin_list_reports(
-        &self,
-        auth: &AuthContext,
-        filter: ReportFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResponse<AdminReportResponse>, AppError>;
+    // AdminListReports lists reports (admin queue with filters).
+    AdminListReports(ctx context.Context, auth *shared.AuthContext, filter ReportFilter, pagination *shared.PaginationParams) (*shared.PaginatedResponse[AdminReportResponse], error)
 
-    /// Get report detail (admin view — includes target content snapshot).
-    async fn admin_get_report(
-        &self,
-        auth: &AuthContext,
-        report_id: Uuid,
-    ) -> Result<AdminReportResponse, AppError>;
+    // AdminGetReport gets report detail (admin view — includes target content snapshot).
+    AdminGetReport(ctx context.Context, auth *shared.AuthContext, reportID uuid.UUID) (*AdminReportResponse, error)
 
-    /// List content flags (admin review queue).
-    async fn admin_list_flags(
-        &self,
-        auth: &AuthContext,
-        filter: FlagFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResponse<ContentFlagResponse>, AppError>;
+    // AdminListFlags lists content flags (admin review queue).
+    AdminListFlags(ctx context.Context, auth *shared.AuthContext, filter FlagFilter, pagination *shared.PaginationParams) (*shared.PaginatedResponse[ContentFlagResponse], error)
 
-    /// List moderation actions (audit log).
-    async fn admin_list_actions(
-        &self,
-        auth: &AuthContext,
-        filter: ActionFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResponse<ModActionResponse>, AppError>;
+    // AdminListActions lists moderation actions (audit log).
+    AdminListActions(ctx context.Context, auth *shared.AuthContext, filter ActionFilter, pagination *shared.PaginationParams) (*shared.PaginatedResponse[ModActionResponse], error)
 
-    /// Get account moderation state (admin view).
-    async fn admin_get_account(
-        &self,
-        auth: &AuthContext,
-        family_id: Uuid,
-    ) -> Result<AdminAccountStatusResponse, AppError>;
+    // AdminGetAccount gets account moderation state (admin view).
+    AdminGetAccount(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID) (*AdminAccountStatusResponse, error)
 
-    /// List appeals (admin queue).
-    async fn admin_list_appeals(
-        &self,
-        auth: &AuthContext,
-        filter: AppealFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResponse<AdminAppealResponse>, AppError>;
+    // AdminListAppeals lists appeals (admin queue).
+    AdminListAppeals(ctx context.Context, auth *shared.AuthContext, filter AppealFilter, pagination *shared.PaginationParams) (*shared.PaginatedResponse[AdminAppealResponse], error)
 
-    /// Dashboard statistics.
-    async fn admin_dashboard(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<DashboardStats, AppError>;
+    // AdminDashboard returns dashboard statistics.
+    AdminDashboard(ctx context.Context, auth *shared.AuthContext) (*DashboardStats, error)
 
     // ─── Admin Commands ─────────────────────────────────────────────────
 
-    /// Update a report (assign admin, change status).
-    async fn admin_update_report(
-        &self,
-        auth: &AuthContext,
-        report_id: Uuid,
-        cmd: UpdateReportCommand,
-    ) -> Result<AdminReportResponse, AppError>;
+    // AdminUpdateReport updates a report (assign admin, change status).
+    AdminUpdateReport(ctx context.Context, auth *shared.AuthContext, reportID uuid.UUID, cmd UpdateReportCommand) (*AdminReportResponse, error)
 
-    /// Review a content flag.
-    async fn admin_review_flag(
-        &self,
-        auth: &AuthContext,
-        flag_id: Uuid,
-        cmd: ReviewFlagCommand,
-    ) -> Result<ContentFlagResponse, AppError>;
+    // AdminReviewFlag reviews a content flag.
+    AdminReviewFlag(ctx context.Context, auth *shared.AuthContext, flagID uuid.UUID, cmd ReviewFlagCommand) (*ContentFlagResponse, error)
 
-    /// Take a moderation action.
-    async fn admin_take_action(
-        &self,
-        auth: &AuthContext,
-        cmd: CreateModActionCommand,
-    ) -> Result<ModActionResponse, AppError>;
+    // AdminTakeAction takes a moderation action.
+    AdminTakeAction(ctx context.Context, auth *shared.AuthContext, cmd CreateModActionCommand) (*ModActionResponse, error)
 
-    /// Suspend an account.
-    async fn admin_suspend_account(
-        &self,
-        auth: &AuthContext,
-        family_id: Uuid,
-        cmd: SuspendAccountCommand,
-    ) -> Result<AdminAccountStatusResponse, AppError>;
+    // AdminSuspendAccount suspends an account.
+    AdminSuspendAccount(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, cmd SuspendAccountCommand) (*AdminAccountStatusResponse, error)
 
-    /// Ban an account.
-    async fn admin_ban_account(
-        &self,
-        auth: &AuthContext,
-        family_id: Uuid,
-        cmd: BanAccountCommand,
-    ) -> Result<AdminAccountStatusResponse, AppError>;
+    // AdminBanAccount bans an account.
+    AdminBanAccount(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, cmd BanAccountCommand) (*AdminAccountStatusResponse, error)
 
-    /// Lift a suspension.
-    async fn admin_lift_suspension(
-        &self,
-        auth: &AuthContext,
-        family_id: Uuid,
-        cmd: LiftSuspensionCommand,
-    ) -> Result<AdminAccountStatusResponse, AppError>;
+    // AdminLiftSuspension lifts a suspension.
+    AdminLiftSuspension(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, cmd LiftSuspensionCommand) (*AdminAccountStatusResponse, error)
 
-    /// Resolve an appeal.
-    async fn admin_resolve_appeal(
-        &self,
-        auth: &AuthContext,
-        appeal_id: Uuid,
-        cmd: ResolveAppealCommand,
-    ) -> Result<AdminAppealResponse, AppError>;
+    // AdminResolveAppeal resolves an appeal.
+    AdminResolveAppeal(ctx context.Context, auth *shared.AuthContext, appealID uuid.UUID, cmd ResolveAppealCommand) (*AdminAppealResponse, error)
 
     // ─── Internal (Cross-Domain) Methods ────────────────────────────────
 
-    /// Check whether a family's account is allowed to access the platform.
-    /// Called by auth middleware on every authenticated request.
-    /// Returns Ok(()) if active, Err(AccountSuspended/AccountBanned) otherwise.
-    /// Uses Redis cache with 60s TTL for performance.
-    async fn check_account_access(
-        &self,
-        family_id: Uuid,
-    ) -> Result<(), AppError>;
+    // CheckAccountAccess checks whether a family's account is allowed to access the platform.
+    // Called by auth middleware on every authenticated request.
+    // Returns nil if active, ErrAccountSuspended/ErrAccountBanned otherwise.
+    // Uses Redis cache with 60s TTL for performance.
+    CheckAccountAccess(ctx context.Context, familyID uuid.UUID) error
 
-    /// Scan text content for policy violations.
-    /// Called synchronously by social::, mkt::, and learn:: before persisting content.
-    /// Phase 1: keyword + regex matching. Phase 2: ML (AWS Comprehend).
-    async fn scan_text(
-        &self,
-        text: &str,
-    ) -> Result<TextScanResult, AppError>;
+    // ScanText scans text content for policy violations.
+    // Called synchronously by social, mkt, and learn before persisting content.
+    // Phase 1: keyword + regex matching. Phase 2: ML (AWS Comprehend).
+    ScanText(ctx context.Context, text string) (*TextScanResult, error)
 
-    /// Record a bot behavioral signal.
-    /// Called by domains that detect suspicious patterns.
-    async fn record_bot_signal(
-        &self,
-        family_id: Uuid,
-        parent_id: Uuid,
-        signal: BotSignalType,
-        details: serde_json::Value,
-    ) -> Result<(), AppError>;
+    // RecordBotSignal records a bot behavioral signal.
+    // Called by domains that detect suspicious patterns.
+    RecordBotSignal(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID, signal BotSignalType, details json.RawMessage) error
 
-    /// Process a CSAM detection from media:: pipeline.
-    /// Quarantines upload, files NCMEC report, bans account.
-    /// Called by SafetyScanAdapter::report_csam() implementation.
-    async fn handle_csam_detection(
-        &self,
-        upload_id: Uuid,
-        family_id: Uuid,
-        scan_result: &CsamScanResult,
-    ) -> Result<(), AppError>;
+    // HandleCsamDetection processes a CSAM detection from the media pipeline.
+    // Quarantines upload, files NCMEC report, bans account.
+    // Called by SafetyScanAdapter.ReportCsam() implementation.
+    HandleCsamDetection(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID, scanResult *CsamScanResult) error
 
-    /// Escalate flagged/rejected content to CSAM (admin action). [§11.4.1]
-    /// Marks the flag as reviewed, then delegates to handle_csam_detection()
-    /// for the full §10 pipeline (evidence → NCMEC → ban → session revoke).
-    async fn admin_escalate_to_csam(
-        &self,
-        auth: &AuthContext,
-        flag_id: Uuid,
-        cmd: EscalateCsamCommand,
-    ) -> Result<(), AppError>;
+    // AdminEscalateToCsam escalates flagged/rejected content to CSAM (admin action). [§11.4.1]
+    // Marks the flag as reviewed, then delegates to HandleCsamDetection()
+    // for the full §10 pipeline (evidence → NCMEC → ban → session revoke).
+    AdminEscalateToCsam(ctx context.Context, auth *shared.AuthContext, flagID uuid.UUID, cmd EscalateCsamCommand) error
 }
 ```
 
 ### §5.1 Service Implementation
 
-```rust
-pub struct SafetyServiceImpl {
-    report_repo: Arc<dyn ReportRepository>,
-    flag_repo: Arc<dyn ContentFlagRepository>,
-    action_repo: Arc<dyn ModActionRepository>,
-    account_repo: Arc<dyn AccountStatusRepository>,
-    appeal_repo: Arc<dyn AppealRepository>,
-    ncmec_repo: Arc<dyn NcmecReportRepository>,
-    bot_signal_repo: Arc<dyn BotSignalRepository>,
-    thorn: Arc<dyn ThornAdapter>,
-    rekognition: Arc<dyn RekognitionAdapter>,
-    iam_service: Arc<dyn IamService>,
-    redis: RedisPool,
-    events: Arc<EventBus>,
-    config: SafetyConfig,
+```go
+// internal/safety/service.go
+
+type SafetyServiceImpl struct {
+    reportRepo     ReportRepository
+    flagRepo       ContentFlagRepository
+    actionRepo     ModActionRepository
+    accountRepo    AccountStatusRepository
+    appealRepo     AppealRepository
+    ncmecRepo      NcmecReportRepository
+    botSignalRepo  BotSignalRepository
+    thorn          ThornAdapter
+    rekognition    RekognitionAdapter
+    iamService     iam.IamService
+    redis          *redis.Client
+    events         *shared.EventBus
+    config         SafetyConfig
 }
 ```
 
@@ -861,230 +754,116 @@ pub struct SafetyServiceImpl {
 
 ### §6.1 ReportRepository
 
-```rust
-#[async_trait]
-pub trait ReportRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        input: CreateReportRow,
-    ) -> Result<Report, DbErr>;
+```go
+// internal/safety/ports.go
 
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        report_id: Uuid,
-    ) -> Result<Option<Report>, DbErr>;
+type ReportRepository interface {
+    Create(ctx context.Context, scope *shared.FamilyScope, input CreateReportRow) (*Report, error)
 
-    /// Admin: find by ID without family scoping.
-    /// Unscoped — admin-only access [CODING §2.4].
-    async fn find_by_id_unscoped(
-        &self,
-        report_id: Uuid,
-    ) -> Result<Option<Report>, DbErr>;
+    FindByID(ctx context.Context, scope *shared.FamilyScope, reportID uuid.UUID) (*Report, error)
 
-    async fn list_by_reporter(
-        &self,
-        scope: &FamilyScope,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResult<Report>, DbErr>;
+    // FindByIDUnscoped — admin-only access [CODING §2.4].
+    FindByIDUnscoped(ctx context.Context, reportID uuid.UUID) (*Report, error)
 
-    /// Admin: list with filters (status, priority, category, assigned).
-    async fn list_filtered(
-        &self,
-        filter: &ReportFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResult<Report>, DbErr>;
+    ListByReporter(ctx context.Context, scope *shared.FamilyScope, pagination *shared.PaginationParams) (*shared.PaginatedResult[Report], error)
 
-    async fn update(
-        &self,
-        report_id: Uuid,
-        updates: ReportUpdate,
-    ) -> Result<Report, DbErr>;
+    // ListFiltered — admin: list with filters (status, priority, category, assigned).
+    ListFiltered(ctx context.Context, filter *ReportFilter, pagination *shared.PaginationParams) (*shared.PaginatedResult[Report], error)
 
-    /// Check for duplicate reports within time window.
-    async fn exists_recent(
-        &self,
-        scope: &FamilyScope,
-        target_type: &str,
-        target_id: Uuid,
-        within_hours: u32,
-    ) -> Result<bool, DbErr>;
+    Update(ctx context.Context, reportID uuid.UUID, updates ReportUpdate) (*Report, error)
+
+    // ExistsRecent checks for duplicate reports within time window.
+    ExistsRecent(ctx context.Context, scope *shared.FamilyScope, targetType string, targetID uuid.UUID, withinHours uint32) (bool, error)
 }
 ```
 
 ### §6.2 ContentFlagRepository
 
-```rust
-#[async_trait]
-pub trait ContentFlagRepository: Send + Sync {
-    async fn create(
-        &self,
-        input: CreateContentFlagRow,
-    ) -> Result<ContentFlag, DbErr>;
+```go
+type ContentFlagRepository interface {
+    Create(ctx context.Context, input CreateContentFlagRow) (*ContentFlag, error)
 
-    async fn find_by_id(
-        &self,
-        flag_id: Uuid,
-    ) -> Result<Option<ContentFlag>, DbErr>;
+    FindByID(ctx context.Context, flagID uuid.UUID) (*ContentFlag, error)
 
-    /// List unreviewed flags (admin queue).
-    async fn list_unreviewed(
-        &self,
-        filter: &FlagFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResult<ContentFlag>, DbErr>;
+    // ListUnreviewed lists unreviewed flags (admin queue).
+    ListUnreviewed(ctx context.Context, filter *FlagFilter, pagination *shared.PaginationParams) (*shared.PaginatedResult[ContentFlag], error)
 
-    async fn mark_reviewed(
-        &self,
-        flag_id: Uuid,
-        reviewed_by: Uuid,
-        action_taken: bool,
-    ) -> Result<ContentFlag, DbErr>;
+    MarkReviewed(ctx context.Context, flagID uuid.UUID, reviewedBy uuid.UUID, actionTaken bool) (*ContentFlag, error)
 
-    /// Find all flags for a target entity.
-    async fn find_by_target(
-        &self,
-        target_type: &str,
-        target_id: Uuid,
-    ) -> Result<Vec<ContentFlag>, DbErr>;
+    // FindByTarget finds all flags for a target entity.
+    FindByTarget(ctx context.Context, targetType string, targetID uuid.UUID) ([]ContentFlag, error)
 }
 ```
 
 ### §6.3 ModActionRepository
 
-```rust
-/// Immutable audit trail — only insert and read operations.
-#[async_trait]
-pub trait ModActionRepository: Send + Sync {
-    /// Insert a new moderation action. Never updates or deletes.
-    async fn create(
-        &self,
-        input: CreateModActionRow,
-    ) -> Result<ModAction, DbErr>;
+```go
+// ModActionRepository is an immutable audit trail — only insert and read operations.
+type ModActionRepository interface {
+    // Create inserts a new moderation action. Never updates or deletes.
+    Create(ctx context.Context, input CreateModActionRow) (*ModAction, error)
 
-    async fn find_by_id(
-        &self,
-        action_id: Uuid,
-    ) -> Result<Option<ModAction>, DbErr>;
+    FindByID(ctx context.Context, actionID uuid.UUID) (*ModAction, error)
 
-    /// List actions with filters (admin, target_family, action_type).
-    async fn list_filtered(
-        &self,
-        filter: &ActionFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResult<ModAction>, DbErr>;
+    // ListFiltered lists actions with filters (admin, target_family, action_type).
+    ListFiltered(ctx context.Context, filter *ActionFilter, pagination *shared.PaginationParams) (*shared.PaginatedResult[ModAction], error)
 
-    /// List all actions against a specific family.
-    async fn list_by_target_family(
-        &self,
-        family_id: Uuid,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResult<ModAction>, DbErr>;
+    // ListByTargetFamily lists all actions against a specific family.
+    ListByTargetFamily(ctx context.Context, familyID uuid.UUID, pagination *shared.PaginationParams) (*shared.PaginatedResult[ModAction], error)
 }
 ```
 
 ### §6.4 AccountStatusRepository
 
-```rust
-#[async_trait]
-pub trait AccountStatusRepository: Send + Sync {
-    /// Get or create account status (default: active).
-    async fn get_or_create(
-        &self,
-        family_id: Uuid,
-    ) -> Result<AccountStatus, DbErr>;
+```go
+type AccountStatusRepository interface {
+    // GetOrCreate gets or creates account status (default: active).
+    GetOrCreate(ctx context.Context, familyID uuid.UUID) (*AccountStatus, error)
 
-    async fn update(
-        &self,
-        family_id: Uuid,
-        updates: AccountStatusUpdate,
-    ) -> Result<AccountStatus, DbErr>;
+    Update(ctx context.Context, familyID uuid.UUID, updates AccountStatusUpdate) (*AccountStatus, error)
 
-    /// Find all restricted accounts (for cache warming).
-    async fn find_restricted(
-        &self,
-    ) -> Result<Vec<AccountStatus>, DbErr>;
+    // FindRestricted finds all restricted accounts (for cache warming).
+    FindRestricted(ctx context.Context) ([]AccountStatus, error)
 }
 ```
 
 ### §6.5 AppealRepository
 
-```rust
-#[async_trait]
-pub trait AppealRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        input: CreateAppealRow,
-    ) -> Result<Appeal, DbErr>;
+```go
+type AppealRepository interface {
+    Create(ctx context.Context, scope *shared.FamilyScope, input CreateAppealRow) (*Appeal, error)
 
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        appeal_id: Uuid,
-    ) -> Result<Option<Appeal>, DbErr>;
+    FindByID(ctx context.Context, scope *shared.FamilyScope, appealID uuid.UUID) (*Appeal, error)
 
-    async fn find_by_id_unscoped(
-        &self,
-        appeal_id: Uuid,
-    ) -> Result<Option<Appeal>, DbErr>;
+    FindByIDUnscoped(ctx context.Context, appealID uuid.UUID) (*Appeal, error)
 
-    async fn list_pending(
-        &self,
-        filter: &AppealFilter,
-        pagination: &PaginationParams,
-    ) -> Result<PaginatedResult<Appeal>, DbErr>;
+    ListPending(ctx context.Context, filter *AppealFilter, pagination *shared.PaginationParams) (*shared.PaginatedResult[Appeal], error)
 
-    async fn update(
-        &self,
-        appeal_id: Uuid,
-        updates: AppealUpdate,
-    ) -> Result<Appeal, DbErr>;
+    Update(ctx context.Context, appealID uuid.UUID, updates AppealUpdate) (*Appeal, error)
 }
 ```
 
 ### §6.6 NcmecReportRepository
 
-```rust
-/// Append-only — legal evidence. Only insert and read.
-#[async_trait]
-pub trait NcmecReportRepository: Send + Sync {
-    async fn create(
-        &self,
-        input: CreateNcmecReportRow,
-    ) -> Result<NcmecReport, DbErr>;
+```go
+// NcmecReportRepository is append-only — legal evidence. Only insert and read.
+type NcmecReportRepository interface {
+    Create(ctx context.Context, input CreateNcmecReportRow) (*NcmecReport, error)
 
-    async fn update_status(
-        &self,
-        report_id: Uuid,
-        status: &str,
-        ncmec_report_id: Option<&str>,
-        error: Option<&str>,
-    ) -> Result<NcmecReport, DbErr>;
+    UpdateStatus(ctx context.Context, reportID uuid.UUID, status string, ncmecReportID *string, errMsg *string) (*NcmecReport, error)
 
-    async fn find_pending(
-        &self,
-    ) -> Result<Vec<NcmecReport>, DbErr>;
+    FindPending(ctx context.Context) ([]NcmecReport, error)
 }
 ```
 
 ### §6.7 BotSignalRepository
 
-```rust
-#[async_trait]
-pub trait BotSignalRepository: Send + Sync {
-    async fn create(
-        &self,
-        input: CreateBotSignalRow,
-    ) -> Result<BotSignal, DbErr>;
+```go
+type BotSignalRepository interface {
+    Create(ctx context.Context, input CreateBotSignalRow) (*BotSignal, error)
 
-    /// Count signals for a parent within a time window.
-    async fn count_recent(
-        &self,
-        parent_id: Uuid,
-        within_minutes: u32,
-    ) -> Result<i64, DbErr>;
+    // CountRecent counts signals for a parent within a time window.
+    CountRecent(ctx context.Context, parentID uuid.UUID, withinMinutes uint32) (int64, error)
 }
 ```
 
@@ -1097,53 +876,42 @@ pub trait BotSignalRepository: Send + Sync {
 Wraps the Thorn Safer API for PhotoDNA hash matching and automated NCMEC CyberTipline
 report submission. `[ARCH §2.13, S§12.1]`
 
-Adapter file: `src/safety/adapters/thorn.rs`
+Adapter file: `internal/safety/adapters/thorn.go`
 
-```rust
-/// Thorn Safer adapter for CSAM detection and NCMEC reporting.
-///
-/// Thorn Safer provides:
-/// 1. PhotoDNA hash matching against NCMEC's hash database
-/// 2. Automated NCMEC CyberTipline report submission
-///
-/// [ARCH §2.13, S§12.1, 18 U.S.C. § 2258A]
-#[async_trait]
-pub trait ThornAdapter: Send + Sync {
+```go
+// internal/safety/adapters/thorn.go
 
-    /// Scan an image/video for CSAM using PhotoDNA hash matching.
-    ///
-    /// Reads the file from S3 (via storage_key), computes PhotoDNA hash,
-    /// and checks against NCMEC's known CSAM hash database.
-    async fn scan_csam(
-        &self,
-        storage_key: &str,
-    ) -> Result<CsamScanResult, ThornError>;
+// ThornAdapter wraps the Thorn Safer API for CSAM detection and NCMEC reporting.
+//
+// Thorn Safer provides:
+// 1. PhotoDNA hash matching against NCMEC's hash database
+// 2. Automated NCMEC CyberTipline report submission
+//
+// [ARCH §2.13, S§12.1, 18 U.S.C. § 2258A]
+type ThornAdapter interface {
+    // ScanCsam scans an image/video for CSAM using PhotoDNA hash matching.
+    // Reads the file from S3 (via storageKey), computes PhotoDNA hash,
+    // and checks against NCMEC's known CSAM hash database.
+    ScanCsam(ctx context.Context, storageKey string) (*CsamScanResult, error)
 
-    /// Submit a CyberTipline report to NCMEC.
-    ///
-    /// Required by federal law (18 U.S.C. § 2258A) when CSAM is detected.
-    /// Includes: file hash, upload metadata, uploader info, evidence URL.
-    async fn submit_ncmec_report(
-        &self,
-        report: NcmecReportPayload,
-    ) -> Result<NcmecSubmissionResult, ThornError>;
+    // SubmitNcmecReport submits a CyberTipline report to NCMEC.
+    // Required by federal law (18 U.S.C. § 2258A) when CSAM is detected.
+    // Includes: file hash, upload metadata, uploader info, evidence URL.
+    SubmitNcmecReport(ctx context.Context, report NcmecReportPayload) (*NcmecSubmissionResult, error)
 }
 
-/// Configuration for Thorn Safer adapter.
-pub struct ThornConfig {
-    pub api_url: String,          // THORN_API_URL
-    pub api_key: String,          // THORN_API_KEY (secret)
+// ThornConfig holds configuration for Thorn Safer adapter.
+type ThornConfig struct {
+    APIUrl string // THORN_API_URL
+    APIKey string // THORN_API_KEY (secret)
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum ThornError {
-    #[error("Thorn API unavailable")]
-    Unavailable,
-    #[error("Thorn API error: {0}")]
-    ApiError(String),
-    #[error("NCMEC submission failed: {0}")]
-    NcmecSubmissionFailed(String),
-}
+// Thorn adapter errors.
+var (
+    ErrThornUnavailable        = errors.New("thorn API unavailable")
+    ErrThornAPI                = errors.New("thorn API error")
+    ErrNcmecSubmissionFailed   = errors.New("NCMEC submission failed")
+)
 ```
 
 ### §7.2 RekognitionAdapter (Content Moderation)
@@ -1151,51 +919,45 @@ pub enum ThornError {
 Wraps AWS Rekognition's `DetectModerationLabels` API for general content moderation
 (explicit content, violence, etc. — NOT CSAM). `[ARCH §2.13, S§12.2]`
 
-Adapter file: `src/safety/adapters/rekognition.rs`
+Adapter file: `internal/safety/adapters/rekognition.go`
 
-```rust
-/// AWS Rekognition adapter for content moderation.
-///
-/// Thin wrapper around DetectModerationLabels. Returns ALL raw labels from
-/// Rekognition without filtering — including categories the platform ignores
-/// (drugs, hate symbols, weapons). Label routing (which labels trigger
-/// auto-reject vs. flag vs. ignore) is handled by SafetyScanBridge (§11.2.2).
-///
-/// Rekognition returns labels for:
-/// - Explicit/suggestive content → routed by bridge (auto-reject or flag)
-/// - Violence/graphic content → routed by bridge (flag for review)
-/// - Drugs/tobacco/alcohol → ignored by bridge (educational content)
-/// - Hate symbols → ignored by bridge (educational content)
-/// - Weapons → ignored by bridge (educational content)
-///
-/// Does NOT handle CSAM detection — that is ThornAdapter's responsibility.
-/// [ARCH §2.13, S§12.2]
-#[async_trait]
-pub trait RekognitionAdapter: Send + Sync {
+```go
+// internal/safety/adapters/rekognition.go
 
-    /// Detect moderation labels in an image.
-    ///
-    /// Returns labels with confidence scores. The caller decides the
-    /// threshold for flagging (configurable via SafetyConfig).
-    async fn detect_moderation_labels(
-        &self,
-        storage_key: &str,
-    ) -> Result<ModerationResult, RekognitionError>;
+// RekognitionAdapter wraps AWS Rekognition's DetectModerationLabels API for content moderation.
+//
+// Thin wrapper around DetectModerationLabels. Returns ALL raw labels from
+// Rekognition without filtering — including categories the platform ignores
+// (drugs, hate symbols, weapons). Label routing (which labels trigger
+// auto-reject vs. flag vs. ignore) is handled by SafetyScanBridge (§11.2.2).
+//
+// Rekognition returns labels for:
+// - Explicit/suggestive content → routed by bridge (auto-reject or flag)
+// - Violence/graphic content → routed by bridge (flag for review)
+// - Drugs/tobacco/alcohol → ignored by bridge (educational content)
+// - Hate symbols → ignored by bridge (educational content)
+// - Weapons → ignored by bridge (educational content)
+//
+// Does NOT handle CSAM detection — that is ThornAdapter's responsibility.
+// [ARCH §2.13, S§12.2]
+type RekognitionAdapter interface {
+    // DetectModerationLabels detects moderation labels in an image.
+    // Returns labels with confidence scores. The caller decides the
+    // threshold for flagging (configurable via SafetyConfig).
+    DetectModerationLabels(ctx context.Context, storageKey string) (*ModerationResult, error)
 }
 
-/// Configuration for Rekognition adapter.
-pub struct RekognitionConfig {
-    pub region: String,            // AWS_REGION
-    pub min_confidence: f64,       // minimum confidence threshold (default: 70.0)
+// RekognitionConfig holds configuration for Rekognition adapter.
+type RekognitionConfig struct {
+    Region        string  // AWS_REGION
+    MinConfidence float64 // minimum confidence threshold (default: 70.0)
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum RekognitionError {
-    #[error("Rekognition unavailable")]
-    Unavailable,
-    #[error("Rekognition error: {0}")]
-    ApiError(String),
-}
+// Rekognition adapter errors.
+var (
+    ErrRekognitionUnavailable = errors.New("rekognition unavailable")
+    ErrRekognitionAPI         = errors.New("rekognition API error")
+)
 ```
 
 ### §7.3 SafetyScanAdapter Implementation
@@ -1204,54 +966,46 @@ pub enum RekognitionError {
 the `ProcessUploadJob` pipeline. This adapter bridges `media::`'s port with `safety::`'s
 Thorn and Rekognition adapters. `[09-media §7.2]`
 
-```rust
-/// Implementation of media::SafetyScanAdapter.
-///
-/// Bridges media::'s scan port with safety::'s Thorn and Rekognition adapters.
-/// Lives in src/safety/adapters/scan_bridge.rs
-pub struct SafetyScanBridge {
-    thorn: Arc<dyn ThornAdapter>,
-    rekognition: Arc<dyn RekognitionAdapter>,
-    safety_service: Arc<dyn SafetyService>,
+```go
+// internal/safety/adapters/scan_bridge.go
+
+// SafetyScanBridge implements media.SafetyScanAdapter.
+// Bridges media's scan port with safety's Thorn and Rekognition adapters.
+type SafetyScanBridge struct {
+    thorn         ThornAdapter
+    rekognition   RekognitionAdapter
+    safetyService SafetyService
+    config        SafetyConfig
 }
 
-#[async_trait]
-impl SafetyScanAdapter for SafetyScanBridge {
-    async fn scan_csam(
-        &self,
-        storage_key: &str,
-    ) -> Result<CsamScanResult, ScanError> {
-        self.thorn.scan_csam(storage_key).await
-            .map_err(|e| ScanError::Failed(e.to_string()))
+// ScanCsam implements media.SafetyScanAdapter.
+func (b *SafetyScanBridge) ScanCsam(ctx context.Context, storageKey string) (*CsamScanResult, error) {
+    return b.thorn.ScanCsam(ctx, storageKey)
+}
+
+// ScanModeration implements media.SafetyScanAdapter.
+func (b *SafetyScanBridge) ScanModeration(ctx context.Context, storageKey string) (*ModerationResult, error) {
+    // 1. Get raw labels from Rekognition (all categories, unfiltered)
+    rawResult, err := b.rekognition.DetectModerationLabels(ctx, storageKey)
+    if err != nil {
+        return nil, fmt.Errorf("rekognition scan failed: %w", err)
     }
 
-    async fn scan_moderation(
-        &self,
-        storage_key: &str,
-    ) -> Result<ModerationResult, ScanError> {
-        // 1. Get raw labels from Rekognition (all categories, unfiltered)
-        let raw_result = self.rekognition.detect_moderation_labels(storage_key).await
-            .map_err(|e| ScanError::Failed(e.to_string()))?;
+    // 2. Apply platform's label routing table (§11.2.2)
+    //    - Nudity/explicit → AutoReject = true
+    //    - Suggestive/violence → HasViolations = true, priority set
+    //    - Drugs/hate/weapons → discarded (ignored categories)
+    //    - Underage + sexual → critical priority
+    return applyLabelRouting(rawResult.Labels, &b.config), nil
+}
 
-        // 2. Apply platform's label routing table (§11.2.2)
-        //    - Nudity/explicit → auto_reject = true
-        //    - Suggestive/violence → has_violations = true, priority set
-        //    - Drugs/hate/weapons → discarded (ignored categories)
-        //    - Underage + sexual → critical priority
-        Ok(apply_label_routing(raw_result.labels, &self.config))
-    }
-
-    async fn report_csam(
-        &self,
-        upload_id: Uuid,
-        scan_result: &CsamScanResult,
-    ) -> Result<(), ScanError> {
-        // Delegates to SafetyService::handle_csam_detection()
-        // which handles NCMEC filing, evidence preservation, and account ban.
-        // family_id is looked up from the upload record.
-        // This method is called from media::ProcessUploadJob when CSAM is detected.
-        todo!("Implementation delegates to safety_service.handle_csam_detection()")
-    }
+// ReportCsam implements media.SafetyScanAdapter.
+func (b *SafetyScanBridge) ReportCsam(ctx context.Context, uploadID uuid.UUID, scanResult *CsamScanResult) error {
+    // Delegates to SafetyService.HandleCsamDetection()
+    // which handles NCMEC filing, evidence preservation, and account ban.
+    // familyID is looked up from the upload record.
+    // This method is called from media.ProcessUploadJob when CSAM is detected.
+    panic("not implemented: delegates to safetyService.HandleCsamDetection()")
 }
 ```
 
@@ -1261,282 +1015,251 @@ impl SafetyScanAdapter for SafetyScanBridge {
 
 ### §8.1 Request Types
 
-```rust
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateReportCommand {
-    pub target_type: String,
-    pub target_id: Uuid,
-    #[validate(length(max = 2000))]
-    pub description: Option<String>,
-    pub category: String,
+```go
+// internal/safety/models.go
+
+type CreateReportCommand struct {
+    TargetType  string     `json:"target_type" validate:"required"`
+    TargetID    uuid.UUID  `json:"target_id" validate:"required"`
+    Description *string    `json:"description,omitempty" validate:"omitempty,max=2000"`
+    Category    string     `json:"category" validate:"required"`
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateAppealCommand {
-    pub action_id: Uuid,
-    #[validate(length(min = 10, max = 5000))]
-    pub appeal_text: String,
+type CreateAppealCommand struct {
+    ActionID   uuid.UUID `json:"action_id" validate:"required"`
+    AppealText string    `json:"appeal_text" validate:"required,min=10,max=5000"`
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateModActionCommand {
-    pub target_family_id: Uuid,
-    pub target_parent_id: Option<Uuid>,
-    pub action_type: String,
-    #[validate(length(min = 5, max = 2000))]
-    pub reason: String,
-    pub report_id: Option<Uuid>,
-    pub suspension_days: Option<i32>,
+type CreateModActionCommand struct {
+    TargetFamilyID uuid.UUID  `json:"target_family_id" validate:"required"`
+    TargetParentID *uuid.UUID `json:"target_parent_id,omitempty"`
+    ActionType     string     `json:"action_type" validate:"required"`
+    Reason         string     `json:"reason" validate:"required,min=5,max=2000"`
+    ReportID       *uuid.UUID `json:"report_id,omitempty"`
+    SuspensionDays *int32     `json:"suspension_days,omitempty"`
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct SuspendAccountCommand {
-    #[validate(length(min = 5, max = 2000))]
-    pub reason: String,
-    #[validate(range(min = 1, max = 365))]
-    pub suspension_days: i32,
-    pub report_id: Option<Uuid>,
+type SuspendAccountCommand struct {
+    Reason         string     `json:"reason" validate:"required,min=5,max=2000"`
+    SuspensionDays int32      `json:"suspension_days" validate:"required,min=1,max=365"`
+    ReportID       *uuid.UUID `json:"report_id,omitempty"`
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct BanAccountCommand {
-    #[validate(length(min = 5, max = 2000))]
-    pub reason: String,
-    pub report_id: Option<Uuid>,
+type BanAccountCommand struct {
+    Reason   string     `json:"reason" validate:"required,min=5,max=2000"`
+    ReportID *uuid.UUID `json:"report_id,omitempty"`
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct LiftSuspensionCommand {
-    #[validate(length(min = 5, max = 2000))]
-    pub reason: String,
+type LiftSuspensionCommand struct {
+    Reason string `json:"reason" validate:"required,min=5,max=2000"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdateReportCommand {
-    pub assigned_admin_id: Option<Uuid>,
-    pub status: Option<String>,
+type UpdateReportCommand struct {
+    AssignedAdminID *uuid.UUID `json:"assigned_admin_id,omitempty"`
+    Status          *string    `json:"status,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct ReviewFlagCommand {
-    pub action_taken: bool,
+type ReviewFlagCommand struct {
+    ActionTaken bool `json:"action_taken"`
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct ResolveAppealCommand {
-    pub status: String,       // "granted" or "denied"
-    #[validate(length(min = 5, max = 2000))]
-    pub resolution_text: String,
+type ResolveAppealCommand struct {
+    Status         string `json:"status" validate:"required"`         // "granted" or "denied"
+    ResolutionText string `json:"resolution_text" validate:"required,min=5,max=2000"`
 }
 
-/// Request to escalate flagged content to CSAM. [§11.4.1]
-/// Triggers the full §10 CSAM pipeline (evidence → NCMEC → ban → session revoke).
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct EscalateCsamCommand {
-    #[validate(length(min = 5, max = 2000))]
-    pub admin_notes: String,  // required justification for audit trail
+// EscalateCsamCommand requests escalation of flagged content to CSAM. [§11.4.1]
+// Triggers the full §10 CSAM pipeline (evidence → NCMEC → ban → session revoke).
+type EscalateCsamCommand struct {
+    AdminNotes string `json:"admin_notes" validate:"required,min=5,max=2000"` // required justification for audit trail
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReportResponse {
-    pub id: Uuid,
-    pub target_type: String,
-    pub category: String,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
+```go
+type ReportResponse struct {
+    ID         uuid.UUID `json:"id"`
+    TargetType string    `json:"target_type"`
+    Category   string    `json:"category"`
+    Status     string    `json:"status"`
+    CreatedAt  time.Time `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct AdminReportResponse {
-    pub id: Uuid,
-    pub reporter_family_id: Uuid,
-    pub target_type: String,
-    pub target_id: Uuid,
-    pub target_family_id: Option<Uuid>,
-    pub category: String,
-    pub description: Option<String>,
-    pub priority: String,
-    pub status: String,
-    pub assigned_admin_id: Option<Uuid>,
-    pub resolved_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+type AdminReportResponse struct {
+    ID              uuid.UUID  `json:"id"`
+    ReporterFamilyID uuid.UUID `json:"reporter_family_id"`
+    TargetType      string     `json:"target_type"`
+    TargetID        uuid.UUID  `json:"target_id"`
+    TargetFamilyID  *uuid.UUID `json:"target_family_id,omitempty"`
+    Category        string     `json:"category"`
+    Description     *string    `json:"description,omitempty"`
+    Priority        string     `json:"priority"`
+    Status          string     `json:"status"`
+    AssignedAdminID *uuid.UUID `json:"assigned_admin_id,omitempty"`
+    ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+    CreatedAt       time.Time  `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ContentFlagResponse {
-    pub id: Uuid,
-    pub source: String,
-    pub target_type: String,
-    pub target_id: Uuid,
-    pub flag_type: String,
-    pub confidence: Option<f64>,
-    pub labels: Option<serde_json::Value>,
-    pub reviewed: bool,
-    pub reviewed_by: Option<Uuid>,
-    pub action_taken: Option<bool>,
-    pub created_at: DateTime<Utc>,
+type ContentFlagResponse struct {
+    ID          uuid.UUID        `json:"id"`
+    Source      string           `json:"source"`
+    TargetType  string           `json:"target_type"`
+    TargetID    uuid.UUID        `json:"target_id"`
+    FlagType    string           `json:"flag_type"`
+    Confidence  *float64         `json:"confidence,omitempty"`
+    Labels      json.RawMessage  `json:"labels,omitempty"`
+    Reviewed    bool             `json:"reviewed"`
+    ReviewedBy  *uuid.UUID       `json:"reviewed_by,omitempty"`
+    ActionTaken *bool            `json:"action_taken,omitempty"`
+    CreatedAt   time.Time        `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ModActionResponse {
-    pub id: Uuid,
-    pub admin_id: Uuid,
-    pub target_family_id: Uuid,
-    pub target_parent_id: Option<Uuid>,
-    pub action_type: String,
-    pub reason: String,
-    pub report_id: Option<Uuid>,
-    pub suspension_days: Option<i32>,
-    pub suspension_expires_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+type ModActionResponse struct {
+    ID                 uuid.UUID  `json:"id"`
+    AdminID            uuid.UUID  `json:"admin_id"`
+    TargetFamilyID     uuid.UUID  `json:"target_family_id"`
+    TargetParentID     *uuid.UUID `json:"target_parent_id,omitempty"`
+    ActionType         string     `json:"action_type"`
+    Reason             string     `json:"reason"`
+    ReportID           *uuid.UUID `json:"report_id,omitempty"`
+    SuspensionDays     *int32     `json:"suspension_days,omitempty"`
+    SuspensionExpiresAt *time.Time `json:"suspension_expires_at,omitempty"`
+    CreatedAt          time.Time  `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct AccountStatusResponse {
-    pub status: String,
-    pub suspended_at: Option<DateTime<Utc>>,
-    pub suspension_expires_at: Option<DateTime<Utc>>,
-    pub suspension_reason: Option<String>,
+type AccountStatusResponse struct {
+    Status              string     `json:"status"`
+    SuspendedAt         *time.Time `json:"suspended_at,omitempty"`
+    SuspensionExpiresAt *time.Time `json:"suspension_expires_at,omitempty"`
+    SuspensionReason    *string    `json:"suspension_reason,omitempty"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct AdminAccountStatusResponse {
-    pub family_id: Uuid,
-    pub status: String,
-    pub suspended_at: Option<DateTime<Utc>>,
-    pub suspension_expires_at: Option<DateTime<Utc>>,
-    pub suspension_reason: Option<String>,
-    pub banned_at: Option<DateTime<Utc>>,
-    pub ban_reason: Option<String>,
-    pub action_history: Vec<ModActionResponse>,
+type AdminAccountStatusResponse struct {
+    FamilyID            uuid.UUID           `json:"family_id"`
+    Status              string              `json:"status"`
+    SuspendedAt         *time.Time          `json:"suspended_at,omitempty"`
+    SuspensionExpiresAt *time.Time          `json:"suspension_expires_at,omitempty"`
+    SuspensionReason    *string             `json:"suspension_reason,omitempty"`
+    BannedAt            *time.Time          `json:"banned_at,omitempty"`
+    BanReason           *string             `json:"ban_reason,omitempty"`
+    ActionHistory       []ModActionResponse `json:"action_history"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct AppealResponse {
-    pub id: Uuid,
-    pub action_id: Uuid,
-    pub status: String,
-    pub appeal_text: String,
-    pub resolution_text: Option<String>,
-    pub resolved_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+type AppealResponse struct {
+    ID             uuid.UUID  `json:"id"`
+    ActionID       uuid.UUID  `json:"action_id"`
+    Status         string     `json:"status"`
+    AppealText     string     `json:"appeal_text"`
+    ResolutionText *string    `json:"resolution_text,omitempty"`
+    ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+    CreatedAt      time.Time  `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct AdminAppealResponse {
-    pub id: Uuid,
-    pub family_id: Uuid,
-    pub action_id: Uuid,
-    pub original_action: ModActionResponse,
-    pub appeal_text: String,
-    pub status: String,
-    pub assigned_admin_id: Option<Uuid>,
-    pub resolution_text: Option<String>,
-    pub resolved_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+type AdminAppealResponse struct {
+    ID              uuid.UUID         `json:"id"`
+    FamilyID        uuid.UUID         `json:"family_id"`
+    ActionID        uuid.UUID         `json:"action_id"`
+    OriginalAction  ModActionResponse `json:"original_action"`
+    AppealText      string            `json:"appeal_text"`
+    Status          string            `json:"status"`
+    AssignedAdminID *uuid.UUID        `json:"assigned_admin_id,omitempty"`
+    ResolutionText  *string           `json:"resolution_text,omitempty"`
+    ResolvedAt      *time.Time        `json:"resolved_at,omitempty"`
+    CreatedAt       time.Time         `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct DashboardStats {
-    pub pending_reports: i64,
-    pub critical_reports: i64,
-    pub unreviewed_flags: i64,
-    pub pending_appeals: i64,
-    pub active_suspensions: i64,
-    pub active_bans: i64,
-    pub reports_last_24h: i64,
-    pub actions_last_24h: i64,
+type DashboardStats struct {
+    PendingReports    int64 `json:"pending_reports"`
+    CriticalReports   int64 `json:"critical_reports"`
+    UnreviewedFlags   int64 `json:"unreviewed_flags"`
+    PendingAppeals    int64 `json:"pending_appeals"`
+    ActiveSuspensions int64 `json:"active_suspensions"`
+    ActiveBans        int64 `json:"active_bans"`
+    ReportsLast24h    int64 `json:"reports_last_24h"`
+    ActionsLast24h    int64 `json:"actions_last_24h"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct TextScanResult {
-    pub has_violations: bool,
-    pub matched_terms: Vec<String>,
-    pub severity: String,          // "none", "low", "high", "critical"
+type TextScanResult struct {
+    HasViolations bool     `json:"has_violations"`
+    MatchedTerms  []string `json:"matched_terms"`
+    Severity      string   `json:"severity"` // "none", "low", "high", "critical"
 }
 ```
 
 ### §8.3 Filter Types
 
-```rust
-#[derive(Debug, Deserialize)]
-pub struct ReportFilter {
-    pub status: Option<String>,
-    pub priority: Option<String>,
-    pub category: Option<String>,
-    pub assigned_admin_id: Option<Uuid>,
+```go
+type ReportFilter struct {
+    Status          *string    `query:"status"`
+    Priority        *string    `query:"priority"`
+    Category        *string    `query:"category"`
+    AssignedAdminID *uuid.UUID `query:"assigned_admin_id"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct FlagFilter {
-    pub reviewed: Option<bool>,
-    pub flag_type: Option<String>,
-    pub target_type: Option<String>,
+type FlagFilter struct {
+    Reviewed   *bool   `query:"reviewed"`
+    FlagType   *string `query:"flag_type"`
+    TargetType *string `query:"target_type"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ActionFilter {
-    pub admin_id: Option<Uuid>,
-    pub target_family_id: Option<Uuid>,
-    pub action_type: Option<String>,
+type ActionFilter struct {
+    AdminID        *uuid.UUID `query:"admin_id"`
+    TargetFamilyID *uuid.UUID `query:"target_family_id"`
+    ActionType     *string    `query:"action_type"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct AppealFilter {
-    pub status: Option<String>,
+type AppealFilter struct {
+    Status *string `query:"status"`
 }
 ```
 
 ### §8.4 Internal / Adapter Types
 
-```rust
-/// CSAM scan result from Thorn Safer (shared with media::).
-/// Defined authoritatively in media::models (09-media §8.3).
-/// Re-exported here for convenience.
-pub use crate::media::models::{CsamScanResult, ModerationResult, ModerationLabel};
+```go
+// CSAM scan result from Thorn Safer (shared with media package).
+// Defined authoritatively in internal/media/models.go (09-media §8.3).
+// Imported here: media.CsamScanResult, media.ModerationResult, media.ModerationLabel
 
-/// NCMEC report payload for Thorn Safer submission.
-pub struct NcmecReportPayload {
-    pub upload_id: Uuid,
-    pub csam_hash: Option<String>,
-    pub confidence: Option<f64>,
-    pub matched_database: Option<String>,
-    pub evidence_storage_key: String,
-    pub uploader_family_id: Uuid,
-    pub uploader_parent_id: Uuid,
-    pub upload_timestamp: DateTime<Utc>,
+// NcmecReportPayload is the payload for Thorn Safer NCMEC submission.
+type NcmecReportPayload struct {
+    UploadID           uuid.UUID `json:"upload_id"`
+    CsamHash           *string   `json:"csam_hash,omitempty"`
+    Confidence         *float64  `json:"confidence,omitempty"`
+    MatchedDatabase    *string   `json:"matched_database,omitempty"`
+    EvidenceStorageKey string    `json:"evidence_storage_key"`
+    UploaderFamilyID   uuid.UUID `json:"uploader_family_id"`
+    UploaderParentID   uuid.UUID `json:"uploader_parent_id"`
+    UploadTimestamp    time.Time `json:"upload_timestamp"`
 }
 
-/// NCMEC submission result from Thorn Safer.
-pub struct NcmecSubmissionResult {
-    pub ncmec_report_id: String,
-    pub submitted_at: DateTime<Utc>,
+// NcmecSubmissionResult is the result from a Thorn Safer NCMEC submission.
+type NcmecSubmissionResult struct {
+    NcmecReportID string    `json:"ncmec_report_id"`
+    SubmittedAt   time.Time `json:"submitted_at"`
 }
 
-/// Bot signal type enum.
-#[derive(Debug, Clone, Copy)]
-pub enum BotSignalType {
-    RapidPosting,
-    MassFriendRequests,
-    RepetitiveContent,
-    SuspiciousRegistration,
-    RateLimitExceeded,
-}
+// BotSignalType enumerates bot signal types.
+type BotSignalType string
 
-/// Safety configuration.
-pub struct SafetyConfig {
-    pub rekognition_min_confidence: f64,      // default: 70.0
-    pub nudity_auto_reject_labels: Vec<String>, // labels that trigger auto-rejection (§11.2.1)
-                                              // default: ["Explicit Nudity", "Nudity",
-                                              //           "Graphic Male Nudity", "Graphic Female Nudity"]
-    pub bot_signal_threshold: i64,            // signals in window before auto-suspend (default: 5)
-    pub bot_signal_window_minutes: u32,       // time window for signal counting (default: 60)
-    pub text_scan_word_list_redis_key: String, // Redis key for keyword list
-    pub account_status_cache_ttl_seconds: u64, // Redis cache TTL (default: 60)
+const (
+    BotSignalRapidPosting          BotSignalType = "rapid_posting"
+    BotSignalMassFriendRequests    BotSignalType = "mass_friend_requests"
+    BotSignalRepetitiveContent     BotSignalType = "repetitive_content"
+    BotSignalSuspiciousRegistration BotSignalType = "suspicious_registration"
+    BotSignalRateLimitExceeded     BotSignalType = "rate_limit_exceeded"
+)
+
+// SafetyConfig holds safety domain configuration.
+type SafetyConfig struct {
+    RekognitionMinConfidence     float64  // default: 70.0
+    NudityAutoRejectLabels       []string // labels that trigger auto-rejection (§11.2.1)
+                                          // default: ["Explicit Nudity", "Nudity",
+                                          //           "Graphic Male Nudity", "Graphic Female Nudity"]
+    BotSignalThreshold           int64    // signals in window before auto-suspend (default: 5)
+    BotSignalWindowMinutes       uint32   // time window for signal counting (default: 60)
+    TextScanWordListRedisKey     string   // Redis key for keyword list
+    AccountStatusCacheTTLSeconds uint64   // Redis cache TTL (default: 60)
 }
 ```
 
@@ -1546,7 +1269,7 @@ pub struct SafetyConfig {
 
 ### §9.1 Design
 
-`RequireAdmin` is a new Axum extractor defined in `00-core` (`src/middleware/extractors.rs`)
+`RequireAdmin` is Echo middleware defined in `00-core` (`internal/shared/middleware/`)
 that verifies the authenticated user has platform administrator privileges. It is backed by a
 new `is_platform_admin` boolean field on `iam_parents` and a corresponding field in
 `AuthContext`. `[S§3.1.5]`
@@ -1559,7 +1282,7 @@ critical path — requires admin endpoints for the moderation dashboard.
 **00-core changes** (specified in updated `00-core.md` alongside this spec):
 
 1. Add `is_platform_admin: bool` field to `AuthContext` (§7.2)
-2. Add `RequireAdmin` extractor to `src/middleware/extractors.rs` (§13.3)
+2. Add `RequireAdmin` middleware to `internal/shared/middleware/` (§13.3)
 3. Add `AccountSuspended` and `AccountBanned` variants to `AppError` (§6.1)
 4. Add safety access check to auth middleware (§13.1, step 5.5)
 
@@ -1569,35 +1292,27 @@ critical path — requires admin endpoints for the moderation dashboard.
 2. Populate `is_platform_admin` in auth middleware DB lookup
 3. Expose `revoke_sessions(kratos_identity_id)` on `KratosAdapter` trait
 
-### §9.3 Extractor Definition (in 00-core §13.3)
+### §9.3 Middleware Definition (in 00-core §13.3)
 
-```rust
-/// Extracts AuthContext and verifies the user is a platform administrator.
-/// Returns 403 Forbidden if the user is not an admin. [S§3.1.5]
-pub struct RequireAdmin(pub AuthContext);
+```go
+// internal/shared/middleware/require_admin.go
 
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for RequireAdmin
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
+// RequireAdmin returns Echo middleware that verifies the user is a platform administrator.
+// Returns 403 Forbidden if the user is not an admin. [S§3.1.5]
+func RequireAdmin() echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            auth, ok := c.Get("auth").(*shared.AuthContext)
+            if !ok || auth == nil {
+                return shared.ErrUnauthorized
+            }
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth = parts
-            .extensions
-            .get::<AuthContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)?;
+            if !auth.IsPlatformAdmin {
+                return shared.ErrForbidden
+            }
 
-        if !auth.is_platform_admin {
-            return Err(AppError::Forbidden);
+            return next(c)
         }
-
-        Ok(RequireAdmin(auth))
     }
 }
 ```
@@ -1674,55 +1389,53 @@ in the media status state machine `[09-media §3.1]`.
 
 The `CsamReportJob` (Critical queue) handles the actual NCMEC CyberTipline submission:
 
-```rust
-/// Background job: submit CSAM report to NCMEC via Thorn Safer.
-/// Critical queue — target processing within 30 seconds. [ARCH §12.2]
-pub struct CsamReportJob {
-    pub ncmec_report_id: Uuid,
+```go
+// internal/safety/jobs.go
+
+// CsamReportJob submits CSAM report to NCMEC via Thorn Safer.
+// Critical queue — target processing within 30 seconds. [ARCH §12.2]
+type CsamReportJob struct {
+    NcmecReportID uuid.UUID `json:"ncmec_report_id"`
 }
 
-impl CsamReportJob {
-    async fn perform(&self, state: &AppState) -> Result<(), JobError> {
-        let report = state.ncmec_repo.find_by_id(self.ncmec_report_id).await?;
-
-        let result = state.thorn.submit_ncmec_report(NcmecReportPayload {
-            upload_id: report.upload_id,
-            csam_hash: report.csam_hash.clone(),
-            confidence: report.confidence,
-            matched_database: report.matched_database.clone(),
-            evidence_storage_key: report.evidence_storage_key.clone(),
-            uploader_family_id: report.family_id,
-            uploader_parent_id: report.parent_id,
-            upload_timestamp: report.created_at,
-        }).await;
-
-        match result {
-            Ok(submission) => {
-                state.ncmec_repo.update_status(
-                    self.ncmec_report_id,
-                    "submitted",
-                    Some(&submission.ncmec_report_id),
-                    None,
-                ).await?;
-            }
-            Err(err) => {
-                tracing::error!(
-                    ncmec_report_id = %self.ncmec_report_id,
-                    error = %err,
-                    "NCMEC submission failed — will retry"
-                );
-                state.ncmec_repo.update_status(
-                    self.ncmec_report_id,
-                    "failed",
-                    None,
-                    Some(&err.to_string()),
-                ).await?;
-                return Err(JobError::Retryable(err.to_string()));
-            }
-        }
-
-        Ok(())
+func (j *CsamReportJob) ProcessTask(ctx context.Context, state *AppState) error {
+    report, err := state.NcmecRepo.FindByID(ctx, j.NcmecReportID)
+    if err != nil {
+        return fmt.Errorf("find ncmec report: %w", err)
     }
+
+    submission, err := state.Thorn.SubmitNcmecReport(ctx, NcmecReportPayload{
+        UploadID:           report.UploadID,
+        CsamHash:           report.CsamHash,
+        Confidence:         report.Confidence,
+        MatchedDatabase:    report.MatchedDatabase,
+        EvidenceStorageKey: report.EvidenceStorageKey,
+        UploaderFamilyID:   report.FamilyID,
+        UploaderParentID:   report.ParentID,
+        UploadTimestamp:    report.CreatedAt,
+    })
+
+    if err != nil {
+        slog.Error("NCMEC submission failed — will retry",
+            "ncmec_report_id", j.NcmecReportID,
+            "error", err,
+        )
+        errMsg := err.Error()
+        if _, updateErr := state.NcmecRepo.UpdateStatus(
+            ctx, j.NcmecReportID, "failed", nil, &errMsg,
+        ); updateErr != nil {
+            slog.Error("failed to update ncmec report status", "error", updateErr)
+        }
+        return fmt.Errorf("ncmec submission retryable: %w", err)
+    }
+
+    if _, err := state.NcmecRepo.UpdateStatus(
+        ctx, j.NcmecReportID, "submitted", &submission.NcmecReportID, nil,
+    ); err != nil {
+        return fmt.Errorf("update ncmec report status: %w", err)
+    }
+
+    return nil
 }
 ```
 
@@ -1788,37 +1501,37 @@ CSAM-associated accounts are immediately and permanently banned `[S§12.1]`:
 Phase 1 uses keyword + regex matching for synchronous text screening. This avoids external
 API call latency while providing basic protection. `[S§12.2]`
 
-```rust
-/// Synchronous text scanner. Called by social::, mkt::, and learn:: before persisting
-/// user-generated text content (posts, comments, messages, reviews, question text,
-/// answer text, quiz titles/descriptions, sequence titles/descriptions).
-///
-/// Phase 1: Redis-cached keyword list + regex patterns.
-/// Phase 2: AWS Comprehend for ML-based detection.
-pub struct TextScanner {
-    redis: RedisPool,
-    config: SafetyConfig,
+```go
+// internal/safety/text_scanner.go
+
+// TextScanner performs synchronous text scanning. Called by social, mkt, and learn
+// before persisting user-generated text content (posts, comments, messages, reviews,
+// question text, answer text, quiz titles/descriptions, sequence titles/descriptions).
+//
+// Phase 1: Redis-cached keyword list + regex patterns.
+// Phase 2: AWS Comprehend for ML-based detection.
+type TextScanner struct {
+    redis  *redis.Client
+    config SafetyConfig
 }
 
-impl TextScanner {
-    /// Scan text against keyword list and regex patterns.
-    ///
-    /// Word lists are stored in Redis as a sorted set at the key
-    /// specified by SafetyConfig::text_scan_word_list_redis_key.
-    /// Lists are loaded at startup and refreshed via admin API.
-    ///
-    /// Returns TextScanResult with severity:
-    /// - "none": no matches
-    /// - "low": soft matches (may be false positives) — log only
-    /// - "high": definite policy violations — block + flag
-    /// - "critical": child safety terms — block + flag + escalate
-    pub async fn scan(&self, text: &str) -> Result<TextScanResult, AppError> {
-        // 1. Normalize text (lowercase, strip diacritics, collapse whitespace)
-        // 2. Check against keyword list (O(n) scan, n = term count)
-        // 3. Check against regex patterns (compiled at startup)
-        // 4. Return aggregated result with matched terms
-        todo!()
-    }
+// Scan checks text against keyword list and regex patterns.
+//
+// Word lists are stored in Redis as a sorted set at the key
+// specified by SafetyConfig.TextScanWordListRedisKey.
+// Lists are loaded at startup and refreshed via admin API.
+//
+// Returns TextScanResult with severity:
+// - "none": no matches
+// - "low": soft matches (may be false positives) — log only
+// - "high": definite policy violations — block + flag
+// - "critical": child safety terms — block + flag + escalate
+func (s *TextScanner) Scan(ctx context.Context, text string) (*TextScanResult, error) {
+    // 1. Normalize text (lowercase, strip diacritics, collapse whitespace)
+    // 2. Check against keyword list (O(n) scan, n = term count)
+    // 3. Check against regex patterns (compiled at startup)
+    // 4. Return aggregated result with matched terms
+    panic("not implemented")
 }
 ```
 
@@ -1900,64 +1613,70 @@ returns raw labels without filtering. `[09-media §7.2, §8.3]`
 
 **Routing logic** (`SafetyScanBridge::scan_moderation()`):
 
-```rust
-// Pseudocode — actual implementation follows Rust patterns
-fn apply_label_routing(
-    raw_labels: Vec<ModerationLabel>,
-    config: &SafetyConfig,
-) -> ModerationResult {
-    let mut auto_reject = false;
-    let mut has_violations = false;
-    let mut priority: Option<String> = None;
-    let mut kept_labels = Vec::new();
+```go
+// Pseudocode — actual implementation follows Go patterns
+func applyLabelRouting(rawLabels []ModerationLabel, config *SafetyConfig) *ModerationResult {
+    autoReject := false
+    hasViolations := false
+    var priority *string
+    var keptLabels []ModerationLabel
 
-    let has_underage_indicator = raw_labels.iter().any(|l|
-        is_underage_label(&l.name) && l.confidence >= 50.0
-    );
+    hasUnderageIndicator := false
+    for _, l := range rawLabels {
+        if isUnderageLabel(l.Name) && l.Confidence >= 50.0 {
+            hasUnderageIndicator = true
+            break
+        }
+    }
 
-    for label in &raw_labels {
-        if is_ignored_category(&label.name) {
-            continue; // Drugs, hate symbols, weapons — skip entirely
+    for _, label := range rawLabels {
+        if isIgnoredCategory(label.Name) {
+            continue // Drugs, hate symbols, weapons — skip entirely
         }
 
-        if config.nudity_auto_reject_labels.contains(&label.name)
-            && label.confidence >= config.rekognition_min_confidence
-        {
-            auto_reject = true;
-            has_violations = true;
-            kept_labels.push(label.clone());
-        } else if is_suggestive(&label.name)
-            && label.confidence >= 80.0
-        {
-            has_violations = true;
-            kept_labels.push(label.clone());
+        if contains(config.NudityAutoRejectLabels, label.Name) &&
+            label.Confidence >= config.RekognitionMinConfidence {
+            autoReject = true
+            hasViolations = true
+            keptLabels = append(keptLabels, label)
+        } else if isSuggestive(label.Name) && label.Confidence >= 80.0 {
+            hasViolations = true
+            keptLabels = append(keptLabels, label)
             // Upgrade priority if underage indicators co-occur
-            if has_underage_indicator {
-                priority = Some("critical".into());
-            } else if priority.is_none() {
-                priority = Some("normal".into());
+            if hasUnderageIndicator {
+                p := "critical"
+                priority = &p
+            } else if priority == nil {
+                p := "normal"
+                priority = &p
             }
-        } else if is_violence(&label.name)
-            && label.confidence >= config.rekognition_min_confidence
-        {
-            has_violations = true;
-            kept_labels.push(label.clone());
-            if priority.is_none() {
-                priority = Some("normal".into());
+        } else if isViolence(label.Name) &&
+            label.Confidence >= config.RekognitionMinConfidence {
+            hasViolations = true
+            keptLabels = append(keptLabels, label)
+            if priority == nil {
+                p := "normal"
+                priority = &p
             }
         }
     }
 
     // Underage + any nudity label → critical even if auto-rejecting
-    if has_underage_indicator && has_violations && !auto_reject {
-        priority = Some("critical".into());
+    if hasUnderageIndicator && hasViolations && !autoReject {
+        p := "critical"
+        priority = &p
     }
 
-    ModerationResult {
-        has_violations,
-        auto_reject,
-        labels: kept_labels,
-        priority: if auto_reject { None } else { priority },
+    var resultPriority *string
+    if !autoReject {
+        resultPriority = priority
+    }
+
+    return &ModerationResult{
+        HasViolations: hasViolations,
+        AutoReject:    autoReject,
+        Labels:        keptLabels,
+        Priority:      resultPriority,
     }
 }
 ```
@@ -1967,7 +1686,7 @@ content is not auto-rejected), the resulting `safety_content_flags` record gets
 `flag_type = 'suspected_underage_exploitation'` and is routed to the top of the admin review
 queue at `critical` priority. This matches the CSAM report SLA: review within 24 hours.
 
-**Priority field on ModerationResult**: `priority: Option<String>` — `None` for auto-reject
+**Priority field on ModerationResult**: `Priority *string` — `nil` for auto-reject
 outcomes (rejected uploads don't enter the review queue), `Some("critical"|"high"|"normal")`
 for flagged items. The `UploadFlagged` event carries this priority through to the
 `safety_content_flags` record. `[09-media §16.3]`
@@ -2238,43 +1957,47 @@ registration.
 (default: 5) signals within `SafetyConfig::bot_signal_window_minutes` (default: 60 minutes),
 the account is automatically suspended pending review.
 
-```rust
-/// Called by other domains when suspicious behavior is detected.
-async fn record_bot_signal(
-    &self,
-    family_id: Uuid,
-    parent_id: Uuid,
-    signal: BotSignalType,
-    details: serde_json::Value,
-) -> Result<(), AppError> {
+```go
+// RecordBotSignal is called by other domains when suspicious behavior is detected.
+func (s *SafetyServiceImpl) RecordBotSignal(
+    ctx context.Context,
+    familyID uuid.UUID,
+    parentID uuid.UUID,
+    signal BotSignalType,
+    details json.RawMessage,
+) error {
     // 1. Create bot signal record
-    self.bot_signal_repo.create(CreateBotSignalRow {
-        family_id,
-        parent_id,
-        signal_type: signal.as_str(),
-        details,
-    }).await?;
-
-    // 2. Check threshold
-    let count = self.bot_signal_repo.count_recent(
-        parent_id,
-        self.config.bot_signal_window_minutes,
-    ).await?;
-
-    if count >= self.config.bot_signal_threshold {
-        // Auto-suspend pending review
-        self.admin_suspend_account(
-            &AuthContext::system(), // system-initiated
-            family_id,
-            SuspendAccountCommand {
-                reason: "Automated suspension: bot-like behavior detected".into(),
-                suspension_days: 1, // 24h pending manual review
-                report_id: None,
-            },
-        ).await?;
+    if _, err := s.botSignalRepo.Create(ctx, CreateBotSignalRow{
+        FamilyID:   familyID,
+        ParentID:   parentID,
+        SignalType:  string(signal),
+        Details:     details,
+    }); err != nil {
+        return fmt.Errorf("create bot signal: %w", err)
     }
 
-    Ok(())
+    // 2. Check threshold
+    count, err := s.botSignalRepo.CountRecent(ctx, parentID, s.config.BotSignalWindowMinutes)
+    if err != nil {
+        return fmt.Errorf("count recent signals: %w", err)
+    }
+
+    if count >= s.config.BotSignalThreshold {
+        // Auto-suspend pending review
+        if _, err := s.AdminSuspendAccount(
+            ctx,
+            shared.SystemAuthContext(), // system-initiated
+            familyID,
+            SuspendAccountCommand{
+                Reason:         "Automated suspension: bot-like behavior detected",
+                SuspensionDays: 1, // 24h pending manual review
+            },
+        ); err != nil {
+            return fmt.Errorf("auto-suspend account: %w", err)
+        }
+    }
+
+    return nil
 }
 ```
 
@@ -2340,60 +2063,25 @@ bridge — group admins report severe issues to platform moderators.
 
 ### §15.1 SafetyError Enum
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum SafetyError {
-    #[error("report not found")]
-    ReportNotFound,
+```go
+// internal/safety/errors.go
 
-    #[error("content flag not found")]
-    FlagNotFound,
-
-    #[error("moderation action not found")]
-    ActionNotFound,
-
-    #[error("appeal not found")]
-    AppealNotFound,
-
-    #[error("account status not found")]
-    AccountNotFound,
-
-    #[error("duplicate report within 24 hours")]
-    DuplicateReport,
-
-    #[error("appeal already exists for this action")]
-    AppealAlreadyExists,
-
-    #[error("CSAM bans are not appealable")]
-    CsamBanNotAppealable,
-
-    #[error("appeal reviewer must differ from original action admin")]
-    SameAdminAppeal,
-
-    #[error("invalid action type")]
-    InvalidActionType,
-
-    #[error("invalid report status transition")]
-    InvalidReportTransition,
-
-    #[error("flag already reviewed — cannot escalate")]
-    FlagAlreadyReviewed,
-
-    #[error("account is suspended")]
-    AccountSuspended,
-
-    #[error("account is banned")]
-    AccountBanned,
-
-    #[error("Thorn adapter error")]
-    ThornError(#[from] ThornError),
-
-    #[error("Rekognition adapter error")]
-    RekognitionError(#[from] RekognitionError),
-
-    #[error("database error")]
-    DatabaseError(#[from] sea_orm::DbErr),
-}
+var (
+    ErrReportNotFound          = errors.New("report not found")
+    ErrFlagNotFound            = errors.New("content flag not found")
+    ErrActionNotFound          = errors.New("moderation action not found")
+    ErrAppealNotFound          = errors.New("appeal not found")
+    ErrAccountNotFound         = errors.New("account status not found")
+    ErrDuplicateReport         = errors.New("duplicate report within 24 hours")
+    ErrAppealAlreadyExists     = errors.New("appeal already exists for this action")
+    ErrCsamBanNotAppealable    = errors.New("CSAM bans are not appealable")
+    ErrSameAdminAppeal         = errors.New("appeal reviewer must differ from original action admin")
+    ErrInvalidActionType       = errors.New("invalid action type")
+    ErrInvalidReportTransition = errors.New("invalid report status transition")
+    ErrFlagAlreadyReviewed     = errors.New("flag already reviewed — cannot escalate")
+    ErrAccountSuspended        = errors.New("account is suspended")
+    ErrAccountBanned           = errors.New("account is banned")
+)
 ```
 
 ### §15.2 Error-to-HTTP Mapping
@@ -2420,38 +2108,49 @@ pub enum SafetyError {
 
 ### §15.3 AppError Conversion
 
-```rust
-impl From<SafetyError> for AppError {
-    fn from(err: SafetyError) -> Self {
-        match err {
-            SafetyError::ReportNotFound
-            | SafetyError::FlagNotFound
-            | SafetyError::ActionNotFound
-            | SafetyError::AppealNotFound
-            | SafetyError::AccountNotFound => AppError::NotFound,
+```go
+// ToAppError maps safety domain errors to shared AppError responses.
+// Used in handlers to convert service errors to HTTP responses.
+func ToAppError(err error) *shared.AppError {
+    switch {
+    case errors.Is(err, ErrReportNotFound),
+         errors.Is(err, ErrFlagNotFound),
+         errors.Is(err, ErrActionNotFound),
+         errors.Is(err, ErrAppealNotFound),
+         errors.Is(err, ErrAccountNotFound):
+        return shared.NewNotFoundError()
 
-            SafetyError::DuplicateReport
-            | SafetyError::AppealAlreadyExists => AppError::Conflict(err.to_string()),
+    case errors.Is(err, ErrDuplicateReport),
+         errors.Is(err, ErrAppealAlreadyExists):
+        return shared.NewConflictError(err.Error())
 
-            SafetyError::CsamBanNotAppealable
-            | SafetyError::SameAdminAppeal
-            | SafetyError::InvalidActionType
-            | SafetyError::InvalidReportTransition
-            | SafetyError::FlagAlreadyReviewed => AppError::Validation(err.to_string()),
+    case errors.Is(err, ErrCsamBanNotAppealable),
+         errors.Is(err, ErrSameAdminAppeal),
+         errors.Is(err, ErrInvalidActionType),
+         errors.Is(err, ErrInvalidReportTransition),
+         errors.Is(err, ErrFlagAlreadyReviewed):
+        return shared.NewValidationError(err.Error())
 
-            SafetyError::AccountSuspended => AppError::AccountSuspended,
-            SafetyError::AccountBanned => AppError::AccountBanned,
+    case errors.Is(err, ErrAccountSuspended):
+        return shared.NewAccountSuspendedError()
 
-            SafetyError::ThornError(e) => {
-                tracing::error!(error = %e, "Thorn adapter error");
-                AppError::Internal(anyhow::anyhow!("safety scan error"))
-            }
-            SafetyError::RekognitionError(e) => {
-                tracing::error!(error = %e, "Rekognition adapter error");
-                AppError::Internal(anyhow::anyhow!("safety scan error"))
-            }
-            SafetyError::DatabaseError(e) => AppError::Database(e),
-        }
+    case errors.Is(err, ErrAccountBanned):
+        return shared.NewAccountBannedError()
+
+    case errors.Is(err, ErrThornUnavailable),
+         errors.Is(err, ErrThornAPI),
+         errors.Is(err, ErrNcmecSubmissionFailed):
+        slog.Error("Thorn adapter error", "error", err)
+        return shared.NewInternalError("safety scan error")
+
+    case errors.Is(err, ErrRekognitionUnavailable),
+         errors.Is(err, ErrRekognitionAPI):
+        slog.Error("Rekognition adapter error", "error", err)
+        return shared.NewInternalError("safety scan error")
+
+    default:
+        slog.Error("unexpected safety error", "error", err)
+        return shared.NewInternalError("internal error")
     }
 }
 ```
@@ -2486,69 +2185,66 @@ impl From<SafetyError> for AppError {
 
 ### §16.3 Events safety:: Publishes
 
-Defined in `src/safety/events.rs`. `[CODING §8.4]`
+Defined in `internal/safety/events.go`. `[CODING §8.4]`
 
-```rust
-// src/safety/events.rs
+```go
+// internal/safety/events.go
 
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
-
-/// Published when a community report is submitted.
-/// Consumed by notify:: (admin queue alert notification).
-#[derive(Clone, Debug)]
-pub struct ContentReported {
-    pub report_id: Uuid,
-    pub target_type: String,
-    pub target_id: Uuid,
-    pub category: String,
-    pub priority: String,
+// ContentReported is published when a community report is submitted.
+// Consumed by notify (admin queue alert notification).
+type ContentReported struct {
+    ReportID   uuid.UUID `json:"report_id"`
+    TargetType string    `json:"target_type"`
+    TargetID   uuid.UUID `json:"target_id"`
+    Category   string    `json:"category"`
+    Priority   string    `json:"priority"`
 }
-impl DomainEvent for ContentReported {}
 
-/// Published when a moderation action is taken (EXCEPT for CSAM cases).
-/// Consumed by notify:: (notification to affected user),
-/// social:: (hide removed content), mkt:: (hide removed listing/review).
-#[derive(Clone, Debug)]
-pub struct ModerationActionTaken {
-    pub action_id: Uuid,
-    pub action_type: String,
-    pub target_family_id: Uuid,
-    pub target_type: Option<String>,       // "post", "listing", etc. (for content actions)
-    pub target_id: Option<Uuid>,
-}
-impl DomainEvent for ModerationActionTaken {}
+func (ContentReported) EventName() string { return "safety.content_reported" }
 
-/// Published when an account is suspended.
-/// Consumed by notify:: (suspension notification to user).
-#[derive(Clone, Debug)]
-pub struct AccountSuspended {
-    pub family_id: Uuid,
-    pub suspension_days: i32,
-    pub expires_at: DateTime<Utc>,
+// ModerationActionTaken is published when a moderation action is taken (EXCEPT for CSAM cases).
+// Consumed by notify (notification to affected user),
+// social (hide removed content), mkt (hide removed listing/review).
+type ModerationActionTaken struct {
+    ActionID       uuid.UUID  `json:"action_id"`
+    ActionType     string     `json:"action_type"`
+    TargetFamilyID uuid.UUID  `json:"target_family_id"`
+    TargetType     *string    `json:"target_type,omitempty"`     // "post", "listing", etc. (for content actions)
+    TargetID       *uuid.UUID `json:"target_id,omitempty"`
 }
-impl DomainEvent for AccountSuspended {}
 
-/// Published when an appeal is resolved.
-/// Consumed by notify:: (appeal outcome notification to user).
-#[derive(Clone, Debug)]
-pub struct AppealResolved {
-    pub appeal_id: Uuid,
-    pub family_id: Uuid,
-    pub status: String,                    // "granted" or "denied"
-}
-impl DomainEvent for AppealResolved {}
+func (ModerationActionTaken) EventName() string { return "safety.moderation_action_taken" }
 
-/// Published when an upload is auto-rejected by content policy (§11.2.1).
-/// Consumed by notify:: (generic rejection notification to uploader).
-/// Message: "Your upload was not published because it violates our content guidelines."
-/// Does NOT specify which policy was violated (prevents gaming).
-#[derive(Clone, Debug)]
-pub struct UploadAutoRejectedNotification {
-    pub family_id: Uuid,
-    pub upload_id: Uuid,
+// AccountSuspendedEvent is published when an account is suspended.
+// Consumed by notify (suspension notification to user).
+type AccountSuspendedEvent struct {
+    FamilyID       uuid.UUID `json:"family_id"`
+    SuspensionDays int32     `json:"suspension_days"`
+    ExpiresAt      time.Time `json:"expires_at"`
 }
-impl DomainEvent for UploadAutoRejectedNotification {}
+
+func (AccountSuspendedEvent) EventName() string { return "safety.account_suspended" }
+
+// AppealResolved is published when an appeal is resolved.
+// Consumed by notify (appeal outcome notification to user).
+type AppealResolved struct {
+    AppealID uuid.UUID `json:"appeal_id"`
+    FamilyID uuid.UUID `json:"family_id"`
+    Status   string    `json:"status"` // "granted" or "denied"
+}
+
+func (AppealResolved) EventName() string { return "safety.appeal_resolved" }
+
+// UploadAutoRejectedNotification is published when an upload is auto-rejected by content policy (§11.2.1).
+// Consumed by notify (generic rejection notification to uploader).
+// Message: "Your upload was not published because it violates our content guidelines."
+// Does NOT specify which policy was violated (prevents gaming).
+type UploadAutoRejectedNotification struct {
+    FamilyID uuid.UUID `json:"family_id"`
+    UploadID uuid.UUID `json:"upload_id"`
+}
+
+func (UploadAutoRejectedNotification) EventName() string { return "safety.upload_auto_rejected" }
 ```
 
 ### §16.4 Events safety:: Subscribes To
@@ -2563,133 +2259,137 @@ impl DomainEvent for UploadAutoRejectedNotification {}
 | `UploadFlagged` | `media::` | `OnUploadFlagged` | Create content flag record |
 | `MessageReported` | `social::` | `OnMessageReported` | Create report + flag from social message report |
 
-```rust
-// src/safety/event_handlers.rs
+```go
+// internal/safety/event_handlers.go
 
-use crate::social::events::{PostCreated, MessageSent, MessageReported};
-use crate::mkt::events::ReviewCreated;
-use crate::media::events::{UploadQuarantined, UploadRejected, UploadFlagged};
+// Imports: social.PostCreated, social.MessageSent, social.MessageReported,
+//          mkt.ReviewCreated, media.UploadQuarantined, media.UploadRejected, media.UploadFlagged
 
-pub struct OnPostCreated {
-    safety_service: Arc<dyn SafetyService>,
+type OnPostCreated struct {
+    safetyService SafetyService
 }
 
-#[async_trait]
-impl DomainEventHandler<PostCreated> for OnPostCreated {
-    async fn handle(&self, event: &PostCreated) -> Result<(), AppError> {
-        // Scan post text content for policy violations
-        if let Some(ref content) = event.content {
-            let result = self.safety_service.scan_text(content).await?;
-            if result.has_violations {
-                // Create content flag for admin review
-                // Target: post, target_id: event.post_id
-            }
+func (h *OnPostCreated) Handle(ctx context.Context, event *social.PostCreated) error {
+    // Scan post text content for policy violations
+    if event.Content != nil {
+        result, err := h.safetyService.ScanText(ctx, *event.Content)
+        if err != nil {
+            return fmt.Errorf("scan post text: %w", err)
         }
-        Ok(())
-    }
-}
-
-pub struct OnUploadQuarantined {
-    safety_service: Arc<dyn SafetyService>,
-}
-
-#[async_trait]
-impl DomainEventHandler<UploadQuarantined> for OnUploadQuarantined {
-    async fn handle(&self, event: &UploadQuarantined) -> Result<(), AppError> {
-        // Initiate CSAM pipeline: evidence preservation → NCMEC report → ban
-        self.safety_service.handle_csam_detection(
-            event.upload_id,
-            event.family_id,
-            // CsamScanResult is retrieved from the media upload record
-            &CsamScanResult { is_csam: true, hash: None, confidence: None, matched_database: None },
-        ).await
-    }
-}
-
-pub struct OnUploadRejected {
-    flag_repo: Arc<dyn ContentFlagRepository>,
-    events: Arc<EventBus>,
-}
-
-#[async_trait]
-impl DomainEventHandler<UploadRejected> for OnUploadRejected {
-    async fn handle(&self, event: &UploadRejected) -> Result<(), AppError> {
-        // Create auto-rejected content flag [§11.2.1]
-        let max_confidence = event.labels.iter()
-            .map(|l| l.confidence)
-            .fold(0.0_f64, f64::max);
-
-        self.flag_repo.create(CreateContentFlagRow {
-            source: "automated".into(),
-            target_type: "upload".into(),
-            target_id: event.upload_id,
-            target_family_id: Some(event.family_id),
-            flag_type: "explicit_content".into(),
-            confidence: Some(max_confidence),
-            labels: Some(serde_json::to_value(&event.labels)?),
-            report_id: None,
-            auto_rejected: true,
-        }).await?;
-
-        // Notify user via notify:: — generic rejection message
-        // "Your upload was not published because it violates our content guidelines."
-        self.events.publish(UploadAutoRejectedNotification {
-            family_id: event.family_id,
-            upload_id: event.upload_id,
-        }).await;
-
-        Ok(())
-    }
-}
-
-pub struct OnUploadFlagged {
-    flag_repo: Arc<dyn ContentFlagRepository>,
-}
-
-#[async_trait]
-impl DomainEventHandler<UploadFlagged> for OnUploadFlagged {
-    async fn handle(&self, event: &UploadFlagged) -> Result<(), AppError> {
-        // Determine flag_type from labels — upgrade to suspected_underage_exploitation
-        // if priority is critical (see §11.2.2)
-        let flag_type = if event.priority.as_deref() == Some("critical") {
-            "suspected_underage_exploitation"
-        } else {
-            "explicit_content"
-        };
-
-        // Create automated content flag from media moderation result
-        self.flag_repo.create(CreateContentFlagRow {
-            source: "automated".into(),
-            target_type: "upload".into(),
-            target_id: event.upload_id,
-            target_family_id: Some(event.family_id),
-            flag_type: flag_type.into(),
-            confidence: None,
-            labels: Some(serde_json::to_value(&event.labels)?),
-            report_id: None,
-            auto_rejected: false,
-        }).await?;
-        Ok(())
-    }
-}
-
-pub struct OnReviewCreated {
-    safety_service: Arc<dyn SafetyService>,
-}
-
-#[async_trait]
-impl DomainEventHandler<ReviewCreated> for OnReviewCreated {
-    async fn handle(&self, event: &ReviewCreated) -> Result<(), AppError> {
-        // Scan review text for policy violations
-        if let Some(ref text) = event.review_text {
-            let result = self.safety_service.scan_text(text).await?;
-            if result.has_violations {
-                // Create content flag for admin review
-                // Target: review, target_id: event.review_id
-            }
+        if result.HasViolations {
+            // Create content flag for admin review
+            // Target: post, target_id: event.PostID
         }
-        Ok(())
     }
+    return nil
+}
+
+type OnUploadQuarantined struct {
+    safetyService SafetyService
+}
+
+func (h *OnUploadQuarantined) Handle(ctx context.Context, event *media.UploadQuarantined) error {
+    // Initiate CSAM pipeline: evidence preservation → NCMEC report → ban
+    return h.safetyService.HandleCsamDetection(
+        ctx,
+        event.UploadID,
+        event.FamilyID,
+        // CsamScanResult is retrieved from the media upload record
+        &media.CsamScanResult{IsCsam: true},
+    )
+}
+
+type OnUploadRejected struct {
+    flagRepo ContentFlagRepository
+    events   *shared.EventBus
+}
+
+func (h *OnUploadRejected) Handle(ctx context.Context, event *media.UploadRejected) error {
+    // Create auto-rejected content flag [§11.2.1]
+    maxConfidence := 0.0
+    for _, l := range event.Labels {
+        if l.Confidence > maxConfidence {
+            maxConfidence = l.Confidence
+        }
+    }
+
+    labelsJSON, err := json.Marshal(event.Labels)
+    if err != nil {
+        return fmt.Errorf("marshal labels: %w", err)
+    }
+
+    if _, err := h.flagRepo.Create(ctx, CreateContentFlagRow{
+        Source:         "automated",
+        TargetType:     "upload",
+        TargetID:       event.UploadID,
+        TargetFamilyID: &event.FamilyID,
+        FlagType:       "explicit_content",
+        Confidence:     &maxConfidence,
+        Labels:         labelsJSON,
+        AutoRejected:   true,
+    }); err != nil {
+        return fmt.Errorf("create content flag: %w", err)
+    }
+
+    // Notify user via notify — generic rejection message
+    // "Your upload was not published because it violates our content guidelines."
+    h.events.Publish(ctx, UploadAutoRejectedNotification{
+        FamilyID: event.FamilyID,
+        UploadID: event.UploadID,
+    })
+
+    return nil
+}
+
+type OnUploadFlagged struct {
+    flagRepo ContentFlagRepository
+}
+
+func (h *OnUploadFlagged) Handle(ctx context.Context, event *media.UploadFlagged) error {
+    // Determine flagType from labels — upgrade to suspected_underage_exploitation
+    // if priority is critical (see §11.2.2)
+    flagType := "explicit_content"
+    if event.Priority != nil && *event.Priority == "critical" {
+        flagType = "suspected_underage_exploitation"
+    }
+
+    labelsJSON, err := json.Marshal(event.Labels)
+    if err != nil {
+        return fmt.Errorf("marshal labels: %w", err)
+    }
+
+    // Create automated content flag from media moderation result
+    if _, err := h.flagRepo.Create(ctx, CreateContentFlagRow{
+        Source:         "automated",
+        TargetType:     "upload",
+        TargetID:       event.UploadID,
+        TargetFamilyID: &event.FamilyID,
+        FlagType:       flagType,
+        Labels:         labelsJSON,
+        AutoRejected:   false,
+    }); err != nil {
+        return fmt.Errorf("create content flag: %w", err)
+    }
+    return nil
+}
+
+type OnReviewCreated struct {
+    safetyService SafetyService
+}
+
+func (h *OnReviewCreated) Handle(ctx context.Context, event *mkt.ReviewCreated) error {
+    // Scan review text for policy violations
+    if event.ReviewText != nil {
+        result, err := h.safetyService.ScanText(ctx, *event.ReviewText)
+        if err != nil {
+            return fmt.Errorf("scan review text: %w", err)
+        }
+        if result.HasViolations {
+            // Create content flag for admin review
+            // Target: review, target_id: event.ReviewID
+        }
+    }
+    return nil
 }
 ```
 
@@ -2834,7 +2534,7 @@ impl DomainEventHandler<ReviewCreated> for OnReviewCreated {
 
 48. `SafetyScanAdapter` implementation correctly bridges to Thorn and Rekognition
 49. `SafetyScanBridge` applies label routing table (§11.2.2) — not the adapter itself
-50. All 7 consumed events have registered handlers in `main.rs`
+50. All 7 consumed events have registered handlers in `main.go`
 51. All 5 published events have documented consumers
 52. `RequireAdmin` extractor is available in `00-core` for all admin endpoints
 
@@ -2849,265 +2549,245 @@ validated state transitions. `[ARCH §4.5]`
 
 The `ModerationReport` aggregate root enforces the report lifecycle state machine.
 
-```rust
-// src/safety/domain/moderation_report.rs
+```go
+// internal/safety/domain/moderation_report.go
 
-#[derive(Debug)]
-pub struct ModerationReport {
-    id: Uuid,
-    reporter_family_id: Uuid,
-    reporter_parent_id: Uuid,
-    target_type: String,
-    target_id: Uuid,
-    target_family_id: Option<Uuid>,
-    category: String,
-    description: Option<String>,
-    priority: ReportPriority,
-    status: ReportStatus,
-    assigned_admin_id: Option<Uuid>,
-    resolved_at: Option<DateTime<Utc>>,
-    created_at: DateTime<Utc>,
+type ReportStatus string
+
+const (
+    ReportStatusPending             ReportStatus = "pending"
+    ReportStatusInReview            ReportStatus = "in_review"
+    ReportStatusResolvedActionTaken ReportStatus = "resolved_action_taken"
+    ReportStatusResolvedNoAction    ReportStatus = "resolved_no_action"
+    ReportStatusDismissed           ReportStatus = "dismissed"
+)
+
+type ReportPriority string
+
+const (
+    ReportPriorityCritical ReportPriority = "critical"
+    ReportPriorityHigh     ReportPriority = "high"
+    ReportPriorityNormal   ReportPriority = "normal"
+)
+
+type ModerationReport struct {
+    id               uuid.UUID
+    reporterFamilyID uuid.UUID
+    reporterParentID uuid.UUID
+    targetType       string
+    targetID         uuid.UUID
+    targetFamilyID   *uuid.UUID
+    category         string
+    description      *string
+    priority         ReportPriority
+    status           ReportStatus
+    assignedAdminID  *uuid.UUID
+    resolvedAt       *time.Time
+    createdAt        time.Time
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum ReportStatus {
-    Pending,
-    InReview,
-    ResolvedActionTaken,
-    ResolvedNoAction,
-    Dismissed,
+// NewModerationReport creates a new report. Priority is derived from category.
+func NewModerationReport(
+    reporterFamilyID uuid.UUID,
+    reporterParentID uuid.UUID,
+    targetType string,
+    targetID uuid.UUID,
+    targetFamilyID *uuid.UUID,
+    category string,
+    description *string,
+) *ModerationReport {
+    var priority ReportPriority
+    switch category {
+    case "csam_child_safety":
+        priority = ReportPriorityCritical
+    case "harassment":
+        priority = ReportPriorityHigh
+    default:
+        priority = ReportPriorityNormal
+    }
+
+    return &ModerationReport{
+        id:               uuid.New(),
+        reporterFamilyID: reporterFamilyID,
+        reporterParentID: reporterParentID,
+        targetType:       targetType,
+        targetID:         targetID,
+        targetFamilyID:   targetFamilyID,
+        category:         category,
+        description:      description,
+        priority:         priority,
+        status:           ReportStatusPending,
+        createdAt:        time.Now().UTC(),
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum ReportPriority {
-    Critical,
-    High,
-    Normal,
+// Assign assigns an admin for review. Transitions: Pending → InReview.
+func (r *ModerationReport) Assign(adminID uuid.UUID) error {
+    if r.status != ReportStatusPending && r.status != ReportStatusInReview {
+        return ErrInvalidReportTransition
+    }
+    r.status = ReportStatusInReview
+    r.assignedAdminID = &adminID
+    return nil
 }
 
-impl ModerationReport {
-    /// Create a new report. Priority is derived from category.
-    pub fn new(
-        reporter_family_id: Uuid,
-        reporter_parent_id: Uuid,
-        target_type: String,
-        target_id: Uuid,
-        target_family_id: Option<Uuid>,
-        category: String,
-        description: Option<String>,
-    ) -> Self {
-        let priority = match category.as_str() {
-            "csam_child_safety" => ReportPriority::Critical,
-            "harassment" => ReportPriority::High,
-            _ => ReportPriority::Normal,
-        };
-
-        Self {
-            id: Uuid::new_v4(),
-            reporter_family_id,
-            reporter_parent_id,
-            target_type,
-            target_id,
-            target_family_id,
-            category,
-            description,
-            priority,
-            status: ReportStatus::Pending,
-            assigned_admin_id: None,
-            resolved_at: None,
-            created_at: Utc::now(),
-        }
+// ResolveActionTaken resolves with action taken. Transitions: InReview → ResolvedActionTaken.
+func (r *ModerationReport) ResolveActionTaken() error {
+    if r.status != ReportStatusInReview {
+        return ErrInvalidReportTransition
     }
-
-    /// Assign an admin for review. Transitions: Pending → InReview.
-    pub fn assign(&mut self, admin_id: Uuid) -> Result<(), SafetyError> {
-        if self.status != ReportStatus::Pending && self.status != ReportStatus::InReview {
-            return Err(SafetyError::InvalidReportTransition);
-        }
-        self.status = ReportStatus::InReview;
-        self.assigned_admin_id = Some(admin_id);
-        Ok(())
-    }
-
-    /// Resolve with action taken. Transitions: InReview → ResolvedActionTaken.
-    pub fn resolve_action_taken(&mut self) -> Result<(), SafetyError> {
-        if self.status != ReportStatus::InReview {
-            return Err(SafetyError::InvalidReportTransition);
-        }
-        self.status = ReportStatus::ResolvedActionTaken;
-        self.resolved_at = Some(Utc::now());
-        Ok(())
-    }
-
-    /// Resolve with no action. Transitions: InReview → ResolvedNoAction.
-    pub fn resolve_no_action(&mut self) -> Result<(), SafetyError> {
-        if self.status != ReportStatus::InReview {
-            return Err(SafetyError::InvalidReportTransition);
-        }
-        self.status = ReportStatus::ResolvedNoAction;
-        self.resolved_at = Some(Utc::now());
-        Ok(())
-    }
-
-    /// Dismiss. Transitions: Pending|InReview → Dismissed.
-    pub fn dismiss(&mut self) -> Result<(), SafetyError> {
-        if self.status == ReportStatus::ResolvedActionTaken
-            || self.status == ReportStatus::ResolvedNoAction
-            || self.status == ReportStatus::Dismissed
-        {
-            return Err(SafetyError::InvalidReportTransition);
-        }
-        self.status = ReportStatus::Dismissed;
-        self.resolved_at = Some(Utc::now());
-        Ok(())
-    }
-
-    // Getters for private fields
-    pub fn id(&self) -> Uuid { self.id }
-    pub fn status(&self) -> &ReportStatus { &self.status }
-    pub fn priority(&self) -> &ReportPriority { &self.priority }
-    pub fn category(&self) -> &str { &self.category }
+    r.status = ReportStatusResolvedActionTaken
+    now := time.Now().UTC()
+    r.resolvedAt = &now
+    return nil
 }
+
+// ResolveNoAction resolves with no action. Transitions: InReview → ResolvedNoAction.
+func (r *ModerationReport) ResolveNoAction() error {
+    if r.status != ReportStatusInReview {
+        return ErrInvalidReportTransition
+    }
+    r.status = ReportStatusResolvedNoAction
+    now := time.Now().UTC()
+    r.resolvedAt = &now
+    return nil
+}
+
+// Dismiss dismisses the report. Transitions: Pending|InReview → Dismissed.
+func (r *ModerationReport) Dismiss() error {
+    if r.status == ReportStatusResolvedActionTaken ||
+        r.status == ReportStatusResolvedNoAction ||
+        r.status == ReportStatusDismissed {
+        return ErrInvalidReportTransition
+    }
+    r.status = ReportStatusDismissed
+    now := time.Now().UTC()
+    r.resolvedAt = &now
+    return nil
+}
+
+// Getters for private fields
+func (r *ModerationReport) ID() uuid.UUID           { return r.id }
+func (r *ModerationReport) Status() ReportStatus     { return r.status }
+func (r *ModerationReport) Priority() ReportPriority  { return r.priority }
+func (r *ModerationReport) Category() string          { return r.category }
 ```
 
 ### §19.2 AccountModerationState
 
 The `AccountModerationState` aggregate root enforces the account status state machine.
 
-```rust
-// src/safety/domain/account_state.rs
+```go
+// internal/safety/domain/account_state.go
 
-#[derive(Debug)]
-pub struct AccountModerationState {
-    family_id: Uuid,
-    status: AccountModerationStatus,
-    suspended_at: Option<DateTime<Utc>>,
-    suspension_expires_at: Option<DateTime<Utc>>,
-    suspension_reason: Option<String>,
-    banned_at: Option<DateTime<Utc>>,
-    ban_reason: Option<String>,
-    last_action_id: Option<Uuid>,
+type AccountModerationStatus string
+
+const (
+    AccountStatusActive    AccountModerationStatus = "active"
+    AccountStatusSuspended AccountModerationStatus = "suspended"
+    AccountStatusBanned    AccountModerationStatus = "banned"
+)
+
+type AccountModerationState struct {
+    familyID            uuid.UUID
+    status              AccountModerationStatus
+    suspendedAt         *time.Time
+    suspensionExpiresAt *time.Time
+    suspensionReason    *string
+    bannedAt            *time.Time
+    banReason           *string
+    lastActionID        *uuid.UUID
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum AccountModerationStatus {
-    Active,
-    Suspended,
-    Banned,
+func NewAccountModerationState(familyID uuid.UUID) *AccountModerationState {
+    return &AccountModerationState{
+        familyID: familyID,
+        status:   AccountStatusActive,
+    }
 }
 
-impl AccountModerationState {
-    pub fn new(family_id: Uuid) -> Self {
-        Self {
-            family_id,
-            status: AccountModerationStatus::Active,
-            suspended_at: None,
-            suspension_expires_at: None,
-            suspension_reason: None,
-            banned_at: None,
-            ban_reason: None,
-            last_action_id: None,
+// Suspend suspends the account. Valid from: Active.
+func (s *AccountModerationState) Suspend(days int32, reason string, actionID uuid.UUID) (*AccountSuspendedEvent, error) {
+    if s.status == AccountStatusBanned {
+        return nil, ErrAccountBanned
+    }
+    now := time.Now().UTC()
+    expiresAt := now.Add(time.Duration(days) * 24 * time.Hour)
+    s.status = AccountStatusSuspended
+    s.suspendedAt = &now
+    s.suspensionExpiresAt = &expiresAt
+    s.suspensionReason = &reason
+    s.lastActionID = &actionID
+
+    return &AccountSuspendedEvent{
+        FamilyID:       s.familyID,
+        SuspensionDays: days,
+        ExpiresAt:      expiresAt,
+    }, nil
+}
+
+// Ban permanently bans the account. Valid from: Active, Suspended.
+func (s *AccountModerationState) Ban(reason string, actionID uuid.UUID) error {
+    if s.status == AccountStatusBanned {
+        return ErrAccountBanned
+    }
+    now := time.Now().UTC()
+    s.status = AccountStatusBanned
+    s.bannedAt = &now
+    s.banReason = &reason
+    s.suspensionExpiresAt = nil // clear any pending suspension
+    s.lastActionID = &actionID
+    return nil
+}
+
+// LiftSuspension lifts the suspension. Valid from: Suspended.
+func (s *AccountModerationState) LiftSuspension(actionID uuid.UUID) error {
+    if s.status != AccountStatusSuspended {
+        return ErrInvalidActionType
+    }
+    s.status = AccountStatusActive
+    s.suspendedAt = nil
+    s.suspensionExpiresAt = nil
+    s.suspensionReason = nil
+    s.lastActionID = &actionID
+    return nil
+}
+
+// CheckExpiry checks if suspension has expired (lazy expiry).
+// Returns true if the suspension was expired and status was changed to active.
+func (s *AccountModerationState) CheckExpiry() bool {
+    if s.status == AccountStatusSuspended && s.suspensionExpiresAt != nil {
+        if time.Now().UTC().After(*s.suspensionExpiresAt) {
+            s.status = AccountStatusActive
+            s.suspendedAt = nil
+            s.suspensionExpiresAt = nil
+            s.suspensionReason = nil
+            return true // expired, now active
         }
     }
+    return false
+}
 
-    /// Suspend the account. Valid from: Active.
-    pub fn suspend(
-        &mut self,
-        days: i32,
-        reason: String,
-        action_id: Uuid,
-    ) -> Result<AccountSuspended, SafetyError> {
-        if self.status == AccountModerationStatus::Banned {
-            return Err(SafetyError::AccountBanned);
-        }
-        let now = Utc::now();
-        let expires_at = now + chrono::Duration::days(days as i64);
-        self.status = AccountModerationStatus::Suspended;
-        self.suspended_at = Some(now);
-        self.suspension_expires_at = Some(expires_at);
-        self.suspension_reason = Some(reason);
-        self.last_action_id = Some(action_id);
-
-        Ok(AccountSuspended {
-            family_id: self.family_id,
-            suspension_days: days,
-            expires_at,
-        })
+// Unban unbans via appeal. Valid from: Banned (non-CSAM only).
+func (s *AccountModerationState) Unban(actionID uuid.UUID) error {
+    if s.status != AccountStatusBanned {
+        return ErrInvalidActionType
     }
-
-    /// Ban the account permanently. Valid from: Active, Suspended.
-    pub fn ban(
-        &mut self,
-        reason: String,
-        action_id: Uuid,
-    ) -> Result<(), SafetyError> {
-        if self.status == AccountModerationStatus::Banned {
-            return Err(SafetyError::AccountBanned);
-        }
-        self.status = AccountModerationStatus::Banned;
-        self.banned_at = Some(Utc::now());
-        self.ban_reason = Some(reason);
-        self.suspension_expires_at = None; // clear any pending suspension
-        self.last_action_id = Some(action_id);
-        Ok(())
+    if s.banReason != nil && *s.banReason == "csam_violation" {
+        return ErrCsamBanNotAppealable
     }
+    s.status = AccountStatusActive
+    s.bannedAt = nil
+    s.banReason = nil
+    s.lastActionID = &actionID
+    return nil
+}
 
-    /// Lift suspension. Valid from: Suspended.
-    pub fn lift_suspension(
-        &mut self,
-        action_id: Uuid,
-    ) -> Result<(), SafetyError> {
-        if self.status != AccountModerationStatus::Suspended {
-            return Err(SafetyError::InvalidActionType);
-        }
-        self.status = AccountModerationStatus::Active;
-        self.suspended_at = None;
-        self.suspension_expires_at = None;
-        self.suspension_reason = None;
-        self.last_action_id = Some(action_id);
-        Ok(())
-    }
-
-    /// Check if suspension has expired (lazy expiry).
-    pub fn check_expiry(&mut self) -> bool {
-        if self.status == AccountModerationStatus::Suspended {
-            if let Some(expires_at) = self.suspension_expires_at {
-                if Utc::now() >= expires_at {
-                    self.status = AccountModerationStatus::Active;
-                    self.suspended_at = None;
-                    self.suspension_expires_at = None;
-                    self.suspension_reason = None;
-                    return true; // expired, now active
-                }
-            }
-        }
-        false
-    }
-
-    /// Unban (via appeal). Valid from: Banned (non-CSAM only).
-    pub fn unban(
-        &mut self,
-        action_id: Uuid,
-    ) -> Result<(), SafetyError> {
-        if self.status != AccountModerationStatus::Banned {
-            return Err(SafetyError::InvalidActionType);
-        }
-        if self.ban_reason.as_deref() == Some("csam_violation") {
-            return Err(SafetyError::CsamBanNotAppealable);
-        }
-        self.status = AccountModerationStatus::Active;
-        self.banned_at = None;
-        self.ban_reason = None;
-        self.last_action_id = Some(action_id);
-        Ok(())
-    }
-
-    // Getters
-    pub fn family_id(&self) -> Uuid { self.family_id }
-    pub fn status(&self) -> &AccountModerationStatus { &self.status }
-    pub fn is_restricted(&self) -> bool {
-        self.status != AccountModerationStatus::Active
-    }
+// Getters
+func (s *AccountModerationState) FamilyID() uuid.UUID             { return s.familyID }
+func (s *AccountModerationState) Status() AccountModerationStatus  { return s.status }
+func (s *AccountModerationState) IsRestricted() bool {
+    return s.status != AccountStatusActive
 }
 ```
 
@@ -3116,30 +2796,26 @@ impl AccountModerationState {
 ## §20 Module Structure
 
 ```
-src/safety/
-├── mod.rs                        # Module declarations, re-exports
-├── handlers.rs                   # Thin HTTP handlers (user + admin endpoints)
-├── service.rs                    # SafetyServiceImpl — business logic orchestration
-├── repository.rs                 # Repository implementations (7 repos)
-├── models.rs                     # Request/response types, DTOs, filter types
-├── ports.rs                      # SafetyService trait, adapter traits
-├── errors.rs                     # SafetyError enum, From<SafetyError> for AppError
-├── events.rs                     # ContentReported, ModerationActionTaken,
-│                                 # AccountSuspended, AppealResolved
-├── event_handlers.rs             # OnPostCreated, OnUploadQuarantined, OnUploadFlagged,
+internal/safety/
+├── handler.go                    # Thin HTTP handlers (user + admin endpoints)
+├── service.go                    # SafetyServiceImpl — business logic orchestration
+├── repository.go                 # Repository implementations (7 repos)
+├── models.go                     # Request/response types, DTOs, filter types, GORM models
+├── ports.go                      # SafetyService interface, adapter interfaces
+├── errors.go                     # Error sentinel vars, ToAppError mapping
+├── events.go                     # ContentReported, ModerationActionTaken,
+│                                 # AccountSuspendedEvent, AppealResolved
+├── event_handlers.go             # OnPostCreated, OnUploadQuarantined, OnUploadFlagged,
 │                                 # OnReviewCreated, OnMessageSent, OnMessageReported
-├── jobs.rs                       # CsamReportJob, CheckCsamHashUpdateJob, CsamRescanJob
-├── text_scanner.rs               # TextScanner — keyword + regex matching
+├── jobs.go                       # CsamReportJob, CheckCsamHashUpdateJob, CsamRescanJob
+├── text_scanner.go               # TextScanner — keyword + regex matching
 ├── domain/
-│   ├── mod.rs                    # Domain model re-exports
-│   ├── moderation_report.rs      # ModerationReport aggregate root
-│   └── account_state.rs          # AccountModerationState aggregate root
-├── adapters/
-│   ├── mod.rs                    # Adapter re-exports
-│   ├── thorn.rs                  # ThornAdapter impl — Thorn Safer API client
-│   ├── rekognition.rs            # RekognitionAdapter impl — AWS Rekognition client
-│   └── scan_bridge.rs            # SafetyScanBridge — media::SafetyScanAdapter impl
-└── entities/                     # SeaORM-generated — NEVER hand-edit [CODING §4.2]
+│   ├── moderation_report.go      # ModerationReport aggregate root
+│   └── account_state.go          # AccountModerationState aggregate root
+└── adapters/
+    ├── thorn.go                  # ThornAdapter impl — Thorn Safer API client (net/http)
+    ├── rekognition.go            # RekognitionAdapter impl — AWS Rekognition client (aws-sdk-go-v2)
+    └── scan_bridge.go            # SafetyScanBridge — media.SafetyScanAdapter impl
 ```
 
 ---
@@ -3166,36 +2842,32 @@ specifies mitigation strategies.
 
 ### §21.2 Account Takeover Detection
 
-```rust
-/// Impossible travel detection — flags concurrent sessions from distant geolocations
-pub struct ImpossibleTravelDetector {
-    max_speed_kmh: f64,  // ~900 km/h (commercial airline speed)
+```go
+// ImpossibleTravelDetector flags concurrent sessions from distant geolocations.
+type ImpossibleTravelDetector struct {
+    MaxSpeedKmh float64 // ~900 km/h (commercial airline speed)
 }
 
-impl ImpossibleTravelDetector {
-    /// Check if a new session is suspicious based on the user's recent sessions.
-    /// Returns true if the new session location is impossibly distant from the
-    /// most recent session location given the time elapsed.
-    pub fn is_suspicious(
-        &self,
-        new_session: &SessionGeoInfo,
-        recent_sessions: &[SessionGeoInfo],
-    ) -> bool {
-        // Uses city-level geolocation only (no GPS) [S§7.8]
-        // City centers are approximate — allow generous margins
-        for session in recent_sessions {
-            let time_hours = (new_session.started_at - session.last_active_at)
-                .num_minutes() as f64 / 60.0;
-            let distance_km = haversine_distance(
-                session.city_lat, session.city_lon,
-                new_session.city_lat, new_session.city_lon,
-            );
-            if time_hours > 0.0 && distance_km / time_hours > self.max_speed_kmh {
-                return true;
-            }
+// IsSuspicious checks if a new session is suspicious based on the user's recent sessions.
+// Returns true if the new session location is impossibly distant from the
+// most recent session location given the time elapsed.
+func (d *ImpossibleTravelDetector) IsSuspicious(
+    newSession *SessionGeoInfo,
+    recentSessions []SessionGeoInfo,
+) bool {
+    // Uses city-level geolocation only (no GPS) [S§7.8]
+    // City centers are approximate — allow generous margins
+    for _, session := range recentSessions {
+        timeHours := newSession.StartedAt.Sub(session.LastActiveAt).Minutes() / 60.0
+        distanceKm := haversineDistance(
+            session.CityLat, session.CityLon,
+            newSession.CityLat, newSession.CityLon,
+        )
+        if timeHours > 0.0 && distanceKm/timeHours > d.MaxSpeedKmh {
+            return true
         }
-        false
     }
+    return false
 }
 ```
 
@@ -3219,29 +2891,31 @@ Credential stuffing protection is layered:
 4. **Breach detection** (Phase 2): Integrate with Have I Been Pwned API to warn users
    if their email appears in known breaches
 
-```rust
-/// Track failed login attempts for credential stuffing detection
-pub async fn record_failed_login(
-    redis: &RedisPool,
-    email: &str,
-    ip: &str,
-) -> Result<LoginAttemptStatus, AppError> {
-    let email_key = format!("login:fail:email:{}", email);
-    let ip_key = format!("login:fail:ip:{}", ip);
+```go
+// RecordFailedLogin tracks failed login attempts for credential stuffing detection.
+func RecordFailedLogin(ctx context.Context, rdb *redis.Client, email, ip string) (LoginAttemptStatus, error) {
+    emailKey := fmt.Sprintf("login:fail:email:%s", email)
+    ipKey := fmt.Sprintf("login:fail:ip:%s", ip)
 
-    let email_count: u32 = redis.incr(&email_key, 1).await?;
-    redis.expire(&email_key, 3600).await?; // 1-hour window
-
-    let ip_count: u32 = redis.incr(&ip_key, 1).await?;
-    redis.expire(&ip_key, 86400).await?; // 24-hour window
-
-    if ip_count >= 20 {
-        return Ok(LoginAttemptStatus::IpBlocked);
+    emailCount, err := rdb.Incr(ctx, emailKey).Result()
+    if err != nil {
+        return LoginAttemptStatusNormal, fmt.Errorf("incr email key: %w", err)
     }
-    if email_count >= 5 {
-        return Ok(LoginAttemptStatus::CaptchaRequired);
+    rdb.Expire(ctx, emailKey, time.Hour) // 1-hour window
+
+    ipCount, err := rdb.Incr(ctx, ipKey).Result()
+    if err != nil {
+        return LoginAttemptStatusNormal, fmt.Errorf("incr ip key: %w", err)
     }
-    Ok(LoginAttemptStatus::Normal)
+    rdb.Expire(ctx, ipKey, 24*time.Hour) // 24-hour window
+
+    if ipCount >= 20 {
+        return LoginAttemptStatusIPBlocked, nil
+    }
+    if emailCount >= 5 {
+        return LoginAttemptStatusCaptchaRequired, nil
+    }
+    return LoginAttemptStatusNormal, nil
 }
 ```
 

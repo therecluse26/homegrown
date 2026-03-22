@@ -1,7 +1,7 @@
 # Homegrown Academy — Claude Development Guide
 
 Homegrown Academy is a privacy-first platform for homeschooling families, built with a
-Rust/Axum backend, React SPA frontend, and PostgreSQL database. It supports multiple
+Go/Echo backend, React SPA frontend, and PostgreSQL database. It supports multiple
 homeschooling methodologies (Charlotte Mason, Classical, Unschooling, etc.) as runtime
 configuration — not code branches.
 
@@ -14,7 +14,7 @@ configuration — not code branches.
 2. **Read the relevant section(s) of `specs/ARCHITECTURE.md`** for any domain you are
    working in. It explains *why* each decision was made.
 3. **Read `specs/SPEC.md` §[n]** for the requirements in your domain before implementing.
-4. **Check `src/shared/`** for existing utilities before writing new ones.
+4. **Check `internal/shared/`** for existing utilities before writing new ones.
 
 ---
 
@@ -23,10 +23,10 @@ configuration — not code branches.
 All implementation work MUST follow `specs/CODING_STANDARDS.md`. That document is the
 authoritative source for:
 
-- Module structure and layer responsibilities
+- Package structure and layer responsibilities
 - Error handling rules
 - Type safety requirements
-- Database patterns (family-scoped queries, migration rules, entity generation)
+- Database patterns (family-scoped queries, migration rules)
 - Privacy enforcement
 - Naming conventions
 - Forbidden patterns
@@ -41,22 +41,22 @@ design. Consult it before making any architectural decision.
 
 | Area | Rule |
 |------|------|
-| **Rust** | Zero `.unwrap()` / `.expect()` in production code. Use `?` and `thiserror`. |
+| **Go** | All errors MUST be checked (`if err != nil`). No ignored error returns in production code. Use custom error types with `errors.Is`/`errors.As`. |
 | **TypeScript** | Strict mode enabled. Zero `any`. All API types from `src/api/generated/` only. |
-| **Database** | Every user-data query MUST be family-scoped via `FamilyScope`. Migrations are append-only. Regenerate SeaORM entities after every migration before writing queries. |
-| **Methodology** | MUST NOT branch on methodology name in code. Use config lookup via `method::` service. |
+| **Database** | Every user-data query MUST be family-scoped via `FamilyScope`. Migrations are append-only (goose). |
+| **Methodology** | MUST NOT branch on methodology name in code. Use config lookup via `method` package. |
 | **Privacy** | Never store GPS coordinates. Student resources require parent ownership check. Never log PII or tokens. |
 | **File uploads** | Validate magic bytes, not just file extension. |
 | **API errors** | Never expose internal error details in responses. Log internally; return generic message. |
-| **Generated files** | `src/api/generated/` and `src/{domain}/entities/` are generated — never hand-edit. |
+| **Generated files** | `frontend/src/api/generated/` is generated — never hand-edit. |
 
 ---
 
 ## Quality Gates (Must Pass Before Every Commit)
 
 ```bash
-cargo clippy -- -D warnings    # Zero warnings
-cargo test                     # All tests pass
+golangci-lint run              # Zero warnings
+go test ./...                  # All tests pass
 npm run type-check             # Zero TypeScript errors (in frontend/)
 ```
 

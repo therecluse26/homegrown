@@ -11,11 +11,11 @@ enforced at payment time via Hyperswitch split payment rules. `[S§9, V§9, V§1
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/mkt/` |
+| **Module path** | `internal/mkt/` |
 | **DB prefix** | `mkt_` |
 | **Complexity class** | Complex (has `domain/` subdirectory) `[ARCH §4.5]` |
 | **CQRS** | Yes — listing commands separated from faceted browse/search reads `[ARCH §4.7]` |
-| **External adapter** | `src/mkt/adapters/payment.rs` (Hyperswitch — processor-agnostic payment orchestration) |
+| **External adapter** | `internal/mkt/adapters/payment.go` (Hyperswitch — processor-agnostic payment orchestration) |
 | **Key constraint** | Payment adapter is processor-agnostic; Stripe is configured in Hyperswitch, swappable without code changes `[supersedes ADR-007]` |
 
 **What mkt:: owns**: Creator accounts, publisher organizations and membership, content listings
@@ -127,7 +127,7 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_mkt_tables.rs
+-- Migration: YYYYMMDD_000001_create_mkt_tables.sql (goose)
 -- =============================================================================
 -- IMPORTANT: mkt_publishers MUST be created before any learn_*_defs tables,
 -- as those tables reference mkt_publishers(id) as a foreign key. [06-learn §3.2]
@@ -470,9 +470,9 @@ CREATE POLICY reviews_write_family ON mkt_reviews
 
 ## §4 API Endpoints
 
-All endpoints are prefixed with `/v1/marketplace`. Auth requirements use extractors defined
+All endpoints are prefixed with `/v1/marketplace`. Auth requirements use middleware defined
 in `00-core §13`: `AuthContext` for authenticated users, `RequireCreator` for creator-only
-endpoints (see §16 for extractor implementation). `[CODING §2.1]`
+endpoints (see §16 for middleware implementation). `[CODING §2.1]`
 
 ### §4.1 Phase 1 (~25 endpoints)
 
@@ -496,8 +496,8 @@ Generate a Hyperswitch sub-merchant onboarding link for identity verification an
 
 - **Auth**: `RequireCreator`
 - **Body**: None
-- **Response**: `200 OK` → `{ onboarding_url: String }`
-- **Side effects**: Calls `PaymentAdapter::create_onboarding_link()`. Sets `onboarding_status = 'onboarding'` if currently `pending`.
+- **Response**: `200 OK` → `{ onboarding_url: string }`
+- **Side effects**: Calls `PaymentAdapter.CreateOnboardingLink()`. Sets `onboarding_status = 'onboarding'` if currently `pending`.
 - **Error codes**: `400` (already active), `502` (payment provider error)
 
 ##### `GET /v1/marketplace/creators/me`
@@ -553,7 +553,7 @@ Update publisher details.
 List publisher members.
 
 - **Auth**: `RequireCreator` + publisher member check
-- **Response**: `200 OK` → `Vec<PublisherMemberResponse>`
+- **Response**: `200 OK` → `[]PublisherMemberResponse`
 - **Error codes**: `403` (not a member), `404`
 
 #### Listing Commands (5 endpoints)
@@ -641,9 +641,9 @@ Get listing detail.
 Trigram-based autocomplete for listing titles.
 
 - **Auth**: `AuthContext`
-- **Query**: `{ q: String, limit?: u8 }`
+- **Query**: `{ q: string, limit?: uint8 }`
 - **Validation**: `q` minimum 2 chars, `limit` max 10
-- **Response**: `200 OK` → `Vec<AutocompleteResult>`
+- **Response**: `200 OK` → `[]AutocompleteResult`
 - **Error codes**: `422`
 
 ##### `GET /v1/marketplace/curated-sections`
@@ -651,8 +651,8 @@ Trigram-based autocomplete for listing titles.
 Get all active curated sections with their listings.
 
 - **Auth**: `AuthContext`
-- **Query**: `{ items_per_section?: u8 }`
-- **Response**: `200 OK` → `Vec<CuratedSectionResponse>`
+- **Query**: `{ items_per_section?: uint8 }`
+- **Response**: `200 OK` → `[]CuratedSectionResponse`
 
 #### Cart & Checkout (4 endpoints)
 
@@ -688,8 +688,8 @@ Create a Hyperswitch payment session for cart items and redirect to checkout.
 - **Auth**: `AuthContext`
 - **Body**: `CreateCheckoutCommand {}` (empty — uses current cart contents)
 - **Validation**: Cart must not be empty, all cart items must still be published
-- **Response**: `200 OK` → `{ checkout_url: String, payment_session_id: String }`
-- **Side effects**: Calls `PaymentAdapter::create_payment()` with split rules per listing. `[§11]`
+- **Response**: `200 OK` → `{ checkout_url: string, payment_session_id: string }`
+- **Side effects**: Calls `PaymentAdapter.CreatePayment()` with split rules per listing. `[§11]`
 - **Error codes**: `400` (empty cart), `409` (stale cart — items unpublished), `502` (payment provider)
 
 #### Purchases & Downloads (2 endpoints)
@@ -732,7 +732,7 @@ Create a review for a purchased listing.
 
 Receive Hyperswitch payment event webhooks.
 
-- **Auth**: Webhook signature verification via `PaymentAdapter::verify_webhook()`
+- **Auth**: Webhook signature verification via `PaymentAdapter.VerifyWebhook()`
 - **Body**: Raw Hyperswitch webhook payload
 - **Response**: `200 OK`
 - **Side effects**: On `payment_succeeded`: create `mkt_purchases` rows, clear cart items, publish `PurchaseCompleted` events. On `payment_failed`: log failure. On `refund_succeeded`: update purchase refund columns. `[§11]`
@@ -778,7 +778,7 @@ Creator responds to a review.
 Creator dashboard with sales and earnings data.
 
 - **Auth**: `RequireCreator`
-- **Query**: `{ period?: String }` (default: last 30 days)
+- **Query**: `{ period?: string }` (default: last 30 days)
 - **Response**: `200 OK` → `CreatorDashboardResponse`
 
 ##### `GET /v1/marketplace/creators/listings`
@@ -795,15 +795,15 @@ Request a payout of accumulated earnings via Hyperswitch payout API.
 
 - **Auth**: `RequireCreator`
 - **Validation**: `onboarding_status` must be `active`, minimum payout threshold met
-- **Response**: `200 OK` → `{ payout_id: String, amount_cents: i64, status: String }`
-- **Side effects**: Calls `PaymentAdapter::create_payout()`
+- **Response**: `200 OK` → `{ payout_id: string, amount_cents: int64, status: string }`
+- **Side effects**: Calls `PaymentAdapter.CreatePayout()`
 
 ##### `POST /v1/marketplace/publishers/:publisher_id/members`
 
 Add a member to a publisher.
 
 - **Auth**: `RequireCreator` + publisher owner/admin check
-- **Body**: `{ creator_id: Uuid, role: String }`
+- **Body**: `{ creator_id: uuid.UUID, role: string }`
 - **Response**: `201 Created` → `PublisherMemberResponse`
 
 ### §4.3 Phase 3 (~4 endpoints)
@@ -813,7 +813,7 @@ Add a member to a publisher.
 Create a content bundle linking multiple listings.
 
 - **Auth**: `RequireCreator`
-- **Body**: `{ listing_ids: Vec<Uuid>, bundle_price_cents: i64 }`
+- **Body**: `{ listing_ids: []uuid.UUID, bundle_price_cents: int64 }`
 
 ##### `POST /v1/marketplace/admin/listings/:listing_id/publish`
 
@@ -832,333 +832,145 @@ Remove a member from a publisher.
 List version history for a listing.
 
 - **Auth**: `RequireCreator` + listing owner check
-- **Response**: `200 OK` → `Vec<ListingVersionResponse>`
+- **Response**: `200 OK` → `[]ListingVersionResponse`
 
 ---
 
 ## §5 Service Interface
 
-The `MarketplaceService` trait defines all use cases exposed to handlers and other domains.
+The `MarketplaceService` interface defines all use cases exposed to handlers and other domains.
 Commands and queries are clearly separated per CQRS conventions. `[ARCH §4.7, CODING §8.2]`
 
-```rust
-// src/mkt/ports.rs
+```go
+// internal/mkt/ports.go
 
-use crate::shared::types::{FamilyId, FamilyScope};
-use crate::shared::error::AppError;
-use crate::shared::pagination::PaginatedResponse;
-
-#[async_trait]
-pub trait MarketplaceService: Send + Sync {
+// MarketplaceService defines all marketplace use cases.
+// Command methods return only IDs or error — never rich reads after write. [CODING §8.5]
+type MarketplaceService interface {
     // ─── Command side (write, has side effects) ─────────────────────────
-    // Return only IDs or () — never rich reads after write. [CODING §8.5]
 
     // Creator onboarding
-    async fn register_creator(
-        &self,
-        cmd: RegisterCreatorCommand,
-        auth: &AuthContext,
-    ) -> Result<Uuid, AppError>;
-
-    async fn update_creator_profile(
-        &self,
-        cmd: UpdateCreatorProfileCommand,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn create_onboarding_link(
-        &self,
-        creator_id: Uuid,
-    ) -> Result<String, AppError>;
+    RegisterCreator(ctx context.Context, cmd RegisterCreatorCommand, auth *AuthContext) (uuid.UUID, error)
+    UpdateCreatorProfile(ctx context.Context, cmd UpdateCreatorProfileCommand, creatorID uuid.UUID) error
+    CreateOnboardingLink(ctx context.Context, creatorID uuid.UUID) (string, error)
 
     // Publisher management
-    async fn create_publisher(
-        &self,
-        cmd: CreatePublisherCommand,
-        creator_id: Uuid,
-    ) -> Result<Uuid, AppError>;
-
-    async fn update_publisher(
-        &self,
-        cmd: UpdatePublisherCommand,
-        publisher_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn add_publisher_member(
-        &self,
-        publisher_id: Uuid,
-        creator_id: Uuid,
-        role: String,
-        acting_creator_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn remove_publisher_member(
-        &self,
-        publisher_id: Uuid,
-        member_id: Uuid,
-        acting_creator_id: Uuid,
-    ) -> Result<(), AppError>;
+    CreatePublisher(ctx context.Context, cmd CreatePublisherCommand, creatorID uuid.UUID) (uuid.UUID, error)
+    UpdatePublisher(ctx context.Context, cmd UpdatePublisherCommand, publisherID, creatorID uuid.UUID) error
+    AddPublisherMember(ctx context.Context, publisherID, creatorID uuid.UUID, role string, actingCreatorID uuid.UUID) error
+    RemovePublisherMember(ctx context.Context, publisherID, memberID, actingCreatorID uuid.UUID) error
 
     // Listing lifecycle
-    async fn create_listing(
-        &self,
-        cmd: CreateListingCommand,
-        creator_id: Uuid,
-    ) -> Result<Uuid, AppError>;
-
-    async fn update_listing(
-        &self,
-        cmd: UpdateListingCommand,
-        listing_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn submit_listing(
-        &self,
-        listing_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn publish_listing(
-        &self,
-        listing_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn archive_listing(
-        &self,
-        listing_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn upload_listing_file(
-        &self,
-        cmd: UploadListingFileCommand,
-        listing_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<Uuid, AppError>;
+    CreateListing(ctx context.Context, cmd CreateListingCommand, creatorID uuid.UUID) (uuid.UUID, error)
+    UpdateListing(ctx context.Context, cmd UpdateListingCommand, listingID, creatorID uuid.UUID) error
+    SubmitListing(ctx context.Context, listingID, creatorID uuid.UUID) error
+    PublishListing(ctx context.Context, listingID, creatorID uuid.UUID) error
+    ArchiveListing(ctx context.Context, listingID, creatorID uuid.UUID) error
+    UploadListingFile(ctx context.Context, cmd UploadListingFileCommand, listingID, creatorID uuid.UUID) (uuid.UUID, error)
 
     // Cart & checkout
-    async fn add_to_cart(
-        &self,
-        listing_id: Uuid,
-        scope: FamilyScope,
-        parent_id: Uuid,
-    ) -> Result<(), AppError>;
-
-    async fn remove_from_cart(
-        &self,
-        listing_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
-
-    async fn create_checkout(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<CheckoutSession, AppError>;
-
-    async fn handle_payment_webhook(
-        &self,
-        payload: Vec<u8>,
-        signature: String,
-    ) -> Result<(), AppError>;
+    AddToCart(ctx context.Context, listingID uuid.UUID, scope FamilyScope, parentID uuid.UUID) error
+    RemoveFromCart(ctx context.Context, listingID uuid.UUID, scope FamilyScope) error
+    CreateCheckout(ctx context.Context, scope FamilyScope) (*CheckoutSession, error)
+    HandlePaymentWebhook(ctx context.Context, payload []byte, signature string) error
 
     // Reviews
-    async fn create_review(
-        &self,
-        cmd: CreateReviewCommand,
-        listing_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Uuid, AppError>;
-
-    async fn update_review(
-        &self,
-        cmd: UpdateReviewCommand,
-        review_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
-
-    async fn delete_review(
-        &self,
-        review_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
-
-    async fn respond_to_review(
-        &self,
-        cmd: RespondToReviewCommand,
-        review_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
+    CreateReview(ctx context.Context, cmd CreateReviewCommand, listingID uuid.UUID, scope FamilyScope) (uuid.UUID, error)
+    UpdateReview(ctx context.Context, cmd UpdateReviewCommand, reviewID uuid.UUID, scope FamilyScope) error
+    DeleteReview(ctx context.Context, reviewID uuid.UUID, scope FamilyScope) error
+    RespondToReview(ctx context.Context, cmd RespondToReviewCommand, reviewID, creatorID uuid.UUID) error
 
     // Free content acquisition
-    async fn get_free_listing(
-        &self,
-        listing_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<Uuid, AppError>;
+    GetFreeListing(ctx context.Context, listingID uuid.UUID, scope FamilyScope) (uuid.UUID, error)
 
     // Payouts (Phase 2)
-    async fn request_payout(
-        &self,
-        creator_id: Uuid,
-    ) -> Result<PayoutResult, AppError>;
+    RequestPayout(ctx context.Context, creatorID uuid.UUID) (*PayoutResult, error)
 
     // Event handlers (cross-domain reactions)
-    async fn handle_content_flagged(
-        &self,
-        listing_id: Uuid,
-        reason: String,
-    ) -> Result<(), AppError>;
-
-    async fn handle_family_deletion_scheduled(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+    HandleContentFlagged(ctx context.Context, listingID uuid.UUID, reason string) error
+    HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
 
     // ─── Query side (read, no side effects) ─────────────────────────────
 
     // Creator queries
-    async fn get_creator_by_parent_id(
-        &self,
-        parent_id: Uuid,
-    ) -> Result<Option<CreatorResponse>, AppError>;
-
-    async fn get_creator_dashboard(
-        &self,
-        creator_id: Uuid,
-        period: DashboardPeriod,
-    ) -> Result<CreatorDashboardResponse, AppError>;
-
-    async fn get_creator_listings(
-        &self,
-        creator_id: Uuid,
-        params: CreatorListingQueryParams,
-    ) -> Result<PaginatedResponse<ListingDetailResponse>, AppError>;
+    GetCreatorByParentID(ctx context.Context, parentID uuid.UUID) (*CreatorResponse, error)
+    GetCreatorDashboard(ctx context.Context, creatorID uuid.UUID, period DashboardPeriod) (*CreatorDashboardResponse, error)
+    GetCreatorListings(ctx context.Context, creatorID uuid.UUID, params CreatorListingQueryParams) (*PaginatedResponse[ListingDetailResponse], error)
 
     // Publisher queries
-    async fn get_publisher(
-        &self,
-        publisher_id: Uuid,
-    ) -> Result<PublisherResponse, AppError>;
-
-    async fn get_publisher_members(
-        &self,
-        publisher_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<Vec<PublisherMemberResponse>, AppError>;
-
-    /// Verify that creator_id is a member of publisher_id with the given
-    /// minimum role. Consumed by learn:: for publisher ownership checks.
-    /// [06-learn §18.2]
-    async fn verify_publisher_membership(
-        &self,
-        publisher_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<bool, AppError>;
+    GetPublisher(ctx context.Context, publisherID uuid.UUID) (*PublisherResponse, error)
+    GetPublisherMembers(ctx context.Context, publisherID, creatorID uuid.UUID) ([]PublisherMemberResponse, error)
+    // VerifyPublisherMembership verifies that creatorID is a member of publisherID.
+    // Consumed by learn:: for publisher ownership checks. [06-learn §18.2]
+    VerifyPublisherMembership(ctx context.Context, publisherID, creatorID uuid.UUID) (bool, error)
 
     // Listing browse
-    async fn browse_listings(
-        &self,
-        params: BrowseListingsParams,
-    ) -> Result<PaginatedResponse<ListingBrowseResponse>, AppError>;
-
-    async fn get_listing(
-        &self,
-        listing_id: Uuid,
-    ) -> Result<ListingDetailResponse, AppError>;
-
-    async fn autocomplete_listings(
-        &self,
-        query: String,
-        limit: u8,
-    ) -> Result<Vec<AutocompleteResult>, AppError>;
-
-    async fn get_curated_sections(
-        &self,
-        items_per_section: u8,
-    ) -> Result<Vec<CuratedSectionResponse>, AppError>;
+    BrowseListings(ctx context.Context, params BrowseListingsParams) (*PaginatedResponse[ListingBrowseResponse], error)
+    GetListing(ctx context.Context, listingID uuid.UUID) (*ListingDetailResponse, error)
+    AutocompleteListings(ctx context.Context, query string, limit uint8) ([]AutocompleteResult, error)
+    GetCuratedSections(ctx context.Context, itemsPerSection uint8) ([]CuratedSectionResponse, error)
 
     // Cart queries
-    async fn get_cart(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<CartResponse, AppError>;
+    GetCart(ctx context.Context, scope FamilyScope) (*CartResponse, error)
 
     // Purchase queries
-    async fn get_purchases(
-        &self,
-        scope: FamilyScope,
-        params: PurchaseQueryParams,
-    ) -> Result<PaginatedResponse<PurchaseResponse>, AppError>;
-
-    async fn get_download_url(
-        &self,
-        listing_id: Uuid,
-        file_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<DownloadResponse, AppError>;
+    GetPurchases(ctx context.Context, scope FamilyScope, params PurchaseQueryParams) (*PaginatedResponse[PurchaseResponse], error)
+    GetDownloadURL(ctx context.Context, listingID, fileID uuid.UUID, scope FamilyScope) (*DownloadResponse, error)
 
     // Review queries
-    async fn get_listing_reviews(
-        &self,
-        listing_id: Uuid,
-        params: ReviewQueryParams,
-    ) -> Result<PaginatedResponse<ReviewResponse>, AppError>;
+    GetListingReviews(ctx context.Context, listingID uuid.UUID, params ReviewQueryParams) (*PaginatedResponse[ReviewResponse], error)
 }
 ```
 
 ### Implementation
 
-```rust
-// src/mkt/service.rs
+```go
+// internal/mkt/service.go
 
-pub struct MarketplaceServiceImpl {
-    creators: Arc<dyn CreatorRepository>,
-    publishers: Arc<dyn PublisherRepository>,
-    listings: Arc<dyn ListingRepository>,
-    listing_files: Arc<dyn ListingFileRepository>,
-    cart: Arc<dyn CartRepository>,
-    purchases: Arc<dyn PurchaseRepository>,
-    reviews: Arc<dyn ReviewRepository>,
-    curated_sections: Arc<dyn CuratedSectionRepository>,
-    payment: Arc<dyn PaymentAdapter>,
-    media: Arc<dyn MediaAdapter>,
-    events: Arc<EventBus>,
+type MarketplaceServiceImpl struct {
+    creators       CreatorRepository
+    publishers     PublisherRepository
+    listings       ListingRepository
+    listingFiles   ListingFileRepository
+    cart           CartRepository
+    purchases      PurchaseRepository
+    reviews        ReviewRepository
+    curatedSections CuratedSectionRepository
+    payment        PaymentAdapter
+    media          MediaAdapter
+    events         *EventBus
 }
 
-impl MarketplaceServiceImpl {
-    pub fn new(
-        creators: Arc<dyn CreatorRepository>,
-        publishers: Arc<dyn PublisherRepository>,
-        listings: Arc<dyn ListingRepository>,
-        listing_files: Arc<dyn ListingFileRepository>,
-        cart: Arc<dyn CartRepository>,
-        purchases: Arc<dyn PurchaseRepository>,
-        reviews: Arc<dyn ReviewRepository>,
-        curated_sections: Arc<dyn CuratedSectionRepository>,
-        payment: Arc<dyn PaymentAdapter>,
-        media: Arc<dyn MediaAdapter>,
-        events: Arc<EventBus>,
-    ) -> Self {
-        Self {
-            creators,
-            publishers,
-            listings,
-            listing_files,
-            cart,
-            purchases,
-            reviews,
-            curated_sections,
-            payment,
-            media,
-            events,
-        }
+func NewMarketplaceService(
+    creators CreatorRepository,
+    publishers PublisherRepository,
+    listings ListingRepository,
+    listingFiles ListingFileRepository,
+    cart CartRepository,
+    purchases PurchaseRepository,
+    reviews ReviewRepository,
+    curatedSections CuratedSectionRepository,
+    payment PaymentAdapter,
+    media MediaAdapter,
+    events *EventBus,
+) *MarketplaceServiceImpl {
+    return &MarketplaceServiceImpl{
+        creators:       creators,
+        publishers:     publishers,
+        listings:       listings,
+        listingFiles:   listingFiles,
+        cart:           cart,
+        purchases:      purchases,
+        reviews:        reviews,
+        curatedSections: curatedSections,
+        payment:        payment,
+        media:          media,
+        events:         events,
     }
 }
 
-impl MarketplaceService for MarketplaceServiceImpl { /* ... */ }
+// MarketplaceServiceImpl implements MarketplaceService.
+var _ MarketplaceService = (*MarketplaceServiceImpl)(nil)
 ```
 
 ---
@@ -1169,240 +981,105 @@ Each repository trait maps to one or more database tables. Family-scoped methods
 `FamilyScope` to enforce privacy. Non-family-scoped methods (creators, publishers, listings)
 are documented as such. `[CODING §8.2]`
 
-```rust
-// src/mkt/ports.rs (continued)
+```go
+// internal/mkt/ports.go (continued)
 
 // ─── CreatorRepository ──────────────────────────────────────────────────
 // NOT family-scoped — creator accounts are per-parent, not per-family.
-#[async_trait]
-pub trait CreatorRepository: Send + Sync {
-    async fn create(&self, cmd: CreateCreator) -> Result<MktCreator, AppError>;
-    async fn get_by_id(&self, creator_id: Uuid) -> Result<Option<MktCreator>, AppError>;
-    async fn get_by_parent_id(&self, parent_id: Uuid) -> Result<Option<MktCreator>, AppError>;
-    async fn update(&self, creator_id: Uuid, cmd: UpdateCreator) -> Result<MktCreator, AppError>;
-    async fn set_onboarding_status(
-        &self,
-        creator_id: Uuid,
-        status: String,
-    ) -> Result<(), AppError>;
-    async fn set_payment_account_id(
-        &self,
-        creator_id: Uuid,
-        payment_account_id: String,
-    ) -> Result<(), AppError>;
+type CreatorRepository interface {
+    Create(ctx context.Context, cmd CreateCreator) (*MktCreator, error)
+    GetByID(ctx context.Context, creatorID uuid.UUID) (*MktCreator, error)
+    GetByParentID(ctx context.Context, parentID uuid.UUID) (*MktCreator, error)
+    Update(ctx context.Context, creatorID uuid.UUID, cmd UpdateCreator) (*MktCreator, error)
+    SetOnboardingStatus(ctx context.Context, creatorID uuid.UUID, status string) error
+    SetPaymentAccountID(ctx context.Context, creatorID uuid.UUID, paymentAccountID string) error
 }
 
 // ─── PublisherRepository ────────────────────────────────────────────────
 // NOT family-scoped — publishers are organization-level entities.
-#[async_trait]
-pub trait PublisherRepository: Send + Sync {
-    async fn create(&self, cmd: CreatePublisher) -> Result<MktPublisher, AppError>;
-    async fn get_by_id(&self, publisher_id: Uuid) -> Result<Option<MktPublisher>, AppError>;
-    async fn get_by_slug(&self, slug: &str) -> Result<Option<MktPublisher>, AppError>;
-    async fn update(
-        &self,
-        publisher_id: Uuid,
-        cmd: UpdatePublisher,
-    ) -> Result<MktPublisher, AppError>;
-    async fn get_platform_publisher(&self) -> Result<MktPublisher, AppError>;
+type PublisherRepository interface {
+    Create(ctx context.Context, cmd CreatePublisher) (*MktPublisher, error)
+    GetByID(ctx context.Context, publisherID uuid.UUID) (*MktPublisher, error)
+    GetBySlug(ctx context.Context, slug string) (*MktPublisher, error)
+    Update(ctx context.Context, publisherID uuid.UUID, cmd UpdatePublisher) (*MktPublisher, error)
+    GetPlatformPublisher(ctx context.Context) (*MktPublisher, error)
 
     // Membership
-    async fn add_member(
-        &self,
-        publisher_id: Uuid,
-        creator_id: Uuid,
-        role: &str,
-    ) -> Result<(), AppError>;
-    async fn remove_member(
-        &self,
-        publisher_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<(), AppError>;
-    async fn get_members(
-        &self,
-        publisher_id: Uuid,
-    ) -> Result<Vec<PublisherMemberRow>, AppError>;
-    async fn get_member_role(
-        &self,
-        publisher_id: Uuid,
-        creator_id: Uuid,
-    ) -> Result<Option<String>, AppError>;
-    async fn get_publishers_for_creator(
-        &self,
-        creator_id: Uuid,
-    ) -> Result<Vec<MktPublisher>, AppError>;
+    AddMember(ctx context.Context, publisherID, creatorID uuid.UUID, role string) error
+    RemoveMember(ctx context.Context, publisherID, creatorID uuid.UUID) error
+    GetMembers(ctx context.Context, publisherID uuid.UUID) ([]PublisherMemberRow, error)
+    GetMemberRole(ctx context.Context, publisherID, creatorID uuid.UUID) (*string, error)
+    GetPublishersForCreator(ctx context.Context, creatorID uuid.UUID) ([]MktPublisher, error)
 }
 
 // ─── ListingRepository ──────────────────────────────────────────────────
 // NOT family-scoped — listings are creator-owned, publicly browsable.
 // CQRS: command methods (create/update/save) and query methods (browse/get)
 // are clearly separated. [CODING §8.5]
-#[async_trait]
-pub trait ListingRepository: Send + Sync {
+type ListingRepository interface {
     // Command side
-    async fn create(&self, cmd: CreateListing) -> Result<MktListing, AppError>;
-    async fn save(&self, listing: &MarketplaceListing) -> Result<(), AppError>;
-    async fn create_version_snapshot(
-        &self,
-        listing_id: Uuid,
-        version: i32,
-        title: &str,
-        description: &str,
-        price_cents: i32,
-        change_summary: Option<&str>,
-    ) -> Result<(), AppError>;
+    Create(ctx context.Context, cmd CreateListing) (*MktListing, error)
+    Save(ctx context.Context, listing *MarketplaceListing) error
+    CreateVersionSnapshot(ctx context.Context, listingID uuid.UUID, version int32, title, description string, priceCents int32, changeSummary *string) error
 
     // Query side
-    async fn get_by_id(&self, listing_id: Uuid) -> Result<Option<MktListing>, AppError>;
-    async fn browse(
-        &self,
-        params: &BrowseListingsParams,
-    ) -> Result<PaginatedResponse<ListingBrowseRow>, AppError>;
-    async fn autocomplete(
-        &self,
-        query: &str,
-        limit: u8,
-    ) -> Result<Vec<AutocompleteRow>, AppError>;
-    async fn get_by_creator(
-        &self,
-        creator_id: Uuid,
-        params: &CreatorListingQueryParams,
-    ) -> Result<PaginatedResponse<MktListing>, AppError>;
-    async fn get_versions(
-        &self,
-        listing_id: Uuid,
-    ) -> Result<Vec<MktListingVersion>, AppError>;
-    async fn count_files(&self, listing_id: Uuid) -> Result<i64, AppError>;
+    GetByID(ctx context.Context, listingID uuid.UUID) (*MktListing, error)
+    Browse(ctx context.Context, params *BrowseListingsParams) (*PaginatedResponse[ListingBrowseRow], error)
+    Autocomplete(ctx context.Context, query string, limit uint8) ([]AutocompleteRow, error)
+    GetByCreator(ctx context.Context, creatorID uuid.UUID, params *CreatorListingQueryParams) (*PaginatedResponse[MktListing], error)
+    GetVersions(ctx context.Context, listingID uuid.UUID) ([]MktListingVersion, error)
+    CountFiles(ctx context.Context, listingID uuid.UUID) (int64, error)
 }
 
 // ─── ListingFileRepository ──────────────────────────────────────────────
-#[async_trait]
-pub trait ListingFileRepository: Send + Sync {
-    async fn create(&self, cmd: CreateListingFile) -> Result<MktListingFile, AppError>;
-    async fn get_by_id(
-        &self,
-        listing_id: Uuid,
-        file_id: Uuid,
-    ) -> Result<Option<MktListingFile>, AppError>;
-    async fn list_by_listing(
-        &self,
-        listing_id: Uuid,
-    ) -> Result<Vec<MktListingFile>, AppError>;
-    async fn delete(&self, file_id: Uuid) -> Result<(), AppError>;
+type ListingFileRepository interface {
+    Create(ctx context.Context, cmd CreateListingFile) (*MktListingFile, error)
+    GetByID(ctx context.Context, listingID, fileID uuid.UUID) (*MktListingFile, error)
+    ListByListing(ctx context.Context, listingID uuid.UUID) ([]MktListingFile, error)
+    Delete(ctx context.Context, fileID uuid.UUID) error
 }
 
 // ─── CartRepository ─────────────────────────────────────────────────────
 // Family-scoped — cart belongs to the family. [00-core §8]
-#[async_trait]
-pub trait CartRepository: Send + Sync {
-    async fn add_item(
-        &self,
-        listing_id: Uuid,
-        parent_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
-    async fn remove_item(
-        &self,
-        listing_id: Uuid,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
-    async fn get_items(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Vec<CartItemRow>, AppError>;
-    async fn clear(&self, scope: FamilyScope) -> Result<(), AppError>;
+type CartRepository interface {
+    AddItem(ctx context.Context, listingID, parentID uuid.UUID, scope FamilyScope) error
+    RemoveItem(ctx context.Context, listingID uuid.UUID, scope FamilyScope) error
+    GetItems(ctx context.Context, scope FamilyScope) ([]CartItemRow, error)
+    Clear(ctx context.Context, scope FamilyScope) error
 }
 
 // ─── PurchaseRepository ─────────────────────────────────────────────────
 // Family-scoped on read queries. System-scoped writes (from webhook handler).
-#[async_trait]
-pub trait PurchaseRepository: Send + Sync {
-    async fn create(&self, cmd: CreatePurchase) -> Result<MktPurchase, AppError>;
-    async fn get_by_family_and_listing(
-        &self,
-        family_id: Uuid,
-        listing_id: Uuid,
-    ) -> Result<Option<MktPurchase>, AppError>;
-    async fn list_by_family(
-        &self,
-        scope: FamilyScope,
-        params: &PurchaseQueryParams,
-    ) -> Result<PaginatedResponse<PurchaseRow>, AppError>;
-    async fn get_by_payment_session_id(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<MktPurchase>, AppError>;
-    async fn set_refund(
-        &self,
-        purchase_id: Uuid,
-        refund_id: &str,
-        refund_amount_cents: i32,
-    ) -> Result<(), AppError>;
-    async fn get_creator_sales(
-        &self,
-        creator_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-    ) -> Result<Vec<SalesRow>, AppError>;
-    async fn delete_by_family(
-        &self,
-        family_id: Uuid,
-    ) -> Result<(), AppError>;
+type PurchaseRepository interface {
+    Create(ctx context.Context, cmd CreatePurchase) (*MktPurchase, error)
+    GetByFamilyAndListing(ctx context.Context, familyID, listingID uuid.UUID) (*MktPurchase, error)
+    ListByFamily(ctx context.Context, scope FamilyScope, params *PurchaseQueryParams) (*PaginatedResponse[PurchaseRow], error)
+    GetByPaymentSessionID(ctx context.Context, sessionID string) (*MktPurchase, error)
+    SetRefund(ctx context.Context, purchaseID uuid.UUID, refundID string, refundAmountCents int32) error
+    GetCreatorSales(ctx context.Context, creatorID uuid.UUID, from, to time.Time) ([]SalesRow, error)
+    DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── ReviewRepository ───────────────────────────────────────────────────
 // Family-scoped writes, public reads.
-#[async_trait]
-pub trait ReviewRepository: Send + Sync {
-    async fn create(&self, cmd: CreateReview) -> Result<MktReview, AppError>;
-    async fn get_by_id(&self, review_id: Uuid) -> Result<Option<MktReview>, AppError>;
-    async fn update(&self, review_id: Uuid, cmd: UpdateReview) -> Result<MktReview, AppError>;
-    async fn delete(&self, review_id: Uuid) -> Result<(), AppError>;
-    async fn set_creator_response(
-        &self,
-        review_id: Uuid,
-        response_text: &str,
-    ) -> Result<(), AppError>;
-    async fn list_by_listing(
-        &self,
-        listing_id: Uuid,
-        params: &ReviewQueryParams,
-    ) -> Result<PaginatedResponse<ReviewRow>, AppError>;
-    async fn get_aggregate_rating(
-        &self,
-        listing_id: Uuid,
-    ) -> Result<(f64, i32), AppError>;
-    async fn set_moderation_status(
-        &self,
-        review_id: Uuid,
-        status: &str,
-    ) -> Result<(), AppError>;
+type ReviewRepository interface {
+    Create(ctx context.Context, cmd CreateReview) (*MktReview, error)
+    GetByID(ctx context.Context, reviewID uuid.UUID) (*MktReview, error)
+    Update(ctx context.Context, reviewID uuid.UUID, cmd UpdateReview) (*MktReview, error)
+    Delete(ctx context.Context, reviewID uuid.UUID) error
+    SetCreatorResponse(ctx context.Context, reviewID uuid.UUID, responseText string) error
+    ListByListing(ctx context.Context, listingID uuid.UUID, params *ReviewQueryParams) (*PaginatedResponse[ReviewRow], error)
+    GetAggregateRating(ctx context.Context, listingID uuid.UUID) (float64, int32, error)
+    SetModerationStatus(ctx context.Context, reviewID uuid.UUID, status string) error
 }
 
 // ─── CuratedSectionRepository ───────────────────────────────────────────
-#[async_trait]
-pub trait CuratedSectionRepository: Send + Sync {
-    async fn list_active(&self) -> Result<Vec<MktCuratedSection>, AppError>;
-    async fn get_section_items(
-        &self,
-        section_id: Uuid,
-        limit: u8,
-    ) -> Result<Vec<ListingBrowseRow>, AppError>;
-    async fn add_item(
-        &self,
-        section_id: Uuid,
-        listing_id: Uuid,
-        sort_order: i16,
-    ) -> Result<(), AppError>;
-    async fn remove_item(
-        &self,
-        section_id: Uuid,
-        listing_id: Uuid,
-    ) -> Result<(), AppError>;
-    async fn refresh_auto_section(
-        &self,
-        section_slug: &str,
-    ) -> Result<(), AppError>;
+type CuratedSectionRepository interface {
+    ListActive(ctx context.Context) ([]MktCuratedSection, error)
+    GetSectionItems(ctx context.Context, sectionID uuid.UUID, limit uint8) ([]ListingBrowseRow, error)
+    AddItem(ctx context.Context, sectionID, listingID uuid.UUID, sortOrder int16) error
+    RemoveItem(ctx context.Context, sectionID, listingID uuid.UUID) error
+    RefreshAutoSection(ctx context.Context, sectionSlug string) error
 }
 ```
 
@@ -1426,169 +1103,118 @@ configured as the initial connector in Hyperswitch, swappable without code chang
 > payment connector — can add Adyen, Xendit, etc. later without code changes. See §18.5 for
 > deployment topology.
 
-```rust
-// src/mkt/adapters/payment.rs
+```go
+// internal/mkt/adapters/payment.go
 
-/// Processor-agnostic payment adapter backed by Hyperswitch.
-/// Implementations: HyperswitchPaymentAdapter (production), MockPaymentAdapter (tests).
-#[async_trait]
-pub trait PaymentAdapter: Send + Sync {
+// PaymentAdapter is a processor-agnostic payment adapter backed by Hyperswitch.
+// Implementations: HyperswitchPaymentAdapter (production), MockPaymentAdapter (tests).
+// Uses net/http to communicate with the Hyperswitch REST API.
+type PaymentAdapter interface {
     // ─── Account Management ─────────────────────────────────────────────
     // Sub-merchant onboarding for creator payouts. Maps to Hyperswitch's
     // Organization → Merchant → Profile hierarchy.
 
-    /// Create a sub-merchant account in Hyperswitch for a creator.
-    /// Returns the Hyperswitch merchant/sub-merchant ID.
-    async fn create_sub_merchant(
-        &self,
-        config: SubMerchantConfig,
-    ) -> Result<String, PaymentError>;
+    // CreateSubMerchant creates a sub-merchant account in Hyperswitch for a creator.
+    // Returns the Hyperswitch merchant/sub-merchant ID.
+    CreateSubMerchant(ctx context.Context, config SubMerchantConfig) (string, error)
 
-    /// Generate an onboarding link for creator KYC/identity verification.
-    /// The link redirects to the underlying processor's onboarding flow
-    /// (e.g., Stripe Connect onboarding) orchestrated through Hyperswitch.
-    async fn create_onboarding_link(
-        &self,
-        payment_account_id: &str,
-        return_url: &str,
-    ) -> Result<String, PaymentError>;
+    // CreateOnboardingLink generates an onboarding link for creator KYC/identity verification.
+    CreateOnboardingLink(ctx context.Context, paymentAccountID, returnURL string) (string, error)
 
-    /// Check the onboarding/verification status of a sub-merchant account.
-    async fn get_account_status(
-        &self,
-        payment_account_id: &str,
-    ) -> Result<AccountStatus, PaymentError>;
+    // GetAccountStatus checks the onboarding/verification status of a sub-merchant account.
+    GetAccountStatus(ctx context.Context, paymentAccountID string) (PaymentAccountStatus, error)
 
     // ─── Payments ───────────────────────────────────────────────────────
-    // Split payments for marketplace transactions. Hyperswitch handles
-    // routing to the configured payment processor.
 
-    /// Create a payment session with split payment rules.
-    /// Returns a checkout URL and payment session ID.
-    async fn create_payment(
-        &self,
-        line_items: Vec<PaymentLineItem>,
-        split_rules: Vec<SplitRule>,
-        return_url: &str,
-        metadata: HashMap<String, String>,
-    ) -> Result<PaymentSession, PaymentError>;
+    // CreatePayment creates a payment session with split payment rules.
+    CreatePayment(ctx context.Context, lineItems []PaymentLineItem, splitRules []SplitRule, returnURL string, metadata map[string]string) (*PaymentSession, error)
 
-    /// Check the status of a payment.
-    async fn get_payment_status(
-        &self,
-        payment_id: &str,
-    ) -> Result<PaymentStatus, PaymentError>;
+    // GetPaymentStatus checks the status of a payment.
+    GetPaymentStatus(ctx context.Context, paymentID string) (PaymentStatus, error)
 
     // ─── Payouts (Phase 2) ──────────────────────────────────────────────
 
-    /// Create a payout to a creator's connected account.
-    async fn create_payout(
-        &self,
-        payment_account_id: &str,
-        amount_cents: i64,
-        currency: &str,
-    ) -> Result<PayoutResult, PaymentError>;
+    // CreatePayout creates a payout to a creator's connected account.
+    CreatePayout(ctx context.Context, paymentAccountID string, amountCents int64, currency string) (*PayoutResult, error)
 
     // ─── Refunds ────────────────────────────────────────────────────────
 
-    /// Create a refund for a payment.
-    async fn create_refund(
-        &self,
-        payment_id: &str,
-        amount_cents: i64,
-        reason: &str,
-    ) -> Result<RefundResult, PaymentError>;
+    // CreateRefund creates a refund for a payment.
+    CreateRefund(ctx context.Context, paymentID string, amountCents int64, reason string) (*RefundResult, error)
 
     // ─── Webhooks ───────────────────────────────────────────────────────
 
-    /// Verify the signature of an incoming Hyperswitch webhook.
-    async fn verify_webhook(
-        &self,
-        payload: &[u8],
-        signature: &str,
-    ) -> Result<bool, PaymentError>;
+    // VerifyWebhook verifies the signature of an incoming Hyperswitch webhook.
+    VerifyWebhook(ctx context.Context, payload []byte, signature string) (bool, error)
 
-    /// Parse a verified webhook payload into a domain event.
-    async fn parse_event(
-        &self,
-        payload: &[u8],
-    ) -> Result<PaymentEvent, PaymentError>;
+    // ParseEvent parses a verified webhook payload into a domain event.
+    ParseEvent(ctx context.Context, payload []byte) (*PaymentEvent, error)
 }
 
 // ─── Supporting Types ───────────────────────────────────────────────────
 
-pub struct SubMerchantConfig {
-    pub creator_id: Uuid,
-    pub store_name: String,
-    pub email: String,
-    pub country: String,     // ISO 3166-1 alpha-2
+type SubMerchantConfig struct {
+    CreatorID uuid.UUID `json:"creator_id"`
+    StoreName string    `json:"store_name"`
+    Email     string    `json:"email"`
+    Country   string    `json:"country"` // ISO 3166-1 alpha-2
 }
 
-pub enum AccountStatus {
-    /// Account created but onboarding not started
-    Pending,
-    /// Creator is going through KYC/verification
-    Onboarding,
-    /// Fully verified, can receive payouts
-    Active,
-    /// Account suspended (compliance issue)
-    Suspended,
+type PaymentAccountStatus int
+
+const (
+    PaymentAccountStatusPending    PaymentAccountStatus = iota // Account created but onboarding not started
+    PaymentAccountStatusOnboarding                             // Creator is going through KYC/verification
+    PaymentAccountStatusActive                                 // Fully verified, can receive payouts
+    PaymentAccountStatusSuspended                              // Account suspended (compliance issue)
+)
+
+type PaymentLineItem struct {
+    ListingID   uuid.UUID `json:"listing_id"`
+    AmountCents int64     `json:"amount_cents"`
+    Description string    `json:"description"`
 }
 
-pub struct PaymentLineItem {
-    pub listing_id: Uuid,
-    pub amount_cents: i64,
-    pub description: String,
+type SplitRule struct {
+    RecipientAccountID string `json:"recipient_account_id"` // creator's Hyperswitch sub-merchant ID
+    AmountCents        int64  `json:"amount_cents"`         // creator's share
 }
 
-pub struct SplitRule {
-    pub recipient_account_id: String,   // creator's Hyperswitch sub-merchant ID
-    pub amount_cents: i64,              // creator's share
+type PaymentSession struct {
+    CheckoutURL      string `json:"checkout_url"`
+    PaymentSessionID string `json:"payment_session_id"` // Hyperswitch payment ID (idempotency key)
 }
 
-pub struct PaymentSession {
-    pub checkout_url: String,
-    pub payment_session_id: String,     // Hyperswitch payment ID (idempotency key)
+type PaymentStatus int
+
+const (
+    PaymentStatusProcessing PaymentStatus = iota
+    PaymentStatusSucceeded
+    PaymentStatusFailed
+    PaymentStatusCancelled
+)
+
+type PayoutResult struct {
+    PayoutID    string `json:"payout_id"`
+    AmountCents int64  `json:"amount_cents"`
+    Status      string `json:"status"`
 }
 
-pub enum PaymentStatus {
-    Processing,
-    Succeeded,
-    Failed { reason: String },
-    Cancelled,
+type RefundResult struct {
+    RefundID    string `json:"refund_id"`
+    AmountCents int64  `json:"amount_cents"`
+    Status      string `json:"status"`
 }
 
-pub struct PayoutResult {
-    pub payout_id: String,
-    pub amount_cents: i64,
-    pub status: String,
-}
-
-pub struct RefundResult {
-    pub refund_id: String,
-    pub amount_cents: i64,
-    pub status: String,
-}
-
-pub enum PaymentEvent {
-    PaymentSucceeded {
-        payment_id: String,
-        metadata: HashMap<String, String>,
-    },
-    PaymentFailed {
-        payment_id: String,
-        reason: String,
-    },
-    RefundSucceeded {
-        payment_id: String,
-        refund_id: String,
-        amount_cents: i64,
-    },
-    PayoutCompleted {
-        payout_id: String,
-        merchant_id: String,
-        amount_cents: i64,
-    },
+type PaymentEvent struct {
+    Type        string            // "payment_succeeded", "payment_failed", "refund_succeeded", "payout_completed"
+    PaymentID   string
+    Metadata    map[string]string
+    Reason      string
+    RefundID    string
+    AmountCents int64
+    MerchantID  string
+    PayoutID    string
 }
 ```
 
@@ -1596,24 +1222,13 @@ pub enum PaymentEvent {
 
 File upload and signed-URL generation delegated to `media::`. `[ARCH §4.2]`
 
-```rust
+```go
 // Consumed from media:: — not defined here. See media:: domain spec.
 // Used for: presigned upload URLs (creator uploads), presigned download
 // URLs (purchaser downloads). [ARCH §8.3]
-#[async_trait]
-pub trait MediaAdapter: Send + Sync {
-    async fn presigned_upload(
-        &self,
-        key: &str,
-        content_type: &str,
-        max_size_bytes: u64,
-    ) -> Result<String, AppError>;
-
-    async fn presigned_get(
-        &self,
-        key: &str,
-        expires_seconds: u32,
-    ) -> Result<String, AppError>;
+type MediaAdapter interface {
+    PresignedUpload(ctx context.Context, key, contentType string, maxSizeBytes uint64) (string, error)
+    PresignedGet(ctx context.Context, key string, expiresSeconds uint32) (string, error)
 }
 ```
 
@@ -1621,418 +1236,390 @@ pub trait MediaAdapter: Send + Sync {
 
 ## §8 Models (DTOs)
 
-All request/response types derive `serde::Serialize`/`Deserialize` and OpenAPI schema derives
-for code generation. `[CODING §2.1]`
+All request/response types use struct tags for JSON serialization and swaggo annotations
+for OpenAPI code generation. `[CODING §2.1]`
 
 ### §8.1 Request Types
 
-```rust
-// src/mkt/models.rs
+```go
+// internal/mkt/models.go
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct RegisterCreatorCommand {
-    pub store_name: String,
-    pub store_bio: Option<String>,
-    pub store_logo_url: Option<String>,
-    pub tos_accepted: bool,
+type RegisterCreatorCommand struct {
+    StoreName    string  `json:"store_name" validate:"required,min=1,max=100"`
+    StoreBio     *string `json:"store_bio,omitempty"`
+    StoreLogoURL *string `json:"store_logo_url,omitempty"`
+    TOSAccepted  bool    `json:"tos_accepted" validate:"required"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdateCreatorProfileCommand {
-    pub store_name: Option<String>,
-    pub store_bio: Option<String>,
-    pub store_logo_url: Option<String>,
-    pub store_banner_url: Option<String>,
+type UpdateCreatorProfileCommand struct {
+    StoreName     *string `json:"store_name,omitempty" validate:"omitempty,min=1,max=100"`
+    StoreBio      *string `json:"store_bio,omitempty"`
+    StoreLogoURL  *string `json:"store_logo_url,omitempty"`
+    StoreBannerURL *string `json:"store_banner_url,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreatePublisherCommand {
-    pub name: String,
-    pub slug: Option<String>,
-    pub description: Option<String>,
-    pub logo_url: Option<String>,
-    pub website_url: Option<String>,
+type CreatePublisherCommand struct {
+    Name        string  `json:"name" validate:"required,min=1,max=100"`
+    Slug        *string `json:"slug,omitempty"`
+    Description *string `json:"description,omitempty"`
+    LogoURL     *string `json:"logo_url,omitempty"`
+    WebsiteURL  *string `json:"website_url,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdatePublisherCommand {
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub logo_url: Option<String>,
-    pub website_url: Option<String>,
+type UpdatePublisherCommand struct {
+    Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=100"`
+    Description *string `json:"description,omitempty"`
+    LogoURL     *string `json:"logo_url,omitempty"`
+    WebsiteURL  *string `json:"website_url,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateListingCommand {
-    pub publisher_id: Uuid,
-    pub title: String,
-    pub description: String,
-    pub price_cents: i32,
-    pub methodology_tags: Vec<Uuid>,
-    pub subject_tags: Vec<String>,
-    pub grade_min: Option<i16>,
-    pub grade_max: Option<i16>,
-    pub content_type: String,
-    pub worldview_tags: Option<Vec<String>>,
-    pub preview_url: Option<String>,
-    pub thumbnail_url: Option<String>,
+type CreateListingCommand struct {
+    PublisherID    uuid.UUID   `json:"publisher_id" validate:"required"`
+    Title          string      `json:"title" validate:"required,min=1,max=200"`
+    Description    string      `json:"description" validate:"required,min=1,max=10000"`
+    PriceCents     int32       `json:"price_cents" validate:"gte=0"`
+    MethodologyTags []uuid.UUID `json:"methodology_tags" validate:"required,min=1"`
+    SubjectTags    []string    `json:"subject_tags" validate:"required,min=1"`
+    GradeMin       *int16      `json:"grade_min,omitempty"`
+    GradeMax       *int16      `json:"grade_max,omitempty"`
+    ContentType    string      `json:"content_type" validate:"required"`
+    WorldviewTags  []string    `json:"worldview_tags,omitempty"`
+    PreviewURL     *string     `json:"preview_url,omitempty"`
+    ThumbnailURL   *string     `json:"thumbnail_url,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdateListingCommand {
-    pub title: Option<String>,
-    pub description: Option<String>,
-    pub price_cents: Option<i32>,
-    pub methodology_tags: Option<Vec<Uuid>>,
-    pub subject_tags: Option<Vec<String>>,
-    pub grade_min: Option<i16>,
-    pub grade_max: Option<i16>,
-    pub worldview_tags: Option<Vec<String>>,
-    pub preview_url: Option<String>,
-    pub thumbnail_url: Option<String>,
+type UpdateListingCommand struct {
+    Title          *string      `json:"title,omitempty" validate:"omitempty,min=1,max=200"`
+    Description    *string      `json:"description,omitempty" validate:"omitempty,min=1,max=10000"`
+    PriceCents     *int32       `json:"price_cents,omitempty" validate:"omitempty,gte=0"`
+    MethodologyTags []uuid.UUID `json:"methodology_tags,omitempty"`
+    SubjectTags    []string     `json:"subject_tags,omitempty"`
+    GradeMin       *int16       `json:"grade_min,omitempty"`
+    GradeMax       *int16       `json:"grade_max,omitempty"`
+    WorldviewTags  []string     `json:"worldview_tags,omitempty"`
+    PreviewURL     *string      `json:"preview_url,omitempty"`
+    ThumbnailURL   *string      `json:"thumbnail_url,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UploadListingFileCommand {
-    pub file_name: String,
-    pub file_size_bytes: i64,
-    pub mime_type: String,
+type UploadListingFileCommand struct {
+    FileName      string `json:"file_name" validate:"required"`
+    FileSizeBytes int64  `json:"file_size_bytes" validate:"required"`
+    MimeType      string `json:"mime_type" validate:"required"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct AddToCartCommand {
-    pub listing_id: Uuid,
+type AddToCartCommand struct {
+    ListingID uuid.UUID `json:"listing_id" validate:"required"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateCheckoutCommand {}
+type CreateCheckoutCommand struct{}
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateReviewCommand {
-    pub rating: i16,
-    pub review_text: Option<String>,
-    pub is_anonymous: Option<bool>,
+type CreateReviewCommand struct {
+    Rating      int16   `json:"rating" validate:"required,min=1,max=5"`
+    ReviewText  *string `json:"review_text,omitempty" validate:"omitempty,max=5000"`
+    IsAnonymous *bool   `json:"is_anonymous,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdateReviewCommand {
-    pub rating: Option<i16>,
-    pub review_text: Option<String>,
-    pub is_anonymous: Option<bool>,
+type UpdateReviewCommand struct {
+    Rating      *int16  `json:"rating,omitempty" validate:"omitempty,min=1,max=5"`
+    ReviewText  *string `json:"review_text,omitempty" validate:"omitempty,max=5000"`
+    IsAnonymous *bool   `json:"is_anonymous,omitempty"`
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct RespondToReviewCommand {
-    pub response_text: String,
+type RespondToReviewCommand struct {
+    ResponseText string `json:"response_text" validate:"required"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CreatorResponse {
-    pub id: Uuid,
-    pub parent_id: Uuid,
-    pub onboarding_status: String,
-    pub store_name: String,
-    pub store_bio: Option<String>,
-    pub store_logo_url: Option<String>,
-    pub store_banner_url: Option<String>,
-    pub created_at: DateTime<Utc>,
+```go
+type CreatorResponse struct {
+    ID               uuid.UUID  `json:"id"`
+    ParentID         uuid.UUID  `json:"parent_id"`
+    OnboardingStatus string     `json:"onboarding_status"`
+    StoreName        string     `json:"store_name"`
+    StoreBio         *string    `json:"store_bio,omitempty"`
+    StoreLogoURL     *string    `json:"store_logo_url,omitempty"`
+    StoreBannerURL   *string    `json:"store_banner_url,omitempty"`
+    CreatedAt        time.Time  `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PublisherResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub description: Option<String>,
-    pub logo_url: Option<String>,
-    pub website_url: Option<String>,
-    pub is_verified: bool,
-    pub member_count: i32,
+type PublisherResponse struct {
+    ID          uuid.UUID `json:"id"`
+    Name        string    `json:"name"`
+    Slug        string    `json:"slug"`
+    Description *string   `json:"description,omitempty"`
+    LogoURL     *string   `json:"logo_url,omitempty"`
+    WebsiteURL  *string   `json:"website_url,omitempty"`
+    IsVerified  bool      `json:"is_verified"`
+    MemberCount int32     `json:"member_count"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PublisherMemberResponse {
-    pub creator_id: Uuid,
-    pub store_name: String,
-    pub role: String,
-    pub joined_at: DateTime<Utc>,
+type PublisherMemberResponse struct {
+    CreatorID uuid.UUID `json:"creator_id"`
+    StoreName string    `json:"store_name"`
+    Role      string    `json:"role"`
+    JoinedAt  time.Time `json:"joined_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ListingBrowseResponse {
-    pub id: Uuid,
-    pub title: String,
-    pub description_preview: String,    // truncated to ~200 chars
-    pub price_cents: i32,
-    pub content_type: String,
-    pub thumbnail_url: Option<String>,
-    pub rating_avg: f64,
-    pub rating_count: i32,
-    pub publisher_name: String,
-    pub creator_store_name: String,
+type ListingBrowseResponse struct {
+    ID                 uuid.UUID `json:"id"`
+    Title              string    `json:"title"`
+    DescriptionPreview string    `json:"description_preview"` // truncated to ~200 chars
+    PriceCents         int32     `json:"price_cents"`
+    ContentType        string    `json:"content_type"`
+    ThumbnailURL       *string   `json:"thumbnail_url,omitempty"`
+    RatingAvg          float64   `json:"rating_avg"`
+    RatingCount        int32     `json:"rating_count"`
+    PublisherName      string    `json:"publisher_name"`
+    CreatorStoreName   string    `json:"creator_store_name"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ListingDetailResponse {
-    pub id: Uuid,
-    pub creator_id: Uuid,
-    pub publisher_id: Uuid,
-    pub publisher_name: String,
-    pub title: String,
-    pub description: String,
-    pub price_cents: i32,
-    pub methodology_tags: Vec<Uuid>,
-    pub subject_tags: Vec<String>,
-    pub grade_min: Option<i16>,
-    pub grade_max: Option<i16>,
-    pub content_type: String,
-    pub worldview_tags: Vec<String>,
-    pub preview_url: Option<String>,
-    pub thumbnail_url: Option<String>,
-    pub status: String,
-    pub rating_avg: f64,
-    pub rating_count: i32,
-    pub version: i32,
-    pub files: Vec<ListingFileResponse>,
-    pub published_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+type ListingDetailResponse struct {
+    ID              uuid.UUID            `json:"id"`
+    CreatorID       uuid.UUID            `json:"creator_id"`
+    PublisherID     uuid.UUID            `json:"publisher_id"`
+    PublisherName   string               `json:"publisher_name"`
+    Title           string               `json:"title"`
+    Description     string               `json:"description"`
+    PriceCents      int32                `json:"price_cents"`
+    MethodologyTags []uuid.UUID          `json:"methodology_tags"`
+    SubjectTags     []string             `json:"subject_tags"`
+    GradeMin        *int16               `json:"grade_min,omitempty"`
+    GradeMax        *int16               `json:"grade_max,omitempty"`
+    ContentType     string               `json:"content_type"`
+    WorldviewTags   []string             `json:"worldview_tags"`
+    PreviewURL      *string              `json:"preview_url,omitempty"`
+    ThumbnailURL    *string              `json:"thumbnail_url,omitempty"`
+    Status          string               `json:"status"`
+    RatingAvg       float64              `json:"rating_avg"`
+    RatingCount     int32                `json:"rating_count"`
+    Version         int32                `json:"version"`
+    Files           []ListingFileResponse `json:"files"`
+    PublishedAt     *time.Time           `json:"published_at,omitempty"`
+    CreatedAt       time.Time            `json:"created_at"`
+    UpdatedAt       time.Time            `json:"updated_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ListingFileResponse {
-    pub id: Uuid,
-    pub file_name: String,
-    pub file_size_bytes: i64,
-    pub mime_type: String,
-    pub version: i32,
+type ListingFileResponse struct {
+    ID            uuid.UUID `json:"id"`
+    FileName      string    `json:"file_name"`
+    FileSizeBytes int64     `json:"file_size_bytes"`
+    MimeType      string    `json:"mime_type"`
+    Version       int32     `json:"version"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CartResponse {
-    pub items: Vec<CartItemResponse>,
-    pub total_cents: i64,
-    pub item_count: i32,
+type CartResponse struct {
+    Items      []CartItemResponse `json:"items"`
+    TotalCents int64              `json:"total_cents"`
+    ItemCount  int32              `json:"item_count"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CartItemResponse {
-    pub listing_id: Uuid,
-    pub title: String,
-    pub price_cents: i32,
-    pub thumbnail_url: Option<String>,
-    pub added_at: DateTime<Utc>,
+type CartItemResponse struct {
+    ListingID    uuid.UUID `json:"listing_id"`
+    Title        string    `json:"title"`
+    PriceCents   int32     `json:"price_cents"`
+    ThumbnailURL *string   `json:"thumbnail_url,omitempty"`
+    AddedAt      time.Time `json:"added_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PurchaseResponse {
-    pub id: Uuid,
-    pub listing_id: Uuid,
-    pub listing_title: String,
-    pub amount_cents: i32,
-    pub refunded: bool,
-    pub created_at: DateTime<Utc>,
+type PurchaseResponse struct {
+    ID           uuid.UUID `json:"id"`
+    ListingID    uuid.UUID `json:"listing_id"`
+    ListingTitle string    `json:"listing_title"`
+    AmountCents  int32     `json:"amount_cents"`
+    Refunded     bool      `json:"refunded"`
+    CreatedAt    time.Time `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ReviewResponse {
-    pub id: Uuid,
-    pub listing_id: Uuid,
-    pub rating: i16,
-    pub review_text: Option<String>,
-    pub is_anonymous: bool,
-    pub reviewer_name: Option<String>,  // None if anonymous
-    pub creator_response: Option<String>,
-    pub creator_response_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+type ReviewResponse struct {
+    ID                uuid.UUID  `json:"id"`
+    ListingID         uuid.UUID  `json:"listing_id"`
+    Rating            int16      `json:"rating"`
+    ReviewText        *string    `json:"review_text,omitempty"`
+    IsAnonymous       bool       `json:"is_anonymous"`
+    ReviewerName      *string    `json:"reviewer_name,omitempty"` // nil if anonymous
+    CreatorResponse   *string    `json:"creator_response,omitempty"`
+    CreatorResponseAt *time.Time `json:"creator_response_at,omitempty"`
+    CreatedAt         time.Time  `json:"created_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct DownloadResponse {
-    pub download_url: String,
-    pub expires_at: DateTime<Utc>,
+type DownloadResponse struct {
+    DownloadURL string    `json:"download_url"`
+    ExpiresAt   time.Time `json:"expires_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct AutocompleteResult {
-    pub listing_id: Uuid,
-    pub title: String,
-    pub similarity: f32,
+type AutocompleteResult struct {
+    ListingID  uuid.UUID `json:"listing_id"`
+    Title      string    `json:"title"`
+    Similarity float32   `json:"similarity"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CuratedSectionResponse {
-    pub slug: String,
-    pub display_name: String,
-    pub description: Option<String>,
-    pub listings: Vec<ListingBrowseResponse>,
+type CuratedSectionResponse struct {
+    Slug        string                 `json:"slug"`
+    DisplayName string                 `json:"display_name"`
+    Description *string                `json:"description,omitempty"`
+    Listings    []ListingBrowseResponse `json:"listings"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CreatorDashboardResponse {
-    pub total_sales_count: i64,
-    pub total_earnings_cents: i64,
-    pub period_sales_count: i64,
-    pub period_earnings_cents: i64,
-    pub pending_payout_cents: i64,
-    pub average_rating: f64,
-    pub total_reviews: i32,
-    pub recent_sales: Vec<SaleSummary>,
+type CreatorDashboardResponse struct {
+    TotalSalesCount     int64         `json:"total_sales_count"`
+    TotalEarningsCents  int64         `json:"total_earnings_cents"`
+    PeriodSalesCount    int64         `json:"period_sales_count"`
+    PeriodEarningsCents int64         `json:"period_earnings_cents"`
+    PendingPayoutCents  int64         `json:"pending_payout_cents"`
+    AverageRating       float64       `json:"average_rating"`
+    TotalReviews        int32         `json:"total_reviews"`
+    RecentSales         []SaleSummary `json:"recent_sales"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SaleSummary {
-    pub purchase_id: Uuid,
-    pub listing_title: String,
-    pub amount_cents: i32,
-    pub creator_payout_cents: i32,
-    pub purchased_at: DateTime<Utc>,
+type SaleSummary struct {
+    PurchaseID        uuid.UUID `json:"purchase_id"`
+    ListingTitle      string    `json:"listing_title"`
+    AmountCents       int32     `json:"amount_cents"`
+    CreatorPayoutCents int32    `json:"creator_payout_cents"`
+    PurchasedAt       time.Time `json:"purchased_at"`
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ListingVersionResponse {
-    pub version: i32,
-    pub title: String,
-    pub price_cents: i32,
-    pub change_summary: Option<String>,
-    pub created_at: DateTime<Utc>,
+type ListingVersionResponse struct {
+    Version       int32      `json:"version"`
+    Title         string     `json:"title"`
+    PriceCents    int32      `json:"price_cents"`
+    ChangeSummary *string    `json:"change_summary,omitempty"`
+    CreatedAt     time.Time  `json:"created_at"`
 }
 ```
 
 ### §8.3 Internal Types
 
-```rust
+```go
 // Query parameter types (not exposed in API responses)
 
-#[derive(Debug, Deserialize)]
-pub struct BrowseListingsParams {
-    pub q: Option<String>,
-    pub methodology_ids: Option<Vec<Uuid>>,
-    pub subject_slugs: Option<Vec<String>>,
-    pub grade_min: Option<i16>,
-    pub grade_max: Option<i16>,
-    pub content_type: Option<String>,
-    pub worldview_tags: Option<Vec<String>>,
-    pub price_min: Option<i32>,
-    pub price_max: Option<i32>,
-    pub min_rating: Option<f64>,
-    pub sort_by: Option<ListingSortBy>,
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
+type BrowseListingsParams struct {
+    Q              *string      `query:"q"`
+    MethodologyIDs []uuid.UUID  `query:"methodology_ids"`
+    SubjectSlugs   []string     `query:"subject_slugs"`
+    GradeMin       *int16       `query:"grade_min"`
+    GradeMax       *int16       `query:"grade_max"`
+    ContentType    *string      `query:"content_type"`
+    WorldviewTags  []string     `query:"worldview_tags"`
+    PriceMin       *int32       `query:"price_min"`
+    PriceMax       *int32       `query:"price_max"`
+    MinRating      *float64     `query:"min_rating"`
+    SortBy         *string      `query:"sort_by"` // "relevance", "price_asc", "price_desc", "rating", "newest"
+    Cursor         *string      `query:"cursor"`
+    Limit          *uint8       `query:"limit"`
 }
 
-#[derive(Debug, Deserialize)]
-pub enum ListingSortBy {
-    Relevance,
-    PriceAsc,
-    PriceDesc,
-    Rating,
-    Newest,
+type ListingSortBy string
+
+const (
+    ListingSortByRelevance ListingSortBy = "relevance"
+    ListingSortByPriceAsc  ListingSortBy = "price_asc"
+    ListingSortByPriceDesc ListingSortBy = "price_desc"
+    ListingSortByRating    ListingSortBy = "rating"
+    ListingSortByNewest    ListingSortBy = "newest"
+)
+
+type CreatorListingQueryParams struct {
+    Status *string `query:"status"`
+    Cursor *string `query:"cursor"`
+    Limit  *uint8  `query:"limit"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CreatorListingQueryParams {
-    pub status: Option<String>,
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
+type PurchaseQueryParams struct {
+    Cursor *string `query:"cursor"`
+    Limit  *uint8  `query:"limit"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct PurchaseQueryParams {
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
+type ReviewQueryParams struct {
+    SortBy *string `query:"sort_by"` // "newest", "oldest", "highest_rating", "lowest_rating"
+    Cursor *string `query:"cursor"`
+    Limit  *uint8  `query:"limit"`
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ReviewQueryParams {
-    pub sort_by: Option<ReviewSortBy>,
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
-}
+type ReviewSortBy string
 
-#[derive(Debug, Deserialize)]
-pub enum ReviewSortBy {
-    Newest,
-    Oldest,
-    HighestRating,
-    LowestRating,
-}
+const (
+    ReviewSortByNewest        ReviewSortBy = "newest"
+    ReviewSortByOldest        ReviewSortBy = "oldest"
+    ReviewSortByHighestRating ReviewSortBy = "highest_rating"
+    ReviewSortByLowestRating  ReviewSortBy = "lowest_rating"
+)
 
-pub enum DashboardPeriod {
-    Last7Days,
-    Last30Days,
-    Last90Days,
-    AllTime,
-}
+type DashboardPeriod string
+
+const (
+    DashboardPeriodLast7Days  DashboardPeriod = "last_7_days"
+    DashboardPeriodLast30Days DashboardPeriod = "last_30_days"
+    DashboardPeriodLast90Days DashboardPeriod = "last_90_days"
+    DashboardPeriodAllTime    DashboardPeriod = "all_time"
+)
 
 // Internal row types returned by repositories
-pub struct ListingBrowseRow {
-    pub id: Uuid,
-    pub title: String,
-    pub description: String,
-    pub price_cents: i32,
-    pub content_type: String,
-    pub thumbnail_url: Option<String>,
-    pub rating_avg: f64,
-    pub rating_count: i32,
-    pub publisher_name: String,
-    pub creator_store_name: String,
+type ListingBrowseRow struct {
+    ID               uuid.UUID
+    Title            string
+    Description      string
+    PriceCents       int32
+    ContentType      string
+    ThumbnailURL     *string
+    RatingAvg        float64
+    RatingCount      int32
+    PublisherName    string
+    CreatorStoreName string
 }
 
-pub struct AutocompleteRow {
-    pub listing_id: Uuid,
-    pub title: String,
-    pub similarity: f32,
+type AutocompleteRow struct {
+    ListingID  uuid.UUID
+    Title      string
+    Similarity float32
 }
 
-pub struct CartItemRow {
-    pub listing_id: Uuid,
-    pub title: String,
-    pub price_cents: i32,
-    pub thumbnail_url: Option<String>,
-    pub created_at: DateTime<Utc>,
+type CartItemRow struct {
+    ListingID    uuid.UUID
+    Title        string
+    PriceCents   int32
+    ThumbnailURL *string
+    CreatedAt    time.Time
 }
 
-pub struct PurchaseRow {
-    pub id: Uuid,
-    pub listing_id: Uuid,
-    pub listing_title: String,
-    pub amount_cents: i32,
-    pub refunded_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+type PurchaseRow struct {
+    ID           uuid.UUID
+    ListingID    uuid.UUID
+    ListingTitle string
+    AmountCents  int32
+    RefundedAt   *time.Time
+    CreatedAt    time.Time
 }
 
-pub struct ReviewRow {
-    pub id: Uuid,
-    pub listing_id: Uuid,
-    pub rating: i16,
-    pub review_text: Option<String>,
-    pub is_anonymous: bool,
-    pub reviewer_family_name: Option<String>,
-    pub creator_response: Option<String>,
-    pub creator_response_at: Option<DateTime<Utc>>,
-    pub moderation_status: String,
-    pub created_at: DateTime<Utc>,
+type ReviewRow struct {
+    ID                 uuid.UUID
+    ListingID          uuid.UUID
+    Rating             int16
+    ReviewText         *string
+    IsAnonymous        bool
+    ReviewerFamilyName *string
+    CreatorResponse    *string
+    CreatorResponseAt  *time.Time
+    ModerationStatus   string
+    CreatedAt          time.Time
 }
 
-pub struct SalesRow {
-    pub purchase_id: Uuid,
-    pub listing_id: Uuid,
-    pub listing_title: String,
-    pub amount_cents: i32,
-    pub creator_payout_cents: i32,
-    pub created_at: DateTime<Utc>,
+type SalesRow struct {
+    PurchaseID        uuid.UUID
+    ListingID         uuid.UUID
+    ListingTitle      string
+    AmountCents       int32
+    CreatorPayoutCents int32
+    CreatedAt         time.Time
 }
 
-pub struct PublisherMemberRow {
-    pub creator_id: Uuid,
-    pub store_name: String,
-    pub role: String,
-    pub created_at: DateTime<Utc>,
+type PublisherMemberRow struct {
+    CreatorID uuid.UUID
+    StoreName string
+    Role      string
+    CreatedAt time.Time
 }
 ```
 
@@ -2061,201 +1648,207 @@ cannot set `status` directly) and runtime-checked (methods return `Result`). `[A
 
 | From | To | Method | Preconditions | Side Effects | Event |
 |------|----|--------|---------------|--------------|-------|
-| Draft | Submitted | `submit()` | At least 1 file attached, valid price, title/description present | — | `ListingSubmitted` |
-| Submitted | Published | `publish()` | Content screening passed | Sets `published_at` | `ListingPublished` |
-| Submitted | Draft | `reject()` | Content screening failed or creator withdraws | — | — |
-| Published | Archived | `archive()` | — | Sets `archived_at` | `ListingArchived` |
-| Published | Published | `update()` | — | Creates version snapshot, increments `version` | — |
+| Draft | Submitted | `Submit()` | At least 1 file attached, valid price, title/description present | — | `ListingSubmitted` |
+| Submitted | Published | `Publish()` | Content screening passed | Sets `published_at` | `ListingPublished` |
+| Submitted | Draft | `Reject()` | Content screening failed or creator withdraws | — | — |
+| Published | Archived | `Archive()` | — | Sets `archived_at` | `ListingArchived` |
+| Published | Published | `Update()` | — | Creates version snapshot, increments `version` | — |
 
 ### Invariants
 
 1. A listing **must have at least one file** to be submitted. Enforced by checking file count
-   in the `submit()` method.
+   in the `Submit()` method.
 2. A listing **must have a valid price** (`price_cents >= 0`) — enforced by the `Price` value
    object constructor.
 3. Published listings **always have a `published_at` timestamp** — set atomically during the
-   `publish()` transition.
+   `Publish()` transition.
 4. Archived listings **retain `published_at`** — `archived_at` is additive, not a replacement.
 5. Version snapshots are **only created for updates to published listings** — draft edits do
    not generate versions.
 
 ### Aggregate Root
 
-```rust
-// src/mkt/domain/listing.rs
+```go
+// internal/mkt/domain/listing.go
 
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
+type ListingState string
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ListingState {
-    Draft,
-    Submitted,
-    Published,
-    Archived,
+const (
+    ListingStateDraft     ListingState = "draft"
+    ListingStateSubmitted ListingState = "submitted"
+    ListingStatePublished ListingState = "published"
+    ListingStateArchived  ListingState = "archived"
+)
+
+type MarketplaceListing struct {
+    id              uuid.UUID
+    creatorID       uuid.UUID
+    publisherID     uuid.UUID
+    title           string
+    description     string
+    priceCents      int32
+    methodologyTags []uuid.UUID
+    subjectTags     []string
+    gradeMin        *int16
+    gradeMax        *int16
+    contentType     string
+    worldviewTags   []string
+    previewURL      *string
+    thumbnailURL    *string
+    state           ListingState
+    ratingAvg       float64
+    ratingCount     int32
+    version         int32
+    publishedAt     *time.Time
+    archivedAt      *time.Time
+    fileCount       int64 // denormalized for submit check
+    createdAt       time.Time
+    updatedAt       time.Time
 }
 
-#[derive(Debug)]
-pub struct MarketplaceListing {
-    id: Uuid,
-    creator_id: Uuid,
-    publisher_id: Uuid,
-    title: String,
-    description: String,
-    price_cents: i32,
-    methodology_tags: Vec<Uuid>,
-    subject_tags: Vec<String>,
-    grade_min: Option<i16>,
-    grade_max: Option<i16>,
-    content_type: String,
-    worldview_tags: Vec<String>,
-    preview_url: Option<String>,
-    thumbnail_url: Option<String>,
-    state: ListingState,
-    rating_avg: f64,
-    rating_count: i32,
-    version: i32,
-    published_at: Option<DateTime<Utc>>,
-    archived_at: Option<DateTime<Utc>>,
-    file_count: i64,       // denormalized for submit check
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+// FromPersistence reconstructs from persistence (all fields provided by repository).
+func FromPersistence( /* all fields */ ) *MarketplaceListing { /* ... */ }
+
+// ─── Queries ────────────────────────────────────────────────────────
+
+func (l *MarketplaceListing) ID() uuid.UUID          { return l.id }
+func (l *MarketplaceListing) State() ListingState     { return l.state }
+func (l *MarketplaceListing) CreatorID() uuid.UUID    { return l.creatorID }
+func (l *MarketplaceListing) PublisherID() uuid.UUID  { return l.publisherID }
+func (l *MarketplaceListing) Version() int32          { return l.version }
+
+// ─── State Transitions ──────────────────────────────────────────────
+
+func (l *MarketplaceListing) Submit() (*ListingSubmittedEvent, error) {
+    if l.state != ListingStateDraft {
+        return nil, &MktDomainError{
+            Kind:   ErrInvalidStateTransition,
+            From:   string(l.state),
+            Action: "submit",
+        }
+    }
+    if l.fileCount == 0 {
+        return nil, &MktDomainError{Kind: ErrListingHasNoFiles}
+    }
+    l.state = ListingStateSubmitted
+    return &ListingSubmittedEvent{
+        ListingID: l.id,
+        CreatorID: l.creatorID,
+    }, nil
 }
 
-impl MarketplaceListing {
-    /// Reconstruct from persistence (all fields provided by repository).
-    pub fn from_persistence(/* all fields */) -> Self { /* ... */ }
-
-    // ─── Queries ────────────────────────────────────────────────────────
-
-    pub fn id(&self) -> Uuid { self.id }
-    pub fn state(&self) -> &ListingState { &self.state }
-    pub fn creator_id(&self) -> Uuid { self.creator_id }
-    pub fn publisher_id(&self) -> Uuid { self.publisher_id }
-    pub fn version(&self) -> i32 { self.version }
-
-    // ─── State Transitions ──────────────────────────────────────────────
-
-    pub fn submit(&mut self) -> Result<ListingSubmittedEvent, MktDomainError> {
-        if self.state != ListingState::Draft {
-            return Err(MktDomainError::InvalidStateTransition {
-                from: format!("{:?}", self.state),
-                action: "submit".to_string(),
-            });
+func (l *MarketplaceListing) Publish() (*ListingPublishedEvent, error) {
+    if l.state != ListingStateSubmitted {
+        return nil, &MktDomainError{
+            Kind:   ErrInvalidStateTransition,
+            From:   string(l.state),
+            Action: "publish",
         }
-        if self.file_count == 0 {
-            return Err(MktDomainError::ListingHasNoFiles);
-        }
-        self.state = ListingState::Submitted;
-        Ok(ListingSubmittedEvent {
-            listing_id: self.id,
-            creator_id: self.creator_id,
-        })
     }
-
-    pub fn publish(&mut self) -> Result<ListingPublishedEvent, MktDomainError> {
-        if self.state != ListingState::Submitted {
-            return Err(MktDomainError::InvalidStateTransition {
-                from: format!("{:?}", self.state),
-                action: "publish".to_string(),
-            });
-        }
-        self.state = ListingState::Published;
-        self.published_at = Some(Utc::now());
-        Ok(ListingPublishedEvent {
-            listing_id: self.id,
-            publisher_id: self.publisher_id,
-            content_type: self.content_type.clone(),
-            subject_tags: self.subject_tags.clone(),
-        })
-    }
-
-    pub fn reject(&mut self) -> Result<(), MktDomainError> {
-        if self.state != ListingState::Submitted {
-            return Err(MktDomainError::InvalidStateTransition {
-                from: format!("{:?}", self.state),
-                action: "reject".to_string(),
-            });
-        }
-        self.state = ListingState::Draft;
-        Ok(())
-    }
-
-    pub fn archive(&mut self) -> Result<ListingArchivedEvent, MktDomainError> {
-        if self.state != ListingState::Published {
-            return Err(MktDomainError::InvalidStateTransition {
-                from: format!("{:?}", self.state),
-                action: "archive".to_string(),
-            });
-        }
-        self.state = ListingState::Archived;
-        self.archived_at = Some(Utc::now());
-        Ok(ListingArchivedEvent {
-            listing_id: self.id,
-        })
-    }
-
-    /// Update a published listing. Returns the pre-update state for version snapshot.
-    pub fn update_published(
-        &mut self,
-        title: Option<String>,
-        description: Option<String>,
-        price_cents: Option<i32>,
-    ) -> Result<Option<VersionSnapshot>, MktDomainError> {
-        if self.state != ListingState::Published && self.state != ListingState::Draft {
-            return Err(MktDomainError::InvalidStateTransition {
-                from: format!("{:?}", self.state),
-                action: "update".to_string(),
-            });
-        }
-
-        let snapshot = if self.state == ListingState::Published {
-            let snap = VersionSnapshot {
-                version: self.version,
-                title: self.title.clone(),
-                description: self.description.clone(),
-                price_cents: self.price_cents,
-            };
-            self.version += 1;
-            Some(snap)
-        } else {
-            None
-        };
-
-        if let Some(t) = title { self.title = t; }
-        if let Some(d) = description { self.description = d; }
-        if let Some(p) = price_cents { self.price_cents = p; }
-        self.updated_at = Utc::now();
-
-        Ok(snapshot)
-    }
+    l.state = ListingStatePublished
+    now := time.Now().UTC()
+    l.publishedAt = &now
+    return &ListingPublishedEvent{
+        ListingID:   l.id,
+        PublisherID: l.publisherID,
+        ContentType: l.contentType,
+        SubjectTags: l.subjectTags,
+    }, nil
 }
 
-pub struct VersionSnapshot {
-    pub version: i32,
-    pub title: String,
-    pub description: String,
-    pub price_cents: i32,
+func (l *MarketplaceListing) Reject() error {
+    if l.state != ListingStateSubmitted {
+        return &MktDomainError{
+            Kind:   ErrInvalidStateTransition,
+            From:   string(l.state),
+            Action: "reject",
+        }
+    }
+    l.state = ListingStateDraft
+    return nil
+}
+
+func (l *MarketplaceListing) Archive() (*ListingArchivedEvent, error) {
+    if l.state != ListingStatePublished {
+        return nil, &MktDomainError{
+            Kind:   ErrInvalidStateTransition,
+            From:   string(l.state),
+            Action: "archive",
+        }
+    }
+    l.state = ListingStateArchived
+    now := time.Now().UTC()
+    l.archivedAt = &now
+    return &ListingArchivedEvent{ListingID: l.id}, nil
+}
+
+// UpdatePublished updates a published listing. Returns the pre-update state for version snapshot.
+func (l *MarketplaceListing) UpdatePublished(title, description *string, priceCents *int32) (*VersionSnapshot, error) {
+    if l.state != ListingStatePublished && l.state != ListingStateDraft {
+        return nil, &MktDomainError{
+            Kind:   ErrInvalidStateTransition,
+            From:   string(l.state),
+            Action: "update",
+        }
+    }
+
+    var snapshot *VersionSnapshot
+    if l.state == ListingStatePublished {
+        snapshot = &VersionSnapshot{
+            Version:    l.version,
+            Title:      l.title,
+            Description: l.description,
+            PriceCents: l.priceCents,
+        }
+        l.version++
+    }
+
+    if title != nil { l.title = *title }
+    if description != nil { l.description = *description }
+    if priceCents != nil { l.priceCents = *priceCents }
+    l.updatedAt = time.Now().UTC()
+
+    return snapshot, nil
+}
+
+type VersionSnapshot struct {
+    Version     int32
+    Title       string
+    Description string
+    PriceCents  int32
 }
 ```
 
 ### Domain Errors
 
-```rust
-// src/mkt/domain/errors.rs
+```go
+// internal/mkt/domain/errors.go
 
-use thiserror::Error;
+type MktDomainErrorKind int
 
-#[derive(Debug, Error)]
-pub enum MktDomainError {
-    #[error("Invalid state transition from {from} via {action}")]
-    InvalidStateTransition { from: String, action: String },
+const (
+    ErrInvalidStateTransition MktDomainErrorKind = iota
+    ErrListingHasNoFiles
+    ErrInvalidPrice
+)
 
-    #[error("Listing has no files attached")]
-    ListingHasNoFiles,
+type MktDomainError struct {
+    Kind   MktDomainErrorKind
+    From   string // for InvalidStateTransition
+    Action string // for InvalidStateTransition
+}
 
-    #[error("Invalid price: must be >= 0")]
-    InvalidPrice,
+func (e *MktDomainError) Error() string {
+    switch e.Kind {
+    case ErrInvalidStateTransition:
+        return fmt.Sprintf("invalid state transition from %s via %s", e.From, e.Action)
+    case ErrListingHasNoFiles:
+        return "listing has no files attached"
+    case ErrInvalidPrice:
+        return "invalid price: must be >= 0"
+    default:
+        return "unknown domain error"
+    }
 }
 ```
 
@@ -2305,19 +1898,20 @@ The `mkt_publishers` table is the **most critical cross-domain dependency** in t
 be created in a migration that precedes all `learn_*_defs` table migrations. The migration
 filename ordering must reflect this dependency.
 
-### verify_publisher_membership()
+### VerifyPublisherMembership()
 
-The `MarketplaceService::verify_publisher_membership()` method is consumed by `learn::` to
+The `MarketplaceService.VerifyPublisherMembership()` method is consumed by `learn::` to
 verify that a creator has permission to create/edit content definitions under a publisher.
 `[06-learn §18.2]`
 
-```rust
+```go
 // Called by learn:: service when creating/updating content definitions
-let is_member = marketplace_service
-    .verify_publisher_membership(publisher_id, creator_id)
-    .await?;
-if !is_member {
-    return Err(AppError::Forbidden);
+isMember, err := marketplaceService.VerifyPublisherMembership(ctx, publisherID, creatorID)
+if err != nil {
+    return err
+}
+if !isMember {
+    return apperr.Forbidden
 }
 ```
 
@@ -2374,79 +1968,86 @@ Family (Parent)           mkt:: Service            PaymentAdapter           Hype
 Revenue split is configurable at the platform level (stored as system config, default 75% to
 creator) and recorded immutably on each purchase record at transaction time. `[S§9.6]`
 
-```rust
+```go
 // Split calculation in checkout service
-fn calculate_split(listing_price_cents: i64, creator_share_percent: u8) -> (i64, i64) {
-    let creator_payout = (listing_price_cents * creator_share_percent as i64) / 100;
-    let platform_fee = listing_price_cents - creator_payout;
-    (creator_payout, platform_fee)
+func calculateSplit(listingPriceCents int64, creatorSharePercent uint8) (creatorPayout, platformFee int64) {
+    creatorPayout = (listingPriceCents * int64(creatorSharePercent)) / 100
+    platformFee = listingPriceCents - creatorPayout
+    return creatorPayout, platformFee
 }
 
 // Split rules sent to Hyperswitch
-let split_rules: Vec<SplitRule> = cart_items.iter().map(|item| {
-    let (creator_payout, _platform_fee) = calculate_split(
-        item.price_cents as i64,
-        config.creator_share_percent,  // e.g., 75
-    );
-    SplitRule {
-        recipient_account_id: item.creator_payment_account_id.clone(),
-        amount_cents: creator_payout,
-    }
-}).collect();
+splitRules := make([]SplitRule, 0, len(cartItems))
+for _, item := range cartItems {
+    creatorPayout, _ := calculateSplit(
+        int64(item.PriceCents),
+        config.CreatorSharePercent, // e.g., 75
+    )
+    splitRules = append(splitRules, SplitRule{
+        RecipientAccountID: item.CreatorPaymentAccountID,
+        AmountCents:        creatorPayout,
+    })
+}
 ```
 
 ### Free Content "Get" Flow
 
 Free content (`price_cents == 0`) bypasses the payment processor entirely. `[S§9.4]`
 
-```rust
+```go
 // POST /v1/marketplace/listings/:listing_id/get
-async fn get_free_listing(
-    &self,
-    listing_id: Uuid,
-    scope: FamilyScope,
-) -> Result<Uuid, AppError> {
-    let listing = self.listings.get_by_id(listing_id).await?
-        .ok_or(MktError::ListingNotFound)?;
-
-    if listing.price_cents != 0 {
-        return Err(MktError::ListingNotFree.into());
+func (s *MarketplaceServiceImpl) GetFreeListing(ctx context.Context, listingID uuid.UUID, scope FamilyScope) (uuid.UUID, error) {
+    listing, err := s.listings.GetByID(ctx, listingID)
+    if err != nil {
+        return uuid.Nil, err
     }
-    if listing.status != "published" {
-        return Err(MktError::ListingNotPublished.into());
+    if listing == nil {
+        return uuid.Nil, ErrListingNotFound
+    }
+
+    if listing.PriceCents != 0 {
+        return uuid.Nil, ErrListingNotFree
+    }
+    if listing.Status != "published" {
+        return uuid.Nil, ErrListingNotPublished
     }
 
     // Check not already purchased
-    if self.purchases.get_by_family_and_listing(
-        scope.family_id(), listing_id
-    ).await?.is_some() {
-        return Err(MktError::AlreadyPurchased.into());
+    existing, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+    if err != nil {
+        return uuid.Nil, err
+    }
+    if existing != nil {
+        return uuid.Nil, ErrAlreadyPurchased
     }
 
     // Direct insert — no payment processor
-    let purchase_id = self.purchases.create(CreatePurchase {
-        family_id: scope.family_id(),
-        listing_id,
-        creator_id: listing.creator_id,
-        payment_id: None,
-        payment_session_id: None,
-        amount_cents: 0,
-        platform_fee_cents: 0,
-        creator_payout_cents: 0,
-    }).await?.id;
+    purchase, err := s.purchases.Create(ctx, CreatePurchase{
+        FamilyID:          scope.FamilyID(),
+        ListingID:         listingID,
+        CreatorID:         listing.CreatorID,
+        PaymentID:         nil,
+        PaymentSessionID:  nil,
+        AmountCents:       0,
+        PlatformFeeCents:  0,
+        CreatorPayoutCents: 0,
+    })
+    if err != nil {
+        return uuid.Nil, err
+    }
 
-    self.events.publish(PurchaseCompleted {
-        family_id: FamilyId::from(scope.family_id()),
-        purchase_id,
-        listing_id,
-        content_metadata: PurchaseMetadata {
-            content_type: listing.content_type.clone(),
-            content_ids: vec![listing_id],
-            publisher_id: listing.publisher_id,
+    s.events.Publish(PurchaseCompleted{
+        FamilyID:   scope.FamilyID(),
+        PurchaseID: purchase.ID,
+        ListingID:  listingID,
+        ContentMetadata: PurchaseMetadata{
+            ContentType: listing.ContentType,
+            ContentIDs:  []uuid.UUID{listingID},
+            PublisherID: listing.PublisherID,
         },
-    })?;
+    })
 
-    Ok(purchase_id)
+    return purchase.ID, nil
 }
 ```
 
@@ -2454,11 +2055,15 @@ async fn get_free_listing(
 
 Payment webhook processing is idempotent via `payment_session_id`:
 
-```rust
+```go
 // In webhook handler
-if self.purchases.get_by_payment_session_id(&payment_id).await?.is_some() {
+existing, err := s.purchases.GetByPaymentSessionID(ctx, paymentID)
+if err != nil {
+    return err
+}
+if existing != nil {
     // Already processed — return 200 OK to acknowledge
-    return Ok(());
+    return nil
 }
 ```
 
@@ -2467,7 +2072,7 @@ if self.purchases.get_by_payment_session_id(&payment_id).await?.is_some() {
 Refunds are processed via Hyperswitch within a 30-day window. `[S§9.6]`
 
 1. Family requests refund (Phase 2 endpoint, or admin-initiated)
-2. Service calls `PaymentAdapter::create_refund(payment_id, amount_cents, reason)`
+2. Service calls `PaymentAdapter.CreateRefund(paymentID, amountCents, reason)`
 3. On `RefundSucceeded` webhook: update `mkt_purchases.refunded_at`, `refund_amount_cents`, `refund_id`
 4. Publish `PurchaseRefunded` event
 5. Refund deducted from creator's pending earnings
@@ -2482,7 +2087,7 @@ Creators upload files to listings via `media::` presigned URLs. `[ARCH §8.3, CO
 
 1. Creator calls `POST /v1/marketplace/listings/:id/files` with file metadata
 2. Service validates: listing exists, creator owns it, listing is in draft/published status
-3. Service calls `MediaAdapter::presigned_upload()` to get a presigned R2 upload URL
+3. Service calls `MediaAdapter.PresignedUpload()` to get a presigned R2 upload URL
 4. Service creates `mkt_listing_files` record with `storage_key`
 5. Returns presigned URL to client; client uploads directly to R2
 6. **File validation**: MIME type validated via magic bytes on the server side when the
@@ -2492,36 +2097,38 @@ Creators upload files to listings via `media::` presigned URLs. `[ARCH §8.3, CO
 
 Purchasers download files via time-limited R2 signed URLs. `[ARCH §8.3]`
 
-```rust
+```go
 // GET /v1/marketplace/purchases/:listing_id/download/:file_id
-async fn get_download_url(
-    &self,
-    listing_id: Uuid,
-    file_id: Uuid,
-    scope: FamilyScope,
-) -> Result<DownloadResponse, AppError> {
+func (s *MarketplaceServiceImpl) GetDownloadURL(ctx context.Context, listingID, fileID uuid.UUID, scope FamilyScope) (*DownloadResponse, error) {
     // Verify purchase exists — no subscription tier check [S§9.4]
-    let _purchase = self.purchases
-        .get_by_family_and_listing(scope.family_id(), listing_id)
-        .await?
-        .ok_or(MktError::NotPurchased)?;
+    purchase, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+    if err != nil {
+        return nil, err
+    }
+    if purchase == nil {
+        return nil, ErrNotPurchased
+    }
 
-    let file = self.listing_files
-        .get_by_id(listing_id, file_id)
-        .await?
-        .ok_or(MktError::FileNotFound)?;
+    file, err := s.listingFiles.GetByID(ctx, listingID, fileID)
+    if err != nil {
+        return nil, err
+    }
+    if file == nil {
+        return nil, ErrFileNotFound
+    }
 
     // Generate 1-hour signed URL
-    let signed_url = self.media
-        .presigned_get(&file.storage_key, 3600)
-        .await?;
+    signedURL, err := s.media.PresignedGet(ctx, file.StorageKey, 3600)
+    if err != nil {
+        return nil, err
+    }
 
-    let expires_at = Utc::now() + chrono::Duration::hours(1);
+    expiresAt := time.Now().UTC().Add(1 * time.Hour)
 
-    Ok(DownloadResponse {
-        download_url: signed_url,
-        expires_at,
-    })
+    return &DownloadResponse{
+        DownloadURL: signedURL,
+        ExpiresAt:   expiresAt,
+    }, nil
 }
 ```
 
@@ -2542,7 +2149,7 @@ as the access grant.
 
 **Access check flow:**
 1. Student (or parent) requests to start quiz/sequence/video
-2. `learn::` service checks `mkt::PurchaseRepository::get_by_family_and_listing(family_id, listing_id)`
+2. `learn::` service checks `mkt::PurchaseRepository.GetByFamilyAndListing(familyID, listingID)`
 3. If purchase exists, access is granted; if not, return `content_not_purchased` (403)
 
 ### File Versioning
@@ -2626,7 +2233,7 @@ replaces `mkt_curated_section_items` rows for `auto` sections.
 When PostgreSQL FTS becomes insufficient (>50k listings, complex facet combinations causing
 slow queries, or p95 search latency exceeding 500ms), migrate to Meilisearch. The contract:
 
-- `ListingRepository::browse()` switches from SQL to Meilisearch HTTP client
+- `ListingRepository.Browse()` switches from SQL to Meilisearch HTTP client
 - `ListingPublished` / `ListingArchived` events trigger index updates
 - The search API response shape (`ListingBrowseResponse`) remains unchanged
 
@@ -2639,52 +2246,61 @@ slow queries, or p95 search latency exceeding 500ms), migrate to Meilisearch. Th
 Only families who have purchased a listing can leave a review. Enforced via `purchase_id`
 foreign key and a service-level check. `[S§9.5]`
 
-```rust
-async fn create_review(
-    &self,
-    cmd: CreateReviewCommand,
-    listing_id: Uuid,
-    scope: FamilyScope,
-) -> Result<Uuid, AppError> {
+```go
+func (s *MarketplaceServiceImpl) CreateReview(ctx context.Context, cmd CreateReviewCommand, listingID uuid.UUID, scope FamilyScope) (uuid.UUID, error) {
     // Verify purchase exists
-    let purchase = self.purchases
-        .get_by_family_and_listing(scope.family_id(), listing_id)
-        .await?
-        .ok_or(MktError::NotPurchased)?;
+    purchase, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+    if err != nil {
+        return uuid.Nil, err
+    }
+    if purchase == nil {
+        return uuid.Nil, ErrNotPurchased
+    }
 
     // One review per purchase
     // (enforced by UNIQUE constraint on purchase_id, but check first for better error)
 
-    let review_id = self.reviews.create(CreateReview {
-        listing_id,
-        purchase_id: purchase.id,
-        family_id: scope.family_id(),
-        rating: cmd.rating,
-        review_text: cmd.review_text.clone(),
-        is_anonymous: cmd.is_anonymous.unwrap_or(true),
-    }).await?.id;
+    isAnonymous := true
+    if cmd.IsAnonymous != nil {
+        isAnonymous = *cmd.IsAnonymous
+    }
+
+    review, err := s.reviews.Create(ctx, CreateReview{
+        ListingID:   listingID,
+        PurchaseID:  purchase.ID,
+        FamilyID:    scope.FamilyID(),
+        Rating:      cmd.Rating,
+        ReviewText:  cmd.ReviewText,
+        IsAnonymous: isAnonymous,
+    })
+    if err != nil {
+        return uuid.Nil, err
+    }
 
     // Update aggregate rating on listing
-    let (avg, count) = self.reviews.get_aggregate_rating(listing_id).await?;
+    _, _, err = s.reviews.GetAggregateRating(ctx, listingID)
+    if err != nil {
+        return uuid.Nil, err
+    }
     // (listing rating_avg and rating_count updated in repository)
 
     // Publish event
-    self.events.publish(ReviewCreated {
-        review_id,
-        listing_id,
-        rating: cmd.rating,
-    })?;
+    s.events.Publish(ReviewCreated{
+        ReviewID:  review.ID,
+        ListingID: listingID,
+        Rating:    cmd.Rating,
+    })
 
     // Send review text to safety:: for moderation
-    if let Some(text) = &cmd.review_text {
-        self.events.publish(ContentSubmittedForModeration {
-            content_id: review_id,
-            content_type: "marketplace_review".to_string(),
-            text: text.clone(),
-        })?;
+    if cmd.ReviewText != nil {
+        s.events.Publish(ContentSubmittedForModeration{
+            ContentID:   review.ID,
+            ContentType: "marketplace_review",
+            Text:        *cmd.ReviewText,
+        })
     }
 
-    Ok(review_id)
+    return review.ID, nil
 }
 ```
 
@@ -2742,42 +2358,51 @@ with `moderation_status = 'pending'`. The safety domain processes the text and c
 
 The creator dashboard aggregates sales, earnings, and analytics data. `[S§9.6]`
 
-```rust
-async fn get_creator_dashboard(
-    &self,
-    creator_id: Uuid,
-    period: DashboardPeriod,
-) -> Result<CreatorDashboardResponse, AppError> {
-    let (from, to) = period.to_date_range();
+```go
+func (s *MarketplaceServiceImpl) GetCreatorDashboard(ctx context.Context, creatorID uuid.UUID, period DashboardPeriod) (*CreatorDashboardResponse, error) {
+    from, to := period.ToDateRange()
 
-    let all_time_sales = self.purchases.get_creator_sales(
-        creator_id,
-        DateTime::<Utc>::MIN_UTC,
-        Utc::now(),
-    ).await?;
+    allTimeSales, err := s.purchases.GetCreatorSales(ctx, creatorID, time.Time{}, time.Now().UTC())
+    if err != nil {
+        return nil, err
+    }
 
-    let period_sales = self.purchases.get_creator_sales(
-        creator_id, from, to,
-    ).await?;
+    periodSales, err := s.purchases.GetCreatorSales(ctx, creatorID, from, to)
+    if err != nil {
+        return nil, err
+    }
 
-    Ok(CreatorDashboardResponse {
-        total_sales_count: all_time_sales.len() as i64,
-        total_earnings_cents: all_time_sales.iter()
-            .map(|s| s.creator_payout_cents as i64).sum(),
-        period_sales_count: period_sales.len() as i64,
-        period_earnings_cents: period_sales.iter()
-            .map(|s| s.creator_payout_cents as i64).sum(),
-        pending_payout_cents: 0, // Phase 2: calculated from unpaid earnings
-        average_rating: /* aggregate from listings */,
-        total_reviews: /* aggregate from listings */,
-        recent_sales: period_sales.into_iter().take(10).map(|s| SaleSummary {
-            purchase_id: s.purchase_id,
-            listing_title: s.listing_title,
-            amount_cents: s.amount_cents,
-            creator_payout_cents: s.creator_payout_cents,
-            purchased_at: s.created_at,
-        }).collect(),
-    })
+    var totalEarnings int64
+    for _, sale := range allTimeSales {
+        totalEarnings += int64(sale.CreatorPayoutCents)
+    }
+    var periodEarnings int64
+    for _, sale := range periodSales {
+        periodEarnings += int64(sale.CreatorPayoutCents)
+    }
+
+    recentSales := make([]SaleSummary, 0, 10)
+    for i, sale := range periodSales {
+        if i >= 10 { break }
+        recentSales = append(recentSales, SaleSummary{
+            PurchaseID:        sale.PurchaseID,
+            ListingTitle:      sale.ListingTitle,
+            AmountCents:       sale.AmountCents,
+            CreatorPayoutCents: sale.CreatorPayoutCents,
+            PurchasedAt:       sale.CreatedAt,
+        })
+    }
+
+    return &CreatorDashboardResponse{
+        TotalSalesCount:     int64(len(allTimeSales)),
+        TotalEarningsCents:  totalEarnings,
+        PeriodSalesCount:    int64(len(periodSales)),
+        PeriodEarningsCents: periodEarnings,
+        PendingPayoutCents:  0, // Phase 2: calculated from unpaid earnings
+        AverageRating:       0, // aggregate from listings
+        TotalReviews:        0, // aggregate from listings
+        RecentSales:         recentSales,
+    }, nil
 }
 ```
 
@@ -2796,7 +2421,7 @@ Creator payouts are managed via Hyperswitch's payout API:
 
 1. Creator requests payout from dashboard
 2. Service validates: `onboarding_status = 'active'`, minimum threshold met ($25 default)
-3. Service calls `PaymentAdapter::create_payout()`
+3. Service calls `PaymentAdapter.CreatePayout()`
 4. Hyperswitch routes payout to creator's connected bank account via underlying processor
 5. `PayoutCompleted` webhook updates payout status
 
@@ -2808,20 +2433,20 @@ The platform does not handle tax forms directly. `[S§9.6]`
 
 ---
 
-## §16 RequireCreator Extractor (Domain Deep-Dive 8)
+## §16 RequireCreator Middleware (Domain Deep-Dive 8)
 
 ### Decision
 
-**Dedicated extractor in `src/mkt/extractors.rs`** — does NOT add `creator_id` to `AuthContext`.
+**Dedicated middleware in `internal/mkt/middleware.go`** — does NOT add `creator_id` to `AuthContext`.
 
 This resolves the open question from 00-core §13.3, which documented two approaches:
 
-1. ~~Preferred (00-core): Add `creator_id: Option<Uuid>` to `AuthContext`~~ — **rejected**
-2. **Chosen: Query `mkt::` service from the extractor via `AppState`**
+1. ~~Preferred (00-core): Add `CreatorID *uuid.UUID` to `AuthContext`~~ — **rejected**
+2. **Chosen: Query `mkt::` service from the middleware via `AppState`**
 
 ### Rationale
 
-1. **Shared kernel minimality** — `AuthContext` is in `src/shared/types.rs` and used by ALL
+1. **Shared kernel minimality** — `AuthContext` is in `internal/shared/types.go` and used by ALL
    domains. Adding `creator_id` (a marketplace-specific concept) to the shared kernel violates
    the bounded context principle. Only ~10% of requests are creator-related.
 
@@ -2829,7 +2454,7 @@ This resolves the open question from 00-core §13.3, which documented two approa
    middleware would need to LEFT JOIN `mkt_creators` on EVERY authenticated request, even
    though most requests don't need it.
 
-3. **Redis caching eliminates performance concern** — The extractor queries `mkt_creators` by
+3. **Redis caching eliminates performance concern** — The middleware queries `mkt_creators` by
    `parent_id`, which is cached in Redis with a short TTL (5 minutes). The cache hit rate for
    active creators will be near 100%.
 
@@ -2838,100 +2463,96 @@ This resolves the open question from 00-core §13.3, which documented two approa
 
 ### Implementation
 
-```rust
-// src/mkt/extractors.rs
+```go
+// internal/mkt/middleware.go
 
-use axum::extract::{FromRequestParts, State};
-use axum::http::request::Parts;
-
-use crate::shared::error::AppError;
-use crate::shared::types::AuthContext;
-
-/// Extracts AuthContext and verifies the user has a creator account.
-/// Returns 403 Forbidden if no creator account exists. [S§3.1.4]
-///
-/// Uses Redis caching to avoid DB query on every request.
-/// Cache key: `mkt:creator:{parent_id}` with 5-minute TTL.
-pub struct RequireCreator {
-    pub auth: AuthContext,
-    pub creator_id: Uuid,
+// CreatorContext holds the authenticated user's creator information.
+// Extracted by RequireCreator middleware and stored in Echo context.
+//
+// Uses Redis caching to avoid DB query on every request.
+// Cache key: "mkt:creator:{parent_id}" with 5-minute TTL.
+type CreatorContext struct {
+    Auth      *AuthContext
+    CreatorID uuid.UUID
 }
 
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for RequireCreator
-where
-    S: Send + Sync + AsRef<AppState>,
-{
-    type Rejection = AppError;
+// RequireCreator is an Echo middleware that verifies the user has a creator account.
+// Returns 403 Forbidden if no creator account exists. [S§3.1.4]
+func RequireCreator(appState *AppState) echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            auth, ok := c.Get("auth").(*AuthContext)
+            if !ok || auth == nil {
+                return apperr.Unauthorized
+            }
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth = parts
-            .extensions
-            .get::<AuthContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)?;
+            cacheKey := fmt.Sprintf("mkt:creator:%s", auth.ParentID)
 
-        let app_state = state.as_ref();
-        let cache_key = format!("mkt:creator:{}", auth.parent_id);
+            // Try Redis cache first
+            creatorIDStr, err := appState.Redis.Get(c.Request().Context(), cacheKey).Result()
+            if err == nil {
+                creatorID, _ := uuid.Parse(creatorIDStr)
+                c.Set("creator", &CreatorContext{Auth: auth, CreatorID: creatorID})
+                return next(c)
+            }
 
-        // Try Redis cache first
-        if let Some(creator_id) = app_state.redis
-            .get::<Option<Uuid>>(&cache_key)
-            .await?
-        {
-            return Ok(RequireCreator { auth, creator_id });
+            // Cache miss — query DB
+            creator, err := appState.MarketplaceService.GetCreatorByParentID(c.Request().Context(), auth.ParentID)
+            if err != nil {
+                return err
+            }
+            if creator == nil {
+                return apperr.Forbidden
+            }
+
+            // Cache for 5 minutes
+            appState.Redis.Set(c.Request().Context(), cacheKey, creator.ID.String(), 5*time.Minute)
+
+            c.Set("creator", &CreatorContext{Auth: auth, CreatorID: creator.ID})
+            return next(c)
         }
-
-        // Cache miss — query DB
-        let creator = app_state.marketplace_service
-            .get_creator_by_parent_id(auth.parent_id)
-            .await?
-            .ok_or(AppError::Forbidden)?;
-
-        // Cache for 5 minutes
-        app_state.redis
-            .set_ex(&cache_key, &creator.id, 300)
-            .await?;
-
-        Ok(RequireCreator {
-            auth,
-            creator_id: creator.id,
-        })
     }
 }
 ```
 
 ### Usage in Handlers
 
-```rust
-// src/mkt/handlers.rs
+```go
+// internal/mkt/handler.go
 
-pub async fn create_listing(
-    RequireCreator { auth, creator_id }: RequireCreator,
-    State(state): State<AppState>,
-    Json(cmd): Json<CreateListingCommand>,
-) -> Result<Json<ListingDetailResponse>, AppError> {
-    let listing_id = state.marketplace_service
-        .create_listing(cmd, creator_id)
-        .await?;
-    let listing = state.marketplace_service
-        .get_listing(listing_id)
-        .await?;
-    Ok(Json(listing))
+func (h *Handler) CreateListing(c echo.Context) error {
+    cc := c.Get("creator").(*CreatorContext)
+
+    var cmd CreateListingCommand
+    if err := c.Bind(&cmd); err != nil {
+        return err
+    }
+
+    listingID, err := h.service.CreateListing(c.Request().Context(), cmd, cc.CreatorID)
+    if err != nil {
+        return err
+    }
+
+    listing, err := h.service.GetListing(c.Request().Context(), listingID)
+    if err != nil {
+        return err
+    }
+
+    return c.JSON(http.StatusCreated, listing)
 }
 
-pub async fn get_creator_profile(
-    RequireCreator { auth, creator_id }: RequireCreator,
-    State(state): State<AppState>,
-) -> Result<Json<CreatorResponse>, AppError> {
-    let creator = state.marketplace_service
-        .get_creator_by_parent_id(auth.parent_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    Ok(Json(creator))
+func (h *Handler) GetCreatorProfile(c echo.Context) error {
+    cc := c.Get("creator").(*CreatorContext)
+
+    creator, err := h.service.GetCreatorByParentID(c.Request().Context(), cc.Auth.ParentID)
+    if err != nil {
+        return err
+    }
+    if creator == nil {
+        return apperr.NotFound
+    }
+
+    return c.JSON(http.StatusOK, creator)
 }
 ```
 
@@ -2939,151 +2560,85 @@ pub async fn get_creator_profile(
 
 ## §17 Error Types
 
-All marketplace errors use `thiserror` and map to HTTP status codes via `AppError`. Internal
-details are logged but never exposed in API responses. `[CODING §5.2, S§18]`
+All marketplace errors use custom error types with `errors.Is`/`errors.As` and map to HTTP
+status codes via `AppError`. Internal details are logged but never exposed in API
+responses. `[CODING §5.2, S§18]`
 
-```rust
-// src/mkt/errors.rs
+```go
+// internal/mkt/errors.go
 
-use thiserror::Error;
+import "errors"
 
-#[derive(Debug, Error)]
-pub enum MktError {
-    // ─── Creator Errors ─────────────────────────────────────────────────
-    #[error("Creator account already exists for this user")]
-    CreatorAlreadyExists,
+// ─── Creator Errors ─────────────────────────────────────────────────
+var (
+    ErrCreatorAlreadyExists = errors.New("creator account already exists for this user")
+    ErrCreatorNotFound      = errors.New("creator account not found")
+    ErrTOSNotAccepted       = errors.New("creator must accept Terms of Service")
+    ErrCreatorNotActive     = errors.New("creator onboarding not complete")
+    ErrCreatorSuspended     = errors.New("creator account is suspended")
+)
 
-    #[error("Creator account not found")]
-    CreatorNotFound,
+// ─── Publisher Errors ───────────────────────────────────────────────
+var (
+    ErrPublisherNotFound           = errors.New("publisher not found")
+    ErrPublisherSlugConflict       = errors.New("publisher slug already taken")
+    ErrNotPublisherMember          = errors.New("not a member of this publisher")
+    ErrInsufficientPublisherRole   = errors.New("insufficient publisher role for this action")
+    ErrCannotRemoveLastOwner       = errors.New("cannot remove the last owner of a publisher")
+    ErrCannotModifyPlatformPublisher = errors.New("cannot modify the platform publisher")
+)
 
-    #[error("Creator must accept Terms of Service")]
-    TosNotAccepted,
+// ─── Listing Errors ─────────────────────────────────────────────────
+var (
+    ErrListingNotFound    = errors.New("listing not found")
+    ErrListingNotPublished = errors.New("listing is not published")
+    ErrListingNotFree     = errors.New("listing is not free")
+    ErrListingHasNoFiles  = errors.New("listing has no files attached")
+    ErrNotListingOwner    = errors.New("not the owner of this listing")
+    ErrInvalidContentType = errors.New("invalid content type")
+    ErrInvalidPrice       = errors.New("invalid price: must be >= 0")
+)
 
-    #[error("Creator onboarding not complete")]
-    CreatorNotActive,
+// ─── File Errors ────────────────────────────────────────────────────
+var (
+    ErrFileNotFound   = errors.New("file not found")
+    ErrInvalidFileType = errors.New("invalid file type")
+    ErrFileTooLarge   = errors.New("file too large")
+)
 
-    #[error("Creator account is suspended")]
-    CreatorSuspended,
+// ─── Cart Errors ────────────────────────────────────────────────────
+var (
+    ErrAlreadyInCart = errors.New("item already in cart")
+    ErrNotInCart     = errors.New("item not in cart")
+    ErrEmptyCart     = errors.New("cart is empty")
+    ErrStaleCart     = errors.New("cart contains unpublished listings")
+)
 
-    // ─── Publisher Errors ───────────────────────────────────────────────
-    #[error("Publisher not found")]
-    PublisherNotFound,
+// ─── Purchase Errors ────────────────────────────────────────────────
+var (
+    ErrAlreadyPurchased   = errors.New("already purchased this listing")
+    ErrPurchaseNotFound   = errors.New("purchase not found")
+    ErrNotPurchased       = errors.New("not purchased — cannot download")
+    ErrRefundWindowExpired = errors.New("refund window has expired (30 days)")
+    ErrAlreadyRefunded    = errors.New("purchase already refunded")
+)
 
-    #[error("Publisher slug already taken")]
-    PublisherSlugConflict,
+// ─── Review Errors ──────────────────────────────────────────────────
+var (
+    ErrAlreadyReviewed = errors.New("already reviewed this purchase")
+    ErrReviewNotFound  = errors.New("review not found")
+    ErrNotReviewOwner  = errors.New("not the owner of this review")
+    ErrInvalidRating   = errors.New("invalid rating: must be between 1 and 5")
+)
 
-    #[error("Not a member of this publisher")]
-    NotPublisherMember,
-
-    #[error("Insufficient publisher role for this action")]
-    InsufficientPublisherRole,
-
-    #[error("Cannot remove the last owner of a publisher")]
-    CannotRemoveLastOwner,
-
-    #[error("Cannot modify the platform publisher")]
-    CannotModifyPlatformPublisher,
-
-    // ─── Listing Errors ─────────────────────────────────────────────────
-    #[error("Listing not found")]
-    ListingNotFound,
-
-    #[error("Listing is not published")]
-    ListingNotPublished,
-
-    #[error("Listing is not free")]
-    ListingNotFree,
-
-    #[error("Invalid listing state transition: {from} → {action}")]
-    InvalidStateTransition { from: String, action: String },
-
-    #[error("Listing has no files attached")]
-    ListingHasNoFiles,
-
-    #[error("Not the owner of this listing")]
-    NotListingOwner,
-
-    #[error("Invalid content type")]
-    InvalidContentType,
-
-    #[error("Invalid price: must be >= 0")]
-    InvalidPrice,
-
-    // ─── File Errors ────────────────────────────────────────────────────
-    #[error("File not found")]
-    FileNotFound,
-
-    #[error("Invalid file type")]
-    InvalidFileType,
-
-    #[error("File too large")]
-    FileTooLarge,
-
-    // ─── Cart Errors ────────────────────────────────────────────────────
-    #[error("Item already in cart")]
-    AlreadyInCart,
-
-    #[error("Item not in cart")]
-    NotInCart,
-
-    #[error("Cart is empty")]
-    EmptyCart,
-
-    #[error("Cart contains unpublished listings")]
-    StaleCart,
-
-    // ─── Purchase Errors ────────────────────────────────────────────────
-    #[error("Already purchased this listing")]
-    AlreadyPurchased,
-
-    #[error("Purchase not found")]
-    PurchaseNotFound,
-
-    #[error("Not purchased — cannot download")]
-    NotPurchased,
-
-    #[error("Refund window has expired (30 days)")]
-    RefundWindowExpired,
-
-    #[error("Purchase already refunded")]
-    AlreadyRefunded,
-
-    // ─── Review Errors ──────────────────────────────────────────────────
-    #[error("Already reviewed this purchase")]
-    AlreadyReviewed,
-
-    #[error("Review not found")]
-    ReviewNotFound,
-
-    #[error("Not the owner of this review")]
-    NotReviewOwner,
-
-    #[error("Invalid rating: must be between 1 and 5")]
-    InvalidRating,
-
-    // ─── Payment Errors (processor-agnostic) ────────────────────────────
-    #[error("Payment provider unavailable")]
-    PaymentProviderUnavailable,
-
-    #[error("Payment creation failed")]
-    PaymentCreationFailed,
-
-    #[error("Invalid webhook signature")]
-    InvalidWebhookSignature,
-
-    #[error("Webhook payload malformed")]
-    MalformedWebhookPayload,
-
-    #[error("Payout threshold not met")]
-    PayoutThresholdNotMet,
-
-    // ─── Infrastructure ─────────────────────────────────────────────────
-    #[error("Database error")]
-    DatabaseError(#[from] sea_orm::DbErr),
-
-    #[error("Cache error")]
-    CacheError(String),
-}
+// ─── Payment Errors (processor-agnostic) ────────────────────────────
+var (
+    ErrPaymentProviderUnavailable = errors.New("payment provider unavailable")
+    ErrPaymentCreationFailed      = errors.New("payment creation failed")
+    ErrInvalidWebhookSignature    = errors.New("invalid webhook signature")
+    ErrMalformedWebhookPayload    = errors.New("webhook payload malformed")
+    ErrPayoutThresholdNotMet      = errors.New("payout threshold not met")
+)
 ```
 
 ### Error-to-HTTP Mapping
@@ -3195,8 +2750,8 @@ flows (`learn::` Layer 1 definitions require `publisher_id`).
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `MarketplaceService` trait methods | `learn::`, `onboard::` (Phase 2) | `Arc<dyn MarketplaceService>` via AppState |
-| `verify_publisher_membership()` | `learn::` | Service method — publisher ownership checks `[06-learn §18.2]` |
+| `MarketplaceService` interface methods | `learn`, `onboard` (Phase 2) | `MarketplaceService` interface via AppState |
+| `VerifyPublisherMembership()` | `learn::` | Service method — publisher ownership checks `[06-learn §18.2]` |
 | `PurchaseCompleted` event | `learn::`, `billing::`, `notify::` | Domain event — tool access grant, creator earnings, receipt email `[ARCH §4.6]` |
 | `ListingPublished` event | `search::`, `ai::` | Domain event — search index update, recommendation catalog |
 | `ListingArchived` event | `search::` | Domain event — remove from search index |
@@ -3218,98 +2773,79 @@ flows (`learn::` Layer 1 definitions require `publisher_id`).
 
 ### §18.3 Events mkt:: Publishes
 
-Defined in `src/mkt/events.rs`. `[CODING §8.4]`
+Defined in `internal/mkt/events.go`. `[CODING §8.4]`
 
-```rust
-// src/mkt/events.rs
+```go
+// internal/mkt/events.go
 
-use crate::shared::types::FamilyId;
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-
-/// Published when a family completes a marketplace purchase.
-/// Consumed by learn:: (tool access), billing:: (creator earnings), notify:: (receipt).
-///
-/// IMPORTANT: The `content_metadata` field shape is a cross-domain contract
-/// consumed by learn::event_handlers.rs [06-learn:3171]. Changes to this
-/// struct require coordinated updates to all consumers.
-#[derive(Clone, Debug)]
-pub struct PurchaseCompleted {
-    pub family_id: FamilyId,
-    pub purchase_id: Uuid,
-    pub listing_id: Uuid,
-    pub content_metadata: PurchaseMetadata,
-}
-impl DomainEvent for PurchaseCompleted {}
-
-/// Metadata about purchased content. Defined authoritatively by mkt::events
-/// and imported by learn:: [06-learn:2532].
-#[derive(Clone, Debug)]
-pub struct PurchaseMetadata {
-    pub content_type: String,
-    pub content_ids: Vec<Uuid>,
-    pub publisher_id: Uuid,
+// PurchaseCompleted is published when a family completes a marketplace purchase.
+// Consumed by learn:: (tool access), billing:: (creator earnings), notify:: (receipt).
+//
+// IMPORTANT: The ContentMetadata field shape is a cross-domain contract
+// consumed by learn::event_handlers.go [06-learn:3171]. Changes to this
+// struct require coordinated updates to all consumers.
+type PurchaseCompleted struct {
+    FamilyID        uuid.UUID        `json:"family_id"`
+    PurchaseID      uuid.UUID        `json:"purchase_id"`
+    ListingID       uuid.UUID        `json:"listing_id"`
+    ContentMetadata PurchaseMetadata `json:"content_metadata"`
 }
 
-/// Published when a listing transitions to Published state.
-/// Consumed by search:: (index update), ai:: (recommendation catalog).
-#[derive(Clone, Debug)]
-pub struct ListingPublished {
-    pub listing_id: Uuid,
-    pub publisher_id: Uuid,
-    pub content_type: String,
-    pub subject_tags: Vec<String>,
+// PurchaseMetadata holds metadata about purchased content.
+// Defined authoritatively by mkt::events and imported by learn:: [06-learn:2532].
+type PurchaseMetadata struct {
+    ContentType string      `json:"content_type"`
+    ContentIDs  []uuid.UUID `json:"content_ids"`
+    PublisherID uuid.UUID   `json:"publisher_id"`
 }
-impl DomainEvent for ListingPublished {}
 
-/// Published when a listing is archived.
-/// Consumed by search:: (remove from index).
-#[derive(Clone, Debug)]
-pub struct ListingArchived {
-    pub listing_id: Uuid,
+// ListingPublished is published when a listing transitions to Published state.
+// Consumed by search:: (index update), ai:: (recommendation catalog).
+type ListingPublished struct {
+    ListingID   uuid.UUID `json:"listing_id"`
+    PublisherID uuid.UUID `json:"publisher_id"`
+    ContentType string    `json:"content_type"`
+    SubjectTags []string  `json:"subject_tags"`
 }
-impl DomainEvent for ListingArchived {}
 
-/// Published when a verified-purchaser review is created.
-/// Consumed by safety:: (content moderation scan).
-#[derive(Clone, Debug)]
-pub struct ReviewCreated {
-    pub review_id: Uuid,
-    pub listing_id: Uuid,
-    pub rating: i16,
-    pub review_text: Option<String>,  // for safety:: text scanning [11-safety §11.2]
+// ListingArchived is published when a listing is archived.
+// Consumed by search:: (remove from index).
+type ListingArchived struct {
+    ListingID uuid.UUID `json:"listing_id"`
 }
-impl DomainEvent for ReviewCreated {}
 
-/// Published when a creator completes registration.
-/// Consumed by notify:: (welcome email).
-#[derive(Clone, Debug)]
-pub struct CreatorOnboarded {
-    pub creator_id: Uuid,
-    pub parent_id: Uuid,
-    pub store_name: String,
+// ReviewCreated is published when a verified-purchaser review is created.
+// Consumed by safety:: (content moderation scan).
+type ReviewCreated struct {
+    ReviewID   uuid.UUID `json:"review_id"`
+    ListingID  uuid.UUID `json:"listing_id"`
+    Rating     int16     `json:"rating"`
+    ReviewText *string   `json:"review_text,omitempty"` // for safety:: text scanning [11-safety §11.2]
 }
-impl DomainEvent for CreatorOnboarded {}
 
-/// Published when a purchase is refunded.
-/// Consumed by billing:: (earnings adjustment), notify:: (refund notification).
-#[derive(Clone, Debug)]
-pub struct PurchaseRefunded {
-    pub purchase_id: Uuid,
-    pub listing_id: Uuid,
-    pub family_id: FamilyId,
-    pub refund_amount_cents: i64,
+// CreatorOnboarded is published when a creator completes registration.
+// Consumed by notify:: (welcome email).
+type CreatorOnboarded struct {
+    CreatorID uuid.UUID `json:"creator_id"`
+    ParentID  uuid.UUID `json:"parent_id"`
+    StoreName string    `json:"store_name"`
 }
-impl DomainEvent for PurchaseRefunded {}
 
-/// Published when a listing is submitted for content screening.
-/// Consumed by safety:: (automated content screening).
-#[derive(Clone, Debug)]
-pub struct ListingSubmitted {
-    pub listing_id: Uuid,
-    pub creator_id: Uuid,
+// PurchaseRefunded is published when a purchase is refunded.
+// Consumed by billing:: (earnings adjustment), notify:: (refund notification).
+type PurchaseRefunded struct {
+    PurchaseID       uuid.UUID `json:"purchase_id"`
+    ListingID        uuid.UUID `json:"listing_id"`
+    FamilyID         uuid.UUID `json:"family_id"`
+    RefundAmountCents int64    `json:"refund_amount_cents"`
 }
-impl DomainEvent for ListingSubmitted {}
+
+// ListingSubmitted is published when a listing is submitted for content screening.
+// Consumed by safety:: (automated content screening).
+type ListingSubmitted struct {
+    ListingID uuid.UUID `json:"listing_id"`
+    CreatorID uuid.UUID `json:"creator_id"`
+}
 ```
 
 ### §18.4 Events mkt:: Subscribes To
@@ -3320,51 +2856,32 @@ impl DomainEvent for ListingSubmitted {}
 | `FamilyDeletionScheduled { family_id, delete_after }` | `iam::` | Anonymize reviews (retain ratings, clear text), retain purchase records (legal requirement), clear cart items. |
 | `MethodologyConfigUpdated` | `method::` | Invalidate cached methodology tag display names used in listing browse responses. |
 
-```rust
-// src/mkt/event_handlers.rs
+```go
+// internal/mkt/event_handlers.go
 
-use crate::safety::events::ContentFlagged;
-use crate::iam::events::FamilyDeletionScheduled;
-use crate::method::events::MethodologyConfigUpdated;
-
-pub struct ContentFlaggedHandler {
-    marketplace_service: Arc<dyn MarketplaceService>,
+type ContentFlaggedHandler struct {
+    marketplaceService MarketplaceService
 }
 
-#[async_trait]
-impl DomainEventHandler<ContentFlagged> for ContentFlaggedHandler {
-    async fn handle(&self, event: &ContentFlagged) -> Result<(), AppError> {
-        self.marketplace_service.handle_content_flagged(
-            event.content_id,
-            event.action.clone(),
-        ).await
-    }
+func (h *ContentFlaggedHandler) Handle(ctx context.Context, event *ContentFlagged) error {
+    return h.marketplaceService.HandleContentFlagged(ctx, event.ContentID, event.Action)
 }
 
-pub struct FamilyDeletionScheduledHandler {
-    marketplace_service: Arc<dyn MarketplaceService>,
+type FamilyDeletionScheduledHandler struct {
+    marketplaceService MarketplaceService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.marketplace_service.handle_family_deletion_scheduled(
-            event.family_id,
-        ).await
-    }
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *FamilyDeletionScheduled) error {
+    return h.marketplaceService.HandleFamilyDeletionScheduled(ctx, event.FamilyID)
 }
 
-pub struct MethodologyConfigUpdatedHandler {
+type MethodologyConfigUpdatedHandler struct {
     // Invalidate Redis cache for methodology tag display names
-    redis: Arc<RedisPool>,
+    redis *redis.Client
 }
 
-#[async_trait]
-impl DomainEventHandler<MethodologyConfigUpdated> for MethodologyConfigUpdatedHandler {
-    async fn handle(&self, _event: &MethodologyConfigUpdated) -> Result<(), AppError> {
-        self.redis.del_pattern("mkt:methodology_tags:*").await?;
-        Ok(())
-    }
+func (h *MethodologyConfigUpdatedHandler) Handle(ctx context.Context, event *MethodologyConfigUpdated) error {
+    return h.redis.Del(ctx, "mkt:methodology_tags:*").Err()
 }
 ```
 
@@ -3379,7 +2896,7 @@ topology:
 │                                                             │
 │  ┌─────────────────┐     ┌──────────────────────────────┐  │
 │  │  homegrown-app   │────▶│  hyperswitch-app (Rust)      │  │
-│  │  (Axum server)   │     │  :8080                       │  │
+│  │  (Echo server)   │     │  :8080                       │  │
 │  └────────┬─────────┘     └──────────┬───────────────────┘  │
 │           │                          │                       │
 │  ┌────────▼─────────┐     ┌──────────▼───────────────────┐  │
@@ -3460,7 +2977,7 @@ Each item is a testable assertion. Implementation is not complete until all asse
 1. `POST /v1/marketplace/creators/register` creates a creator with `onboarding_status = 'pending'`
 2. Registering twice returns `409 Conflict`
 3. `tos_accepted = false` returns `422`
-4. `POST /v1/marketplace/creators/onboarding-link` calls `PaymentAdapter::create_onboarding_link()`
+4. `POST /v1/marketplace/creators/onboarding-link` calls `PaymentAdapter.CreateOnboardingLink()`
 5. Creator profile update validates `store_name` length (1-100)
 6. `CreatorOnboarded` event published on registration
 
@@ -3469,19 +2986,19 @@ Each item is a testable assertion. Implementation is not complete until all asse
 7. `POST /v1/marketplace/publishers` creates publisher and `owner` membership for creator
 8. Duplicate slug returns `409 Conflict`
 9. Only `owner`/`admin` can update publisher details
-10. `verify_publisher_membership()` returns true for members, false for non-members
+10. `VerifyPublisherMembership()` returns true for members, false for non-members
 11. Platform publisher (`is_platform = true`) cannot be modified via API
 12. Platform publisher seed data exists after migration
 
 ### Listing Lifecycle
 
 13. New listing starts in `draft` status
-14. `submit()` fails if listing has no files (returns `ListingHasNoFiles`)
-15. `submit()` fails from non-`draft` status (returns `InvalidStateTransition`)
-16. `publish()` only succeeds from `submitted` status
-17. `publish()` sets `published_at` timestamp
-18. `archive()` only succeeds from `published` status
-19. `archive()` sets `archived_at` timestamp; `published_at` retained
+14. `Submit()` fails if listing has no files (returns `ListingHasNoFiles`)
+15. `Submit()` fails from non-`draft` status (returns `InvalidStateTransition`)
+16. `Publish()` only succeeds from `submitted` status
+17. `Publish()` sets `published_at` timestamp
+18. `Archive()` only succeeds from `published` status
+19. `Archive()` sets `archived_at` timestamp; `published_at` retained
 20. Updating a published listing creates a version snapshot in `mkt_listing_versions`
 21. Updating a published listing increments the `version` field
 22. Creator must be member of the listing's publisher to create/edit
@@ -3491,7 +3008,7 @@ Each item is a testable assertion. Implementation is not complete until all asse
 23. Adding to cart fails if listing not published (`404`)
 24. Adding to cart fails if already purchased (`409`)
 25. Cart is family-scoped: Parent A's additions visible to Parent B
-26. `POST /cart/checkout` calls `PaymentAdapter::create_payment()` with correct split rules
+26. `POST /cart/checkout` calls `PaymentAdapter.CreatePayment()` with correct split rules
 27. Empty cart checkout returns `400`
 28. Payment webhook creates `mkt_purchases` rows for each cart item
 29. Payment webhook clears cart items after successful purchase
@@ -3525,7 +3042,7 @@ Each item is a testable assertion. Implementation is not complete until all asse
 
 ### Cross-Domain Events
 
-48. `PurchaseCompleted` event shape matches learn::event_handlers expectation: `{ family_id: FamilyId, content_metadata: PurchaseMetadata }`
+48. `PurchaseCompleted` event shape matches learn::event_handlers expectation: `{ FamilyID: uuid.UUID, ContentMetadata: PurchaseMetadata }`
 49. `ListingPublished` event triggers search index update
 50. `ContentFlagged` event from `safety::` archives flagged listings / rejects flagged reviews
 51. `FamilyDeletionScheduled` event anonymizes reviews and clears cart
@@ -3541,34 +3058,31 @@ Each item is a testable assertion. Implementation is not complete until all asse
 ## §21 Module Structure
 
 ```
-src/mkt/
-├── mod.rs                    # Re-exports, domain-level doc comments
-├── handlers.rs               # Axum route handlers (thin layer only)
-├── service.rs                # MarketplaceServiceImpl — orchestration
-├── repository.rs             # PgCreatorRepository, PgPublisherRepository,
+internal/mkt/
+├── handler.go                # Echo route handlers (thin layer only)
+├── service.go                # MarketplaceServiceImpl — orchestration
+├── repository.go             # PgCreatorRepository, PgPublisherRepository,
 │                             # PgListingRepository, PgListingFileRepository,
 │                             # PgCartRepository, PgPurchaseRepository,
 │                             # PgReviewRepository, PgCuratedSectionRepository
-├── models.rs                 # Request/response types, internal types, query params
-├── ports.rs                  # MarketplaceService trait, all repository traits,
-│                             # PaymentAdapter trait, MediaAdapter trait
-├── errors.rs                 # MktError thiserror enum
-├── events.rs                 # PurchaseCompleted, ListingPublished, ListingArchived,
+├── models.go                 # Request/response types, internal types, query params
+│                             # (includes GORM models — no separate entities dir)
+├── ports.go                  # MarketplaceService interface, all repository interfaces,
+│                             # PaymentAdapter interface, MediaAdapter interface
+├── errors.go                 # MktError sentinel errors (errors.Is/As)
+├── events.go                 # PurchaseCompleted, ListingPublished, ListingArchived,
 │                             # ReviewCreated, CreatorOnboarded, PurchaseRefunded,
 │                             # ListingSubmitted
-├── event_handlers.rs         # ContentFlaggedHandler, FamilyDeletionScheduledHandler,
+├── event_handlers.go         # ContentFlaggedHandler, FamilyDeletionScheduledHandler,
 │                             # MethodologyConfigUpdatedHandler
-├── extractors.rs             # RequireCreator extractor [00-core §13.3 resolution]
+├── middleware.go              # RequireCreator middleware [00-core §13.3 resolution]
 ├── adapters/
-│   ├── mod.rs
-│   └── payment.rs            # HyperswitchPaymentAdapter — wraps Hyperswitch REST API,
-│                             # returns domain types only [supersedes ADR-007]
-├── domain/
-│   ├── mod.rs
-│   ├── listing.rs            # MarketplaceListing aggregate root — state machine
-│   ├── value_objects.rs      # Price, ListingTitle, etc.
-│   └── errors.rs             # MktDomainError enum
-└── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
+│   └── payment.go            # HyperswitchPaymentAdapter — wraps Hyperswitch REST API
+│                             # via net/http, returns domain types only [supersedes ADR-007]
+└── domain/
+    ├── listing.go            # MarketplaceListing aggregate root — state machine
+    ├── value_objects.go      # Price, ListingTitle, etc.
+    └── errors.go             # MktDomainError type
 ```
 
 ---
@@ -3654,19 +3168,34 @@ or a parent explicitly switches to the new version (which resets progress).
 
 The following signals are monitored by the marketplace (integrated with safety:: for action):
 
-```rust
+```go
 // Marketplace fraud signals — checked on relevant operations
-pub enum MktFraudSignal {
-    /// Same family purchased and reviewed within minutes
-    SuspiciousReviewTiming { purchase_id: Uuid, review_id: Uuid },
-    /// Creator's IP matches a purchaser's IP
-    SelfPurchaseSuspected { creator_id: Uuid, purchaser_family_id: Uuid },
-    /// Unusual spike in reviews for a listing (>5 in 24 hours)
-    ReviewSpike { listing_id: Uuid, review_count: u32 },
-    /// Excessive refund requests from one account
-    RefundAbuse { family_id: Uuid, refund_count: u32, period_days: u32 },
-    /// Price changed more than twice in 24 hours
-    PriceManipulation { listing_id: Uuid, change_count: u32 },
+
+type MktFraudSignalType string
+
+const (
+    // SuspiciousReviewTiming: Same family purchased and reviewed within minutes
+    FraudSignalSuspiciousReviewTiming MktFraudSignalType = "suspicious_review_timing"
+    // SelfPurchaseSuspected: Creator's IP matches a purchaser's IP
+    FraudSignalSelfPurchaseSuspected  MktFraudSignalType = "self_purchase_suspected"
+    // ReviewSpike: Unusual spike in reviews for a listing (>5 in 24 hours)
+    FraudSignalReviewSpike            MktFraudSignalType = "review_spike"
+    // RefundAbuse: Excessive refund requests from one account
+    FraudSignalRefundAbuse            MktFraudSignalType = "refund_abuse"
+    // PriceManipulation: Price changed more than twice in 24 hours
+    FraudSignalPriceManipulation      MktFraudSignalType = "price_manipulation"
+)
+
+type MktFraudSignal struct {
+    Type              MktFraudSignalType
+    PurchaseID        *uuid.UUID
+    ReviewID          *uuid.UUID
+    CreatorID         *uuid.UUID
+    PurchaserFamilyID *uuid.UUID
+    ListingID         *uuid.UUID
+    FamilyID          *uuid.UUID
+    Count             uint32
+    PeriodDays        uint32
 }
 ```
 

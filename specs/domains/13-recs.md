@@ -16,7 +16,7 @@ publishes no domain events of its own. `[S§10, V§8, V§10]`
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/recs/` |
+| **Module path** | `internal/recs/` |
 | **DB prefix** | `recs_` `[ARCH §5.1]` |
 | **Complexity class** | Simple (no `domain/` subdirectory) — recommendation queries, no invariants to enforce `[ARCH §4.5]` |
 | **CQRS** | Yes — write (signal recording) / read (recommendation queries) `[ARCH §4.7]` |
@@ -37,7 +37,7 @@ delivery (owned by `notify::`), search indexing (owned by `search::`).
 
 **What recs:: delegates**: Notification delivery → `notify::` (via domain events — Phase 3).
 Family/student identity resolution → `iam::` tables (direct DB read). Methodology config
-lookup → `method::` tables (direct DB read). Background job scheduling → sidekiq-rs
+lookup → `method::` tables (direct DB read). Background task scheduling → asynq
 `[ARCH §12]`.
 
 ---
@@ -129,7 +129,7 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 #### `recs_signals` — Raw Event-Derived Learning Signals
 
 Family-scoped. Records each learning signal derived from domain events. 90-day retention
-(purged by `PurgeStaleSignalsJob`).
+(purged by `PurgeStaleSignalsTask`).
 
 ```sql
 CREATE TABLE recs_signals (
@@ -156,7 +156,7 @@ CREATE TABLE recs_signals (
 CREATE INDEX idx_recs_signals_family_date
     ON recs_signals (family_id, signal_date DESC);
 
--- Purge job: "delete signals older than 90 days"
+-- Purge task: "delete signals older than 90 days"
 CREATE INDEX idx_recs_signals_created_at
     ON recs_signals (created_at);
 
@@ -171,8 +171,8 @@ CREATE INDEX idx_recs_signals_student
 
 #### `recs_recommendations` — Pre-Computed Recommendations
 
-Family-scoped. Stores the output of the daily recommendation batch job. Each recommendation
-has a 14-day TTL and is expired by the batch job on next run.
+Family-scoped. Stores the output of the daily recommendation batch task. Each recommendation
+has a 14-day TTL and is expired by the batch task on next run.
 
 ```sql
 CREATE TABLE recs_recommendations (
@@ -219,7 +219,7 @@ CREATE UNIQUE INDEX idx_recs_recommendations_family_entity_active
     ON recs_recommendations (family_id, target_entity_id)
     WHERE status = 'active';
 
--- Expiry job: "find recommendations past their TTL"
+-- Expiry task: "find recommendations past their TTL"
 CREATE INDEX idx_recs_recommendations_expires_at
     ON recs_recommendations (expires_at) WHERE status = 'active';
 ```
@@ -259,7 +259,7 @@ CREATE INDEX idx_recs_feedback_family
 
 **NOT family-scoped** (no PII). Stores aggregated purchase popularity per listing per
 methodology. Powers the "Popular with [Methodology] families" signal. Computed by the
-`AggregatePopularityJob` using a rolling 90-day window with recency decay.
+`AggregatePopularityTask` using a rolling 90-day window with recency decay.
 
 ```sql
 CREATE TABLE recs_popularity_scores (
@@ -298,7 +298,7 @@ personally identifiable information.
 ```sql
 CREATE TABLE recs_anonymized_interactions (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- One-way HMAC-SHA256(family_id, server_secret) → anonymous_id
+    -- One-way HMAC-SHA256(family_id, server_secret) -> anonymous_id
     -- Cannot be reversed to recover family_id [§14]
     anonymous_id        TEXT NOT NULL,
     interaction_type    TEXT NOT NULL CHECK (interaction_type IN (
@@ -362,8 +362,8 @@ Application-layer enforcement (not PostgreSQL RLS policies). `[CODING §2.4]`
 | `recs_signals` | Family-scoped | `FamilyScope` on all repository methods |
 | `recs_recommendations` | Family-scoped | `FamilyScope` on all repository methods |
 | `recs_recommendation_feedback` | Family-scoped | `FamilyScope` on all repository methods |
-| `recs_popularity_scores` | System (no PII) | No `FamilyScope` — accessed by background jobs and algorithm only |
-| `recs_anonymized_interactions` | System (no PII) | No `FamilyScope` — insert-only by background job, no reads in Phase 2 |
+| `recs_popularity_scores` | System (no PII) | No `FamilyScope` — accessed by background tasks and algorithm only |
+| `recs_anonymized_interactions` | System (no PII) | No `FamilyScope` — insert-only by background task, no reads in Phase 2 |
 | `recs_preferences` | Family-scoped | `FamilyScope` on all repository methods |
 
 ---
@@ -386,13 +386,13 @@ Returns the family's active recommendations, sorted by score descending. Support
 by type and cursor pagination.
 
 ```
-Auth:       RequirePremium (→ 402 if free tier)
+Auth:       RequirePremium (-> 402 if free tier)
 Query:      type?: "marketplace_content" | "activity_idea" | "reading_suggestion" | "community_group"
             cursor?: string
             limit?: integer (default 20, max 50)
-Response:   200 → RecommendationListResponse
-            401 → Unauthorized
-            402 → PremiumRequired
+Response:   200 -> RecommendationListResponse
+            401 -> Unauthorized
+            402 -> PremiumRequired
 ```
 
 ```json
@@ -422,16 +422,16 @@ Response:   200 → RecommendationListResponse
 Returns recommendations specific to a student (filtered by age, grade, subjects).
 
 ```
-Auth:       RequirePremium (→ 402 if free tier)
+Auth:       RequirePremium (-> 402 if free tier)
 Path:       student_id: UUID
 Query:      type?: "marketplace_content" | "activity_idea" | "reading_suggestion" | "community_group"
             cursor?: string
             limit?: integer (default 20, max 50)
 Validate:   student_id must belong to the family (FamilyScope check)
-Response:   200 → RecommendationListResponse
-            401 → Unauthorized
-            402 → PremiumRequired
-            404 → StudentNotFound (student doesn't exist or doesn't belong to family)
+Response:   200 -> RecommendationListResponse
+            401 -> Unauthorized
+            402 -> PremiumRequired
+            404 -> StudentNotFound (student doesn't exist or doesn't belong to family)
 ```
 
 #### `POST /v1/recommendations/:id/dismiss`
@@ -440,14 +440,14 @@ Dismisses a recommendation. The recommendation becomes hidden but can be restore
 `DELETE /v1/recommendations/:id/feedback`.
 
 ```
-Auth:       RequirePremium (→ 402 if free tier)
+Auth:       RequirePremium (-> 402 if free tier)
 Path:       id: UUID (recommendation_id)
 Validate:   recommendation must belong to the family (FamilyScope check)
-Response:   200 → { "status": "dismissed" }
-            401 → Unauthorized
-            402 → PremiumRequired
-            404 → RecommendationNotFound
-            409 → AlreadyDismissedOrBlocked
+Response:   200 -> { "status": "dismissed" }
+            401 -> Unauthorized
+            402 -> PremiumRequired
+            404 -> RecommendationNotFound
+            409 -> AlreadyDismissedOrBlocked
 ```
 
 #### `POST /v1/recommendations/:id/block`
@@ -456,14 +456,14 @@ Blocks the recommendation's source entity. Future recommendations for this entit
 suppressed. Can be restored via `DELETE /v1/recommendations/:id/feedback`.
 
 ```
-Auth:       RequirePremium (→ 402 if free tier)
+Auth:       RequirePremium (-> 402 if free tier)
 Path:       id: UUID (recommendation_id)
 Validate:   recommendation must belong to the family (FamilyScope check)
-Response:   200 → { "status": "blocked", "blocked_entity_id": "uuid" }
-            401 → Unauthorized
-            402 → PremiumRequired
-            404 → RecommendationNotFound
-            409 → AlreadyBlocked
+Response:   200 -> { "status": "blocked", "blocked_entity_id": "uuid" }
+            401 -> Unauthorized
+            402 -> PremiumRequired
+            404 -> RecommendationNotFound
+            409 -> AlreadyBlocked
 ```
 
 #### `DELETE /v1/recommendations/:id/feedback`
@@ -472,13 +472,13 @@ Undoes a dismiss or block action. Restores the recommendation to active status (
 expired). For blocks, removes the blocked entity from the suppress list.
 
 ```
-Auth:       RequirePremium (→ 402 if free tier)
+Auth:       RequirePremium (-> 402 if free tier)
 Path:       id: UUID (recommendation_id)
 Validate:   recommendation must belong to the family (FamilyScope check)
-Response:   200 → { "status": "active" }
-            401 → Unauthorized
-            402 → PremiumRequired
-            404 → FeedbackNotFound
+Response:   200 -> { "status": "active" }
+            401 -> Unauthorized
+            402 -> PremiumRequired
+            404 -> FeedbackNotFound
 ```
 
 #### `GET /v1/recommendations/preferences`
@@ -486,10 +486,10 @@ Response:   200 → { "status": "active" }
 Returns the family's recommendation preferences.
 
 ```
-Auth:       RequirePremium (→ 402 if free tier)
-Response:   200 → RecommendationPreferencesResponse
-            401 → Unauthorized
-            402 → PremiumRequired
+Auth:       RequirePremium (-> 402 if free tier)
+Response:   200 -> RecommendationPreferencesResponse
+            401 -> Unauthorized
+            402 -> PremiumRequired
 ```
 
 ```json
@@ -506,12 +506,12 @@ Updates the family's recommendation preferences. Partial update — only provide
 changed.
 
 ```
-Auth:       RequirePremium (→ 402 if free tier)
+Auth:       RequirePremium (-> 402 if free tier)
 Body:       UpdatePreferencesCommand (partial)
-Response:   200 → RecommendationPreferencesResponse
-            401 → Unauthorized
-            402 → PremiumRequired
-            422 → ValidationError (invalid type or frequency value)
+Response:   200 -> RecommendationPreferencesResponse
+            401 -> Unauthorized
+            402 -> PremiumRequired
+            422 -> ValidationError (invalid type or frequency value)
 ```
 
 ```json
@@ -526,272 +526,164 @@ Response:   200 → RecommendationPreferencesResponse
 
 ## §5 Service Interface
 
-Defined in `src/recs/ports.rs`. CQRS separation: command methods (write) and query methods
+Defined in `internal/recs/ports.go`. CQRS separation: command methods (write) and query methods
 (read) are grouped separately. `[ARCH §4.7]`
 
-```rust
-// src/recs/ports.rs
+```go
+// internal/recs/ports.go
 
-use crate::shared::types::{FamilyId, FamilyScope};
-use crate::shared::errors::AppError;
-use uuid::Uuid;
+package recs
 
-/// Primary service trait for the Recommendations & Signals domain.
-/// Injected into handlers via `Arc<dyn RecsService>` in AppState.
-#[async_trait]
-pub trait RecsService: Send + Sync {
+import (
+    "context"
+    "time"
+
+    "github.com/google/uuid"
+    "homegrown/internal/shared/types"
+)
+
+// RecsService is the primary service interface for the Recommendations & Signals domain.
+// Injected into handlers via RecsService interface in AppState.
+type RecsService interface {
     // ── Commands (write side) ──────────────────────────────────
 
-    /// Records a learning signal from a domain event.
-    /// Called by event handlers, not by HTTP handlers.
-    async fn record_signal(
-        &self,
-        command: RecordSignalCommand,
-    ) -> Result<(), AppError>;
+    // RecordSignal records a learning signal from a domain event.
+    // Called by event handlers, not by HTTP handlers.
+    RecordSignal(ctx context.Context, command RecordSignalCommand) error
 
-    /// Registers a newly published listing in the popularity catalog.
-    /// Called by ListingPublishedHandler.
-    async fn register_listing(
-        &self,
-        command: RegisterListingCommand,
-    ) -> Result<(), AppError>;
+    // RegisterListing registers a newly published listing in the popularity catalog.
+    // Called by ListingPublishedHandler.
+    RegisterListing(ctx context.Context, command RegisterListingCommand) error
 
-    /// Dismisses a recommendation (marks as dismissed, creates feedback record).
-    async fn dismiss_recommendation(
-        &self,
-        scope: &FamilyScope,
-        recommendation_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DismissRecommendation dismisses a recommendation (marks as dismissed, creates feedback record).
+    DismissRecommendation(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) error
 
-    /// Blocks a recommendation's source entity (marks as blocked, creates feedback
-    /// with blocked_entity_id for future suppression).
-    async fn block_recommendation(
-        &self,
-        scope: &FamilyScope,
-        recommendation_id: Uuid,
-    ) -> Result<(), AppError>;
+    // BlockRecommendation blocks a recommendation's source entity (marks as blocked, creates feedback
+    // with blocked_entity_id for future suppression).
+    BlockRecommendation(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) error
 
-    /// Undoes a dismiss or block action.
-    async fn undo_feedback(
-        &self,
-        scope: &FamilyScope,
-        recommendation_id: Uuid,
-    ) -> Result<(), AppError>;
+    // UndoFeedback undoes a dismiss or block action.
+    UndoFeedback(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) error
 
-    /// Updates family recommendation preferences.
-    async fn update_preferences(
-        &self,
-        scope: &FamilyScope,
-        command: UpdatePreferencesCommand,
-    ) -> Result<RecommendationPreferencesResponse, AppError>;
+    // UpdatePreferences updates family recommendation preferences.
+    UpdatePreferences(ctx context.Context, scope *types.FamilyScope, command UpdatePreferencesCommand) (*RecommendationPreferencesResponse, error)
 
     // ── Queries (read side) ────────────────────────────────────
 
-    /// Returns active recommendations for the family, filterable by type.
-    async fn get_recommendations(
-        &self,
-        scope: &FamilyScope,
-        params: RecommendationListParams,
-    ) -> Result<RecommendationListResponse, AppError>;
+    // GetRecommendations returns active recommendations for the family, filterable by type.
+    GetRecommendations(ctx context.Context, scope *types.FamilyScope, params RecommendationListParams) (*RecommendationListResponse, error)
 
-    /// Returns active recommendations for a specific student.
-    async fn get_student_recommendations(
-        &self,
-        scope: &FamilyScope,
-        params: StudentRecommendationParams,
-    ) -> Result<RecommendationListResponse, AppError>;
+    // GetStudentRecommendations returns active recommendations for a specific student.
+    GetStudentRecommendations(ctx context.Context, scope *types.FamilyScope, params StudentRecommendationParams) (*RecommendationListResponse, error)
 
-    /// Returns the family's recommendation preferences (or defaults if none set).
-    async fn get_preferences(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<RecommendationPreferencesResponse, AppError>;
+    // GetPreferences returns the family's recommendation preferences (or defaults if none set).
+    GetPreferences(ctx context.Context, scope *types.FamilyScope) (*RecommendationPreferencesResponse, error)
 
     // ── Lifecycle event handlers ───────────────────────────────
 
-    /// Handles family deletion — deletes all recs data for the family.
-    async fn handle_family_deletion(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+    // HandleFamilyDeletion deletes all recs data for the family.
+    HandleFamilyDeletion(ctx context.Context, familyID types.FamilyID) error
 
-    /// Invalidates cached methodology config (e.g., methodology definitions cache).
-    async fn invalidate_methodology_cache(&self) -> Result<(), AppError>;
+    // InvalidateMethodologyCache invalidates cached methodology config (e.g., methodology definitions cache).
+    InvalidateMethodologyCache(ctx context.Context) error
 }
 ```
 
-**Implementation**: `RecsServiceImpl` in `src/recs/service.rs` with:
+**Implementation**: `RecsServiceImpl` in `internal/recs/service.go` with:
 - Injected repositories: `SignalRepository`, `RecommendationRepository`, `FeedbackRepository`,
   `PopularityRepository`, `PreferenceRepository`, `AnonymizedInteractionRepository`
-- Direct DB connection (via `DatabaseConnection`) for cross-domain reads from `iam_families`,
+- Direct DB connection (via `*gorm.DB`) for cross-domain reads from `iam_families`,
   `iam_students`, `method_definitions`, `mkt_listings`, `soc_groups`
 
 ---
 
 ## §6 Repository Interfaces
 
-Defined in `src/recs/ports.rs` alongside the service trait. Each repository handles one
+Defined in `internal/recs/ports.go` alongside the service interface. Each repository handles one
 table or closely related table group. FamilyScope is required on all methods that access
 user data. `[CODING §2.4, §2.5]`
 
-```rust
-// src/recs/ports.rs (continued)
+```go
+// internal/recs/ports.go (continued)
 
-/// Repository for recs_signals table.
-#[async_trait]
-pub trait SignalRepository: Send + Sync {
-    /// Creates a new signal record.
-    async fn create(
-        &self,
-        signal: NewSignal,
-    ) -> Result<(), AppError>;
+// SignalRepository is the repository for recs_signals table.
+type SignalRepository interface {
+    // Create creates a new signal record.
+    Create(ctx context.Context, signal NewSignal) error
 
-    /// Finds signals for a family within a date range.
-    async fn find_by_family(
-        &self,
-        scope: &FamilyScope,
-        since: NaiveDate,
-    ) -> Result<Vec<Signal>, AppError>;
+    // FindByFamily finds signals for a family within a date range.
+    FindByFamily(ctx context.Context, scope *types.FamilyScope, since time.Time) ([]Signal, error)
 
-    /// Deletes all signals for a family (family deletion cascade).
-    async fn delete_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<u64, AppError>;
+    // DeleteByFamily deletes all signals for a family (family deletion cascade).
+    DeleteByFamily(ctx context.Context, familyID types.FamilyID) (int64, error)
 
-    /// Deletes signals older than the retention period (purge job).
-    async fn delete_stale(
-        &self,
-        before: DateTime<Utc>,
-    ) -> Result<u64, AppError>;
+    // DeleteStale deletes signals older than the retention period (purge task).
+    DeleteStale(ctx context.Context, before time.Time) (int64, error)
 }
 
-/// Repository for recs_recommendations table.
-#[async_trait]
-pub trait RecommendationRepository: Send + Sync {
-    /// Creates a batch of recommendations (daily job output).
-    async fn create_batch(
-        &self,
-        recommendations: Vec<NewRecommendation>,
-    ) -> Result<u64, AppError>;
+// RecommendationRepository is the repository for recs_recommendations table.
+type RecommendationRepository interface {
+    // CreateBatch creates a batch of recommendations (daily task output).
+    CreateBatch(ctx context.Context, recommendations []NewRecommendation) (int64, error)
 
-    /// Finds active recommendations for a family, with optional type filter.
-    async fn find_active_by_family(
-        &self,
-        scope: &FamilyScope,
-        recommendation_type: Option<&str>,
-        cursor: Option<&str>,
-        limit: i64,
-    ) -> Result<(Vec<Recommendation>, Option<String>), AppError>;
+    // FindActiveByFamily finds active recommendations for a family, with optional type filter.
+    FindActiveByFamily(ctx context.Context, scope *types.FamilyScope, recommendationType *string, cursor *string, limit int64) ([]Recommendation, *string, error)
 
-    /// Finds active recommendations for a specific student.
-    async fn find_active_by_student(
-        &self,
-        scope: &FamilyScope,
-        student_id: Uuid,
-        recommendation_type: Option<&str>,
-        cursor: Option<&str>,
-        limit: i64,
-    ) -> Result<(Vec<Recommendation>, Option<String>), AppError>;
+    // FindActiveByStudent finds active recommendations for a specific student.
+    FindActiveByStudent(ctx context.Context, scope *types.FamilyScope, studentID uuid.UUID, recommendationType *string, cursor *string, limit int64) ([]Recommendation, *string, error)
 
-    /// Updates recommendation status (dismiss, block, expire, restore).
-    async fn update_status(
-        &self,
-        scope: &FamilyScope,
-        recommendation_id: Uuid,
-        status: &str,
-    ) -> Result<(), AppError>;
+    // UpdateStatus updates recommendation status (dismiss, block, expire, restore).
+    UpdateStatus(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID, status string) error
 
-    /// Expires recommendations past their TTL.
-    async fn expire_stale(&self) -> Result<u64, AppError>;
+    // ExpireStale expires recommendations past their TTL.
+    ExpireStale(ctx context.Context) (int64, error)
 
-    /// Deletes all recommendations for a family (family deletion cascade).
-    async fn delete_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<u64, AppError>;
+    // DeleteByFamily deletes all recommendations for a family (family deletion cascade).
+    DeleteByFamily(ctx context.Context, familyID types.FamilyID) (int64, error)
 }
 
-/// Repository for recs_recommendation_feedback table.
-#[async_trait]
-pub trait FeedbackRepository: Send + Sync {
-    /// Creates a feedback record (dismiss or block).
-    async fn create(
-        &self,
-        feedback: NewFeedback,
-    ) -> Result<(), AppError>;
+// FeedbackRepository is the repository for recs_recommendation_feedback table.
+type FeedbackRepository interface {
+    // Create creates a feedback record (dismiss or block).
+    Create(ctx context.Context, feedback NewFeedback) error
 
-    /// Finds feedback for a specific recommendation.
-    async fn find_by_recommendation(
-        &self,
-        scope: &FamilyScope,
-        recommendation_id: Uuid,
-    ) -> Result<Option<Feedback>, AppError>;
+    // FindByRecommendation finds feedback for a specific recommendation.
+    FindByRecommendation(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) (*Feedback, error)
 
-    /// Finds all blocked entity IDs for a family (used by algorithm to exclude).
-    async fn find_blocked_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Vec<Uuid>, AppError>;
+    // FindBlockedByFamily finds all blocked entity IDs for a family (used by algorithm to exclude).
+    FindBlockedByFamily(ctx context.Context, scope *types.FamilyScope) ([]uuid.UUID, error)
 
-    /// Deletes a feedback record (undo dismiss/block).
-    async fn delete(
-        &self,
-        scope: &FamilyScope,
-        recommendation_id: Uuid,
-    ) -> Result<(), AppError>;
+    // Delete deletes a feedback record (undo dismiss/block).
+    Delete(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) error
 }
 
-/// Repository for recs_popularity_scores table.
-/// NOT family-scoped — operates on cross-family aggregated data (no PII).
-#[async_trait]
-pub trait PopularityRepository: Send + Sync {
-    /// Upserts a popularity score for a listing-methodology-period combination.
-    async fn upsert(
-        &self,
-        score: NewPopularityScore,
-    ) -> Result<(), AppError>;
+// PopularityRepository is the repository for recs_popularity_scores table.
+// NOT family-scoped — operates on cross-family aggregated data (no PII).
+type PopularityRepository interface {
+    // Upsert upserts a popularity score for a listing-methodology-period combination.
+    Upsert(ctx context.Context, score NewPopularityScore) error
 
-    /// Finds top listings by popularity for a methodology.
-    async fn find_by_methodology(
-        &self,
-        methodology_id: Uuid,
-        limit: i64,
-    ) -> Result<Vec<PopularityScore>, AppError>;
+    // FindByMethodology finds top listings by popularity for a methodology.
+    FindByMethodology(ctx context.Context, methodologyID uuid.UUID, limit int64) ([]PopularityScore, error)
 
-    /// Deletes popularity scores for expired periods.
-    async fn delete_stale(
-        &self,
-        before: Date,
-    ) -> Result<u64, AppError>;
+    // DeleteStale deletes popularity scores for expired periods.
+    DeleteStale(ctx context.Context, before time.Time) (int64, error)
 }
 
-/// Repository for recs_preferences table.
-#[async_trait]
-pub trait PreferenceRepository: Send + Sync {
-    /// Finds preferences for a family, or returns defaults if none exist.
-    async fn find_or_default(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Preferences, AppError>;
+// PreferenceRepository is the repository for recs_preferences table.
+type PreferenceRepository interface {
+    // FindOrDefault finds preferences for a family, or returns defaults if none exist.
+    FindOrDefault(ctx context.Context, scope *types.FamilyScope) (*Preferences, error)
 
-    /// Creates or updates preferences for a family.
-    async fn upsert(
-        &self,
-        scope: &FamilyScope,
-        preferences: UpdatePreferences,
-    ) -> Result<Preferences, AppError>;
+    // Upsert creates or updates preferences for a family.
+    Upsert(ctx context.Context, scope *types.FamilyScope, preferences UpdatePreferences) (*Preferences, error)
 }
 
-/// Repository for recs_anonymized_interactions table.
-/// NOT family-scoped — insert-only, anonymized data (no PII).
-#[async_trait]
-pub trait AnonymizedInteractionRepository: Send + Sync {
-    /// Batch-inserts anonymized interaction records (weekly job output).
-    async fn create_batch(
-        &self,
-        interactions: Vec<NewAnonymizedInteraction>,
-    ) -> Result<u64, AppError>;
+// AnonymizedInteractionRepository is the repository for recs_anonymized_interactions table.
+// NOT family-scoped — insert-only, anonymized data (no PII).
+type AnonymizedInteractionRepository interface {
+    // CreateBatch batch-inserts anonymized interaction records (weekly task output).
+    CreateBatch(ctx context.Context, interactions []NewAnonymizedInteraction) (int64, error)
 }
 ```
 
@@ -800,7 +692,7 @@ pub trait AnonymizedInteractionRepository: Send + Sync {
 ## §7 Adapter Interface
 
 N/A — the Recommendations & Signals domain has no external adapter. All recommendation logic
-is an in-house rule-based engine implemented in `src/recs/algorithm.rs`. There is no external
+is an in-house rule-based engine implemented in `internal/recs/algorithm.go`. There is no external
 ML service, embedding API, or third-party recommendation provider in Phases 1-2.
 
 See `AI_FUTURE.md` for Phase 3-4 infrastructure requirements when actual ML capabilities
@@ -810,192 +702,172 @@ are introduced.
 
 ## §8 Models (DTOs)
 
-Defined in `src/recs/models.rs`. All types derive `serde::Serialize`, `serde::Deserialize`,
-and appropriate `utoipa` OpenAPI schema macros. `[CODING §3.2]`
+Defined in `internal/recs/models.go`. All types use struct tags (`json:"field"`) and appropriate
+swaggo annotations. `[CODING §3.2]`
 
 ### Request Types
 
-```rust
-// src/recs/models.rs
+```go
+// internal/recs/models.go
 
-/// Query parameters for GET /v1/recommendations
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct RecommendationListParams {
-    #[param(example = "marketplace_content")]
-    pub r#type: Option<String>,
-    pub cursor: Option<String>,
-    #[param(default = 20, minimum = 1, maximum = 50)]
-    pub limit: Option<i64>,
+package recs
+
+import (
+    "time"
+
+    "github.com/google/uuid"
+    "homegrown/internal/shared/types"
+)
+
+// RecommendationListParams holds query parameters for GET /v1/recommendations.
+type RecommendationListParams struct {
+    Type   *string `query:"type"`   // e.g., "marketplace_content"
+    Cursor *string `query:"cursor"`
+    Limit  *int64  `query:"limit"`  // Default 20, max 50
 }
 
-/// Query parameters for GET /v1/recommendations/students/:student_id
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct StudentRecommendationParams {
-    pub student_id: Uuid,
-    #[param(example = "marketplace_content")]
-    pub r#type: Option<String>,
-    pub cursor: Option<String>,
-    #[param(default = 20, minimum = 1, maximum = 50)]
-    pub limit: Option<i64>,
+// StudentRecommendationParams holds query parameters for GET /v1/recommendations/students/:student_id.
+type StudentRecommendationParams struct {
+    StudentID uuid.UUID `param:"student_id"`
+    Type      *string   `query:"type"`   // e.g., "marketplace_content"
+    Cursor    *string   `query:"cursor"`
+    Limit     *int64    `query:"limit"`  // Default 20, max 50
 }
 
-/// Request body for PATCH /v1/recommendations/preferences
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdatePreferencesCommand {
-    pub enabled_types: Option<Vec<String>>,
-    pub exploration_frequency: Option<String>,
+// UpdatePreferencesCommand is the request body for PATCH /v1/recommendations/preferences.
+type UpdatePreferencesCommand struct {
+    EnabledTypes          []string `json:"enabled_types,omitempty"`
+    ExplorationFrequency  *string  `json:"exploration_frequency,omitempty"`
 }
 ```
 
 ### Response Types
 
-```rust
-/// Response for recommendation list endpoints.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RecommendationListResponse {
-    pub recommendations: Vec<RecommendationResponse>,
-    pub next_cursor: Option<String>,
+```go
+// RecommendationListResponse is the response for recommendation list endpoints.
+type RecommendationListResponse struct {
+    Recommendations []RecommendationResponse `json:"recommendations"`
+    NextCursor      *string                  `json:"next_cursor,omitempty"`
 }
 
-/// Single recommendation in a list response.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RecommendationResponse {
-    pub id: Uuid,
-    pub recommendation_type: String,
-    pub target_entity_id: Uuid,
-    pub target_entity_label: String,
-    pub source_signal: String,
-    /// User-facing explanation (e.g., "Popular with Charlotte Mason families")
-    pub source_label: String,
-    pub score: f32,
-    /// Always true — all recommendations are automated suggestions [S§10.4]
-    pub is_suggestion: bool,
-    pub student_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
+// RecommendationResponse is a single recommendation in a list response.
+type RecommendationResponse struct {
+    ID                 uuid.UUID  `json:"id"`
+    RecommendationType string     `json:"recommendation_type"`
+    TargetEntityID     uuid.UUID  `json:"target_entity_id"`
+    TargetEntityLabel  string     `json:"target_entity_label"`
+    SourceSignal       string     `json:"source_signal"`
+    // SourceLabel is a user-facing explanation (e.g., "Popular with Charlotte Mason families").
+    SourceLabel        string     `json:"source_label"`
+    Score              float32    `json:"score"`
+    // IsSuggestion is always true — all recommendations are automated suggestions [S§10.4]
+    IsSuggestion       bool       `json:"is_suggestion"`
+    StudentID          *uuid.UUID `json:"student_id,omitempty"`
+    CreatedAt          time.Time  `json:"created_at"`
+    ExpiresAt          time.Time  `json:"expires_at"`
 }
 
-/// Response for preferences endpoints.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RecommendationPreferencesResponse {
-    pub enabled_types: Vec<String>,
-    pub exploration_frequency: String,
+// RecommendationPreferencesResponse is the response for preferences endpoints.
+type RecommendationPreferencesResponse struct {
+    EnabledTypes         []string `json:"enabled_types"`
+    ExplorationFrequency string   `json:"exploration_frequency"`
 }
 ```
 
 ### Internal Types (not exposed via API)
 
-```rust
-/// Command to record a signal from a domain event.
-#[derive(Debug)]
-pub struct RecordSignalCommand {
-    pub family_id: FamilyId,
-    pub student_id: Option<Uuid>,
-    pub signal_type: SignalType,
-    pub methodology_id: Uuid,
-    pub payload: serde_json::Value,
-    pub signal_date: NaiveDate,
+```go
+// RecordSignalCommand is a command to record a signal from a domain event.
+type RecordSignalCommand struct {
+    FamilyID      types.FamilyID
+    StudentID     *uuid.UUID
+    SignalType    SignalType
+    MethodologyID uuid.UUID
+    Payload       map[string]any
+    SignalDate    time.Time
 }
 
-/// Command to register a listing in the popularity catalog.
-#[derive(Debug)]
-pub struct RegisterListingCommand {
-    pub listing_id: Uuid,
-    pub publisher_id: Uuid,
-    pub content_type: String,
-    pub subject_tags: Vec<String>,
+// RegisterListingCommand is a command to register a listing in the popularity catalog.
+type RegisterListingCommand struct {
+    ListingID   uuid.UUID
+    PublisherID uuid.UUID
+    ContentType string
+    SubjectTags []string
 }
 
-/// Signal types derived from domain events.
-#[derive(Debug, Clone, PartialEq)]
-pub enum SignalType {
-    ActivityLogged,
-    BookCompleted,
-    PurchaseCompleted,
+// SignalType represents signal types derived from domain events.
+type SignalType string
+
+const (
+    SignalActivityLogged    SignalType = "activity_logged"
+    SignalBookCompleted     SignalType = "book_completed"
+    SignalPurchaseCompleted SignalType = "purchase_completed"
+)
+
+// String returns the string representation of the signal type.
+func (s SignalType) String() string {
+    return string(s)
 }
 
-impl SignalType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::ActivityLogged => "activity_logged",
-            Self::BookCompleted => "book_completed",
-            Self::PurchaseCompleted => "purchase_completed",
-        }
-    }
+// RecommendationType represents recommendation types.
+type RecommendationType string
+
+const (
+    RecommendationMarketplaceContent RecommendationType = "marketplace_content"
+    RecommendationActivityIdea       RecommendationType = "activity_idea"
+    RecommendationReadingSuggestion  RecommendationType = "reading_suggestion"
+    RecommendationCommunityGroup     RecommendationType = "community_group"
+)
+
+// String returns the string representation of the recommendation type.
+func (r RecommendationType) String() string {
+    return string(r)
 }
 
-/// Recommendation types.
-#[derive(Debug, Clone, PartialEq)]
-pub enum RecommendationType {
-    MarketplaceContent,
-    ActivityIdea,
-    ReadingSuggestion,
-    CommunityGroup,
+// SourceSignalType represents source signals that explain why a recommendation was made.
+type SourceSignalType string
+
+const (
+    SourceMethodologyMatch SourceSignalType = "methodology_match"
+    SourcePopularity       SourceSignalType = "popularity"
+    SourceSeasonal         SourceSignalType = "seasonal"
+    SourceProgressGap      SourceSignalType = "progress_gap"
+    SourceAgeTransition    SourceSignalType = "age_transition"
+    SourcePurchaseHistory  SourceSignalType = "purchase_history"
+    SourceReadingHistory   SourceSignalType = "reading_history"
+    SourceExploration      SourceSignalType = "exploration"
+)
+
+// String returns the string representation of the source signal.
+func (s SourceSignalType) String() string {
+    return string(s)
 }
 
-impl RecommendationType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::MarketplaceContent => "marketplace_content",
-            Self::ActivityIdea => "activity_idea",
-            Self::ReadingSuggestion => "reading_suggestion",
-            Self::CommunityGroup => "community_group",
-        }
-    }
+// ExplorationFrequency represents exploration frequency preference.
+type ExplorationFrequency string
+
+const (
+    ExplorationOff        ExplorationFrequency = "off"
+    ExplorationOccasional ExplorationFrequency = "occasional"
+    ExplorationFrequent   ExplorationFrequency = "frequent"
+)
+
+// String returns the string representation of the exploration frequency.
+func (e ExplorationFrequency) String() string {
+    return string(e)
 }
 
-/// Source signals that explain why a recommendation was made.
-#[derive(Debug, Clone, PartialEq)]
-pub enum SourceSignal {
-    MethodologyMatch,
-    Popularity,
-    Seasonal,
-    ProgressGap,
-    AgeTransition,
-    PurchaseHistory,
-    ReadingHistory,
-    Exploration,
-}
-
-impl SourceSignal {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::MethodologyMatch => "methodology_match",
-            Self::Popularity => "popularity",
-            Self::Seasonal => "seasonal",
-            Self::ProgressGap => "progress_gap",
-            Self::AgeTransition => "age_transition",
-            Self::PurchaseHistory => "purchase_history",
-            Self::ReadingHistory => "reading_history",
-            Self::Exploration => "exploration",
-        }
-    }
-}
-
-/// Exploration frequency preference.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExplorationFrequency {
-    Off,
-    Occasional,
-    Frequent,
-}
-
-impl ExplorationFrequency {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Off => "off",
-            Self::Occasional => "occasional",
-            Self::Frequent => "frequent",
-        }
-    }
-
-    /// Returns the percentage of recommendation slots reserved for exploration.
-    pub fn exploration_ratio(&self) -> f32 {
-        match self {
-            Self::Off => 0.0,
-            Self::Occasional => 0.10,
-            Self::Frequent => 0.25,
-        }
+// ExplorationRatio returns the percentage of recommendation slots reserved for exploration.
+func (e ExplorationFrequency) ExplorationRatio() float32 {
+    switch e {
+    case ExplorationOff:
+        return 0.0
+    case ExplorationOccasional:
+        return 0.10
+    case ExplorationFrequent:
+        return 0.25
+    default:
+        return 0.10
     }
 }
 ```
@@ -1007,7 +879,7 @@ impl ExplorationFrequency {
 ### §9.1 Event Flow
 
 ```
-Domain Event → EventBus → recs::event_handlers → RecsService::record_signal → SignalRepository::create
+Domain Event -> EventBus -> recs::event_handlers -> RecsService.RecordSignal -> SignalRepository.Create
 ```
 
 Each domain event is mapped to a signal type and recorded with the family's current
@@ -1028,21 +900,24 @@ the event and construct a `RecordSignalCommand`.
 When recording a signal, the handler resolves the family's `primary_methodology_id` from
 `iam_families` (direct DB read) and denormalizes it onto the signal record:
 
-```rust
+```go
 // In event handler (simplified)
-let family = db.query_one::<IamFamily>(family_id).await?;
-let command = RecordSignalCommand {
-    family_id: event.family_id,
-    student_id: Some(event.student_id),
-    signal_type: SignalType::ActivityLogged,
-    methodology_id: family.primary_methodology_id,
-    payload: serde_json::json!({
-        "subject_tags": event.subject_tags,
-        "duration_minutes": event.duration_minutes,
-    }),
-    signal_date: event.activity_date,
-};
-service.record_signal(command).await?;
+family, err := db.First(&IamFamily{}, familyID)
+if err != nil {
+    return fmt.Errorf("looking up family: %w", err)
+}
+command := RecordSignalCommand{
+    FamilyID:      event.FamilyID,
+    StudentID:     &event.StudentID,
+    SignalType:    SignalActivityLogged,
+    MethodologyID: family.PrimaryMethodologyID,
+    Payload: map[string]any{
+        "subject_tags":     event.SubjectTags,
+        "duration_minutes": event.DurationMinutes,
+    },
+    SignalDate: event.ActivityDate,
+}
+return service.RecordSignal(ctx, command)
 ```
 
 **Why snapshot methodology?** If a family switches methodologies, old signals retain the
@@ -1055,19 +930,19 @@ Charlotte Mason methodology should not retroactively become a Classical methodol
 not a family-scoped learning signal. Instead, it ensures the listing exists in the popularity
 catalog so it can receive popularity scores:
 
-```rust
+```go
 // ListingPublishedHandler
-async fn handle(&self, event: &ListingPublished) -> Result<(), AppError> {
-    self.recs_service.register_listing(RegisterListingCommand {
-        listing_id: event.listing_id,
-        publisher_id: event.publisher_id,
-        content_type: event.content_type.clone(),
-        subject_tags: event.subject_tags.clone(),
-    }).await
+func (h *ListingPublishedHandler) Handle(ctx context.Context, event *mktevents.ListingPublished) error {
+    return h.recsService.RegisterListing(ctx, RegisterListingCommand{
+        ListingID:   event.ListingID,
+        PublisherID: event.PublisherID,
+        ContentType: event.ContentType,
+        SubjectTags: event.SubjectTags,
+    })
 }
 ```
 
-The actual popularity score computation happens in the `AggregatePopularityJob` (§11.2),
+The actual popularity score computation happens in the `AggregatePopularityTask` (§11.2),
 not in this event handler.
 
 ---
@@ -1076,7 +951,7 @@ not in this event handler.
 
 The Phase 2 algorithm is entirely rule-based — hand-tuned scoring weights, SQL aggregations,
 and deterministic heuristics. There is no machine learning, no gradient descent, no model
-training. The algorithm runs as a daily batch job (`ComputeRecommendationsJob`).
+training. The algorithm runs as a daily batch task (`ComputeRecommendationsTask`).
 
 ### §10.1 Methodology Constraining
 
@@ -1087,7 +962,7 @@ the recommendation is an exploration slot (§10.7). `[S§10.1]`
 
 ```
 Candidate passes if:
-  candidate.methodology_ids ∩ family.active_methodology_ids ≠ ∅
+  candidate.methodology_ids INTERSECT family.active_methodology_ids != empty
   OR candidate is in an exploration slot (§10.7)
 ```
 
@@ -1118,7 +993,7 @@ For each student in the family:
                                   AND payload->>'subject_tags' @> [subject]
                                   AND signal_date > now() - interval '14 days')
     IF recent_activity_count < methodology_minimum_frequency:
-      → Generate progress_gap recommendation for this subject
+      -> Generate progress_gap recommendation for this subject
 ```
 
 **Methodology minimum frequency** is read from `method_definitions` configuration (not
@@ -1126,16 +1001,16 @@ hardcoded). Each methodology defines expected subject engagement cadence.
 
 ### §10.4 Popularity Scoring
 
-Pre-computed by `AggregatePopularityJob` (§11.2). The score uses purchase count with
+Pre-computed by `AggregatePopularityTask` (§11.2). The score uses purchase count with
 recency decay over a 90-day rolling window:
 
 ```
-popularity_score = Σ (purchase_weight × recency_decay)
+popularity_score = SUM(purchase_weight * recency_decay)
 
 Where:
   purchase_weight = 1.0  (each purchase counts equally)
-  recency_decay   = e^(-λ × days_since_purchase)
-  λ               = 0.03  (half-life ≈ 23 days)
+  recency_decay   = e^(-lambda * days_since_purchase)
+  lambda          = 0.03  (half-life ~ 23 days)
 ```
 
 Popularity is computed **per-methodology** — Charlotte Mason families' purchases affect
@@ -1153,7 +1028,7 @@ Maps the current month to a season, then adjusts subject emphasis:
 | Autumn | Sep-Nov | History, literature, harvest themes, back-to-school |
 | Winter | Dec-Feb | Indoor crafts, music, reading, science experiments |
 
-**Implementation**: A static lookup table in `algorithm.rs`. The seasonal signal provides a
+**Implementation**: A static lookup table in `algorithm.go`. The seasonal signal provides a
 small score boost (not a filter) to recommendations that align with the current season's
 emphasized subjects.
 
@@ -1196,7 +1071,7 @@ family's typical patterns. `[S§10.4]`
 1. Select listings/groups from methodologies the family does NOT currently use
 2. Filter to high-popularity items only (popularity_score > 75th percentile) — exploration
    should surface quality content, not random noise
-3. Label clearly: `source_signal = "exploration"`, `source_label = "Something different — popular with [Other Methodology] families"`
+3. Label clearly: `source_signal = "exploration"`, `source_label = "Something different -- popular with [Other Methodology] families"`
 
 ### §10.8 Content Neutrality Enforcement
 
@@ -1218,7 +1093,7 @@ affiliation, or methodology preference beyond the user's own selections. `[S§10
    `publisher_id` as a scoring factor. No publisher gets preferential recommendation
    placement.
 
-4. **Audit invariant**: The recommendation algorithm code (`src/recs/algorithm.rs`) MUST
+4. **Audit invariant**: The recommendation algorithm code (`internal/recs/algorithm.go`) MUST
    NOT import or reference `worldview_tags` from any table or struct. This is a testable
    assertion (§18, item 25).
 
@@ -1227,11 +1102,11 @@ affiliation, or methodology preference beyond the user's own selections. `[S§10
 Each candidate recommendation receives a composite score:
 
 ```
-score = (methodology_match × 0.35)
-      + (popularity        × 0.25)
-      + (relevance         × 0.25)
-      + (freshness         × 0.10)
-      + (exploration       × 0.05)
+score = (methodology_match * 0.35)
+      + (popularity        * 0.25)
+      + (relevance         * 0.25)
+      + (freshness         * 0.10)
+      + (exploration       * 0.05)
 ```
 
 | Factor | Weight | Computation |
@@ -1248,13 +1123,13 @@ family (configurable), deduplicating by `target_entity_id`, and inserts them int
 
 ---
 
-## §11 Background Jobs (Deep Dive 3)
+## §11 Background Tasks (Deep Dive 3)
 
-All background jobs run via sidekiq-rs `[ARCH §12]`. Phase 2 introduces 4 jobs.
+All background tasks run via asynq `[ARCH §12]`. Phase 2 introduces 4 tasks.
 
-### §11.1 ComputeRecommendationsJob
+### §11.1 ComputeRecommendationsTask
 
-**Schedule**: Daily at 4:00 AM UTC (after `AggregatePopularityJob` completes).
+**Schedule**: Daily at 4:00 AM UTC (after `AggregatePopularityTask` completes).
 
 **Process**:
 1. Query all families with `subscription_tier = 'premium'` from `iam_families`
@@ -1274,24 +1149,24 @@ All background jobs run via sidekiq-rs `[ARCH §12]`. Phase 2 introduces 4 jobs.
 (< 10K families), this completes well within the daily window. Parallelization (multiple
 workers with family ID sharding) is a Phase 3 optimization.
 
-**Idempotency**: The job does NOT delete existing active recommendations before inserting.
+**Idempotency**: The task does NOT delete existing active recommendations before inserting.
 The unique index `idx_recs_recommendations_family_entity_active` prevents duplicates. If the
-job is re-run on the same day, duplicate inserts are silently skipped (ON CONFLICT DO NOTHING).
+task is re-run on the same day, duplicate inserts are silently skipped (ON CONFLICT DO NOTHING).
 
-### §11.2 AggregatePopularityJob
+### §11.2 AggregatePopularityTask
 
-**Schedule**: Daily at 3:00 AM UTC (runs before `ComputeRecommendationsJob`).
+**Schedule**: Daily at 3:00 AM UTC (runs before `ComputeRecommendationsTask`).
 
 **Process**:
 1. For each methodology in `method_definitions`:
    a. Count purchases per listing in the last 90 days (from `recs_signals` where
       `signal_type = 'purchase_completed'` and `methodology_id = ?`)
-   b. Apply recency decay: `Σ e^(-0.03 × days_since_purchase)`
+   b. Apply recency decay: `SUM(e^(-0.03 * days_since_purchase))`
    c. Upsert into `recs_popularity_scores` (listing_id, methodology_id, period_start)
 2. Delete popularity scores where `period_end < now() - interval '90 days'`
 3. Log total scores computed, total methodologies processed, duration
 
-### §11.3 PurgeStaleSignalsJob
+### §11.3 PurgeStaleSignalsTask
 
 **Schedule**: Weekly (Sunday 2:00 AM UTC).
 
@@ -1299,9 +1174,9 @@ job is re-run on the same day, duplicate inserts are silently skipped (ON CONFLI
 1. Delete from `recs_signals` where `created_at < now() - interval '90 days'`
 2. Log total signals purged
 
-### §11.4 AnonymizeInteractionsJob
+### §11.4 AnonymizeInteractionsTask
 
-**Schedule**: Weekly (Sunday 3:00 AM UTC, after `PurgeStaleSignalsJob`).
+**Schedule**: Weekly (Sunday 3:00 AM UTC, after `PurgeStaleSignalsTask`).
 
 **Process**:
 1. Query `recs_signals` from the last 7 days
@@ -1322,135 +1197,125 @@ the anonymized data and is rotated periodically.
 
 ## §12 Event Handlers
 
-Defined in `src/recs/event_handlers.rs`. All handlers implement `DomainEventHandler<E>` and
-delegate to `RecsService`. `[ARCH §4.6]`
+Defined in `internal/recs/event_handlers.go`. All handlers implement the event handler interface
+and delegate to `RecsService`. `[ARCH §4.6]`
 
 ### Phase 1 Handlers (Signal Recording)
 
-```rust
-// src/recs/event_handlers.rs
+```go
+// internal/recs/event_handlers.go
 
-use crate::learn::events::{ActivityLogged, BookCompleted};
-use crate::mkt::events::{PurchaseCompleted, ListingPublished};
-use crate::iam::events::FamilyDeletionScheduled;
-use crate::method::events::MethodologyConfigUpdated;
+package recs
 
-/// Records an activity signal when a student logs a learning activity.
-/// Source: learn::events::ActivityLogged [06-learn §18.3]
-pub struct ActivityLoggedHandler {
-    recs_service: Arc<dyn RecsService>,
+import (
+    "context"
+    "time"
+
+    "github.com/google/uuid"
+    learnevents "homegrown/internal/learn/events"
+    mktevents "homegrown/internal/mkt/events"
+    iamevents "homegrown/internal/iam/events"
+    methodevents "homegrown/internal/method/events"
+)
+
+// ActivityLoggedHandler records an activity signal when a student logs a learning activity.
+// Source: learn::events::ActivityLogged [06-learn §18.3]
+type ActivityLoggedHandler struct {
+    RecsService RecsService
 }
 
-#[async_trait]
-impl DomainEventHandler<ActivityLogged> for ActivityLoggedHandler {
-    async fn handle(&self, event: &ActivityLogged) -> Result<(), AppError> {
-        self.recs_service.record_signal(RecordSignalCommand {
-            family_id: event.family_id,
-            student_id: Some(event.student_id),
-            signal_type: SignalType::ActivityLogged,
-            methodology_id: Uuid::nil(), // resolved by service from iam_families
-            payload: serde_json::json!({
-                "subject_tags": event.subject_tags,
-                "duration_minutes": event.duration_minutes,
-            }),
-            signal_date: event.activity_date,
-        }).await
-    }
+func (h *ActivityLoggedHandler) Handle(ctx context.Context, event *learnevents.ActivityLogged) error {
+    return h.RecsService.RecordSignal(ctx, RecordSignalCommand{
+        FamilyID:      event.FamilyID,
+        StudentID:     &event.StudentID,
+        SignalType:    SignalActivityLogged,
+        MethodologyID: uuid.Nil, // resolved by service from iam_families
+        Payload: map[string]any{
+            "subject_tags":     event.SubjectTags,
+            "duration_minutes": event.DurationMinutes,
+        },
+        SignalDate: event.ActivityDate,
+    })
 }
 
-/// Records a book completion signal.
-/// Source: learn::events::BookCompleted [06-learn §18.3]
-pub struct BookCompletedHandler {
-    recs_service: Arc<dyn RecsService>,
+// BookCompletedHandler records a book completion signal.
+// Source: learn::events::BookCompleted [06-learn §18.3]
+type BookCompletedHandler struct {
+    RecsService RecsService
 }
 
-#[async_trait]
-impl DomainEventHandler<BookCompleted> for BookCompletedHandler {
-    async fn handle(&self, event: &BookCompleted) -> Result<(), AppError> {
-        self.recs_service.record_signal(RecordSignalCommand {
-            family_id: event.family_id,
-            student_id: Some(event.student_id),
-            signal_type: SignalType::BookCompleted,
-            methodology_id: Uuid::nil(), // resolved by service from iam_families
-            payload: serde_json::json!({
-                "title": event.reading_item_title,
-                "reading_item_id": event.reading_item_id,
-            }),
-            signal_date: chrono::Utc::now().date_naive(),
-        }).await
-    }
+func (h *BookCompletedHandler) Handle(ctx context.Context, event *learnevents.BookCompleted) error {
+    return h.RecsService.RecordSignal(ctx, RecordSignalCommand{
+        FamilyID:      event.FamilyID,
+        StudentID:     &event.StudentID,
+        SignalType:    SignalBookCompleted,
+        MethodologyID: uuid.Nil, // resolved by service from iam_families
+        Payload: map[string]any{
+            "title":           event.ReadingItemTitle,
+            "reading_item_id": event.ReadingItemID,
+        },
+        SignalDate: time.Now().UTC(),
+    })
 }
 
-/// Records a purchase signal when a family buys marketplace content.
-/// Source: mkt::events::PurchaseCompleted [07-mkt §18.3]
-pub struct PurchaseCompletedHandler {
-    recs_service: Arc<dyn RecsService>,
+// PurchaseCompletedHandler records a purchase signal when a family buys marketplace content.
+// Source: mkt::events::PurchaseCompleted [07-mkt §18.3]
+type PurchaseCompletedHandler struct {
+    RecsService RecsService
 }
 
-#[async_trait]
-impl DomainEventHandler<PurchaseCompleted> for PurchaseCompletedHandler {
-    async fn handle(&self, event: &PurchaseCompleted) -> Result<(), AppError> {
-        self.recs_service.record_signal(RecordSignalCommand {
-            family_id: event.family_id,
-            student_id: None, // purchases are family-level, not student-specific
-            signal_type: SignalType::PurchaseCompleted,
-            methodology_id: Uuid::nil(), // resolved by service from iam_families
-            payload: serde_json::json!({
-                "listing_id": event.listing_id,
-                "content_type": event.content_metadata.content_type,
-            }),
-            signal_date: chrono::Utc::now().date_naive(),
-        }).await
-    }
+func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event *mktevents.PurchaseCompleted) error {
+    return h.RecsService.RecordSignal(ctx, RecordSignalCommand{
+        FamilyID:      event.FamilyID,
+        StudentID:     nil, // purchases are family-level, not student-specific
+        SignalType:    SignalPurchaseCompleted,
+        MethodologyID: uuid.Nil, // resolved by service from iam_families
+        Payload: map[string]any{
+            "listing_id":   event.ListingID,
+            "content_type": event.ContentMetadata.ContentType,
+        },
+        SignalDate: time.Now().UTC(),
+    })
 }
 
-/// Registers a newly published listing in the popularity catalog.
-/// Source: mkt::events::ListingPublished [07-mkt §18.3]
-/// NOTE: Does NOT create a recs_signals row — this is a catalog-level event.
-pub struct ListingPublishedHandler {
-    recs_service: Arc<dyn RecsService>,
+// ListingPublishedHandler registers a newly published listing in the popularity catalog.
+// Source: mkt::events::ListingPublished [07-mkt §18.3]
+// NOTE: Does NOT create a recs_signals row — this is a catalog-level event.
+type ListingPublishedHandler struct {
+    RecsService RecsService
 }
 
-#[async_trait]
-impl DomainEventHandler<ListingPublished> for ListingPublishedHandler {
-    async fn handle(&self, event: &ListingPublished) -> Result<(), AppError> {
-        self.recs_service.register_listing(RegisterListingCommand {
-            listing_id: event.listing_id,
-            publisher_id: event.publisher_id,
-            content_type: event.content_type.clone(),
-            subject_tags: event.subject_tags.clone(),
-        }).await
-    }
+func (h *ListingPublishedHandler) Handle(ctx context.Context, event *mktevents.ListingPublished) error {
+    return h.RecsService.RegisterListing(ctx, RegisterListingCommand{
+        ListingID:   event.ListingID,
+        PublisherID: event.PublisherID,
+        ContentType: event.ContentType,
+        SubjectTags: event.SubjectTags,
+    })
 }
 ```
 
 ### Lifecycle Handlers (Family Deletion, Config Invalidation)
 
-```rust
-/// Deletes all recs data for a family when deletion is scheduled.
-/// Source: iam::events::FamilyDeletionScheduled [01-iam §13.3]
-pub struct FamilyDeletionScheduledHandler {
-    recs_service: Arc<dyn RecsService>,
+```go
+// FamilyDeletionScheduledHandler deletes all recs data for a family when deletion is scheduled.
+// Source: iam::events::FamilyDeletionScheduled [01-iam §13.3]
+type FamilyDeletionScheduledHandler struct {
+    RecsService RecsService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.recs_service.handle_family_deletion(event.family_id).await
-    }
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *iamevents.FamilyDeletionScheduled) error {
+    return h.RecsService.HandleFamilyDeletion(ctx, event.FamilyID)
 }
 
-/// Invalidates cached methodology configuration when definitions change.
-/// Source: method::events::MethodologyConfigUpdated [02-method §12]
-pub struct MethodologyConfigUpdatedHandler {
-    recs_service: Arc<dyn RecsService>,
+// MethodologyConfigUpdatedHandler invalidates cached methodology configuration when definitions change.
+// Source: method::events::MethodologyConfigUpdated [02-method §12]
+type MethodologyConfigUpdatedHandler struct {
+    RecsService RecsService
 }
 
-#[async_trait]
-impl DomainEventHandler<MethodologyConfigUpdated> for MethodologyConfigUpdatedHandler {
-    async fn handle(&self, _event: &MethodologyConfigUpdated) -> Result<(), AppError> {
-        self.recs_service.invalidate_methodology_cache().await
-    }
+func (h *MethodologyConfigUpdatedHandler) Handle(ctx context.Context, event *methodevents.MethodologyConfigUpdated) error {
+    return h.RecsService.InvalidateMethodologyCache(ctx)
 }
 ```
 
@@ -1521,14 +1386,14 @@ Implemented via four mechanisms (§10.8):
 1. `worldview_tags` excluded from scoring algorithm
 2. Per-methodology popularity isolation
 3. No publisher identity boosting
-4. Testable audit invariant (no `worldview_tags` reference in `algorithm.rs`)
+4. Testable audit invariant (no `worldview_tags` reference in `algorithm.go`)
 
 ### §13.6 Content Neutrality Audit
 
 The following assertion MUST hold and is included in the verification checklist (§18):
 
-> `src/recs/algorithm.rs` MUST NOT import, reference, or query `worldview_tags` from any
-> table, struct, or function. A `grep -r "worldview_tags" src/recs/` MUST return zero results.
+> `internal/recs/algorithm.go` MUST NOT import, reference, or query `worldview_tags` from any
+> table, struct, or function. A `grep -r "worldview_tags" internal/recs/` MUST return zero results.
 
 ---
 
@@ -1588,68 +1453,50 @@ when Phase 3 capabilities are implemented (see `AI_FUTURE.md`).
 > any column that can identify a specific family or student.** This invariant MUST be
 > enforced by:
 > 1. Schema design — the table has no FK to `iam_families` or `iam_students`
-> 2. Code review — the `AnonymizeInteractionsJob` MUST NOT write these values
+> 2. Code review — the `AnonymizeInteractionsTask` MUST NOT write these values
 > 3. Verification checklist — §18, items 28-31
 
 ---
 
 ## §15 Error Types
 
-Defined in `src/recs/errors.rs` using `thiserror`. `[CODING §3.1]`
+Defined in `internal/recs/errors.go` using custom error types. `[CODING §3.1]`
 
-```rust
-// src/recs/errors.rs
+```go
+// internal/recs/errors.go
 
-use thiserror::Error;
+package recs
 
-#[derive(Debug, Error)]
-pub enum RecsError {
-    #[error("Recommendation not found")]
-    RecommendationNotFound,
+import "errors"
 
-    #[error("Student not found or does not belong to family")]
-    StudentNotFound,
-
-    #[error("Feedback not found for this recommendation")]
-    FeedbackNotFound,
-
-    #[error("Recommendation already has feedback")]
-    AlreadyHasFeedback,
-
-    #[error("Invalid recommendation type")]
-    InvalidRecommendationType,
-
-    #[error("Invalid exploration frequency")]
-    InvalidExplorationFrequency,
-
-    #[error("Premium subscription required")]
-    PremiumRequired,
-
-    #[error("Signal recording failed")]
-    SignalRecordingFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
-
-    #[error("Database error")]
-    DbError(#[source] sea_orm::DbErr),
-
-    #[error("Internal error")]
-    InternalError(String),
-}
+var (
+    ErrRecommendationNotFound     = errors.New("recommendation not found")
+    ErrStudentNotFound            = errors.New("student not found or does not belong to family")
+    ErrFeedbackNotFound           = errors.New("feedback not found for this recommendation")
+    ErrAlreadyHasFeedback         = errors.New("recommendation already has feedback")
+    ErrInvalidRecommendationType  = errors.New("invalid recommendation type")
+    ErrInvalidExplorationFrequency = errors.New("invalid exploration frequency")
+    ErrPremiumRequired            = errors.New("premium subscription required")
+    ErrSignalRecordingFailed      = errors.New("signal recording failed")
+    ErrDatabaseError              = errors.New("database error")
+    ErrInternalError              = errors.New("internal error")
+)
 ```
 
 ### Error-to-HTTP Mapping
 
 | Error Variant | HTTP Status | Response Body | Notes |
 |--------------|-------------|---------------|-------|
-| `RecommendationNotFound` | 404 | `{ "error": "Recommendation not found" }` | |
-| `StudentNotFound` | 404 | `{ "error": "Student not found" }` | Does not reveal whether student exists in another family |
-| `FeedbackNotFound` | 404 | `{ "error": "No feedback found for this recommendation" }` | |
-| `AlreadyHasFeedback` | 409 | `{ "error": "Recommendation already dismissed or blocked" }` | |
-| `InvalidRecommendationType` | 422 | `{ "error": "Invalid recommendation type" }` | |
-| `InvalidExplorationFrequency` | 422 | `{ "error": "Invalid exploration frequency" }` | |
-| `PremiumRequired` | 402 | `{ "error": "Premium subscription required" }` | Handled by `RequirePremium` extractor |
-| `SignalRecordingFailed` | 500 | `{ "error": "Internal server error" }` | Source error logged internally, not exposed `[CODING §3.1]` |
-| `DbError` | 500 | `{ "error": "Internal server error" }` | Source error logged internally, not exposed |
-| `InternalError` | 500 | `{ "error": "Internal server error" }` | Generic internal error |
+| `ErrRecommendationNotFound` | 404 | `{ "error": "Recommendation not found" }` | |
+| `ErrStudentNotFound` | 404 | `{ "error": "Student not found" }` | Does not reveal whether student exists in another family |
+| `ErrFeedbackNotFound` | 404 | `{ "error": "No feedback found for this recommendation" }` | |
+| `ErrAlreadyHasFeedback` | 409 | `{ "error": "Recommendation already dismissed or blocked" }` | |
+| `ErrInvalidRecommendationType` | 422 | `{ "error": "Invalid recommendation type" }` | |
+| `ErrInvalidExplorationFrequency` | 422 | `{ "error": "Invalid exploration frequency" }` | |
+| `ErrPremiumRequired` | 402 | `{ "error": "Premium subscription required" }` | Handled by `RequirePremium` extractor |
+| `ErrSignalRecordingFailed` | 500 | `{ "error": "Internal server error" }` | Source error logged internally, not exposed `[CODING §3.1]` |
+| `ErrDatabaseError` | 500 | `{ "error": "Internal server error" }` | Source error logged internally, not exposed |
+| `ErrInternalError` | 500 | `{ "error": "Internal server error" }` | Generic internal error |
 
 ---
 
@@ -1659,7 +1506,7 @@ pub enum RecsError {
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `RecsService` trait | None currently | `Arc<dyn RecsService>` via AppState (available for future consumers) |
+| `RecsService` interface | None currently | `RecsService` interface via AppState (available for future consumers) |
 
 **recs:: publishes no domain events.** It is a terminal consumer — it receives events from
 other domains, processes them into signals and recommendations, and serves them via API.
@@ -1704,12 +1551,12 @@ The events consumed by recs:: are defined authoritatively in their source domain
 
 | Event | Authoritative Definition | Struct Fields Used by recs:: |
 |-------|-------------------------|------------------------------|
-| `ActivityLogged` | `src/learn/events.rs` `[06-learn §18.3]` | `family_id`, `student_id`, `subject_tags`, `duration_minutes`, `activity_date` |
-| `BookCompleted` | `src/learn/events.rs` `[06-learn §18.3]` | `family_id`, `student_id`, `reading_item_id`, `reading_item_title` |
-| `PurchaseCompleted` | `src/mkt/events.rs` `[07-mkt §18.3]` | `family_id`, `listing_id`, `content_metadata.content_type` |
-| `ListingPublished` | `src/mkt/events.rs` `[07-mkt §18.3]` | `listing_id`, `publisher_id`, `content_type`, `subject_tags` |
-| `FamilyDeletionScheduled` | `src/iam/events.rs` `[01-iam §13.3]` | `family_id` |
-| `MethodologyConfigUpdated` | `src/method/events.rs` `[02-method §12]` | (unit struct — no fields) |
+| `ActivityLogged` | `internal/learn/events.go` `[06-learn §18.3]` | `FamilyID`, `StudentID`, `SubjectTags`, `DurationMinutes`, `ActivityDate` |
+| `BookCompleted` | `internal/learn/events.go` `[06-learn §18.3]` | `FamilyID`, `StudentID`, `ReadingItemID`, `ReadingItemTitle` |
+| `PurchaseCompleted` | `internal/mkt/events.go` `[07-mkt §18.3]` | `FamilyID`, `ListingID`, `ContentMetadata.ContentType` |
+| `ListingPublished` | `internal/mkt/events.go` `[07-mkt §18.3]` | `ListingID`, `PublisherID`, `ContentType`, `SubjectTags` |
+| `FamilyDeletionScheduled` | `internal/iam/events.go` `[01-iam §13.3]` | `FamilyID` |
+| `MethodologyConfigUpdated` | `internal/method/events.go` `[02-method §12]` | (empty struct — no fields) |
 
 ---
 
@@ -1722,8 +1569,8 @@ The events consumed by recs:: are defined authoritatively in their source domain
 | **Database** | All 6 tables created (schema ready for Phase 2) |
 | **Event handlers** | All 6 handlers active (signals accumulate before recommendations exist) |
 | **API endpoints** | 0 (no HTTP routes registered) |
-| **Background jobs** | 0 (signals accumulate; no purging yet) |
-| **Service** | `record_signal()`, `register_listing()`, `handle_family_deletion()`, `invalidate_methodology_cache()` |
+| **Background tasks** | 0 (signals accumulate; no purging yet) |
+| **Service** | `RecordSignal()`, `RegisterListing()`, `HandleFamilyDeletion()`, `InvalidateMethodologyCache()` |
 | **Algorithm** | Not implemented |
 
 **Rationale**: Phase 1 starts signal collection so that when Phase 2 recommendations launch,
@@ -1735,10 +1582,10 @@ recommendations would start cold with no learning history.
 | Component | Included |
 |-----------|----------|
 | **API endpoints** | All 7 endpoints (all `RequirePremium`) |
-| **Background jobs** | All 4 jobs (`ComputeRecommendations`, `AggregatePopularity`, `PurgeStaleSignals`, `AnonymizeInteractions`) |
+| **Background tasks** | All 4 tasks (`ComputeRecommendations`, `AggregatePopularity`, `PurgeStaleSignals`, `AnonymizeInteractions`) |
 | **Algorithm** | Full scoring formula (§10.9), all recommendation types (§10.2) |
 | **Feedback** | Dismiss, block, undo, preferences CRUD |
-| **Service** | Full trait implementation |
+| **Service** | Full interface implementation |
 
 ### Phase 3 — Advanced Algorithms (see `AI_FUTURE.md`)
 
@@ -1787,7 +1634,7 @@ each phase.
 11. Recommendations are constrained to the family's active methodologies (primary + secondary)
 12. Each recommendation has a non-empty `source_signal` and `source_label`
 13. Each recommendation response includes `is_suggestion: true`
-14. `ComputeRecommendationsJob` generates at most 50 recommendations per family
+14. `ComputeRecommendationsTask` generates at most 50 recommendations per family
 15. Duplicate recommendations (same family + entity) are prevented by unique index
 
 ### Feedback (Phase 2)
@@ -1807,7 +1654,7 @@ each phase.
 
 ### Content Neutrality Audit
 
-25. `grep -r "worldview_tags" src/recs/` returns zero results
+25. `grep -r "worldview_tags" internal/recs/` returns zero results
 
 ### Privacy & Anonymization
 
@@ -1829,25 +1676,17 @@ each phase.
 ## §19 Module Structure
 
 ```
-src/recs/
-├── mod.rs                # Module exports, router registration
-├── handlers.rs           # HTTP handlers (Phase 2): thin extractors → service → response
-├── service.rs            # RecsServiceImpl: business logic, CQRS command/query methods
-├── repository.rs         # SeaORM repository implementations (6 repos)
-├── models.rs             # Request/response types, internal types, enums
-├── ports.rs              # RecsService trait, repository traits
-├── errors.rs             # RecsError thiserror enum
-├── event_handlers.rs     # Domain event handlers (6 handlers)
-├── algorithm.rs          # Recommendation scoring algorithm (Phase 2)
-├── jobs.rs               # Background jobs (Phase 2): compute, aggregate, purge, anonymize
-└── entities/             # SeaORM-generated entities — NEVER hand-edit [CODING §4.2]
-    ├── mod.rs
-    ├── recs_signals.rs
-    ├── recs_recommendations.rs
-    ├── recs_recommendation_feedback.rs
-    ├── recs_popularity_scores.rs
-    ├── recs_anonymized_interactions.rs
-    └── recs_preferences.rs
+internal/recs/
++-- handlers.go          # HTTP handlers (Phase 2): thin extractors -> service -> response
++-- service.go           # RecsServiceImpl: business logic, CQRS command/query methods
++-- repository.go        # GORM repository implementations (6 repos)
++-- models.go            # Request/response types, internal types, enums,
+|                        # GORM models
++-- ports.go             # RecsService interface, repository interfaces
++-- errors.go            # Sentinel error variables
++-- event_handlers.go    # Domain event handlers (6 handlers)
++-- algorithm.go         # Recommendation scoring algorithm (Phase 2)
++-- tasks.go             # Background tasks (Phase 2): compute, aggregate, purge, anonymize
 ```
 
 ---
@@ -1874,7 +1713,7 @@ part of this spec creation.
 | `07-mkt.md` | §18.3 (~line 3180) | `ai::` in `ListingPublished` struct doc comment | → `recs::` |
 | `00-core.md` | §13.3 (~line 1584) | `ai::` as `RequirePremium` consumer | → `recs::` |
 | `SPEC.md` | §10 heading (~line 644) | "AI & Recommendations" | Consider noting rename to "Recommendations & Signals" |
-| `SPEC.md` | §18.5 (~line 1099) | "All → AI" | Consider noting rename |
+| `SPEC.md` | §18.5 (~line 1099) | "All -> AI" | Consider noting rename |
 | `SPEC.md` | §19 Phase 2 (~line 1147) | "AI recommendations" | Consider noting rename |
 | `SPEC.md` | §19 Phase 3 (~line 1164) | "Advanced AI" | Consider noting rename |
 

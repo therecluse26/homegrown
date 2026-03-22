@@ -12,11 +12,11 @@ dataset, strict family scoping). `[S§14, S§9.3, V§7, V§8, V§9]`
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/search/` |
+| **Module path** | `internal/search/` |
 | **DB prefix** | `search_` (Phase 2 only — no owned tables in Phase 1) |
 | **Complexity class** | Simple (no `domain/` subdirectory) — indexing and retrieval, no business invariants `[ARCH §4.5]` |
 | **CQRS** | Yes — command side (index updates, Phase 1 no-ops) / query side (search, autocomplete) `[ARCH §4.7]` |
-| **External adapter** | `src/search/adapters/typesense.rs` (Phase 2 — Typesense search engine) |
+| **External adapter** | `internal/search/adapters/typesense.go` (Phase 2 — Typesense search engine) |
 | **Key constraint** | Social search MUST enforce friendship + discovery visibility; learning search MUST be family-scoped; cross-family learning data MUST NOT be searchable `[S§14.2]` |
 
 **What search:: owns**: Search query routing (scope dispatch, backend selection), autocomplete
@@ -35,7 +35,7 @@ listing status lifecycle (owned by `mkt::`), family membership and `FamilyScope`
 **What search:: delegates**: Friendship status checks → reads `soc_friendships` directly (no
 service call — pure SQL JOIN). Block checks → reads `soc_blocks` directly. Family scoping →
 `FamilyScope` extractor from `00-core`. Methodology display name resolution → reads
-`method_definitions` directly. Background job scheduling → sidekiq-rs `[ARCH §12]`. Phase 2
+`method_definitions` directly. Background job scheduling → asynq `[ARCH §12]`. Phase 2
 search engine → Typesense client via `TypesenseAdapter`.
 
 ---
@@ -194,12 +194,12 @@ access. `[CODING §2.1]`
 Unified search across social, marketplace, or learning content.
 
 - **Auth**: `AuthContext` (required for all scopes); `FamilyScope` (required, used by learning scope and social privacy enforcement)
-- **Query**: `SearchParams { q: String, scope: SearchScope, cursor?: String, limit?: i32 (default 20, max 50), sort?: SearchSortOrder, filters?: scope-specific }`
+- **Query**: `SearchParams { Q string, Scope SearchScope, Cursor *string, Limit *int (default 20, max 50), Sort *SearchSortOrder, filters: scope-specific }`
 - **Scope-specific query parameters**:
-  - `scope=social`: `sub_scope?: SocialSubScope (families|groups|events)`, `methodology_id?: Uuid`
-  - `scope=marketplace`: `methodology_tags?: Vec<Uuid>`, `subject_tags?: Vec<String>`, `grade_min?: i16`, `grade_max?: i16`, `price_max?: i32`, `price_min?: i32 (default 0)`, `content_type?: String`, `worldview_tags?: Vec<String>`, `free_only?: bool`
-  - `scope=learning`: `student_id?: Uuid`, `source_type?: LearningSourceType (activity|journal|reading)`, `date_from?: NaiveDate`, `date_to?: NaiveDate`, `subject_tags?: Vec<String>`
-- **Response**: `200 OK` → `SearchResponse { results: Vec<SearchResult>, total_count: i64, facets?: FacetCounts, next_cursor?: String }`
+  - `scope=social`: `sub_scope?: SocialSubScope (families|groups|events)`, `methodology_id?: uuid.UUID`
+  - `scope=marketplace`: `methodology_tags?: []uuid.UUID`, `subject_tags?: []string`, `grade_min?: *int16`, `grade_max?: *int16`, `price_max?: *int32`, `price_min?: *int32 (default 0)`, `content_type?: *string`, `worldview_tags?: []string`, `free_only?: *bool`
+  - `scope=learning`: `student_id?: *uuid.UUID`, `source_type?: LearningSourceType (activity|journal|reading)`, `date_from?: *time.Time`, `date_to?: *time.Time`, `subject_tags?: []string`
+- **Response**: `200 OK` → `SearchResponse { Results []SearchResult, TotalCount int64, Facets *FacetCounts, NextCursor *string }`
 - **Pagination**: Cursor-based on `(rank DESC, id)` for stable ordering across pages
 - **Sort options** (marketplace only): `relevance` (default), `price_asc`, `price_desc`, `rating`, `recency`
 - **Error codes**: `400` (missing/invalid q, invalid scope, invalid filter values), `401` (unauthenticated), `422` (q too short — minimum 2 characters)
@@ -215,8 +215,8 @@ Unified search across social, marketplace, or learning content.
 Type-ahead suggestions for search input. Must return within 200ms.
 
 - **Auth**: `AuthContext` + `FamilyScope`
-- **Query**: `AutocompleteParams { q: String, scope?: SearchScope (default: inferred from context), limit?: i32 (default 5, max 10) }`
-- **Response**: `200 OK` → `AutocompleteResponse { suggestions: Vec<AutocompleteSuggestion> }`
+- **Query**: `AutocompleteParams { Q string, Scope *SearchScope (default: inferred from context), Limit *int (default 5, max 10) }`
+- **Response**: `200 OK` → `AutocompleteResponse { Suggestions []AutocompleteSuggestion }`
 - **Implementation**:
   - Marketplace: `pg_trgm` `similarity()` on `mkt_listings.title` (fuzzy)
   - Social: `ILIKE` prefix match on `iam_families.display_name` and `soc_groups.name` (exact prefix)
@@ -236,7 +236,7 @@ AI-powered search suggestions based on family's methodology and past activity. D
 `ai::` domain (not yet specified).
 
 - **Auth**: `AuthContext` + `FamilyScope`
-- **Response**: `200 OK` → `SearchSuggestionsResponse { suggestions: Vec<SearchSuggestion> }`
+- **Response**: `200 OK` → `SearchSuggestionsResponse { Suggestions []SearchSuggestion }`
 
 ---
 
@@ -245,97 +245,81 @@ AI-powered search suggestions based on family's methodology and past activity. D
 The search service follows lightweight CQRS: command side handles index update events (Phase 1
 no-ops), query side handles search and autocomplete requests. `[ARCH §4.7]`
 
-```rust
-/// Search service — query side (search + autocomplete) and command side (index updates).
-///
-/// Phase 1: All queries use PostgreSQL FTS. Command-side methods are no-ops because
-/// `GENERATED ALWAYS` columns auto-update search vectors on source table writes.
-///
-/// Phase 2+: `SearchBackend` enum routes marketplace and social queries to Typesense
-/// when enabled. Command-side methods trigger Typesense index updates via `IndexContentJob`.
-/// Learning search always stays on PostgreSQL FTS.
-#[async_trait]
-pub trait SearchService: Send + Sync {
+```go
+// SearchService — query side (search + autocomplete) and command side (index updates).
+//
+// Phase 1: All queries use PostgreSQL FTS. Command-side methods are no-ops because
+// GENERATED ALWAYS columns auto-update search vectors on source table writes.
+//
+// Phase 2+: SearchBackend enum routes marketplace and social queries to Typesense
+// when enabled. Command-side methods trigger Typesense index updates via IndexContentJob.
+// Learning search always stays on PostgreSQL FTS.
+type SearchService interface {
     // ── Query Side ─────────────────────────────────────────────────────────
 
-    /// Unified search across a single scope with privacy enforcement.
-    /// Dispatches to scope-specific repository based on `params.scope`.
-    async fn search(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        params: &SearchParams,
-    ) -> Result<SearchResponse, SearchError>;
+    // Search performs unified search across a single scope with privacy enforcement.
+    // Dispatches to scope-specific repository based on params.Scope.
+    Search(ctx context.Context, auth *AuthContext, scope *FamilyScope, params *SearchParams) (*SearchResponse, error)
 
-    /// Type-ahead autocomplete suggestions.
-    /// Returns within 200ms target. Scope-specific implementation.
-    async fn autocomplete(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        params: &AutocompleteParams,
-    ) -> Result<AutocompleteResponse, SearchError>;
+    // Autocomplete returns type-ahead suggestions.
+    // Returns within 200ms target. Scope-specific implementation.
+    Autocomplete(ctx context.Context, auth *AuthContext, scope *FamilyScope, params *AutocompleteParams) (*AutocompleteResponse, error)
 
     // ── Command Side (Index Updates) ───────────────────────────────────────
 
-    /// Handle new post creation — update social search index.
-    /// Phase 1: no-op (GENERATED ALWAYS column auto-updates).
-    /// Phase 2: enqueues IndexContentJob for Typesense.
-    async fn handle_post_created(&self, event: &PostCreated) -> Result<(), SearchError>;
+    // HandlePostCreated handles new post creation — update social search index.
+    // Phase 1: no-op (GENERATED ALWAYS column auto-updates).
+    // Phase 2: enqueues IndexContentJob for Typesense.
+    HandlePostCreated(ctx context.Context, event *PostCreated) error
 
-    /// Handle listing publication — add/update marketplace search index.
-    /// Phase 1: no-op (GENERATED ALWAYS column auto-updates).
-    /// Phase 2: enqueues IndexContentJob for Typesense.
-    async fn handle_listing_published(&self, event: &ListingPublished) -> Result<(), SearchError>;
+    // HandleListingPublished handles listing publication — add/update marketplace search index.
+    // Phase 1: no-op (GENERATED ALWAYS column auto-updates).
+    // Phase 2: enqueues IndexContentJob for Typesense.
+    HandleListingPublished(ctx context.Context, event *ListingPublished) error
 
-    /// Handle listing archival — remove from marketplace search index.
-    /// Phase 1: no-op (listing status change excludes from `WHERE status = 'published'`).
-    /// Phase 2: removes document from Typesense collection.
-    async fn handle_listing_archived(&self, event: &ListingArchived) -> Result<(), SearchError>;
+    // HandleListingArchived handles listing archival — remove from marketplace search index.
+    // Phase 1: no-op (listing status change excludes from WHERE status = 'published').
+    // Phase 2: removes document from Typesense collection.
+    HandleListingArchived(ctx context.Context, event *ListingArchived) error
 
-    /// Handle media upload publication — index media metadata.
-    /// Phase 1: no-op (media is not directly searchable in Phase 1).
-    /// Phase 2: indexes media metadata into relevant Typesense collection.
-    async fn handle_upload_published(&self, event: &UploadPublished) -> Result<(), SearchError>;
+    // HandleUploadPublished handles media upload publication — index media metadata.
+    // Phase 1: no-op (media is not directly searchable in Phase 1).
+    // Phase 2: indexes media metadata into relevant Typesense collection.
+    HandleUploadPublished(ctx context.Context, event *UploadPublished) error
 
-    /// Handle family deletion — remove family data from all search indexes.
-    /// Phase 1: no-op (source table CASCADE DELETE removes rows, GENERATED columns follow).
-    /// Phase 2: removes all family-related documents from Typesense collections.
-    async fn handle_family_deletion_scheduled(
-        &self,
-        family_id: Uuid,
-    ) -> Result<(), SearchError>;
+    // HandleFamilyDeletionScheduled handles family deletion — remove family data from all search indexes.
+    // Phase 1: no-op (source table CASCADE DELETE removes rows, GENERATED columns follow).
+    // Phase 2: removes all family-related documents from Typesense collections.
+    HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
 }
 ```
 
 ### SearchServiceImpl
 
-```rust
-pub struct SearchServiceImpl {
-    social_repo: Arc<dyn SocialSearchRepository>,
-    marketplace_repo: Arc<dyn MarketplaceSearchRepository>,
-    learning_repo: Arc<dyn LearningSearchRepository>,
-    autocomplete_repo: Arc<dyn AutocompleteRepository>,
-    backend: SearchBackend,          // Phase 1: always PostgresFts
+```go
+type SearchServiceImpl struct {
+    socialRepo      SocialSearchRepository
+    marketplaceRepo MarketplaceSearchRepository
+    learningRepo    LearningSearchRepository
+    autocompleteRepo AutocompleteRepository
+    backend         SearchBackend          // Phase 1: always PostgresFts
     // Phase 2 additions:
-    // typesense: Option<Arc<dyn TypesenseAdapter>>,
-    // job_queue: Arc<dyn JobQueue>,
+    // typesense TypesenseAdapter
+    // jobQueue  asynq.Client
 }
 
-impl SearchServiceImpl {
-    pub fn new(
-        social_repo: Arc<dyn SocialSearchRepository>,
-        marketplace_repo: Arc<dyn MarketplaceSearchRepository>,
-        learning_repo: Arc<dyn LearningSearchRepository>,
-        autocomplete_repo: Arc<dyn AutocompleteRepository>,
-    ) -> Self {
-        Self {
-            social_repo,
-            marketplace_repo,
-            learning_repo,
-            autocomplete_repo,
-            backend: SearchBackend::PostgresFts,
-        }
+func NewSearchService(
+    socialRepo SocialSearchRepository,
+    marketplaceRepo MarketplaceSearchRepository,
+    learningRepo LearningSearchRepository,
+    autocompleteRepo AutocompleteRepository,
+) *SearchServiceImpl {
+    return &SearchServiceImpl{
+        socialRepo:       socialRepo,
+        marketplaceRepo:  marketplaceRepo,
+        learningRepo:     learningRepo,
+        autocompleteRepo: autocompleteRepo,
+        backend:          SearchBackendPostgresFts,
     }
 }
 ```
@@ -350,135 +334,79 @@ trust callers to pre-filter.
 
 ### §6.1 `SocialSearchRepository`
 
-```rust
-/// Social search repository — queries soc_posts, soc_groups, soc_events, iam_families.
-/// All queries enforce friendship + discovery visibility and block exclusion.
-#[async_trait]
-pub trait SocialSearchRepository: Send + Sync {
-    /// Search families by display name.
-    /// Returns only: (1) friends (soc_friendships.status = 'accepted'), or
-    /// (2) families with soc_profiles.location_visible = true (discovery opt-in).
-    /// Excludes: blocked families (bidirectional soc_blocks check).
-    async fn search_families(
-        &self,
-        searcher_family_id: Uuid,
-        query: &str,
-        limit: i32,
-        cursor: Option<&str>,
-    ) -> Result<Vec<SocialSearchResult>, SearchError>;
+```go
+// SocialSearchRepository queries soc_posts, soc_groups, soc_events, iam_families.
+// All queries enforce friendship + discovery visibility and block exclusion.
+type SocialSearchRepository interface {
+    // SearchFamilies searches families by display name.
+    // Returns only: (1) friends (soc_friendships.status = 'accepted'), or
+    // (2) families with soc_profiles.location_visible = true (discovery opt-in).
+    // Excludes: blocked families (bidirectional soc_blocks check).
+    SearchFamilies(ctx context.Context, searcherFamilyID uuid.UUID, query string, limit int, cursor *string) ([]SocialSearchResult, error)
 
-    /// Search groups by name and description.
-    /// Returns all non-private groups (searchable by any authenticated user).
-    /// Block exclusion: groups created by blocked families are excluded.
-    async fn search_groups(
-        &self,
-        searcher_family_id: Uuid,
-        query: &str,
-        methodology_id: Option<Uuid>,
-        limit: i32,
-        cursor: Option<&str>,
-    ) -> Result<Vec<SocialSearchResult>, SearchError>;
+    // SearchGroups searches groups by name and description.
+    // Returns all non-private groups (searchable by any authenticated user).
+    // Block exclusion: groups created by blocked families are excluded.
+    SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
 
-    /// Search events by title, description, and location.
-    /// Visibility enforcement:
-    /// - 'discoverable': visible to all authenticated users
-    /// - 'friends': visible only to friends of the creator
-    /// - 'group': visible only to members of the associated group
-    /// Excludes: events by blocked families, cancelled events.
-    async fn search_events(
-        &self,
-        searcher_family_id: Uuid,
-        query: &str,
-        methodology_id: Option<Uuid>,
-        limit: i32,
-        cursor: Option<&str>,
-    ) -> Result<Vec<SocialSearchResult>, SearchError>;
+    // SearchEvents searches events by title, description, and location.
+    // Visibility enforcement:
+    // - 'discoverable': visible to all authenticated users
+    // - 'friends': visible only to friends of the creator
+    // - 'group': visible only to members of the associated group
+    // Excludes: events by blocked families, cancelled events.
+    SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
 }
 ```
 
 ### §6.2 `MarketplaceSearchRepository`
 
-```rust
-/// Marketplace search repository — queries mkt_listings with faceted filtering.
-/// Only returns listings with status = 'published'. No family scoping needed.
-#[async_trait]
-pub trait MarketplaceSearchRepository: Send + Sync {
-    /// Full-text search with faceted filtering and sorting.
-    /// Uses weighted search_vector (title = 'A', description = 'B') for relevance ranking.
-    async fn search_listings(
-        &self,
-        query: &str,
-        filters: &MarketplaceSearchFilters,
-        sort: SearchSortOrder,
-        limit: i32,
-        cursor: Option<&str>,
-    ) -> Result<MarketplaceSearchResults, SearchError>;
+```go
+// MarketplaceSearchRepository queries mkt_listings with faceted filtering.
+// Only returns listings with status = 'published'. No family scoping needed.
+type MarketplaceSearchRepository interface {
+    // SearchListings performs full-text search with faceted filtering and sorting.
+    // Uses weighted search_vector (title = 'A', description = 'B') for relevance ranking.
+    SearchListings(ctx context.Context, query string, filters *MarketplaceSearchFilters, sort SearchSortOrder, limit int, cursor *string) (*MarketplaceSearchResults, error)
 
-    /// Count listings per facet value for the current query + filters.
-    /// Returns counts for: methodology_tags, subject_tags, content_type,
-    /// worldview_tags, price_ranges, rating_ranges.
-    async fn count_facets(
-        &self,
-        query: &str,
-        filters: &MarketplaceSearchFilters,
-    ) -> Result<FacetCounts, SearchError>;
+    // CountFacets counts listings per facet value for the current query + filters.
+    // Returns counts for: methodology_tags, subject_tags, content_type,
+    // worldview_tags, price_ranges, rating_ranges.
+    CountFacets(ctx context.Context, query string, filters *MarketplaceSearchFilters) (*FacetCounts, error)
 }
 ```
 
 ### §6.3 `LearningSearchRepository`
 
-```rust
-/// Learning search repository — queries learn_activity_logs, learn_journal_entries,
-/// learn_reading_items (via learn_reading_progress JOIN).
-/// ALWAYS family-scoped via FamilyScope. NEVER uses Typesense, even in Phase 2.
-#[async_trait]
-pub trait LearningSearchRepository: Send + Sync {
-    /// Search family's own learning data across activities, journals, and reading items.
-    /// UNION ALL across multiple tables, always filtered by family_id.
-    /// Optional filters: student_id, source_type, date range, subject_tags.
-    async fn search_learning(
-        &self,
-        family_scope: &FamilyScope,
-        query: &str,
-        filters: &LearningSearchFilters,
-        limit: i32,
-        cursor: Option<&str>,
-    ) -> Result<Vec<LearningSearchResult>, SearchError>;
+```go
+// LearningSearchRepository queries learn_activity_logs, learn_journal_entries,
+// learn_reading_items (via learn_reading_progress JOIN).
+// ALWAYS family-scoped via FamilyScope. NEVER uses Typesense, even in Phase 2.
+type LearningSearchRepository interface {
+    // SearchLearning searches family's own learning data across activities, journals, and reading items.
+    // UNION ALL across multiple tables, always filtered by family_id.
+    // Optional filters: student_id, source_type, date range, subject_tags.
+    SearchLearning(ctx context.Context, familyScope *FamilyScope, query string, filters *LearningSearchFilters, limit int, cursor *string) ([]LearningSearchResult, error)
 }
 ```
 
 ### §6.4 `AutocompleteRepository`
 
-```rust
-/// Autocomplete repository — fast prefix/fuzzy matching for type-ahead.
-/// Target latency: < 200ms.
-#[async_trait]
-pub trait AutocompleteRepository: Send + Sync {
-    /// Marketplace autocomplete using pg_trgm similarity on listing titles.
-    /// Only searches published listings.
-    async fn autocomplete_marketplace(
-        &self,
-        query: &str,
-        limit: i32,
-    ) -> Result<Vec<AutocompleteSuggestion>, SearchError>;
+```go
+// AutocompleteRepository provides fast prefix/fuzzy matching for type-ahead.
+// Target latency: < 200ms.
+type AutocompleteRepository interface {
+    // AutocompleteMarketplace uses pg_trgm similarity on listing titles.
+    // Only searches published listings.
+    AutocompleteMarketplace(ctx context.Context, query string, limit int) ([]AutocompleteSuggestion, error)
 
-    /// Social autocomplete using ILIKE prefix match on family display names
-    /// and group names. Respects friendship/discovery visibility and blocks.
-    async fn autocomplete_social(
-        &self,
-        searcher_family_id: Uuid,
-        query: &str,
-        limit: i32,
-    ) -> Result<Vec<AutocompleteSuggestion>, SearchError>;
+    // AutocompleteSocial uses ILIKE prefix match on family display names
+    // and group names. Respects friendship/discovery visibility and blocks.
+    AutocompleteSocial(ctx context.Context, searcherFamilyID uuid.UUID, query string, limit int) ([]AutocompleteSuggestion, error)
 
-    /// Learning autocomplete using ILIKE prefix match on activity and journal titles.
-    /// Always family-scoped.
-    async fn autocomplete_learning(
-        &self,
-        family_scope: &FamilyScope,
-        query: &str,
-        limit: i32,
-    ) -> Result<Vec<AutocompleteSuggestion>, SearchError>;
+    // AutocompleteLearning uses ILIKE prefix match on activity and journal titles.
+    // Always family-scoped.
+    AutocompleteLearning(ctx context.Context, familyScope *FamilyScope, query string, limit int) ([]AutocompleteSuggestion, error)
 }
 ```
 
@@ -488,52 +416,32 @@ pub trait AutocompleteRepository: Send + Sync {
 
 ### §7.1 Phase 2: `TypesenseAdapter`
 
-```rust
-/// Typesense search engine adapter for Phase 2+ migration.
-/// Provides high-performance search with typo tolerance, faceted filtering,
-/// and built-in Raft-based HA clustering.
-///
-/// Typesense replaces Meilisearch (originally specified in ARCH §2.6) because:
-/// - Built-in Raft-based HA clustering in the open-source edition
-///   (Meilisearch requires Enterprise for HA)
-/// - Sub-50ms search latency (C++ engine), field weighting for relevance tuning
-/// - Production-proven clustering (3 or 5 node) without enterprise licensing
-/// - Better fit for a solo developer running a COPPA-regulated platform
-#[async_trait]
-pub trait TypesenseAdapter: Send + Sync {
-    /// Index a single document into a collection.
-    async fn index_document(
-        &self,
-        collection: &str,
-        document: serde_json::Value,
-    ) -> Result<(), SearchError>;
+```go
+// TypesenseAdapter is a Typesense search engine adapter for Phase 2+ migration.
+// Provides high-performance search with typo tolerance, faceted filtering,
+// and built-in Raft-based HA clustering.
+//
+// Typesense replaces Meilisearch (originally specified in ARCH §2.6) because:
+// - Built-in Raft-based HA clustering in the open-source edition
+//   (Meilisearch requires Enterprise for HA)
+// - Sub-50ms search latency (C++ engine), field weighting for relevance tuning
+// - Production-proven clustering (3 or 5 node) without enterprise licensing
+// - Better fit for a solo developer running a COPPA-regulated platform
+type TypesenseAdapter interface {
+    // IndexDocument indexes a single document into a collection.
+    IndexDocument(ctx context.Context, collection string, document map[string]any) error
 
-    /// Remove a document from a collection by ID.
-    async fn remove_document(
-        &self,
-        collection: &str,
-        document_id: &str,
-    ) -> Result<(), SearchError>;
+    // RemoveDocument removes a document from a collection by ID.
+    RemoveDocument(ctx context.Context, collection string, documentID string) error
 
-    /// Bulk index multiple documents (used by BulkIndexJob).
-    async fn bulk_index(
-        &self,
-        collection: &str,
-        documents: Vec<serde_json::Value>,
-    ) -> Result<BulkIndexResult, SearchError>;
+    // BulkIndex bulk indexes multiple documents (used by BulkIndexJob).
+    BulkIndex(ctx context.Context, collection string, documents []map[string]any) (*BulkIndexResult, error)
 
-    /// Execute a search query against a collection.
-    async fn search(
-        &self,
-        collection: &str,
-        query: &TypesenseSearchQuery,
-    ) -> Result<TypesenseSearchResponse, SearchError>;
+    // Search executes a search query against a collection.
+    Search(ctx context.Context, collection string, query *TypesenseSearchQuery) (*TypesenseSearchResponse, error)
 
-    /// Get collection health/stats (used for monitoring).
-    async fn collection_stats(
-        &self,
-        collection: &str,
-    ) -> Result<CollectionStats, SearchError>;
+    // CollectionStats gets collection health/stats (used for monitoring).
+    CollectionStats(ctx context.Context, collection string) (*CollectionStats, error)
 }
 ```
 
@@ -543,362 +451,332 @@ pub trait TypesenseAdapter: Send + Sync {
 
 ### §8.1 Request Types
 
-```rust
-/// Search scope — determines which repository and privacy model to use.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum SearchScope {
-    Social,
-    Marketplace,
-    Learning,
-}
+```go
+// SearchScope determines which repository and privacy model to use.
+type SearchScope string
 
-/// Social search sub-scope — optionally narrow social search to a specific entity type.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SocialSubScope {
-    Families,
-    Groups,
-    Events,
-}
+const (
+    SearchScopeSocial      SearchScope = "social"
+    SearchScopeMarketplace SearchScope = "marketplace"
+    SearchScopeLearning    SearchScope = "learning"
+)
 
-/// Learning source type — optionally narrow learning search to a specific source.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LearningSourceType {
-    Activity,
-    Journal,
-    Reading,
-}
+// SocialSubScope optionally narrows social search to a specific entity type.
+type SocialSubScope string
 
-/// Sort order for marketplace search results.
-#[derive(Debug, Clone, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum SearchSortOrder {
-    #[default]
-    Relevance,
-    PriceAsc,
-    PriceDesc,
-    Rating,
-    Recency,
-}
+const (
+    SocialSubScopeFamilies SocialSubScope = "families"
+    SocialSubScopeGroups   SocialSubScope = "groups"
+    SocialSubScopeEvents   SocialSubScope = "events"
+)
 
-/// Unified search request parameters.
-/// Deserialized from query string on GET /v1/search.
-#[derive(Debug, Clone, Deserialize)]
-pub struct SearchParams {
-    /// Search query text. Minimum 2 characters.
-    pub q: String,
-    /// Which scope to search within.
-    pub scope: SearchScope,
-    /// Cursor for pagination (opaque string from previous response).
-    pub cursor: Option<String>,
-    /// Results per page (default 20, max 50).
-    #[serde(default = "default_search_limit")]
-    pub limit: i32,
-    /// Sort order (marketplace only, ignored for other scopes).
-    #[serde(default)]
-    pub sort: SearchSortOrder,
+// LearningSourceType optionally narrows learning search to a specific source.
+type LearningSourceType string
+
+const (
+    LearningSourceTypeActivity LearningSourceType = "activity"
+    LearningSourceTypeJournal  LearningSourceType = "journal"
+    LearningSourceTypeReading  LearningSourceType = "reading"
+)
+
+// SearchSortOrder defines sort order for marketplace search results.
+type SearchSortOrder string
+
+const (
+    SearchSortRelevance SearchSortOrder = "relevance"
+    SearchSortPriceAsc  SearchSortOrder = "price_asc"
+    SearchSortPriceDesc SearchSortOrder = "price_desc"
+    SearchSortRating    SearchSortOrder = "rating"
+    SearchSortRecency   SearchSortOrder = "recency"
+)
+
+// SearchParams is the unified search request parameters.
+// Deserialized from query string on GET /v1/search.
+type SearchParams struct {
+    // Q is the search query text. Minimum 2 characters.
+    Q     string      `json:"q" query:"q" validate:"required,min=2"`
+    // Scope determines which scope to search within.
+    Scope SearchScope `json:"scope" query:"scope" validate:"required,oneof=social marketplace learning"`
+    // Cursor for pagination (opaque string from previous response).
+    Cursor *string    `json:"cursor,omitempty" query:"cursor"`
+    // Limit is results per page (default 20, max 50).
+    Limit  int        `json:"limit" query:"limit" validate:"omitempty,min=1,max=50"`
+    // Sort order (marketplace only, ignored for other scopes).
+    Sort   SearchSortOrder `json:"sort,omitempty" query:"sort"`
 
     // ── Social-specific filters ────────────────────────────────────────
-    /// Narrow social search to families, groups, or events.
-    pub sub_scope: Option<SocialSubScope>,
-    /// Filter by methodology (social and marketplace).
-    pub methodology_id: Option<Uuid>,
+    // SubScope narrows social search to families, groups, or events.
+    SubScope      *SocialSubScope `json:"sub_scope,omitempty" query:"sub_scope"`
+    // MethodologyID filters by methodology (social and marketplace).
+    MethodologyID *uuid.UUID      `json:"methodology_id,omitempty" query:"methodology_id"`
 
     // ── Marketplace-specific filters ───────────────────────────────────
-    pub methodology_tags: Option<Vec<Uuid>>,
-    pub subject_tags: Option<Vec<String>>,
-    pub grade_min: Option<i16>,
-    pub grade_max: Option<i16>,
-    pub price_min: Option<i32>,
-    pub price_max: Option<i32>,
-    pub content_type: Option<String>,
-    pub worldview_tags: Option<Vec<String>>,
-    pub free_only: Option<bool>,
+    MethodologyTags []uuid.UUID `json:"methodology_tags,omitempty" query:"methodology_tags"`
+    SubjectTags     []string    `json:"subject_tags,omitempty" query:"subject_tags"`
+    GradeMin        *int16      `json:"grade_min,omitempty" query:"grade_min"`
+    GradeMax        *int16      `json:"grade_max,omitempty" query:"grade_max"`
+    PriceMin        *int32      `json:"price_min,omitempty" query:"price_min"`
+    PriceMax        *int32      `json:"price_max,omitempty" query:"price_max"`
+    ContentType     *string     `json:"content_type,omitempty" query:"content_type"`
+    WorldviewTags   []string    `json:"worldview_tags,omitempty" query:"worldview_tags"`
+    FreeOnly        *bool       `json:"free_only,omitempty" query:"free_only"`
 
     // ── Learning-specific filters ──────────────────────────────────────
-    pub student_id: Option<Uuid>,
-    pub source_type: Option<LearningSourceType>,
-    pub date_from: Option<NaiveDate>,
-    pub date_to: Option<NaiveDate>,
-    // subject_tags reused for learning scope
+    StudentID  *uuid.UUID          `json:"student_id,omitempty" query:"student_id"`
+    SourceType *LearningSourceType `json:"source_type,omitempty" query:"source_type"`
+    DateFrom   *time.Time          `json:"date_from,omitempty" query:"date_from"`
+    DateTo     *time.Time          `json:"date_to,omitempty" query:"date_to"`
+    // SubjectTags reused for learning scope
 }
 
-fn default_search_limit() -> i32 { 20 }
-
-/// Marketplace-specific filter struct (extracted from SearchParams for repository).
-#[derive(Debug, Clone, Default)]
-pub struct MarketplaceSearchFilters {
-    pub methodology_tags: Option<Vec<Uuid>>,
-    pub subject_tags: Option<Vec<String>>,
-    pub grade_min: Option<i16>,
-    pub grade_max: Option<i16>,
-    pub price_min: Option<i32>,
-    pub price_max: Option<i32>,
-    pub content_type: Option<String>,
-    pub worldview_tags: Option<Vec<String>>,
-    pub free_only: Option<bool>,
+// MarketplaceSearchFilters is the marketplace-specific filter struct (extracted from SearchParams for repository).
+type MarketplaceSearchFilters struct {
+    MethodologyTags []uuid.UUID `json:"methodology_tags,omitempty"`
+    SubjectTags     []string    `json:"subject_tags,omitempty"`
+    GradeMin        *int16      `json:"grade_min,omitempty"`
+    GradeMax        *int16      `json:"grade_max,omitempty"`
+    PriceMin        *int32      `json:"price_min,omitempty"`
+    PriceMax        *int32      `json:"price_max,omitempty"`
+    ContentType     *string     `json:"content_type,omitempty"`
+    WorldviewTags   []string    `json:"worldview_tags,omitempty"`
+    FreeOnly        *bool       `json:"free_only,omitempty"`
 }
 
-/// Learning-specific filter struct (extracted from SearchParams for repository).
-#[derive(Debug, Clone, Default)]
-pub struct LearningSearchFilters {
-    pub student_id: Option<Uuid>,
-    pub source_type: Option<LearningSourceType>,
-    pub date_from: Option<NaiveDate>,
-    pub date_to: Option<NaiveDate>,
-    pub subject_tags: Option<Vec<String>>,
+// LearningSearchFilters is the learning-specific filter struct (extracted from SearchParams for repository).
+type LearningSearchFilters struct {
+    StudentID  *uuid.UUID          `json:"student_id,omitempty"`
+    SourceType *LearningSourceType `json:"source_type,omitempty"`
+    DateFrom   *time.Time          `json:"date_from,omitempty"`
+    DateTo     *time.Time          `json:"date_to,omitempty"`
+    SubjectTags []string           `json:"subject_tags,omitempty"`
 }
 
-/// Autocomplete request parameters.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AutocompleteParams {
-    /// Search query text. Minimum 1 character.
-    pub q: String,
-    /// Scope to autocomplete within (default: marketplace if unspecified).
-    pub scope: Option<SearchScope>,
-    /// Max suggestions to return (default 5, max 10).
-    #[serde(default = "default_autocomplete_limit")]
-    pub limit: Option<i32>,
+// AutocompleteParams is the autocomplete request parameters.
+type AutocompleteParams struct {
+    // Q is the search query text. Minimum 1 character.
+    Q     string       `json:"q" query:"q" validate:"required,min=1"`
+    // Scope to autocomplete within (default: marketplace if unspecified).
+    Scope *SearchScope `json:"scope,omitempty" query:"scope"`
+    // Limit is max suggestions to return (default 5, max 10).
+    Limit int          `json:"limit,omitempty" query:"limit" validate:"omitempty,min=1,max=10"`
 }
-
-fn default_autocomplete_limit() -> i32 { 5 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-/// Unified search response.
-#[derive(Debug, Clone, Serialize)]
-pub struct SearchResponse {
-    /// Search results (polymorphic — type depends on scope).
-    pub results: Vec<SearchResult>,
-    /// Total count of matching results (for "X results found" display).
-    pub total_count: i64,
-    /// Facet counts (marketplace scope only, None for other scopes).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub facets: Option<FacetCounts>,
-    /// Cursor for next page (None if no more results).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_cursor: Option<String>,
+```go
+// SearchResponse is the unified search response.
+type SearchResponse struct {
+    // Results are the search results (polymorphic — type depends on scope).
+    Results    []SearchResult `json:"results"`
+    // TotalCount is the total count of matching results (for "X results found" display).
+    TotalCount int64          `json:"total_count"`
+    // Facets are marketplace scope only (nil for other scopes).
+    Facets     *FacetCounts   `json:"facets,omitempty"`
+    // NextCursor for next page (nil if no more results).
+    NextCursor *string        `json:"next_cursor,omitempty"`
 }
 
-/// Polymorphic search result — tagged union by scope.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum SearchResult {
-    /// Social search result — family, group, or event.
-    Family(FamilySearchResult),
-    Group(GroupSearchResult),
-    Event(EventSearchResult),
-    Post(PostSearchResult),
+// SearchResult is a polymorphic search result — tagged union by scope.
+// The Type field discriminates the variant.
+type SearchResult struct {
+    Type string `json:"type"` // "family", "group", "event", "post", "listing", "activity", "journal", "reading_item"
 
-    /// Marketplace search result — listing.
-    Listing(ListingSearchResult),
+    // Social search results
+    *FamilySearchResult  `json:"family,omitempty"`
+    *GroupSearchResult   `json:"group,omitempty"`
+    *EventSearchResult   `json:"event,omitempty"`
+    *PostSearchResult    `json:"post,omitempty"`
 
-    /// Learning search result — activity, journal, or reading item.
-    Activity(ActivitySearchResult),
-    Journal(JournalSearchResult),
-    ReadingItem(ReadingItemSearchResult),
+    // Marketplace search result
+    *ListingSearchResult `json:"listing,omitempty"`
+
+    // Learning search results
+    *ActivitySearchResult    `json:"activity,omitempty"`
+    *JournalSearchResult     `json:"journal,omitempty"`
+    *ReadingItemSearchResult `json:"reading_item,omitempty"`
 }
 
-/// Social: family search result.
-#[derive(Debug, Clone, Serialize)]
-pub struct FamilySearchResult {
-    pub family_id: Uuid,
-    pub display_name: String,
-    pub methodology_name: Option<String>,
-    pub location_region: Option<String>,
-    pub is_friend: bool,
-    pub relevance: f32,
+// FamilySearchResult is a social family search result.
+type FamilySearchResult struct {
+    FamilyID       uuid.UUID `json:"family_id"`
+    DisplayName    string    `json:"display_name"`
+    MethodologyName *string  `json:"methodology_name,omitempty"`
+    LocationRegion *string   `json:"location_region,omitempty"`
+    IsFriend       bool      `json:"is_friend"`
+    Relevance      float32   `json:"relevance"`
 }
 
-/// Social: group search result.
-#[derive(Debug, Clone, Serialize)]
-pub struct GroupSearchResult {
-    pub group_id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub member_count: i32,
-    pub methodology_name: Option<String>,
-    pub relevance: f32,
+// GroupSearchResult is a social group search result.
+type GroupSearchResult struct {
+    GroupID        uuid.UUID `json:"group_id"`
+    Name           string    `json:"name"`
+    Description    *string   `json:"description,omitempty"`
+    MemberCount    int32     `json:"member_count"`
+    MethodologyName *string  `json:"methodology_name,omitempty"`
+    Relevance      float32   `json:"relevance"`
 }
 
-/// Social: event search result.
-#[derive(Debug, Clone, Serialize)]
-pub struct EventSearchResult {
-    pub event_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub event_date: DateTime<Utc>,
-    pub location_name: Option<String>,
-    pub is_virtual: bool,
-    pub visibility: String,
-    pub attendee_count: i32,
-    pub relevance: f32,
+// EventSearchResult is a social event search result.
+type EventSearchResult struct {
+    EventID       uuid.UUID `json:"event_id"`
+    Title         string    `json:"title"`
+    Description   *string   `json:"description,omitempty"`
+    EventDate     time.Time `json:"event_date"`
+    LocationName  *string   `json:"location_name,omitempty"`
+    IsVirtual     bool      `json:"is_virtual"`
+    Visibility    string    `json:"visibility"`
+    AttendeeCount int32     `json:"attendee_count"`
+    Relevance     float32   `json:"relevance"`
 }
 
-/// Social: post search result.
-#[derive(Debug, Clone, Serialize)]
-pub struct PostSearchResult {
-    pub post_id: Uuid,
-    pub content_snippet: String,
-    pub author_family_id: Uuid,
-    pub author_display_name: String,
-    pub group_name: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub relevance: f32,
+// PostSearchResult is a social post search result.
+type PostSearchResult struct {
+    PostID            uuid.UUID `json:"post_id"`
+    ContentSnippet    string    `json:"content_snippet"`
+    AuthorFamilyID    uuid.UUID `json:"author_family_id"`
+    AuthorDisplayName string    `json:"author_display_name"`
+    GroupName         *string   `json:"group_name,omitempty"`
+    CreatedAt         time.Time `json:"created_at"`
+    Relevance         float32   `json:"relevance"`
 }
 
-/// Marketplace: listing search result.
-#[derive(Debug, Clone, Serialize)]
-pub struct ListingSearchResult {
-    pub listing_id: Uuid,
-    pub title: String,
-    pub description_snippet: String,
-    pub price_cents: i32,
-    pub content_type: String,
-    pub rating_avg: Option<f64>,
-    pub rating_count: i32,
-    pub publisher_name: String,
-    pub methodology_tags: Vec<Uuid>,
-    pub subject_tags: Vec<String>,
-    pub published_at: DateTime<Utc>,
-    pub relevance: f32,
+// ListingSearchResult is a marketplace listing search result.
+type ListingSearchResult struct {
+    ListingID       uuid.UUID   `json:"listing_id"`
+    Title           string      `json:"title"`
+    DescriptionSnippet string   `json:"description_snippet"`
+    PriceCents      int32       `json:"price_cents"`
+    ContentType     string      `json:"content_type"`
+    RatingAvg       *float64    `json:"rating_avg,omitempty"`
+    RatingCount     int32       `json:"rating_count"`
+    PublisherName   string      `json:"publisher_name"`
+    MethodologyTags []uuid.UUID `json:"methodology_tags"`
+    SubjectTags     []string    `json:"subject_tags"`
+    PublishedAt     time.Time   `json:"published_at"`
+    Relevance       float32     `json:"relevance"`
 }
 
-/// Learning: activity search result.
-#[derive(Debug, Clone, Serialize)]
-pub struct ActivitySearchResult {
-    pub activity_id: Uuid,
-    pub title: String,
-    pub description: Option<String>,
-    pub student_id: Uuid,
-    pub student_name: String,
-    pub activity_date: NaiveDate,
-    pub subject_tags: Vec<String>,
-    pub relevance: f32,
+// ActivitySearchResult is a learning activity search result.
+type ActivitySearchResult struct {
+    ActivityID   uuid.UUID `json:"activity_id"`
+    Title        string    `json:"title"`
+    Description  *string   `json:"description,omitempty"`
+    StudentID    uuid.UUID `json:"student_id"`
+    StudentName  string    `json:"student_name"`
+    ActivityDate time.Time `json:"activity_date"`
+    SubjectTags  []string  `json:"subject_tags"`
+    Relevance    float32   `json:"relevance"`
 }
 
-/// Learning: journal entry search result.
-#[derive(Debug, Clone, Serialize)]
-pub struct JournalSearchResult {
-    pub journal_id: Uuid,
-    pub title: String,
-    pub content_snippet: String,
-    pub student_id: Uuid,
-    pub student_name: String,
-    pub entry_date: NaiveDate,
-    pub entry_type: String,
-    pub relevance: f32,
+// JournalSearchResult is a learning journal entry search result.
+type JournalSearchResult struct {
+    JournalID      uuid.UUID `json:"journal_id"`
+    Title          string    `json:"title"`
+    ContentSnippet string    `json:"content_snippet"`
+    StudentID      uuid.UUID `json:"student_id"`
+    StudentName    string    `json:"student_name"`
+    EntryDate      time.Time `json:"entry_date"`
+    EntryType      string    `json:"entry_type"`
+    Relevance      float32   `json:"relevance"`
 }
 
-/// Learning: reading item search result (via reading_progress JOIN).
-#[derive(Debug, Clone, Serialize)]
-pub struct ReadingItemSearchResult {
-    pub reading_item_id: Uuid,
-    pub title: String,
-    pub author: Option<String>,
-    pub description: Option<String>,
-    pub student_id: Uuid,
-    pub student_name: String,
-    pub status: String,
-    pub relevance: f32,
+// ReadingItemSearchResult is a learning reading item search result (via reading_progress JOIN).
+type ReadingItemSearchResult struct {
+    ReadingItemID uuid.UUID `json:"reading_item_id"`
+    Title         string    `json:"title"`
+    Author        *string   `json:"author,omitempty"`
+    Description   *string   `json:"description,omitempty"`
+    StudentID     uuid.UUID `json:"student_id"`
+    StudentName   string    `json:"student_name"`
+    Status        string    `json:"status"`
+    Relevance     float32   `json:"relevance"`
 }
 
-/// Marketplace facet counts for filter UI.
-#[derive(Debug, Clone, Serialize)]
-pub struct FacetCounts {
-    pub methodology_tags: Vec<FacetBucket>,
-    pub subject_tags: Vec<FacetBucket>,
-    pub content_type: Vec<FacetBucket>,
-    pub worldview_tags: Vec<FacetBucket>,
-    pub price_ranges: Vec<FacetBucket>,
-    pub rating_ranges: Vec<FacetBucket>,
+// FacetCounts holds marketplace facet counts for filter UI.
+type FacetCounts struct {
+    MethodologyTags []FacetBucket `json:"methodology_tags"`
+    SubjectTags     []FacetBucket `json:"subject_tags"`
+    ContentType     []FacetBucket `json:"content_type"`
+    WorldviewTags   []FacetBucket `json:"worldview_tags"`
+    PriceRanges     []FacetBucket `json:"price_ranges"`
+    RatingRanges    []FacetBucket `json:"rating_ranges"`
 }
 
-/// A single facet bucket with value and document count.
-#[derive(Debug, Clone, Serialize)]
-pub struct FacetBucket {
-    pub value: String,
-    pub display_name: String,
-    pub count: i64,
+// FacetBucket is a single facet bucket with value and document count.
+type FacetBucket struct {
+    Value       string `json:"value"`
+    DisplayName string `json:"display_name"`
+    Count       int64  `json:"count"`
 }
 
-/// Autocomplete response.
-#[derive(Debug, Clone, Serialize)]
-pub struct AutocompleteResponse {
-    pub suggestions: Vec<AutocompleteSuggestion>,
+// AutocompleteResponse is the autocomplete response.
+type AutocompleteResponse struct {
+    Suggestions []AutocompleteSuggestion `json:"suggestions"`
 }
 
-/// A single autocomplete suggestion.
-#[derive(Debug, Clone, Serialize)]
-pub struct AutocompleteSuggestion {
-    /// The suggestion text to display.
-    pub text: String,
-    /// The entity type (family, group, listing, activity, etc.).
-    pub entity_type: String,
-    /// Entity ID for direct navigation.
-    pub entity_id: Uuid,
-    /// Similarity/relevance score (0.0 - 1.0).
-    pub score: f32,
+// AutocompleteSuggestion is a single autocomplete suggestion.
+type AutocompleteSuggestion struct {
+    // Text is the suggestion text to display.
+    Text       string    `json:"text"`
+    // EntityType is the entity type (family, group, listing, activity, etc.).
+    EntityType string    `json:"entity_type"`
+    // EntityID is the entity ID for direct navigation.
+    EntityID   uuid.UUID `json:"entity_id"`
+    // Score is the similarity/relevance score (0.0 - 1.0).
+    Score      float32   `json:"score"`
 }
 ```
 
 ### §8.3 Internal Types
 
-```rust
-/// Search backend enum — routes queries to PostgreSQL FTS or Typesense.
-/// Phase 1: always PostgresFts.
-/// Phase 2: configurable per-scope via feature flag or threshold trigger.
-#[derive(Debug, Clone)]
-pub enum SearchBackend {
-    PostgresFts,
-    Typesense(Arc<dyn TypesenseAdapter>),
+```go
+// SearchBackend routes queries to PostgreSQL FTS or Typesense.
+// Phase 1: always PostgresFts.
+// Phase 2: configurable per-scope via feature flag or threshold trigger.
+type SearchBackend int
+
+const (
+    SearchBackendPostgresFts SearchBackend = iota
+    SearchBackendTypesense
+)
+
+// MarketplaceSearchResults is a marketplace search result container with pagination metadata.
+type MarketplaceSearchResults struct {
+    Listings   []ListingSearchResult `json:"listings"`
+    TotalCount int64                 `json:"total_count"`
+    Facets     FacetCounts           `json:"facets"`
 }
 
-/// Marketplace search result container with pagination metadata.
-#[derive(Debug, Clone)]
-pub struct MarketplaceSearchResults {
-    pub listings: Vec<ListingSearchResult>,
-    pub total_count: i64,
-    pub facets: FacetCounts,
+// TypesenseSearchQuery is a Typesense search query (Phase 2 internal type).
+type TypesenseSearchQuery struct {
+    Q       string   `json:"q"`
+    QueryBy []string `json:"query_by"`
+    FilterBy *string `json:"filter_by,omitempty"`
+    SortBy   *string `json:"sort_by,omitempty"`
+    FacetBy  []string `json:"facet_by,omitempty"`
+    Page     int      `json:"page"`
+    PerPage  int      `json:"per_page"`
 }
 
-/// Typesense search query (Phase 2 internal type).
-#[derive(Debug, Clone)]
-pub struct TypesenseSearchQuery {
-    pub q: String,
-    pub query_by: Vec<String>,
-    pub filter_by: Option<String>,
-    pub sort_by: Option<String>,
-    pub facet_by: Option<Vec<String>>,
-    pub page: i32,
-    pub per_page: i32,
+// TypesenseSearchResponse is a Typesense search response (Phase 2 internal type).
+type TypesenseSearchResponse struct {
+    Found       int64                    `json:"found"`
+    Hits        []map[string]any         `json:"hits"`
+    FacetCounts []map[string]any         `json:"facet_counts,omitempty"`
 }
 
-/// Typesense search response (Phase 2 internal type).
-#[derive(Debug, Clone, Deserialize)]
-pub struct TypesenseSearchResponse {
-    pub found: i64,
-    pub hits: Vec<serde_json::Value>,
-    pub facet_counts: Option<Vec<serde_json::Value>>,
+// BulkIndexResult is a bulk index result (Phase 2).
+type BulkIndexResult struct {
+    Indexed int `json:"indexed"`
+    Failed  int `json:"failed"`
+    Errors  []string `json:"errors"`
 }
 
-/// Bulk index result (Phase 2).
-#[derive(Debug, Clone)]
-pub struct BulkIndexResult {
-    pub indexed: usize,
-    pub failed: usize,
-    pub errors: Vec<String>,
-}
-
-/// Typesense collection stats (Phase 2).
-#[derive(Debug, Clone, Deserialize)]
-pub struct CollectionStats {
-    pub num_documents: i64,
-    pub num_memory_shards: i32,
+// CollectionStats holds Typesense collection stats (Phase 2).
+type CollectionStats struct {
+    NumDocuments   int64 `json:"num_documents"`
+    NumMemoryShards int32 `json:"num_memory_shards"`
 }
 ```
 
@@ -913,77 +791,72 @@ index updates.
 
 | Event | Source Domain | Handler | Phase 1 | Phase 2 |
 |-------|-------------|---------|---------|---------|
-| `PostCreated` | `social::` | `PostCreatedHandler` | No-op (search_vector auto-updates) | Enqueue `IndexContentJob { collection: "social_posts", entity_id }` |
-| `ListingPublished` | `mkt::` | `ListingPublishedHandler` | No-op (search_vector auto-updates) | Enqueue `IndexContentJob { collection: "marketplace_listings", entity_id }` |
+| `PostCreated` | `social::` | `PostCreatedHandler` | No-op (search_vector auto-updates) | Enqueue `IndexContentJob { Collection: "social_posts", EntityID }` |
+| `ListingPublished` | `mkt::` | `ListingPublishedHandler` | No-op (search_vector auto-updates) | Enqueue `IndexContentJob { Collection: "marketplace_listings", EntityID }` |
 | `ListingArchived` | `mkt::` | `ListingArchivedHandler` | No-op (WHERE status = 'published' excludes) | Remove document from `marketplace_listings` collection |
 | `UploadPublished` | `media::` | `UploadPublishedHandler` | No-op (media not directly searchable) | Index media metadata into relevant collection |
 | `FamilyDeletionScheduled` | `iam::` | `FamilyDeletionScheduledHandler` | No-op (CASCADE DELETE handles cleanup) | Remove all family documents from Typesense collections |
 
 ### Event Handler Implementations (Phase 1)
 
-```rust
-/// Phase 1: All event handlers are seams — they exist for forward compatibility
-/// but perform no work because PostgreSQL's GENERATED ALWAYS columns auto-maintain
-/// search vectors, and WHERE clauses exclude non-searchable rows.
+```go
+// Phase 1: All event handlers are seams — they exist for forward compatibility
+// but perform no work because PostgreSQL's GENERATED ALWAYS columns auto-maintain
+// search vectors, and WHERE clauses exclude non-searchable rows.
 
-pub struct PostCreatedHandler {
-    search_service: Arc<dyn SearchService>,
+type PostCreatedHandler struct {
+    searchService SearchService
 }
 
-#[async_trait]
-impl DomainEventHandler<PostCreated> for PostCreatedHandler {
-    async fn handle(&self, event: &PostCreated) -> Result<(), AppError> {
-        self.search_service.handle_post_created(event).await
-            .map_err(|e| AppError::internal(e.to_string()))
+func (h *PostCreatedHandler) Handle(ctx context.Context, event *PostCreated) error {
+    if err := h.searchService.HandlePostCreated(ctx, event); err != nil {
+        return fmt.Errorf("search: handle post created: %w", err)
     }
+    return nil
 }
 
-pub struct ListingPublishedHandler {
-    search_service: Arc<dyn SearchService>,
+type ListingPublishedHandler struct {
+    searchService SearchService
 }
 
-#[async_trait]
-impl DomainEventHandler<ListingPublished> for ListingPublishedHandler {
-    async fn handle(&self, event: &ListingPublished) -> Result<(), AppError> {
-        self.search_service.handle_listing_published(event).await
-            .map_err(|e| AppError::internal(e.to_string()))
+func (h *ListingPublishedHandler) Handle(ctx context.Context, event *ListingPublished) error {
+    if err := h.searchService.HandleListingPublished(ctx, event); err != nil {
+        return fmt.Errorf("search: handle listing published: %w", err)
     }
+    return nil
 }
 
-pub struct ListingArchivedHandler {
-    search_service: Arc<dyn SearchService>,
+type ListingArchivedHandler struct {
+    searchService SearchService
 }
 
-#[async_trait]
-impl DomainEventHandler<ListingArchived> for ListingArchivedHandler {
-    async fn handle(&self, event: &ListingArchived) -> Result<(), AppError> {
-        self.search_service.handle_listing_archived(event).await
-            .map_err(|e| AppError::internal(e.to_string()))
+func (h *ListingArchivedHandler) Handle(ctx context.Context, event *ListingArchived) error {
+    if err := h.searchService.HandleListingArchived(ctx, event); err != nil {
+        return fmt.Errorf("search: handle listing archived: %w", err)
     }
+    return nil
 }
 
-pub struct UploadPublishedHandler {
-    search_service: Arc<dyn SearchService>,
+type UploadPublishedHandler struct {
+    searchService SearchService
 }
 
-#[async_trait]
-impl DomainEventHandler<UploadPublished> for UploadPublishedHandler {
-    async fn handle(&self, event: &UploadPublished) -> Result<(), AppError> {
-        self.search_service.handle_upload_published(event).await
-            .map_err(|e| AppError::internal(e.to_string()))
+func (h *UploadPublishedHandler) Handle(ctx context.Context, event *UploadPublished) error {
+    if err := h.searchService.HandleUploadPublished(ctx, event); err != nil {
+        return fmt.Errorf("search: handle upload published: %w", err)
     }
+    return nil
 }
 
-pub struct FamilyDeletionScheduledHandler {
-    search_service: Arc<dyn SearchService>,
+type FamilyDeletionScheduledHandler struct {
+    searchService SearchService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.search_service.handle_family_deletion_scheduled(event.family_id).await
-            .map_err(|e| AppError::internal(e.to_string()))
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *FamilyDeletionScheduled) error {
+    if err := h.searchService.HandleFamilyDeletionScheduled(ctx, event.FamilyID); err != nil {
+        return fmt.Errorf("search: handle family deletion scheduled: %w", err)
     }
+    return nil
 }
 ```
 
@@ -1552,40 +1425,40 @@ Migrate to Typesense when **any** of:
 
 ### §13.2 Dual-Backend Architecture
 
-```rust
-/// Search service with dual-backend support.
-/// Learning search ALWAYS uses PostgreSQL — never Typesense.
-impl SearchServiceImpl {
-    async fn search(&self, auth: &AuthContext, scope: &FamilyScope, params: &SearchParams)
-        -> Result<SearchResponse, SearchError>
-    {
-        match params.scope {
-            SearchScope::Learning => {
-                // ALWAYS PostgreSQL — privacy-critical, smaller dataset
-                self.learning_repo.search_learning(scope, &params.q, &filters, params.limit, cursor).await
+```go
+// Search service with dual-backend support.
+// Learning search ALWAYS uses PostgreSQL — never Typesense.
+func (s *SearchServiceImpl) Search(ctx context.Context, auth *AuthContext, scope *FamilyScope, params *SearchParams) (*SearchResponse, error) {
+    switch params.Scope {
+    case SearchScopeLearning:
+        // ALWAYS PostgreSQL — privacy-critical, smaller dataset
+        return s.learningRepo.SearchLearning(ctx, scope, params.Q, &filters, params.Limit, cursor)
+
+    case SearchScopeMarketplace:
+        switch s.backend {
+        case SearchBackendPostgresFts:
+            return s.marketplaceRepo.SearchListings(ctx, params.Q, &filters, params.Sort, params.Limit, cursor)
+        case SearchBackendTypesense:
+            tsQuery := buildTypesenseMarketplaceQuery(params)
+            tsResponse, err := s.typesense.Search(ctx, "marketplace_listings", tsQuery)
+            if err != nil {
+                return nil, err
             }
-            SearchScope::Marketplace => match &self.backend {
-                SearchBackend::PostgresFts => {
-                    self.marketplace_repo.search_listings(&params.q, &filters, params.sort, params.limit, cursor).await
-                }
-                SearchBackend::Typesense(adapter) => {
-                    let ts_query = build_typesense_marketplace_query(params);
-                    let ts_response = adapter.search("marketplace_listings", &ts_query).await?;
-                    convert_typesense_to_search_response(ts_response)
-                }
-            }
-            SearchScope::Social => match &self.backend {
-                SearchBackend::PostgresFts => {
-                    // Dispatch to sub-scope repositories
-                    self.search_social_postgres(auth, scope, params).await
-                }
-                SearchBackend::Typesense(adapter) => {
-                    // Typesense query with post-filter privacy enforcement
-                    self.search_social_typesense(adapter, auth, scope, params).await
-                }
-            }
+            return convertTypesenseToSearchResponse(tsResponse)
+        }
+
+    case SearchScopeSocial:
+        switch s.backend {
+        case SearchBackendPostgresFts:
+            // Dispatch to sub-scope repositories
+            return s.searchSocialPostgres(ctx, auth, scope, params)
+        case SearchBackendTypesense:
+            // Typesense query with post-filter privacy enforcement
+            return s.searchSocialTypesense(ctx, auth, scope, params)
         }
     }
+
+    return nil, fmt.Errorf("unsupported search scope: %s", params.Scope)
 }
 ```
 
@@ -1597,7 +1470,7 @@ impl SearchServiceImpl {
 | 2 | Create collections with schema matching source tables | Drop collections |
 | 3 | Run `BulkIndexJob` to index existing PostgreSQL data | No rollback needed |
 | 4 | Enable shadow mode: query both backends, compare results, log discrepancies | Disable shadow mode |
-| 5 | Switch reads to Typesense (`SearchBackend::Typesense`) via config flag | Revert config to `PostgresFts` |
+| 5 | Switch reads to Typesense (`SearchBackendTypesense`) via config flag | Revert config to `PostgresFts` |
 | 6 | Maintain PostgreSQL FTS indexes as fallback for 30+ days | N/A |
 | 7 | Remove PostgreSQL FTS indexes only after Typesense proven stable | Recreate indexes from columns |
 
@@ -1696,41 +1569,43 @@ Typesense provides built-in Raft-based high availability in its open-source edit
 
 ### §14.1 `IndexContentJob` (Phase 2)
 
-```rust
-/// Indexes a single document into the Typesense collection.
-/// Triggered by domain event handlers (PostCreated, ListingPublished, etc.)
-/// when SearchBackend is Typesense.
-///
-/// Queue: search_index (dedicated queue for search jobs)
-/// Retry: 3 attempts with exponential backoff (1s, 4s, 16s)
-/// Timeout: 10 seconds
-pub struct IndexContentJob {
-    pub collection: String,      // "marketplace_listings", "social_posts", etc.
-    pub entity_id: Uuid,         // Source entity ID
-    pub action: IndexAction,     // Upsert or Remove
+```go
+// IndexContentJob indexes a single document into the Typesense collection.
+// Triggered by domain event handlers (PostCreated, ListingPublished, etc.)
+// when SearchBackend is Typesense.
+//
+// Queue: search_index (dedicated queue for search jobs)
+// Retry: 3 attempts with exponential backoff (1s, 4s, 16s)
+// Timeout: 10 seconds
+type IndexContentJob struct {
+    Collection string    `json:"collection"` // "marketplace_listings", "social_posts", etc.
+    EntityID   uuid.UUID `json:"entity_id"`  // Source entity ID
+    Action     IndexAction `json:"action"`   // Upsert or Remove
 }
 
-pub enum IndexAction {
-    Upsert,
-    Remove,
-}
+type IndexAction string
+
+const (
+    IndexActionUpsert IndexAction = "upsert"
+    IndexActionRemove IndexAction = "remove"
+)
 ```
 
 ### §14.2 `BulkIndexJob` (Phase 2)
 
-```rust
-/// Bulk indexes all documents from a source table into a Typesense collection.
-/// Used during initial migration and periodic re-indexing.
-///
-/// Queue: search_bulk (separate queue to avoid blocking incremental updates)
-/// Retry: 1 attempt (manual re-trigger for bulk jobs)
-/// Timeout: 30 minutes
-/// Batch size: 1000 documents per Typesense API call
-pub struct BulkIndexJob {
-    pub collection: String,
-    pub source_table: String,
-    pub batch_size: i32,         // Default 1000
-    pub cursor: Option<Uuid>,    // Resume from last processed ID
+```go
+// BulkIndexJob bulk indexes all documents from a source table into a Typesense collection.
+// Used during initial migration and periodic re-indexing.
+//
+// Queue: search_bulk (separate queue to avoid blocking incremental updates)
+// Retry: 1 attempt (manual re-trigger for bulk jobs)
+// Timeout: 30 minutes
+// Batch size: 1000 documents per Typesense API call
+type BulkIndexJob struct {
+    Collection  string     `json:"collection"`
+    SourceTable string     `json:"source_table"`
+    BatchSize   int        `json:"batch_size"`   // Default 1000
+    Cursor      *uuid.UUID `json:"cursor"`       // Resume from last processed ID
 }
 ```
 
@@ -1811,67 +1686,82 @@ pub struct BulkIndexJob {
 
 ## §16 Error Handling
 
-```rust
-/// Search domain errors.
-/// Internal error details are logged but never exposed in API responses.
-/// [CODING_STANDARDS §4]
-#[derive(Debug, thiserror::Error)]
-pub enum SearchError {
-    /// Query text is too short (minimum 2 characters for search, 1 for autocomplete).
-    #[error("Query too short: minimum {min_length} characters required")]
-    QueryTooShort { min_length: usize },
+```go
+// SearchError represents search domain errors.
+// Internal error details are logged but never exposed in API responses.
+// [CODING_STANDARDS §4]
 
-    /// Invalid search scope provided.
-    #[error("Invalid search scope: {0}")]
-    InvalidScope(String),
+import (
+    "errors"
+    "fmt"
+    "net/http"
+)
 
-    /// Invalid sort order for the given scope.
-    #[error("Sort order '{sort}' is not supported for scope '{scope}'")]
-    InvalidSortForScope { sort: String, scope: String },
+var (
+    // ErrQueryTooShort indicates query text is too short.
+    ErrQueryTooShort = errors.New("query too short")
 
-    /// Invalid filter value (type mismatch, out of range, etc.).
-    #[error("Invalid filter value for '{field}': {reason}")]
-    InvalidFilter { field: String, reason: String },
+    // ErrInvalidScope indicates an invalid search scope was provided.
+    ErrInvalidScope = errors.New("invalid search scope")
 
-    /// Search backend is temporarily unavailable (Phase 2 — Typesense down).
-    #[error("Search service temporarily unavailable")]
-    BackendUnavailable,
+    // ErrInvalidSortForScope indicates an invalid sort order for the given scope.
+    ErrInvalidSortForScope = errors.New("sort order not supported for scope")
 
-    /// Database query error.
-    #[error("Database error: {0}")]
-    Database(#[from] sea_orm::DbErr),
+    // ErrInvalidFilter indicates an invalid filter value.
+    ErrInvalidFilter = errors.New("invalid filter value")
 
-    /// Internal error (catch-all for unexpected failures).
-    #[error("Internal search error")]
-    Internal(String),
+    // ErrBackendUnavailable indicates search backend is temporarily unavailable (Phase 2 — Typesense down).
+    ErrBackendUnavailable = errors.New("search service temporarily unavailable")
+)
+
+// SearchError wraps a search-specific error with additional context.
+type SearchError struct {
+    Err     error
+    Field   string // Optional: which field caused the error
+    Reason  string // Optional: additional detail
+    MinLen  int    // For QueryTooShort
 }
 
-impl SearchError {
-    /// Map SearchError to HTTP status code.
-    /// Internal details are never exposed to clients.
-    pub fn status_code(&self) -> StatusCode {
-        match self {
-            Self::QueryTooShort { .. } => StatusCode::UNPROCESSABLE_ENTITY,  // 422
-            Self::InvalidScope(_) => StatusCode::BAD_REQUEST,                 // 400
-            Self::InvalidSortForScope { .. } => StatusCode::BAD_REQUEST,      // 400
-            Self::InvalidFilter { .. } => StatusCode::BAD_REQUEST,            // 400
-            Self::BackendUnavailable => StatusCode::SERVICE_UNAVAILABLE,      // 503
-            Self::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,           // 500
-            Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,           // 500
-        }
+func (e *SearchError) Error() string {
+    if e.Field != "" {
+        return fmt.Sprintf("%s: field=%s reason=%s", e.Err.Error(), e.Field, e.Reason)
+    }
+    return e.Err.Error()
+}
+
+func (e *SearchError) Unwrap() error {
+    return e.Err
+}
+
+// StatusCode maps SearchError to HTTP status code.
+// Internal details are never exposed to clients.
+func (e *SearchError) StatusCode() int {
+    switch {
+    case errors.Is(e.Err, ErrQueryTooShort):
+        return http.StatusUnprocessableEntity // 422
+    case errors.Is(e.Err, ErrInvalidScope):
+        return http.StatusBadRequest // 400
+    case errors.Is(e.Err, ErrInvalidSortForScope):
+        return http.StatusBadRequest // 400
+    case errors.Is(e.Err, ErrInvalidFilter):
+        return http.StatusBadRequest // 400
+    case errors.Is(e.Err, ErrBackendUnavailable):
+        return http.StatusServiceUnavailable // 503
+    default:
+        return http.StatusInternalServerError // 500
     }
 }
 ```
 
 | Error Variant | HTTP Status | Client Message |
 |--------------|-------------|----------------|
-| `QueryTooShort` | 422 | `"Query too short: minimum {n} characters required"` |
-| `InvalidScope` | 400 | `"Invalid search scope"` |
-| `InvalidSortForScope` | 400 | `"Sort order not supported for this scope"` |
-| `InvalidFilter` | 400 | `"Invalid filter value"` |
-| `BackendUnavailable` | 503 | `"Search service temporarily unavailable"` |
-| `Database` | 500 | `"An internal error occurred"` (log actual error internally) |
-| `Internal` | 500 | `"An internal error occurred"` (log actual error internally) |
+| `ErrQueryTooShort` | 422 | `"Query too short: minimum {n} characters required"` |
+| `ErrInvalidScope` | 400 | `"Invalid search scope"` |
+| `ErrInvalidSortForScope` | 400 | `"Sort order not supported for this scope"` |
+| `ErrInvalidFilter` | 400 | `"Invalid filter value"` |
+| `ErrBackendUnavailable` | 503 | `"Search service temporarily unavailable"` |
+| Database error | 500 | `"An internal error occurred"` (log actual error internally) |
+| Internal error | 500 | `"An internal error occurred"` (log actual error internally) |
 
 ---
 
@@ -1910,9 +1800,9 @@ domain depends on search results for correctness.
 
 | Event | Phase 1 Behavior | Phase 2 Behavior |
 |-------|-----------------|-----------------|
-| `PostCreated` | No-op: `soc_posts.search_vector` auto-updates via `GENERATED ALWAYS` | Enqueue `IndexContentJob { collection: "social_posts", entity_id: event.post_id, action: Upsert }` |
-| `ListingPublished` | No-op: `mkt_listings.search_vector` auto-updates; listing appears when `status = 'published'` | Enqueue `IndexContentJob { collection: "marketplace_listings", entity_id: event.listing_id, action: Upsert }` |
-| `ListingArchived` | No-op: `WHERE status = 'published'` excludes archived listings | Enqueue `IndexContentJob { collection: "marketplace_listings", entity_id: event.listing_id, action: Remove }` |
+| `PostCreated` | No-op: `soc_posts.search_vector` auto-updates via `GENERATED ALWAYS` | Enqueue `IndexContentJob { Collection: "social_posts", EntityID: event.PostID, Action: Upsert }` |
+| `ListingPublished` | No-op: `mkt_listings.search_vector` auto-updates; listing appears when `status = 'published'` | Enqueue `IndexContentJob { Collection: "marketplace_listings", EntityID: event.ListingID, Action: Upsert }` |
+| `ListingArchived` | No-op: `WHERE status = 'published'` excludes archived listings | Enqueue `IndexContentJob { Collection: "marketplace_listings", EntityID: event.ListingID, Action: Remove }` |
 | `UploadPublished` | No-op: media is not directly searchable in Phase 1 | Index media metadata into the relevant collection (context-dependent) |
 | `FamilyDeletionScheduled` | No-op: `ON DELETE CASCADE` handles cleanup when family is deleted | Remove all documents with `family_id` from Typesense `social_posts` and `social_events` collections |
 
@@ -1991,29 +1881,28 @@ domain depends on search results for correctness.
 ## §20 Module Structure
 
 ```
-src/search/
-├── mod.rs                 # Module root — re-exports public types
-├── handlers.rs            # Axum handlers (thin: extractors → service → response)
-├── service.rs             # SearchServiceImpl (CQRS query + command dispatch)
-├── models.rs              # Request/response DTOs (SearchParams, SearchResponse, etc.)
-├── error.rs               # SearchError thiserror enum
+internal/search/
+├── search.go              # Package root — re-exports public types
+├── handlers.go            # Echo handlers (thin: binding → service → response)
+├── service.go             # SearchServiceImpl (CQRS query + command dispatch)
+├── models.go              # Request/response DTOs (SearchParams, SearchResponse, etc.)
+│                          # GORM models for search_index_state (Phase 2)
+├── errors.go              # SearchError types and sentinel errors
 ├── repository/
-│   ├── mod.rs             # Re-exports repository traits
-│   ├── social.rs          # SocialSearchRepository impl (PostgreSQL FTS)
-│   ├── marketplace.rs     # MarketplaceSearchRepository impl (PostgreSQL FTS)
-│   ├── learning.rs        # LearningSearchRepository impl (PostgreSQL FTS)
-│   └── autocomplete.rs    # AutocompleteRepository impl (pg_trgm + ILIKE)
+│   ├── social.go          # SocialSearchRepository impl (PostgreSQL FTS)
+│   ├── marketplace.go     # MarketplaceSearchRepository impl (PostgreSQL FTS)
+│   ├── learning.go        # LearningSearchRepository impl (PostgreSQL FTS)
+│   └── autocomplete.go    # AutocompleteRepository impl (pg_trgm + ILIKE)
 ├── events/
-│   ├── mod.rs             # Re-exports event handlers
-│   ├── post_created.rs    # PostCreatedHandler (Phase 1 no-op)
-│   ├── listing_published.rs  # ListingPublishedHandler (Phase 1 no-op)
-│   ├── listing_archived.rs   # ListingArchivedHandler (Phase 1 no-op)
-│   ├── upload_published.rs   # UploadPublishedHandler (Phase 1 no-op)
-│   └── family_deletion.rs    # FamilyDeletionScheduledHandler (Phase 1 no-op)
+│   ├── post_created.go    # PostCreatedHandler (Phase 1 no-op)
+│   ├── listing_published.go  # ListingPublishedHandler (Phase 1 no-op)
+│   ├── listing_archived.go   # ListingArchivedHandler (Phase 1 no-op)
+│   ├── upload_published.go   # UploadPublishedHandler (Phase 1 no-op)
+│   └── family_deletion.go    # FamilyDeletionScheduledHandler (Phase 1 no-op)
 └── adapters/
-    └── typesense.rs       # TypesenseAdapter impl (Phase 2)
+    └── typesense.go       # TypesenseAdapter impl (Phase 2)
 ```
 
-> **Note on entities/**: Search has no owned entities in Phase 1 (no SeaORM-generated entity
-> files). The `search_index_state` table entity will be generated in Phase 2 when the table
-> becomes active. The `entities/` directory is omitted until then.
+> **Note on GORM models**: Search has no owned GORM models in Phase 1 (no owned tables active).
+> The `search_index_state` GORM model will be added in `models.go` in Phase 2 when the table
+> becomes active.

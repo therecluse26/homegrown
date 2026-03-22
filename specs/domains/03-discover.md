@@ -10,7 +10,7 @@ user-generated content and zero personal data — it is entirely platform-author
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/discover/` |
+| **Module path** | `internal/discover/` |
 | **DB prefix** | `disc_` |
 | **Complexity class** | Non-complex (no `domain/` subdirectory) `[ARCH §4.5]` |
 | **External adapter** | None |
@@ -29,7 +29,7 @@ accounts or family data (owned by `iam::`).
 **What discover:: delegates**: Methodology data retrieval → `method::MethodologyService`
 (for explorer page data and quiz methodology matching). State guide consumption for
 compliance auto-configuration → `comply::` pulls from `disc_state_guides` via
-`DiscoveryService` trait. Email delivery for guide update notifications → `notify::`
+`DiscoveryService` interface. Email delivery for guide update notifications → `notify::`
 (future phase, via domain events).
 
 ---
@@ -83,7 +83,7 @@ public, platform-authored content with no user-generated data. `[S§5.4]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_disc_tables.rs
+-- Migration: YYYYMMDD_000001_create_disc_tables
 -- =============================================================================
 
 -- PostgreSQL extensions (uuid-ossp, pgcrypto) are installed by the bootstrap
@@ -223,7 +223,7 @@ CREATE INDEX idx_disc_content_pages_category ON disc_content_pages(category, dis
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000002_seed_disc_state_guides.rs
+-- Migration: YYYYMMDD_000002_seed_disc_state_guides
 -- =============================================================================
 
 -- Seed all 51 state guide rows (50 states + DC) with draft status.
@@ -287,7 +287,7 @@ INSERT INTO disc_state_guides (state_code, state_name, status) VALUES
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000003_seed_disc_content_pages.rs
+-- Migration: YYYYMMDD_000003_seed_disc_content_pages
 -- =============================================================================
 
 -- Seed Homeschooling 101 content page stubs [S§5.4]
@@ -311,27 +311,27 @@ INSERT INTO disc_content_pages (slug, title, category, display_order) VALUES
 
 ## §4 API Endpoints
 
-All Discovery endpoints live in `public_routes` — they require **no authentication** and
+All Discovery endpoints live in `publicRoutes` — they require **no authentication** and
 no `FamilyScope`. Rate limiting still applies. `[S§5.1.1, ARCH §2.3]`
 
 ### §4.1 Phase 1 — Foundation
 
 | Method | Path | Handler | Description | Auth |
 |--------|------|---------|-------------|------|
-| `GET` | `/v1/discovery/quiz` | `get_quiz` | Returns active quiz questions (weights stripped) | None |
-| `POST` | `/v1/discovery/quiz/results` | `submit_quiz` | Scores answers and creates a result | None |
-| `GET` | `/v1/discovery/quiz/results/:share_id` | `get_quiz_result` | Retrieves a quiz result by shareable ID | None |
-| `GET` | `/v1/discovery/state-guides/:state_code` | `get_state_guide` | Returns a state's legal guide | None |
-| `GET` | `/v1/discovery/state-guides` | `list_state_guides` | Lists all states with guide status | None |
+| `GET` | `/v1/discovery/quiz` | `GetQuiz` | Returns active quiz questions (weights stripped) | None |
+| `POST` | `/v1/discovery/quiz/results` | `SubmitQuiz` | Scores answers and creates a result | None |
+| `GET` | `/v1/discovery/quiz/results/:share_id` | `GetQuizResult` | Retrieves a quiz result by shareable ID | None |
+| `GET` | `/v1/discovery/state-guides/:state_code` | `GetStateGuide` | Returns a state's legal guide | None |
+| `GET` | `/v1/discovery/state-guides` | `ListStateGuides` | Lists all states with guide status | None |
 
 ### §4.2 Phase 2
 
 | Method | Path | Handler | Description | Auth |
 |--------|------|---------|-------------|------|
-| `POST` | `/v1/discovery/quiz/results/:share_id/claim` | `claim_quiz_result` | Links a quiz result to a family account | Authenticated |
-| `GET` | `/v1/discovery/content/:slug` | `get_content_page` | Returns a content page by slug | None |
+| `POST` | `/v1/discovery/quiz/results/:share_id/claim` | `ClaimQuizResult` | Links a quiz result to a family account | Authenticated |
+| `GET` | `/v1/discovery/content/:slug` | `GetContentPage` | Returns a content page by slug | None |
 
-**Note on `claim_quiz_result`**: This is the only authenticated endpoint in discover::.
+**Note on `ClaimQuizResult`**: This is the only authenticated endpoint in discover::.
 It is called during onboarding to transfer an anonymous quiz result to the newly created
 family account. `[S§5.1.3]`
 
@@ -339,106 +339,113 @@ family account. `[S§5.1.3]`
 
 | Method | Path | Handler | Description | Auth |
 |--------|------|---------|-------------|------|
-| `PUT` | `/v1/admin/discovery/quiz` | `update_quiz` | Create or update quiz definition | Admin |
-| `PUT` | `/v1/admin/discovery/state-guides/:state_code` | `update_state_guide` | Update state guide content | Admin |
-| `PUT` | `/v1/admin/discovery/content/:slug` | `update_content_page` | Update content page | Admin |
+| `PUT` | `/v1/admin/discovery/quiz` | `UpdateQuiz` | Create or update quiz definition | Admin |
+| `PUT` | `/v1/admin/discovery/state-guides/:state_code` | `UpdateStateGuide` | Update state guide content | Admin |
+| `PUT` | `/v1/admin/discovery/content/:slug` | `UpdateContentPage` | Update content page | Admin |
 
 ### §4.4 Handler Signatures
 
-```rust
-// src/discover/handlers.rs
+```go
+// internal/discover/handlers.go
 
-/// GET /v1/discovery/quiz
-/// Returns the active quiz definition with scoring weights stripped.
-/// 200 OK with quiz questions; 404 if no active quiz exists.
-pub async fn get_quiz(
-    State(service): State<Arc<dyn DiscoveryService>>,
-) -> Result<Json<QuizResponse>, AppError> {
-    let quiz = service.get_active_quiz().await?;
-    Ok(Json(quiz))
+// GetQuiz handles GET /v1/discovery/quiz
+// Returns the active quiz definition with scoring weights stripped.
+// 200 OK with quiz questions; 404 if no active quiz exists.
+func (h *DiscoverHandler) GetQuiz(c echo.Context) error {
+    quiz, err := h.service.GetActiveQuiz(c.Request().Context())
+    if err != nil {
+        return err
+    }
+    return c.JSON(http.StatusOK, quiz)
 }
 
-/// POST /v1/discovery/quiz/results
-/// Scores the submitted answers and stores the result.
-/// 201 Created with result including share_id.
-pub async fn submit_quiz(
-    State(service): State<Arc<dyn DiscoveryService>>,
-    Json(cmd): Json<SubmitQuizCommand>,
-) -> Result<(StatusCode, Json<QuizResultResponse>), AppError> {
-    let result = service.submit_quiz(cmd).await?;
-    Ok((StatusCode::CREATED, Json(result)))
+// SubmitQuiz handles POST /v1/discovery/quiz/results
+// Scores the submitted answers and stores the result.
+// 201 Created with result including share_id.
+func (h *DiscoverHandler) SubmitQuiz(c echo.Context) error {
+    var cmd SubmitQuizCommand
+    if err := c.Bind(&cmd); err != nil {
+        return err
+    }
+    if err := c.Validate(&cmd); err != nil {
+        return err
+    }
+    result, err := h.service.SubmitQuiz(c.Request().Context(), cmd)
+    if err != nil {
+        return err
+    }
+    return c.JSON(http.StatusCreated, result)
 }
 
-/// GET /v1/discovery/quiz/results/:share_id
-/// Returns a previously submitted quiz result.
-/// 200 OK with result; 404 if share_id not found.
-pub async fn get_quiz_result(
-    State(service): State<Arc<dyn DiscoveryService>>,
-    Path(share_id): Path<String>,
-) -> Result<Json<QuizResultResponse>, AppError> {
-    let result = service.get_quiz_result(&share_id).await?;
-    Ok(Json(result))
+// GetQuizResult handles GET /v1/discovery/quiz/results/:share_id
+// Returns a previously submitted quiz result.
+// 200 OK with result; 404 if share_id not found.
+func (h *DiscoverHandler) GetQuizResult(c echo.Context) error {
+    shareID := c.Param("share_id")
+    result, err := h.service.GetQuizResult(c.Request().Context(), shareID)
+    if err != nil {
+        return err
+    }
+    return c.JSON(http.StatusOK, result)
 }
 
-/// GET /v1/discovery/state-guides
-/// Returns a list of all states with guide availability status.
-/// 200 OK with state list.
-pub async fn list_state_guides(
-    State(service): State<Arc<dyn DiscoveryService>>,
-) -> Result<Json<Vec<StateGuideSummaryResponse>>, AppError> {
-    let guides = service.list_state_guides().await?;
-    Ok(Json(guides))
+// ListStateGuides handles GET /v1/discovery/state-guides
+// Returns a list of all states with guide availability status.
+// 200 OK with state list.
+func (h *DiscoverHandler) ListStateGuides(c echo.Context) error {
+    guides, err := h.service.ListStateGuides(c.Request().Context())
+    if err != nil {
+        return err
+    }
+    return c.JSON(http.StatusOK, guides)
 }
 
-/// GET /v1/discovery/state-guides/:state_code
-/// Returns the full state guide for a given state code.
-/// 200 OK with guide; 404 if state code not found or guide not published.
-pub async fn get_state_guide(
-    State(service): State<Arc<dyn DiscoveryService>>,
-    Path(state_code): Path<String>,
-) -> Result<Json<StateGuideResponse>, AppError> {
-    let guide = service.get_state_guide(&state_code).await?;
-    Ok(Json(guide))
+// GetStateGuide handles GET /v1/discovery/state-guides/:state_code
+// Returns the full state guide for a given state code.
+// 200 OK with guide; 404 if state code not found or guide not published.
+func (h *DiscoverHandler) GetStateGuide(c echo.Context) error {
+    stateCode := c.Param("state_code")
+    guide, err := h.service.GetStateGuide(c.Request().Context(), stateCode)
+    if err != nil {
+        return err
+    }
+    return c.JSON(http.StatusOK, guide)
 }
 
-/// POST /v1/discovery/quiz/results/:share_id/claim (Phase 2)
-/// Links an anonymous quiz result to the authenticated family.
-/// Requires auth middleware. 200 OK; 404 if share_id not found; 409 if already claimed.
-pub async fn claim_quiz_result(
-    auth: AuthContext,
-    State(service): State<Arc<dyn DiscoveryService>>,
-    Path(share_id): Path<String>,
-) -> Result<Json<QuizResultResponse>, AppError> {
-    let scope = FamilyScope::from(&auth);
-    let result = service.claim_quiz_result(&scope, &share_id).await?;
-    Ok(Json(result))
+// ClaimQuizResult handles POST /v1/discovery/quiz/results/:share_id/claim (Phase 2)
+// Links an anonymous quiz result to the authenticated family.
+// Requires auth middleware. 200 OK; 404 if share_id not found; 409 if already claimed.
+func (h *DiscoverHandler) ClaimQuizResult(c echo.Context) error {
+    auth := AuthContextFrom(c)
+    scope := FamilyScopeFrom(auth)
+    shareID := c.Param("share_id")
+    result, err := h.service.ClaimQuizResult(c.Request().Context(), scope, shareID)
+    if err != nil {
+        return err
+    }
+    return c.JSON(http.StatusOK, result)
 }
 ```
 
 ### §4.5 Route Registration
 
-```rust
-// In app.rs — public routes (no auth middleware)
+```go
+// In main.go — public routes (no auth middleware)
 
-pub fn public_routes() -> Router<AppState> {
-    Router::new()
-        // Discovery — quiz
-        .route("/v1/discovery/quiz", get(discover::handlers::get_quiz))
-        .route("/v1/discovery/quiz/results", post(discover::handlers::submit_quiz))
-        .route("/v1/discovery/quiz/results/:share_id", get(discover::handlers::get_quiz_result))
-        // Discovery — state guides
-        .route("/v1/discovery/state-guides", get(discover::handlers::list_state_guides))
-        .route("/v1/discovery/state-guides/:state_code", get(discover::handlers::get_state_guide))
+func publicRoutes(e *echo.Echo, h *DiscoverHandler) {
+    // Discovery — quiz
+    e.GET("/v1/discovery/quiz", h.GetQuiz)
+    e.POST("/v1/discovery/quiz/results", h.SubmitQuiz)
+    e.GET("/v1/discovery/quiz/results/:share_id", h.GetQuizResult)
+    // Discovery — state guides
+    e.GET("/v1/discovery/state-guides", h.ListStateGuides)
+    e.GET("/v1/discovery/state-guides/:state_code", h.GetStateGuide)
 }
 
-// In app.rs — authenticated routes (Phase 2, claim endpoint)
-pub fn authenticated_routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/v1/discovery/quiz/results/:share_id/claim",
-            post(discover::handlers::claim_quiz_result),
-        )
-        // ... other authenticated routes
+// In main.go — authenticated routes (Phase 2, claim endpoint)
+func authenticatedRoutes(g *echo.Group, h *DiscoverHandler) {
+    g.POST("/v1/discovery/quiz/results/:share_id/claim", h.ClaimQuizResult)
+    // ... other authenticated routes
 }
 ```
 
@@ -446,163 +453,137 @@ pub fn authenticated_routes() -> Router<AppState> {
 
 ## §5 Service Interface
 
-The `DiscoveryService` trait defines all use cases exposed to handlers and other domains.
-Defined in `src/discover/ports.rs`. `[CODING §8.2]`
+The `DiscoveryService` interface defines all use cases exposed to handlers and other domains.
+Defined in `internal/discover/ports.go`. `[CODING §8.2]`
 
-```rust
-#[async_trait]
-pub trait DiscoveryService: Send + Sync {
+```go
+// DiscoveryService defines all use cases for the Discovery domain.
+type DiscoveryService interface {
     // ─── Quiz (Public) ──────────────────────────────────────────────────
 
-    /// Returns the currently active quiz definition with scoring weights stripped.
-    /// Used by GET /v1/discovery/quiz. [S§5.1.1]
-    async fn get_active_quiz(&self) -> Result<QuizResponse, AppError>;
+    // GetActiveQuiz returns the currently active quiz definition with scoring weights stripped.
+    // Used by GET /v1/discovery/quiz. [S§5.1.1]
+    GetActiveQuiz(ctx context.Context) (*QuizResponse, error)
 
-    /// Scores submitted answers against the active quiz definition and stores
-    /// the result with a generated share_id.
-    /// Used by POST /v1/discovery/quiz/results. [S§5.1.1]
-    async fn submit_quiz(
-        &self,
-        cmd: SubmitQuizCommand,
-    ) -> Result<QuizResultResponse, AppError>;
+    // SubmitQuiz scores submitted answers against the active quiz definition and stores
+    // the result with a generated share_id.
+    // Used by POST /v1/discovery/quiz/results. [S§5.1.1]
+    SubmitQuiz(ctx context.Context, cmd SubmitQuizCommand) (*QuizResultResponse, error)
 
-    /// Retrieves a previously submitted quiz result by its share_id.
-    /// Used by GET /v1/discovery/quiz/results/:share_id. [S§5.1.1]
-    async fn get_quiz_result(
-        &self,
-        share_id: &str,
-    ) -> Result<QuizResultResponse, AppError>;
+    // GetQuizResult retrieves a previously submitted quiz result by its share_id.
+    // Used by GET /v1/discovery/quiz/results/:share_id. [S§5.1.1]
+    GetQuizResult(ctx context.Context, shareID string) (*QuizResultResponse, error)
 
-    /// Links an anonymous quiz result to a family account.
-    /// Used by POST /v1/discovery/quiz/results/:share_id/claim (Phase 2). [S§5.1.3]
-    async fn claim_quiz_result(
-        &self,
-        scope: &FamilyScope,
-        share_id: &str,
-    ) -> Result<QuizResultResponse, AppError>;
+    // ClaimQuizResult links an anonymous quiz result to a family account.
+    // Used by POST /v1/discovery/quiz/results/:share_id/claim (Phase 2). [S§5.1.3]
+    ClaimQuizResult(ctx context.Context, scope *FamilyScope, shareID string) (*QuizResultResponse, error)
 
     // ─── State Guides (Public) ──────────────────────────────────────────
 
-    /// Returns a list of all states with guide availability status.
-    /// Used by GET /v1/discovery/state-guides. [S§5.3]
-    async fn list_state_guides(&self) -> Result<Vec<StateGuideSummaryResponse>, AppError>;
+    // ListStateGuides returns a list of all states with guide availability status.
+    // Used by GET /v1/discovery/state-guides. [S§5.3]
+    ListStateGuides(ctx context.Context) ([]StateGuideSummaryResponse, error)
 
-    /// Returns the full state guide for a given state code.
-    /// Used by GET /v1/discovery/state-guides/:state_code. [S§5.3]
-    async fn get_state_guide(
-        &self,
-        state_code: &str,
-    ) -> Result<StateGuideResponse, AppError>;
+    // GetStateGuide returns the full state guide for a given state code.
+    // Used by GET /v1/discovery/state-guides/:state_code. [S§5.3]
+    GetStateGuide(ctx context.Context, stateCode string) (*StateGuideResponse, error)
 
-    /// Returns structured requirements for a state, used by comply:: for
-    /// compliance auto-configuration. Not exposed as an HTTP endpoint.
-    /// [S§5.3]
-    async fn get_state_requirements(
-        &self,
-        state_code: &str,
-    ) -> Result<StateGuideRequirements, AppError>;
+    // GetStateRequirements returns structured requirements for a state, used by comply:: for
+    // compliance auto-configuration. Not exposed as an HTTP endpoint.
+    // [S§5.3]
+    GetStateRequirements(ctx context.Context, stateCode string) (*StateGuideRequirements, error)
 
     // ─── Content Pages (Public) ─────────────────────────────────────────
 
-    /// Returns a content page by slug (Phase 2).
-    /// Used by GET /v1/discovery/content/:slug. [S§5.4]
-    async fn get_content_page(
-        &self,
-        slug: &str,
-    ) -> Result<ContentPageResponse, AppError>;
+    // GetContentPage returns a content page by slug (Phase 2).
+    // Used by GET /v1/discovery/content/:slug. [S§5.4]
+    GetContentPage(ctx context.Context, slug string) (*ContentPageResponse, error)
 
-    /// Returns all published content pages grouped by category (Phase 2).
-    /// Used by Astro at build time for navigation and sitemap generation.
-    async fn list_content_pages(&self) -> Result<Vec<ContentPageSummaryResponse>, AppError>;
+    // ListContentPages returns all published content pages grouped by category (Phase 2).
+    // Used by Astro at build time for navigation and sitemap generation.
+    ListContentPages(ctx context.Context) ([]ContentPageSummaryResponse, error)
 }
 ```
 
-**Implementation**: `DiscoveryServiceImpl` in `src/discover/service.rs`. Constructor receives:
-- `Arc<dyn QuizDefinitionRepository>`
-- `Arc<dyn QuizResultRepository>`
-- `Arc<dyn StateGuideRepository>`
-- `Arc<dyn ContentPageRepository>` (Phase 2)
-- `Arc<dyn MethodologyService>` (for methodology slug-to-name mapping in quiz results)
+**Implementation**: `DiscoveryServiceImpl` in `internal/discover/service.go`. Constructor receives:
+- `QuizDefinitionRepository`
+- `QuizResultRepository`
+- `StateGuideRepository`
+- `ContentPageRepository` (Phase 2)
+- `MethodologyService` (for methodology slug-to-name mapping in quiz results)
 
 ---
 
 ## §6 Repository Interfaces
 
-All repository traits defined in `src/discover/ports.rs`. Discovery repositories do NOT
+All repository interfaces defined in `internal/discover/ports.go`. Discovery repositories do NOT
 accept `FamilyScope` — all data is public, platform-authored content. `[CODING §2.4]`
 
 ### §6.1 QuizDefinitionRepository
 
-```rust
-#[async_trait]
-pub trait QuizDefinitionRepository: Send + Sync {
-    /// Returns the currently active quiz definition (status = 'active').
-    /// Returns None if no active quiz exists.
-    async fn find_active(&self) -> Result<Option<QuizDefinition>, AppError>;
+```go
+// QuizDefinitionRepository provides access to quiz definitions.
+type QuizDefinitionRepository interface {
+    // FindActive returns the currently active quiz definition (status = 'active').
+    // Returns nil if no active quiz exists.
+    FindActive(ctx context.Context) (*QuizDefinition, error)
 
-    /// Returns a quiz definition by ID.
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<QuizDefinition>, AppError>;
+    // FindByID returns a quiz definition by ID.
+    FindByID(ctx context.Context, id uuid.UUID) (*QuizDefinition, error)
 }
 ```
 
-**Implementation**: `PgQuizDefinitionRepository` in `src/discover/repository.rs`.
+**Implementation**: `PgQuizDefinitionRepository` in `internal/discover/repository.go`.
 
 ### §6.2 QuizResultRepository
 
-```rust
-#[async_trait]
-pub trait QuizResultRepository: Send + Sync {
-    /// Stores a new quiz result. Returns the created result.
-    async fn create(&self, result: CreateQuizResult) -> Result<QuizResult, AppError>;
+```go
+// QuizResultRepository provides access to quiz results.
+type QuizResultRepository interface {
+    // Create stores a new quiz result. Returns the created result.
+    Create(ctx context.Context, result CreateQuizResult) (*QuizResult, error)
 
-    /// Finds a quiz result by its URL-safe share_id.
-    async fn find_by_share_id(&self, share_id: &str) -> Result<Option<QuizResult>, AppError>;
+    // FindByShareID finds a quiz result by its URL-safe share_id.
+    FindByShareID(ctx context.Context, shareID string) (*QuizResult, error)
 
-    /// Links a quiz result to a family account. [S§5.1.3]
-    /// Returns AppError if the result is already claimed by a different family.
-    async fn claim_for_family(
-        &self,
-        share_id: &str,
-        family_id: Uuid,
-    ) -> Result<QuizResult, AppError>;
+    // ClaimForFamily links a quiz result to a family account. [S§5.1.3]
+    // Returns error if the result is already claimed by a different family.
+    ClaimForFamily(ctx context.Context, shareID string, familyID uuid.UUID) (*QuizResult, error)
 }
 ```
 
-**Implementation**: `PgQuizResultRepository` in `src/discover/repository.rs`.
+**Implementation**: `PgQuizResultRepository` in `internal/discover/repository.go`.
 
 ### §6.3 StateGuideRepository
 
-```rust
-#[async_trait]
-pub trait StateGuideRepository: Send + Sync {
-    /// Returns all state guides with summary information (code, name, status).
-    async fn list_all(&self) -> Result<Vec<StateGuideSummary>, AppError>;
+```go
+// StateGuideRepository provides access to state legal guides.
+type StateGuideRepository interface {
+    // ListAll returns all state guides with summary information (code, name, status).
+    ListAll(ctx context.Context) ([]StateGuideSummary, error)
 
-    /// Returns the full state guide by state code.
-    /// Returns None if state code not found.
-    async fn find_by_state_code(
-        &self,
-        state_code: &str,
-    ) -> Result<Option<StateGuide>, AppError>;
+    // FindByStateCode returns the full state guide by state code.
+    // Returns nil if state code not found.
+    FindByStateCode(ctx context.Context, stateCode string) (*StateGuide, error)
 }
 ```
 
-**Implementation**: `PgStateGuideRepository` in `src/discover/repository.rs`.
+**Implementation**: `PgStateGuideRepository` in `internal/discover/repository.go`.
 
 ### §6.4 ContentPageRepository (Phase 2)
 
-```rust
-#[async_trait]
-pub trait ContentPageRepository: Send + Sync {
-    /// Returns a published content page by slug.
-    async fn find_by_slug(&self, slug: &str) -> Result<Option<ContentPage>, AppError>;
+```go
+// ContentPageRepository provides access to content pages.
+type ContentPageRepository interface {
+    // FindBySlug returns a published content page by slug.
+    FindBySlug(ctx context.Context, slug string) (*ContentPage, error)
 
-    /// Returns all published content pages ordered by category and display_order.
-    async fn list_published(&self) -> Result<Vec<ContentPageSummary>, AppError>;
+    // ListPublished returns all published content pages ordered by category and display_order.
+    ListPublished(ctx context.Context) ([]ContentPageSummary, error)
 }
 ```
 
-**Implementation**: `PgContentPageRepository` in `src/discover/repository.rs`.
+**Implementation**: `PgContentPageRepository` in `internal/discover/repository.go`.
 
 ---
 
@@ -610,233 +591,233 @@ pub trait ContentPageRepository: Send + Sync {
 
 None. The Discovery domain does not call any external services. All data is stored in
 PostgreSQL and served directly. Methodology data is consumed via the `method::` service
-trait (an internal domain dependency, not an external adapter).
+interface (an internal domain dependency, not an external adapter).
 
 ---
 
 ## §8 Models (DTOs)
 
-All types defined in `src/discover/models.rs`. API-facing types derive `serde::Serialize`,
-`serde::Deserialize`, and `utoipa::ToSchema`. Request types additionally derive
-`validator::Validate`. `[CODING §2.3]`
+All types defined in `internal/discover/models.go`. API-facing types use struct tags for JSON
+serialization (`json:"field"`), swaggo annotations, and go-playground/validator tags.
+`[CODING §2.3]`
 
 ### §8.1 Request Types
 
-```rust
-/// POST /v1/discovery/quiz/results [S§5.1.1]
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct SubmitQuizCommand {
-    /// Map of question ID → selected answer ID: { "q1": "q1a1", "q2": "q2a3" }
-    pub answers: HashMap<String, String>,
-    /// Optional session token for anonymous result association [S§5.1.2]
-    /// Allows the same browser session to retrieve its own results.
-    #[validate(length(max = 128))]
-    pub session_token: Option<String>,
+```go
+// SubmitQuizCommand is the request body for POST /v1/discovery/quiz/results [S§5.1.1]
+type SubmitQuizCommand struct {
+    // Answers is a map of question ID → selected answer ID: { "q1": "q1a1", "q2": "q2a3" }
+    Answers map[string]string `json:"answers" validate:"required"`
+    // SessionToken is an optional session token for anonymous result association [S§5.1.2]
+    // Allows the same browser session to retrieve its own results.
+    SessionToken *string `json:"session_token,omitempty" validate:"omitempty,max=128"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-/// GET /v1/discovery/quiz — quiz definition with weights stripped [S§5.1.1]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QuizResponse {
-    pub quiz_id: Uuid,
-    pub version: i16,
-    pub title: String,
-    pub description: String,
-    pub questions: Vec<QuizQuestionResponse>,
+```go
+// QuizResponse is the response for GET /v1/discovery/quiz — quiz definition with weights stripped [S§5.1.1]
+type QuizResponse struct {
+    QuizID      uuid.UUID              `json:"quiz_id"`
+    Version     int16                  `json:"version"`
+    Title       string                 `json:"title"`
+    Description string                 `json:"description"`
+    Questions   []QuizQuestionResponse `json:"questions"`
 }
 
-/// Individual quiz question — weights are NOT included [§9]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QuizQuestionResponse {
-    pub id: String,
-    pub category: String,
-    pub text: String,
-    pub help_text: Option<String>,
-    pub answers: Vec<QuizAnswerResponse>,
+// QuizQuestionResponse is an individual quiz question — weights are NOT included [§9]
+type QuizQuestionResponse struct {
+    ID       string               `json:"id"`
+    Category string               `json:"category"`
+    Text     string               `json:"text"`
+    HelpText *string              `json:"help_text,omitempty"`
+    Answers  []QuizAnswerResponse `json:"answers"`
 }
 
-/// Quiz answer option — no scoring weights exposed
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QuizAnswerResponse {
-    pub id: String,
-    pub text: String,
+// QuizAnswerResponse is a quiz answer option — no scoring weights exposed
+type QuizAnswerResponse struct {
+    ID   string `json:"id"`
+    Text string `json:"text"`
 }
 
-/// POST /v1/discovery/quiz/results (201) and
-/// GET  /v1/discovery/quiz/results/:share_id (200) [S§5.1.1]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QuizResultResponse {
-    pub share_id: String,
-    pub quiz_version: i16,
-    pub recommendations: Vec<MethodologyRecommendation>,
-    pub created_at: DateTime<Utc>,
-    /// Whether this result has been claimed by a family account [S§5.1.3]
-    pub is_claimed: bool,
+// QuizResultResponse is the response for POST /v1/discovery/quiz/results (201) and
+// GET /v1/discovery/quiz/results/:share_id (200) [S§5.1.1]
+type QuizResultResponse struct {
+    ShareID         string                       `json:"share_id"`
+    QuizVersion     int16                        `json:"quiz_version"`
+    Recommendations []MethodologyRecommendation  `json:"recommendations"`
+    CreatedAt       time.Time                    `json:"created_at"`
+    // IsClaimed indicates whether this result has been claimed by a family account [S§5.1.3]
+    IsClaimed       bool                         `json:"is_claimed"`
 }
 
-/// A single methodology recommendation from quiz results
-#[derive(Debug, Serialize, ToSchema)]
-pub struct MethodologyRecommendation {
-    pub rank: u8,
-    pub methodology_slug: String,
-    pub methodology_name: String,
-    pub score_percentage: u8,           // 0-100, derived from raw float score
-    pub explanation: String,            // why this methodology fits [S§5.1.1]
+// MethodologyRecommendation is a single methodology recommendation from quiz results
+type MethodologyRecommendation struct {
+    Rank             uint8  `json:"rank"`
+    MethodologySlug  string `json:"methodology_slug"`
+    MethodologyName  string `json:"methodology_name"`
+    ScorePercentage  uint8  `json:"score_percentage"`  // 0-100, derived from raw float score
+    Explanation      string `json:"explanation"`        // why this methodology fits [S§5.1.1]
 }
 
-/// GET /v1/discovery/state-guides — list item
-#[derive(Debug, Serialize, ToSchema)]
-pub struct StateGuideSummaryResponse {
-    pub state_code: String,
-    pub state_name: String,
-    pub is_available: bool,             // true if status = 'published'
-    pub last_reviewed_at: Option<DateTime<Utc>>,
+// StateGuideSummaryResponse is the list item for GET /v1/discovery/state-guides
+type StateGuideSummaryResponse struct {
+    StateCode      string     `json:"state_code"`
+    StateName      string     `json:"state_name"`
+    IsAvailable    bool       `json:"is_available"`       // true if status = 'published'
+    LastReviewedAt *time.Time `json:"last_reviewed_at,omitempty"`
 }
 
-/// GET /v1/discovery/state-guides/:state_code — full guide [S§5.3]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct StateGuideResponse {
-    pub state_code: String,
-    pub state_name: String,
-    pub requirements: StateGuideRequirements,
-    pub guide_content: String,          // markdown
-    pub last_reviewed_at: Option<DateTime<Utc>>,
-    pub legal_disclaimer: String,
+// StateGuideResponse is the full guide for GET /v1/discovery/state-guides/:state_code [S§5.3]
+type StateGuideResponse struct {
+    StateCode      string                `json:"state_code"`
+    StateName      string                `json:"state_name"`
+    Requirements   StateGuideRequirements `json:"requirements"`
+    GuideContent   string                `json:"guide_content"`     // markdown
+    LastReviewedAt *time.Time            `json:"last_reviewed_at,omitempty"`
+    LegalDisclaimer string              `json:"legal_disclaimer"`
 }
 
-/// Structured state requirements — shared with comply:: [S§5.3]
-/// This type is both API-facing (in StateGuideResponse) and consumed
-/// internally by comply:: for compliance auto-configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct StateGuideRequirements {
-    /// Must the family notify the state/district? [S§5.3]
-    pub notification_required: bool,
-    pub notification_details: Option<String>,
-    /// Subjects required by law
-    pub required_subjects: Vec<String>,
-    /// Assessment or testing obligations [S§5.3]
-    pub assessment_required: bool,
-    pub assessment_details: Option<String>,
-    /// Record-keeping requirements [S§5.3]
-    pub record_keeping_required: bool,
-    pub record_keeping_details: Option<String>,
-    /// Attendance requirements [S§5.3]
-    pub attendance_required: bool,
-    pub attendance_days: Option<u16>,
-    pub attendance_details: Option<String>,
-    /// Umbrella school options (where applicable) [S§5.3]
-    pub umbrella_school_available: bool,
-    pub umbrella_school_details: Option<String>,
-    /// Overall regulatory classification
-    pub regulation_level: String,       // "low", "moderate", "high"
+// StateGuideRequirements is structured state requirements — shared with comply:: [S§5.3]
+// This type is both API-facing (in StateGuideResponse) and consumed
+// internally by comply:: for compliance auto-configuration.
+type StateGuideRequirements struct {
+    // NotificationRequired indicates whether the family must notify the state/district [S§5.3]
+    NotificationRequired bool     `json:"notification_required"`
+    NotificationDetails  *string  `json:"notification_details,omitempty"`
+    // RequiredSubjects lists subjects required by law
+    RequiredSubjects     []string `json:"required_subjects"`
+    // AssessmentRequired indicates assessment or testing obligations [S§5.3]
+    AssessmentRequired   bool     `json:"assessment_required"`
+    AssessmentDetails    *string  `json:"assessment_details,omitempty"`
+    // RecordKeepingRequired indicates record-keeping requirements [S§5.3]
+    RecordKeepingRequired bool    `json:"record_keeping_required"`
+    RecordKeepingDetails *string  `json:"record_keeping_details,omitempty"`
+    // AttendanceRequired indicates attendance requirements [S§5.3]
+    AttendanceRequired   bool     `json:"attendance_required"`
+    AttendanceDays       *uint16  `json:"attendance_days,omitempty"`
+    AttendanceDetails    *string  `json:"attendance_details,omitempty"`
+    // UmbrellaSchoolAvailable indicates umbrella school options (where applicable) [S§5.3]
+    UmbrellaSchoolAvailable bool  `json:"umbrella_school_available"`
+    UmbrellaSchoolDetails *string `json:"umbrella_school_details,omitempty"`
+    // RegulationLevel is the overall regulatory classification
+    RegulationLevel      string   `json:"regulation_level"` // "low", "moderate", "high"
 }
 
-/// GET /v1/discovery/content/:slug (Phase 2) [S§5.4]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ContentPageResponse {
-    pub slug: String,
-    pub title: String,
-    pub category: String,
-    pub content: String,                // markdown
-    pub meta_title: Option<String>,
-    pub meta_description: Option<String>,
+// ContentPageResponse is the response for GET /v1/discovery/content/:slug (Phase 2) [S§5.4]
+type ContentPageResponse struct {
+    Slug            string  `json:"slug"`
+    Title           string  `json:"title"`
+    Category        string  `json:"category"`
+    Content         string  `json:"content"`            // markdown
+    MetaTitle       *string `json:"meta_title,omitempty"`
+    MetaDescription *string `json:"meta_description,omitempty"`
 }
 
-/// Content page summary for navigation and Astro build (Phase 2)
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ContentPageSummaryResponse {
-    pub slug: String,
-    pub title: String,
-    pub category: String,
+// ContentPageSummaryResponse is a content page summary for navigation and Astro build (Phase 2)
+type ContentPageSummaryResponse struct {
+    Slug     string `json:"slug"`
+    Title    string `json:"title"`
+    Category string `json:"category"`
 }
 ```
 
 ### §8.3 Internal Types (not API-facing)
 
-```rust
-/// Full quiz definition from database (includes weights — never serialize to API)
-pub struct QuizDefinition {
-    pub id: Uuid,
-    pub version: i16,
-    pub title: String,
-    pub description: String,
-    pub status: String,
-    pub questions: serde_json::Value,       // JSONB with scoring weights
-    pub explanations: serde_json::Value,    // JSONB methodology explanations
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+```go
+// QuizDefinition is the full quiz definition from database (includes weights — never serialize to API).
+// GORM model for disc_quiz_definitions table.
+type QuizDefinition struct {
+    ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    Version      int16           `gorm:"not null"`
+    Title        string          `gorm:"not null"`
+    Description  string          `gorm:"not null"`
+    Status       string          `gorm:"not null;default:'draft'"`
+    Questions    json.RawMessage `gorm:"type:jsonb;not null;default:'[]'"` // JSONB with scoring weights
+    Explanations json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`  // JSONB methodology explanations
+    CreatedAt    time.Time       `gorm:"not null;default:now()"`
+    UpdatedAt    time.Time       `gorm:"not null;default:now()"`
 }
 
-/// Quiz result from database
-pub struct QuizResult {
-    pub id: Uuid,
-    pub quiz_definition_id: Uuid,
-    pub share_id: String,
-    pub session_token: Option<String>,
-    pub answers: serde_json::Value,
-    pub scores: serde_json::Value,
-    pub recommendations: serde_json::Value,
-    pub family_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
+func (QuizDefinition) TableName() string { return "disc_quiz_definitions" }
+
+// QuizResult is a quiz result from database.
+// GORM model for disc_quiz_results table.
+type QuizResult struct {
+    ID               uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    QuizDefinitionID uuid.UUID       `gorm:"type:uuid;not null"`
+    ShareID          string          `gorm:"uniqueIndex;not null"`
+    SessionToken     *string
+    Answers          json.RawMessage `gorm:"type:jsonb;not null"`
+    Scores           json.RawMessage `gorm:"type:jsonb;not null"`
+    Recommendations  json.RawMessage `gorm:"type:jsonb;not null"`
+    FamilyID         *uuid.UUID      `gorm:"type:uuid"`
+    CreatedAt        time.Time       `gorm:"not null;default:now()"`
 }
 
-/// State guide from database
-pub struct StateGuide {
-    pub id: Uuid,
-    pub state_code: String,
-    pub state_name: String,
-    pub status: String,
-    pub requirements: serde_json::Value,
-    pub guide_content: String,
-    pub last_reviewed_at: Option<DateTime<Utc>>,
-    pub next_review_due: Option<DateTime<Utc>>,
-    pub reviewed_by: Option<String>,
-    pub legal_disclaimer: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+func (QuizResult) TableName() string { return "disc_quiz_results" }
+
+// StateGuide is a state guide from database.
+// GORM model for disc_state_guides table.
+type StateGuide struct {
+    ID              uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    StateCode       string          `gorm:"type:char(2);uniqueIndex;not null"`
+    StateName       string          `gorm:"not null"`
+    Status          string          `gorm:"not null;default:'draft'"`
+    Requirements    json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+    GuideContent    string          `gorm:"not null;default:''"`
+    LastReviewedAt  *time.Time
+    NextReviewDue   *time.Time
+    ReviewedBy      *string
+    LegalDisclaimer string          `gorm:"not null"`
+    CreatedAt       time.Time       `gorm:"not null;default:now()"`
+    UpdatedAt       time.Time       `gorm:"not null;default:now()"`
 }
 
-/// State guide summary for list endpoint
-pub struct StateGuideSummary {
-    pub state_code: String,
-    pub state_name: String,
-    pub status: String,
-    pub last_reviewed_at: Option<DateTime<Utc>>,
+func (StateGuide) TableName() string { return "disc_state_guides" }
+
+// StateGuideSummary is a state guide summary for list endpoint.
+type StateGuideSummary struct {
+    StateCode      string     `json:"state_code"`
+    StateName      string     `json:"state_name"`
+    Status         string     `json:"status"`
+    LastReviewedAt *time.Time `json:"last_reviewed_at,omitempty"`
 }
 
-/// Content page from database
-pub struct ContentPage {
-    pub id: Uuid,
-    pub slug: String,
-    pub title: String,
-    pub category: String,
-    pub content: String,
-    pub meta_title: Option<String>,
-    pub meta_description: Option<String>,
-    pub status: String,
-    pub display_order: i16,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// ContentPage is a content page from database.
+// GORM model for disc_content_pages table.
+type ContentPage struct {
+    ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    Slug            string    `gorm:"uniqueIndex;not null"`
+    Title           string    `gorm:"not null"`
+    Category        string    `gorm:"not null"`
+    Content         string    `gorm:"not null;default:''"`
+    MetaTitle       *string
+    MetaDescription *string
+    Status          string    `gorm:"not null;default:'draft'"`
+    DisplayOrder    int16     `gorm:"not null;default:0"`
+    CreatedAt       time.Time `gorm:"not null;default:now()"`
+    UpdatedAt       time.Time `gorm:"not null;default:now()"`
 }
 
-/// Content page summary for list endpoint
-pub struct ContentPageSummary {
-    pub slug: String,
-    pub title: String,
-    pub category: String,
+func (ContentPage) TableName() string { return "disc_content_pages" }
+
+// ContentPageSummary is a content page summary for list endpoint.
+type ContentPageSummary struct {
+    Slug     string `json:"slug"`
+    Title    string `json:"title"`
+    Category string `json:"category"`
 }
 
-/// Input for creating a quiz result (repository input)
-pub struct CreateQuizResult {
-    pub quiz_definition_id: Uuid,
-    pub share_id: String,
-    pub session_token: Option<String>,
-    pub answers: serde_json::Value,
-    pub scores: serde_json::Value,
-    pub recommendations: serde_json::Value,
+// CreateQuizResult is the input for creating a quiz result (repository input).
+type CreateQuizResult struct {
+    QuizDefinitionID uuid.UUID       `json:"quiz_definition_id"`
+    ShareID          string          `json:"share_id"`
+    SessionToken     *string         `json:"session_token,omitempty"`
+    Answers          json.RawMessage `json:"answers"`
+    Scores           json.RawMessage `json:"scores"`
+    Recommendations  json.RawMessage `json:"recommendations"`
 }
 ```
 
@@ -845,7 +826,7 @@ pub struct CreateQuizResult {
 ## §9 Quiz Scoring Engine
 
 The quiz scoring engine is the primary domain-specific logic in discover::. It lives in
-`src/discover/service.rs` within `DiscoveryServiceImpl::submit_quiz`. `[S§5.1.1]`
+`internal/discover/service.go` within `DiscoveryServiceImpl.SubmitQuiz`. `[S§5.1.1]`
 
 ### §9.1 Scoring Algorithm
 
@@ -860,18 +841,21 @@ weights (stored in `disc_quiz_definitions.questions` JSONB). The scoring process
 3. **Accumulate raw scores** — for each answered question, look up the selected answer's
    weights and add them to the running total per methodology:
    ```
-   for (question_id, answer_id) in submitted_answers:
-       weights = quiz.questions[question_id].answers[answer_id].weights
-       for (methodology_slug, weight) in weights:
-           raw_scores[methodology_slug] += weight
+   for questionID, answerID := range submittedAnswers {
+       weights := quiz.Questions[questionID].Answers[answerID].Weights
+       for methodologySlug, weight := range weights {
+           rawScores[methodologySlug] += weight
+       }
+   }
    ```
 4. **Normalize scores** — divide each methodology's raw score by the maximum possible score
    for that methodology (sum of its highest weight per question):
    ```
-   for methodology in raw_scores:
-       max_possible = sum of max(answer.weights[methodology] for answer in question.answers)
+   for methodology := range rawScores {
+       maxPossible := sum of max(answer.Weights[methodology] for answer in question.Answers)
                       for each question in quiz
-       normalized_scores[methodology] = raw_scores[methodology] / max_possible
+       normalizedScores[methodology] = rawScores[methodology] / maxPossible
+   }
    ```
 5. **Rank methodologies** — sort by normalized score descending. Convert to 0-100
    percentage for display.
@@ -884,11 +868,11 @@ weights (stored in `disc_quiz_definitions.questions` JSONB). The scoring process
 The `GET /v1/discovery/quiz` endpoint MUST strip scoring weights from the response.
 `[S§5.1.1]` — the quiz must not be gameable.
 
-```rust
-// In DiscoveryServiceImpl::get_active_quiz
-fn strip_weights(definition: &QuizDefinition) -> QuizResponse {
+```go
+// In DiscoveryServiceImpl.GetActiveQuiz
+func stripWeights(definition *QuizDefinition) *QuizResponse {
     // Parse questions JSONB, map each question to QuizQuestionResponse
-    // with answers that have id + text only (no weights field)
+    // with answers that have ID + Text only (no Weights field)
     // ...
 }
 ```
@@ -903,26 +887,20 @@ Quiz results use a **nanoid** identifier (12 characters, base62 alphabet) as the
 `[S§5.1.1, S§5.1.2]`
 
 - **Format**: 12 characters from `[0-9A-Za-z]` (base62)
-- **Collision probability**: With 62^12 ≈ 3.2 × 10^21 possible IDs, collision is negligible
+- **Collision probability**: With 62^12 ~ 3.2 x 10^21 possible IDs, collision is negligible
   at any realistic quiz volume
 - **URL safety**: No special characters; safe to embed in URLs without encoding
 - **Example**: `aB3kLm9xPq2R`
 
-Generation uses the `nanoid` crate:
+Generation uses the `gonanoid` package:
 
-```rust
-use nanoid::nanoid;
+```go
+import gonanoid "github.com/matoous/go-nanoid/v2"
 
-const SHARE_ID_ALPHABET: &[char] = &[
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-    'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-];
+const shareIDAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-fn generate_share_id() -> String {
-    nanoid!(12, SHARE_ID_ALPHABET)
+func generateShareID() (string, error) {
+    return gonanoid.Generate(shareIDAlphabet, 12)
 }
 ```
 
@@ -938,8 +916,8 @@ offers to import their quiz results. `[S§5.1.3]`
 2. User creates account and enters onboarding wizard
 3. Onboarding wizard prompts: "Did you already take our methodology quiz?" with an input
    for the result URL or share ID
-4. `onboard::` calls `discover::DiscoveryService::claim_quiz_result(scope, share_id)`
-5. `claim_quiz_result` sets `disc_quiz_results.family_id` to the family's ID
+4. `onboard::` calls `discover::DiscoveryService.ClaimQuizResult(ctx, scope, shareID)`
+5. `ClaimQuizResult` sets `disc_quiz_results.family_id` to the family's ID
 6. `onboard::` reads the result's top recommendation and pre-populates the methodology
    selection wizard `[S§5.1.3]`
 
@@ -948,8 +926,8 @@ bookmark the result URL, share it, or enter the code on a different device. No c
 browser sessions are required for the transfer. `[S§5.1.3]`
 
 **Conflict handling**: If a quiz result is already claimed by a different family,
-`claim_quiz_result` returns `DiscoverError::QuizResultAlreadyClaimed`. The result data is
-still visible via `get_quiz_result` (it's public content), but the ownership link cannot
+`ClaimQuizResult` returns `ErrQuizResultAlreadyClaimed`. The result data is
+still visible via `GetQuizResult` (it's public content), but the ownership link cannot
 be transferred.
 
 ---
@@ -957,7 +935,7 @@ be transferred.
 ## §10 Astro/API Content Split
 
 Discovery content is split between the **Astro static site** (which generates SEO-optimized
-HTML at build time) and the **Rust API** (which serves JSON data). `[ARCH §2.4, S§5.5]`
+HTML at build time) and the **Go API** (which serves JSON data). `[ARCH §2.4, S§5.5]`
 
 ### §10.1 What Astro Builds
 
@@ -965,28 +943,28 @@ Astro generates static pages from API data at build time (`astro build`):
 
 | Page Set | Source | Route Pattern |
 |----------|--------|---------------|
-| Methodology explorer (6 pages) | `method::MethodologyService::list_methodologies()` + `get_methodology()` | `/explore/:slug` |
-| State legal guides (51 pages) | `discover::DiscoveryService::list_state_guides()` + `get_state_guide()` | `/states/:state_code` |
-| Homeschooling 101 (~8 pages) | `discover::DiscoveryService::list_content_pages()` + `get_content_page()` | `/101/:slug` |
-| Advocacy content (~2 pages) | `discover::DiscoveryService::list_content_pages()` + `get_content_page()` | `/why/:slug` |
+| Methodology explorer (6 pages) | `method::MethodologyService.ListMethodologies()` + `GetMethodology()` | `/explore/:slug` |
+| State legal guides (51 pages) | `discover::DiscoveryService.ListStateGuides()` + `GetStateGuide()` | `/states/:state_code` |
+| Homeschooling 101 (~8 pages) | `discover::DiscoveryService.ListContentPages()` + `GetContentPage()` | `/101/:slug` |
+| Advocacy content (~2 pages) | `discover::DiscoveryService.ListContentPages()` + `GetContentPage()` | `/why/:slug` |
 | Quiz landing page (1 page) | Static template (quiz is client-side interactive) | `/quiz` |
 
 **Build-time data flow**:
 ```
 Astro build step
-    │
-    ├── Fetch GET /v1/methodologies → list of methodology slugs
-    │   └── For each slug: Fetch GET /v1/methodologies/:slug → full detail
-    │       (method:: API, not discover::)
-    │
-    ├── Fetch GET /v1/discovery/state-guides → list of state codes
-    │   └── For each state: Fetch GET /v1/discovery/state-guides/:state_code
-    │
-    └── Fetch GET /v1/discovery/content (Phase 2) → list of content slugs
-        └── For each slug: Fetch GET /v1/discovery/content/:slug
+    |
+    +-- Fetch GET /v1/methodologies -> list of methodology slugs
+    |   +-- For each slug: Fetch GET /v1/methodologies/:slug -> full detail
+    |       (method:: API, not discover::)
+    |
+    +-- Fetch GET /v1/discovery/state-guides -> list of state codes
+    |   +-- For each state: Fetch GET /v1/discovery/state-guides/:state_code
+    |
+    +-- Fetch GET /v1/discovery/content (Phase 2) -> list of content slugs
+        +-- For each slug: Fetch GET /v1/discovery/content/:slug
 ```
 
-### §10.2 What the Rust API Serves at Runtime
+### §10.2 What the Go API Serves at Runtime
 
 Only the **quiz** requires runtime API interaction. All other Discovery content is static
 HTML served by Cloudflare Pages.
@@ -1081,27 +1059,27 @@ Example for New York (high regulation):
 State guides follow a defined editorial lifecycle. `[S§5.3]`
 
 ```
-    ┌───────────┐
-    │   draft   │──── Initial creation (seed migration)
-    └─────┬─────┘
-          │
+    +----------+
+    |  draft   |---- Initial creation (seed migration)
+    +----+-----+
+         |
     Content written + reviewed
-          │
-    ┌─────▼──────────┐
-    │   published    │──── Publicly visible, SEO-indexed
-    └─────┬──────────┘
-          │
+         |
+    +----v---------+
+    |  published   |---- Publicly visible, SEO-indexed
+    +----+---------+
+         |
     next_review_due date reached
-          │
-    ┌─────▼──────────┐
-    │  review_due    │──── Still visible, flagged for editorial review
-    └─────┬──────────┘
-          │
+         |
+    +----v---------+
+    |  review_due  |---- Still visible, flagged for editorial review
+    +----+---------+
+         |
     Content reviewed + updated
-          │
-    ┌─────▼──────────┐
-    │   published    │──── last_reviewed_at + next_review_due updated
-    └────────────────┘
+         |
+    +----v---------+
+    |  published   |---- last_reviewed_at + next_review_due updated
+    +--------------+
 ```
 
 **Review cadence**: Every guide MUST be reviewed at minimum annually. `[S§5.3]`
@@ -1119,41 +1097,43 @@ enable editorial management via an admin UI.
 
 ## §12 Error Types
 
-The `DiscoverError` enum lives in `src/discover/models.rs` (or `src/discover/errors.rs`
+The `DiscoverError` types live in `internal/discover/models.go` (or `internal/discover/errors.go`
 if the domain needs a separate error file). Errors map to HTTP status codes via
-`From<DiscoverError> for AppError`. `[CODING §2.2]`
+conversion to `AppError`. `[CODING §2.2]`
 
-```rust
-use thiserror::Error;
+```go
+import (
+    "errors"
+    "fmt"
+)
 
-#[derive(Debug, Error)]
-pub enum DiscoverError {
-    #[error("no active quiz definition found")]
-    NoActiveQuiz,
+var (
+    ErrNoActiveQuiz            = errors.New("no active quiz definition found")
+    ErrQuizResultNotFound      = errors.New("quiz result not found")
+    ErrInvalidQuestionID       = errors.New("invalid quiz answer: question not found")
+    ErrInvalidAnswerID         = errors.New("invalid quiz answer: answer not valid for question")
+    ErrStateGuideNotFound      = errors.New("state guide not found")
+    ErrStateGuideNotPublished  = errors.New("state guide not published")
+    ErrContentPageNotFound     = errors.New("content page not found")
+    ErrQuizResultAlreadyClaimed = errors.New("quiz result already claimed by another family")
+    ErrInvalidStateCode        = errors.New("invalid state code format")
+)
 
-    #[error("quiz result not found")]
-    QuizResultNotFound,
+// DiscoverError wraps a discover-specific error with additional context.
+type DiscoverError struct {
+    Err        error
+    QuestionID string
+    AnswerID   string
+    StateCode  string
+    Slug       string
+}
 
-    #[error("invalid quiz answer: question '{question_id}' not found")]
-    InvalidQuestionId { question_id: String },
+func (e *DiscoverError) Error() string {
+    return e.Err.Error()
+}
 
-    #[error("invalid quiz answer: answer '{answer_id}' not valid for question '{question_id}'")]
-    InvalidAnswerId { question_id: String, answer_id: String },
-
-    #[error("state guide not found for state code '{state_code}'")]
-    StateGuideNotFound { state_code: String },
-
-    #[error("state guide not published for state code '{state_code}'")]
-    StateGuideNotPublished { state_code: String },
-
-    #[error("content page not found: '{slug}'")]
-    ContentPageNotFound { slug: String },
-
-    #[error("quiz result already claimed by another family")]
-    QuizResultAlreadyClaimed,
-
-    #[error("invalid state code format")]
-    InvalidStateCode,
+func (e *DiscoverError) Unwrap() error {
+    return e.Err
 }
 ```
 
@@ -1161,48 +1141,43 @@ pub enum DiscoverError {
 
 | Error Variant | HTTP Status | Client Message |
 |---------------|-------------|----------------|
-| `NoActiveQuiz` | 404 Not Found | "No quiz is currently available." |
-| `QuizResultNotFound` | 404 Not Found | "Quiz result not found." |
-| `InvalidQuestionId` | 422 Unprocessable Entity | "Invalid quiz submission." |
-| `InvalidAnswerId` | 422 Unprocessable Entity | "Invalid quiz submission." |
-| `StateGuideNotFound` | 404 Not Found | "State guide not found." |
-| `StateGuideNotPublished` | 404 Not Found | "State guide not found." |
-| `ContentPageNotFound` | 404 Not Found | "Content not found." |
-| `QuizResultAlreadyClaimed` | 409 Conflict | "This quiz result is already linked to an account." |
-| `InvalidStateCode` | 422 Unprocessable Entity | "Invalid state code." |
+| `ErrNoActiveQuiz` | 404 Not Found | "No quiz is currently available." |
+| `ErrQuizResultNotFound` | 404 Not Found | "Quiz result not found." |
+| `ErrInvalidQuestionID` | 422 Unprocessable Entity | "Invalid quiz submission." |
+| `ErrInvalidAnswerID` | 422 Unprocessable Entity | "Invalid quiz submission." |
+| `ErrStateGuideNotFound` | 404 Not Found | "State guide not found." |
+| `ErrStateGuideNotPublished` | 404 Not Found | "State guide not found." |
+| `ErrContentPageNotFound` | 404 Not Found | "Content not found." |
+| `ErrQuizResultAlreadyClaimed` | 409 Conflict | "This quiz result is already linked to an account." |
+| `ErrInvalidStateCode` | 422 Unprocessable Entity | "Invalid state code." |
 
-**Note**: `StateGuideNotPublished` maps to 404 (not 403) to avoid revealing that a draft
+**Note**: `ErrStateGuideNotPublished` maps to 404 (not 403) to avoid revealing that a draft
 guide exists. Internal error details are logged but never returned in API responses.
 `[CODING §2.2]`
 
-```rust
-impl From<DiscoverError> for AppError {
-    fn from(err: DiscoverError) -> Self {
-        match err {
-            DiscoverError::NoActiveQuiz => AppError::not_found("No quiz is currently available."),
-            DiscoverError::QuizResultNotFound => AppError::not_found("Quiz result not found."),
-            DiscoverError::InvalidQuestionId { .. } => {
-                AppError::unprocessable("Invalid quiz submission.")
-            }
-            DiscoverError::InvalidAnswerId { .. } => {
-                AppError::unprocessable("Invalid quiz submission.")
-            }
-            DiscoverError::StateGuideNotFound { .. } => {
-                AppError::not_found("State guide not found.")
-            }
-            DiscoverError::StateGuideNotPublished { .. } => {
-                AppError::not_found("State guide not found.")
-            }
-            DiscoverError::ContentPageNotFound { .. } => {
-                AppError::not_found("Content not found.")
-            }
-            DiscoverError::QuizResultAlreadyClaimed => {
-                AppError::conflict("This quiz result is already linked to an account.")
-            }
-            DiscoverError::InvalidStateCode => {
-                AppError::unprocessable("Invalid state code.")
-            }
-        }
+```go
+func toAppError(err error) *AppError {
+    switch {
+    case errors.Is(err, ErrNoActiveQuiz):
+        return AppErrorNotFound("No quiz is currently available.")
+    case errors.Is(err, ErrQuizResultNotFound):
+        return AppErrorNotFound("Quiz result not found.")
+    case errors.Is(err, ErrInvalidQuestionID):
+        return AppErrorUnprocessable("Invalid quiz submission.")
+    case errors.Is(err, ErrInvalidAnswerID):
+        return AppErrorUnprocessable("Invalid quiz submission.")
+    case errors.Is(err, ErrStateGuideNotFound):
+        return AppErrorNotFound("State guide not found.")
+    case errors.Is(err, ErrStateGuideNotPublished):
+        return AppErrorNotFound("State guide not found.")
+    case errors.Is(err, ErrContentPageNotFound):
+        return AppErrorNotFound("Content not found.")
+    case errors.Is(err, ErrQuizResultAlreadyClaimed):
+        return AppErrorConflict("This quiz result is already linked to an account.")
+    case errors.Is(err, ErrInvalidStateCode):
+        return AppErrorUnprocessable("Invalid state code.")
+    default:
+        return AppErrorInternal("An internal error occurred.")
     }
 }
 ```
@@ -1215,11 +1190,11 @@ impl From<DiscoverError> for AppError {
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `DiscoveryService` trait methods | `onboard::`, `comply::` | `Arc<dyn DiscoveryService>` via AppState |
-| `get_quiz_result()` | `onboard::` | Service call — pre-populate methodology wizard from quiz result `[S§5.1.3]` |
-| `claim_quiz_result()` | `onboard::` | Service call — link anonymous result to new family account `[S§5.1.3]` |
-| `get_state_requirements()` | `comply::` | Service call — structured state requirements for compliance auto-configuration `[S§5.3]` |
-| `list_state_guides()` | `comply::` | Service call — state list for compliance setup |
+| `DiscoveryService` interface methods | `onboard::`, `comply::` | `DiscoveryService` interface value via AppState |
+| `GetQuizResult()` | `onboard::` | Service call — pre-populate methodology wizard from quiz result `[S§5.1.3]` |
+| `ClaimQuizResult()` | `onboard::` | Service call — link anonymous result to new family account `[S§5.1.3]` |
+| `GetStateRequirements()` | `comply::` | Service call — structured state requirements for compliance auto-configuration `[S§5.3]` |
+| `ListStateGuides()` | `comply::` | Service call — state list for compliance setup |
 | `StateGuideRequirements` type | `comply::` | Shared type — structured requirements data |
 
 ### §13.2 discover:: Consumes
@@ -1252,10 +1227,10 @@ calls during the onboarding flow.
 - `disc_` tables: `disc_quiz_definitions`, `disc_quiz_results`, `disc_state_guides`, `disc_content_pages`
 - Seed migration: 51 state guide rows (draft), 8 Homeschooling 101 stubs, 2 advocacy stubs
 - Public endpoints: `GET /v1/discovery/quiz`, `POST /v1/discovery/quiz/results`, `GET /v1/discovery/quiz/results/:share_id`, `GET /v1/discovery/state-guides`, `GET /v1/discovery/state-guides/:state_code`
-- `DiscoveryService` trait + `DiscoveryServiceImpl`
+- `DiscoveryService` interface + `DiscoveryServiceImpl`
 - Quiz scoring engine (weighted-sum scoring, weight stripping, nanoid share IDs)
-- Repository traits + PostgreSQL implementations for quiz and state guides
-- `DiscoverError` enum + HTTP mapping
+- Repository interfaces + PostgreSQL implementations for quiz and state guides
+- `DiscoverError` types + HTTP mapping
 - All Phase 1 models (request, response, internal)
 - OpenAPI spec + TypeScript type generation
 
@@ -1299,12 +1274,12 @@ these as acceptance criteria for code review and integration testing.
 16. `GET /v1/discovery/state-guides/:state_code` returns 404 for draft (unpublished) guides
 17. State guide responses include `last_reviewed_at` and `legal_disclaimer`
 18. `StateGuideRequirements` is deserializable by comply:: for compliance configuration
-19. `claim_quiz_result` links result to family and returns updated response (Phase 2)
-20. `claim_quiz_result` returns 409 when result is already claimed by a different family (Phase 2)
-21. `claim_quiz_result` allows re-claiming by the same family (idempotent) (Phase 2)
-22. No endpoint under `src/discover/` requires `FamilyScope` (except `claim_quiz_result`)
+19. `ClaimQuizResult` links result to family and returns updated response (Phase 2)
+20. `ClaimQuizResult` returns 409 when result is already claimed by a different family (Phase 2)
+21. `ClaimQuizResult` allows re-claiming by the same family (idempotent) (Phase 2)
+22. No endpoint under `internal/discover/` requires `FamilyScope` (except `ClaimQuizResult`)
 23. All API error responses return generic messages, not SQL or internal details
-24. No code under `src/discover/` branches on methodology name/slug
+24. No code under `internal/discover/` branches on methodology name/slug
 25. `disc_` tables have NO RLS policies
 26. Quiz scoring produces deterministic results for the same answers
 27. Methodology names in quiz results come from `method::` service, not hardcoded strings
@@ -1323,17 +1298,16 @@ these as acceptance criteria for code review and integration testing.
 - [ ] Create migration: `disc_content_pages` table
 - [ ] Create seed migration: 51 state guide rows (draft status)
 - [ ] Create seed migration: 8 Homeschooling 101 + 2 advocacy content page stubs
-- [ ] Regenerate SeaORM entities from migrations
 
-#### Ports & Traits
-- [ ] Define `DiscoveryService` trait in `src/discover/ports.rs`
-- [ ] Define `QuizDefinitionRepository` trait in `src/discover/ports.rs`
-- [ ] Define `QuizResultRepository` trait in `src/discover/ports.rs`
-- [ ] Define `StateGuideRepository` trait in `src/discover/ports.rs`
+#### Interfaces
+- [ ] Define `DiscoveryService` interface in `internal/discover/ports.go`
+- [ ] Define `QuizDefinitionRepository` interface in `internal/discover/ports.go`
+- [ ] Define `QuizResultRepository` interface in `internal/discover/ports.go`
+- [ ] Define `StateGuideRepository` interface in `internal/discover/ports.go`
 
 #### Error Types
-- [ ] Define `DiscoverError` enum
-- [ ] Implement `From<DiscoverError> for AppError` conversion
+- [ ] Define `DiscoverError` sentinel errors and wrapper type
+- [ ] Implement `toAppError` conversion function
 
 #### Repository Implementations
 - [ ] Implement `PgQuizDefinitionRepository`
@@ -1344,8 +1318,8 @@ these as acceptance criteria for code review and integration testing.
 - [ ] Implement `DiscoveryServiceImpl` with Phase 1 methods
 - [ ] Implement quiz scoring engine (weighted-sum, normalization, ranking)
 - [ ] Implement weight stripping for `QuizDefinition` → `QuizResponse` conversion
-- [ ] Implement nanoid share_id generation
-- [ ] Wire `DiscoveryServiceImpl` in `app.rs` with `Arc<dyn DiscoveryService>`
+- [ ] Implement nanoid share_id generation (using `gonanoid`)
+- [ ] Wire `DiscoveryServiceImpl` in `main.go` with `DiscoveryService` interface
 
 #### API Endpoints
 - [ ] `GET  /v1/discovery/quiz` — return active quiz (weights stripped)
@@ -1353,17 +1327,17 @@ these as acceptance criteria for code review and integration testing.
 - [ ] `GET  /v1/discovery/quiz/results/:share_id` — retrieve quiz result
 - [ ] `GET  /v1/discovery/state-guides` — list all state guides
 - [ ] `GET  /v1/discovery/state-guides/:state_code` — get full state guide
-- [ ] Register all endpoints in `public_routes()` (no auth middleware)
+- [ ] Register all endpoints in `publicRoutes()` (no auth middleware)
 
 #### Models
-- [ ] Define `SubmitQuizCommand` request type
+- [ ] Define `SubmitQuizCommand` request type with validator tags
 - [ ] Define all response types (`QuizResponse`, `QuizResultResponse`, `StateGuideResponse`, etc.)
-- [ ] Define all internal types (`QuizDefinition`, `QuizResult`, `StateGuide`, etc.)
-- [ ] Add `nanoid` crate to `Cargo.toml` dependencies
+- [ ] Define all internal types (`QuizDefinition`, `QuizResult`, `StateGuide`, etc.) as GORM models
+- [ ] Add `gonanoid` package to `go.mod` dependencies
 
 #### Code Generation
-- [ ] Regenerate OpenAPI spec (`cargo run --bin openapi-gen`)
-- [ ] Regenerate TypeScript types (`cd frontend && npm run generate-types`)
+- [ ] Generate OpenAPI spec with swaggo (`swag init`)
+- [ ] Generate TypeScript types from OpenAPI spec (`cd frontend && npm run generate-types`)
 
 #### Testing
 - [ ] Unit tests for quiz scoring engine (deterministic scoring, normalization, edge cases)
@@ -1376,11 +1350,11 @@ these as acceptance criteria for code review and integration testing.
 
 ### Phase 2
 
-- [ ] Define `ContentPageRepository` trait
+- [ ] Define `ContentPageRepository` interface
 - [ ] Implement `PgContentPageRepository`
-- [ ] Implement `claim_quiz_result` in service
-- [ ] Add `claim_quiz_result` endpoint to authenticated routes
-- [ ] Implement `get_content_page` and `list_content_pages`
+- [ ] Implement `ClaimQuizResult` in service
+- [ ] Add `ClaimQuizResult` endpoint to authenticated routes
+- [ ] Implement `GetContentPage` and `ListContentPages`
 - [ ] Add content page endpoints
 - [ ] Create quiz content migration (actual questions and scoring weights)
 - [ ] Create state guide content migrations (legal content for initial set of states)
@@ -1390,17 +1364,17 @@ these as acceptance criteria for code review and integration testing.
 ## §17 Module Structure
 
 ```
-src/discover/
-├── mod.rs              # Re-exports, domain-level doc comments
-├── handlers.rs         # Axum route handlers (all public, no auth)
-├── service.rs          # DiscoveryServiceImpl — quiz scoring, weight stripping
-├── repository.rs       # PgQuizDefinitionRepository, PgQuizResultRepository,
+internal/discover/
+├── discover.go         # Package root — re-exports, domain-level doc comments
+├── handlers.go         # Echo route handlers (all public, no auth)
+├── service.go          # DiscoveryServiceImpl — quiz scoring, weight stripping
+├── repository.go       # PgQuizDefinitionRepository, PgQuizResultRepository,
 │                       # PgStateGuideRepository, PgContentPageRepository
-├── models.rs           # Request/response types, DiscoverError enum, internal types
-├── ports.rs            # DiscoveryService trait, all repository traits
-└── entities/           # SeaORM-generated entity files (do not hand-edit)
+├── models.go           # Request/response types, DiscoverError types, internal types,
+│                       # GORM models
+└── ports.go            # DiscoveryService interface, all repository interfaces
 ```
 
-**Note**: No `domain/` subdirectory, no `adapters/` directory, no `events.rs`, no
-`event_handlers.rs`. Discovery is a non-complex domain with no aggregate roots, no
+**Note**: No `domain/` subdirectory, no `adapters/` directory, no `events.go`, no
+`event_handlers.go`. Discovery is a non-complex domain with no aggregate roots, no
 external service adapters, and no emitted events. `[ARCH §4.5]`

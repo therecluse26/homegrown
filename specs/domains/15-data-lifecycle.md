@@ -11,9 +11,9 @@ data portability commitments `[S§8.5, S§16.3]`.
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/lifecycle/` |
+| **Module path** | `internal/lifecycle/` |
 | **DB prefix** | `lifecycle_` |
-| **Complexity class** | Non-complex (no `domain/` subdirectory) `[ARCH §4.5]` |
+| **Complexity class** | Non-complex `[ARCH §4.5]` |
 | **External adapter** | None (orchestrates other domains' service interfaces) |
 | **Key constraint** | Every user-data query family-scoped via `FamilyScope` `[CODING §2.4, §2.5]`; COPPA deletion MUST complete within regulatory timeframe; export MUST complete within 24 hours `[S§8.5]` |
 
@@ -26,11 +26,11 @@ records, cross-domain orchestration for export and deletion workflows.
 file storage (owned by `media::`). Marketplace purchase records retained for legal compliance
 (owned by `mkt::`).
 
-**What lifecycle:: delegates**: Per-domain data extraction → each domain's `ExportHandler`
-implementation. Per-domain data deletion → each domain's `DeletionHandler` implementation.
-Notification delivery → `notify::` (via domain events). Subscription cancellation →
-`billing::BillingService`. Session revocation → `iam::KratosAdapter::revoke_sessions()`.
-Background job scheduling → sidekiq-rs `[ARCH §12]`.
+**What lifecycle:: delegates**: Per-domain data extraction -> each domain's `ExportHandler`
+implementation. Per-domain data deletion -> each domain's `DeletionHandler` implementation.
+Notification delivery -> `notify::` (via domain events). Subscription cancellation ->
+`billing.BillingService`. Session revocation -> `iam.KratosAdapter.RevokeSessions()`.
+Background job scheduling -> hibiken/asynq `[ARCH §12]`.
 
 ---
 
@@ -59,7 +59,7 @@ All tables use the `lifecycle_` prefix. `[ARCH §5.1]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_lifecycle_tables.rs
+-- Migration: YYYYMMDD_000001_create_lifecycle_tables.sql
 -- =============================================================================
 
 -- Export requests: tracks family data export jobs
@@ -227,93 +227,54 @@ PATCH  /v1/admin/lifecycle/retention/:id    # Update retention policy
 
 ## §5 Service Interface
 
-```rust
-#[async_trait]
-pub trait LifecycleService: Send + Sync {
+```go
+// internal/lifecycle/ports.go
+
+// LifecycleService defines the data lifecycle domain's service interface.
+type LifecycleService interface {
     // === Data Export ===
 
-    /// Request a full data export for the family.
-    /// Enqueues a background job that calls each domain's ExportHandler.
-    async fn request_export(
-        &self,
-        auth: &AuthContext,
-        req: RequestExportInput,
-    ) -> Result<ExportRequestId, AppError>;
+    // RequestExport requests a full data export for the family.
+    // Enqueues a background job that calls each domain's ExportHandler.
+    RequestExport(ctx context.Context, auth *AuthContext, req *RequestExportInput) (uuid.UUID, error)
 
-    /// Get export request status. Returns download URL if completed.
-    async fn get_export_status(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        export_id: Uuid,
-    ) -> Result<ExportStatusResponse, AppError>;
+    // GetExportStatus returns export request status. Returns download URL if completed.
+    GetExportStatus(ctx context.Context, auth *AuthContext, scope *FamilyScope, exportID uuid.UUID) (*ExportStatusResponse, error)
 
-    /// List past export requests for the family.
-    async fn list_exports(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-        pagination: PaginationParams,
-    ) -> Result<PaginatedResponse<ExportSummary>, AppError>;
+    // ListExports lists past export requests for the family.
+    ListExports(ctx context.Context, auth *AuthContext, scope *FamilyScope, pagination *PaginationParams) (*PaginatedResponse[ExportSummary], error)
 
     // === Account Deletion ===
 
-    /// Request account deletion. Starts a grace period.
-    /// Sends confirmation email and offers data export.
-    async fn request_deletion(
-        &self,
-        auth: &AuthContext,
-        req: RequestDeletionInput,
-    ) -> Result<DeletionRequestId, AppError>;
+    // RequestDeletion requests account deletion. Starts a grace period.
+    // Sends confirmation email and offers data export.
+    RequestDeletion(ctx context.Context, auth *AuthContext, req *RequestDeletionInput) (uuid.UUID, error)
 
-    /// Get active deletion request status.
-    async fn get_deletion_status(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-    ) -> Result<Option<DeletionStatusResponse>, AppError>;
+    // GetDeletionStatus returns active deletion request status.
+    GetDeletionStatus(ctx context.Context, auth *AuthContext, scope *FamilyScope) (*DeletionStatusResponse, error)
 
-    /// Cancel a pending deletion during the grace period.
-    async fn cancel_deletion(
-        &self,
-        auth: &AuthContext,
-        scope: &FamilyScope,
-    ) -> Result<(), AppError>;
+    // CancelDeletion cancels a pending deletion during the grace period.
+    CancelDeletion(ctx context.Context, auth *AuthContext, scope *FamilyScope) error
 
     // === Account Recovery ===
 
-    /// Initiate account recovery (unauthenticated).
-    async fn initiate_recovery(
-        &self,
-        req: InitiateRecoveryInput,
-    ) -> Result<RecoveryRequestId, AppError>;
+    // InitiateRecovery initiates account recovery (unauthenticated).
+    InitiateRecovery(ctx context.Context, req *InitiateRecoveryInput) (uuid.UUID, error)
 
-    /// Check recovery request status.
-    async fn get_recovery_status(
-        &self,
-        recovery_id: Uuid,
-    ) -> Result<RecoveryStatusResponse, AppError>;
+    // GetRecoveryStatus checks recovery request status.
+    GetRecoveryStatus(ctx context.Context, recoveryID uuid.UUID) (*RecoveryStatusResponse, error)
 
     // === Session Management ===
 
-    /// List active sessions for the current user.
-    async fn list_sessions(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<Vec<SessionInfo>, AppError>;
+    // ListSessions lists active sessions for the current user.
+    ListSessions(ctx context.Context, auth *AuthContext) ([]SessionInfo, error)
 
-    /// Revoke a specific session.
-    async fn revoke_session(
-        &self,
-        auth: &AuthContext,
-        session_id: String,
-    ) -> Result<(), AppError>;
+    // RevokeSession revokes a specific session.
+    RevokeSession(ctx context.Context, auth *AuthContext, sessionID string) error
 
-    /// Revoke all sessions except the current one ("sign out everywhere").
-    async fn revoke_all_sessions(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<u32, AppError>; // returns count of revoked sessions
+    // RevokeAllSessions revokes all sessions except the current one ("sign out everywhere").
+    // Returns count of revoked sessions.
+    RevokeAllSessions(ctx context.Context, auth *AuthContext) (uint32, error)
 }
 ```
 
@@ -321,90 +282,43 @@ pub trait LifecycleService: Send + Sync {
 
 ## §6 Repository Interfaces
 
-```rust
-#[async_trait]
-pub trait ExportRequestRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        input: &CreateExportRequest,
-    ) -> Result<ExportRequest, DbErr>;
+```go
+// internal/lifecycle/ports.go (continued)
 
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-    ) -> Result<Option<ExportRequest>, DbErr>;
+// ExportRequestRepository defines persistence operations for lifecycle_export_requests.
+type ExportRequestRepository interface {
+    Create(ctx context.Context, scope *FamilyScope, input *CreateExportRequest) (*ExportRequest, error)
 
-    async fn list_by_family(
-        &self,
-        scope: &FamilyScope,
-        pagination: &PaginationParams,
-    ) -> Result<Vec<ExportRequest>, DbErr>;
+    FindByID(ctx context.Context, scope *FamilyScope, id uuid.UUID) (*ExportRequest, error)
 
-    async fn update_status(
-        &self,
-        id: Uuid,
-        status: ExportStatus,
-        archive_key: Option<String>,
-        size_bytes: Option<i64>,
-    ) -> Result<(), DbErr>;
+    ListByFamily(ctx context.Context, scope *FamilyScope, pagination *PaginationParams) ([]ExportRequest, error)
+
+    UpdateStatus(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64) error
 }
 
-#[async_trait]
-pub trait DeletionRequestRepository: Send + Sync {
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        input: &CreateDeletionRequest,
-    ) -> Result<DeletionRequest, DbErr>;
+// DeletionRequestRepository defines persistence operations for lifecycle_deletion_requests.
+type DeletionRequestRepository interface {
+    Create(ctx context.Context, scope *FamilyScope, input *CreateDeletionRequest) (*DeletionRequest, error)
 
-    async fn find_active_by_family(
-        &self,
-        scope: &FamilyScope,
-    ) -> Result<Option<DeletionRequest>, DbErr>;
+    FindActiveByFamily(ctx context.Context, scope *FamilyScope) (*DeletionRequest, error)
 
-    async fn update_status(
-        &self,
-        id: Uuid,
-        status: DeletionStatus,
-    ) -> Result<(), DbErr>;
+    UpdateStatus(ctx context.Context, id uuid.UUID, status DeletionStatus) error
 
-    async fn update_domain_status(
-        &self,
-        id: Uuid,
-        domain: &str,
-        completed: bool,
-    ) -> Result<(), DbErr>;
+    UpdateDomainStatus(ctx context.Context, id uuid.UUID, domain string, completed bool) error
 
-    async fn cancel(
-        &self,
-        scope: &FamilyScope,
-        id: Uuid,
-    ) -> Result<(), DbErr>;
+    Cancel(ctx context.Context, scope *FamilyScope, id uuid.UUID) error
 
-    /// Find all deletion requests whose grace period has expired.
-    async fn find_ready_for_deletion(&self) -> Result<Vec<DeletionRequest>, DbErr>;
+    // FindReadyForDeletion finds all deletion requests whose grace period has expired.
+    FindReadyForDeletion(ctx context.Context) ([]DeletionRequest, error)
 }
 
-#[async_trait]
-pub trait RecoveryRequestRepository: Send + Sync {
-    async fn create(
-        &self,
-        input: &CreateRecoveryRequest,
-    ) -> Result<RecoveryRequest, DbErr>;
+// RecoveryRequestRepository defines persistence operations for lifecycle_recovery_requests.
+type RecoveryRequestRepository interface {
+    Create(ctx context.Context, input *CreateRecoveryRequest) (*RecoveryRequest, error)
 
-    async fn find_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<RecoveryRequest>, DbErr>;
+    FindByID(ctx context.Context, id uuid.UUID) (*RecoveryRequest, error)
 
-    async fn update_status(
-        &self,
-        id: Uuid,
-        status: RecoveryStatus,
-        resolved_parent_id: Option<Uuid>,
-    ) -> Result<(), DbErr>;
+    UpdateStatus(ctx context.Context, id uuid.UUID, status RecoveryStatus, resolvedParentID *uuid.UUID) error
 }
 ```
 
@@ -412,46 +326,41 @@ pub trait RecoveryRequestRepository: Send + Sync {
 
 ## §7 Domain Export & Deletion Contracts
 
-Each domain that stores family data MUST implement these traits so lifecycle:: can
+Each domain that stores family data MUST implement these interfaces so lifecycle:: can
 orchestrate cross-domain export and deletion:
 
-```rust
-/// Implemented by each domain that has exportable family data.
-/// Registered at application startup in app.rs.
-#[async_trait]
-pub trait ExportHandler: Send + Sync {
-    /// Domain identifier (e.g., "learning", "social", "compliance")
-    fn domain_name(&self) -> &'static str;
+```go
+// internal/lifecycle/ports.go (continued)
 
-    /// Export all family data for this domain in the requested format.
-    /// Returns a Vec of (filename, content_bytes) pairs.
-    async fn export_family_data(
-        &self,
-        family_id: Uuid,
-        format: ExportFormat,
-    ) -> Result<Vec<(String, Vec<u8>)>, AppError>;
+// ExportHandler is implemented by each domain that has exportable family data.
+// Registered at application startup.
+type ExportHandler interface {
+    // DomainName returns the domain identifier (e.g., "learning", "social", "compliance").
+    DomainName() string
+
+    // ExportFamilyData exports all family data for this domain in the requested format.
+    // Returns a slice of (filename, contentBytes) pairs.
+    ExportFamilyData(ctx context.Context, familyID uuid.UUID, format ExportFormat) ([]ExportFile, error)
 }
 
-/// Implemented by each domain that stores deletable family data.
-/// Registered at application startup in app.rs.
-#[async_trait]
-pub trait DeletionHandler: Send + Sync {
-    /// Domain identifier (e.g., "learning", "social", "compliance")
-    fn domain_name(&self) -> &'static str;
+// ExportFile represents a single file in a data export.
+type ExportFile struct {
+    Filename string
+    Content  []byte
+}
 
-    /// Delete all family data for this domain.
-    /// MUST be idempotent — calling twice with the same family_id MUST NOT error.
-    async fn delete_family_data(
-        &self,
-        family_id: Uuid,
-    ) -> Result<(), AppError>;
+// DeletionHandler is implemented by each domain that stores deletable family data.
+// Registered at application startup.
+type DeletionHandler interface {
+    // DomainName returns the domain identifier (e.g., "learning", "social", "compliance").
+    DomainName() string
 
-    /// Delete data for a specific student within a family.
-    async fn delete_student_data(
-        &self,
-        family_id: Uuid,
-        student_id: Uuid,
-    ) -> Result<(), AppError>;
+    // DeleteFamilyData deletes all family data for this domain.
+    // MUST be idempotent — calling twice with the same family_id MUST NOT error.
+    DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error
+
+    // DeleteStudentData deletes data for a specific student within a family.
+    DeleteStudentData(ctx context.Context, familyID uuid.UUID, studentID uuid.UUID) error
 }
 
 // Domains that MUST implement ExportHandler + DeletionHandler:
@@ -469,101 +378,132 @@ pub trait DeletionHandler: Send + Sync {
 
 ## §8 Models (DTOs)
 
-```rust
+```go
+// internal/lifecycle/models.go
+
 // --- Request types ---
 
-#[derive(Deserialize, ToSchema)]
-pub struct RequestExportInput {
-    /// Export format: "json" or "csv"
-    pub format: Option<ExportFormat>,
-    /// Specific domains to include (None = all)
-    pub include_domains: Option<Vec<String>>,
+// RequestExportInput represents a data export request.
+type RequestExportInput struct {
+    // Export format: "json" or "csv"
+    Format *ExportFormat `json:"format,omitempty"`
+    // Specific domains to include (nil = all)
+    IncludeDomains []string `json:"include_domains,omitempty"`
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct RequestDeletionInput {
-    /// Deletion type
-    pub deletion_type: DeletionType,
-    /// For student-specific deletion
-    pub student_id: Option<Uuid>,
-    /// Optional reason
-    pub reason: Option<String>,
+// RequestDeletionInput represents an account deletion request.
+type RequestDeletionInput struct {
+    // Deletion type
+    DeletionType DeletionType `json:"deletion_type" validate:"required"`
+    // For student-specific deletion
+    StudentID *uuid.UUID `json:"student_id,omitempty"`
+    // Optional reason
+    Reason *string `json:"reason,omitempty"`
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct InitiateRecoveryInput {
-    /// Email address associated with the account
-    pub email: String,
+// InitiateRecoveryInput represents an account recovery initiation request.
+type InitiateRecoveryInput struct {
+    // Email address associated with the account
+    Email string `json:"email" validate:"required,email"`
 }
 
 // --- Response types ---
 
-#[derive(Serialize, ToSchema)]
-pub struct ExportStatusResponse {
-    pub id: Uuid,
-    pub status: ExportStatus,
-    pub format: ExportFormat,
-    pub size_bytes: Option<i64>,
-    pub download_url: Option<String>,  // pre-signed R2 URL, short TTL
-    pub created_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub expires_at: DateTime<Utc>,
+// ExportStatusResponse represents the status of a data export request.
+type ExportStatusResponse struct {
+    ID          uuid.UUID    `json:"id"`
+    Status      ExportStatus `json:"status"`
+    Format      ExportFormat `json:"format"`
+    SizeBytes   *int64       `json:"size_bytes"`
+    DownloadURL *string      `json:"download_url"` // pre-signed R2 URL, short TTL
+    CreatedAt   time.Time    `json:"created_at"`
+    CompletedAt *time.Time   `json:"completed_at"`
+    ExpiresAt   time.Time    `json:"expires_at"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct DeletionStatusResponse {
-    pub id: Uuid,
-    pub status: DeletionStatus,
-    pub deletion_type: DeletionType,
-    pub grace_period_ends_at: DateTime<Utc>,
-    pub export_offered: bool,
-    pub export_request_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
+// DeletionStatusResponse represents the status of a deletion request.
+type DeletionStatusResponse struct {
+    ID                uuid.UUID    `json:"id"`
+    Status            DeletionStatus `json:"status"`
+    DeletionType      DeletionType `json:"deletion_type"`
+    GracePeriodEndsAt time.Time    `json:"grace_period_ends_at"`
+    ExportOffered     bool         `json:"export_offered"`
+    ExportRequestID   *uuid.UUID   `json:"export_request_id"`
+    CreatedAt         time.Time    `json:"created_at"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryStatusResponse {
-    pub id: Uuid,
-    pub status: RecoveryStatus,
-    pub verification_method: VerificationMethod,
-    pub created_at: DateTime<Utc>,
+// RecoveryStatusResponse represents the status of a recovery request.
+type RecoveryStatusResponse struct {
+    ID                 uuid.UUID          `json:"id"`
+    Status             RecoveryStatus     `json:"status"`
+    VerificationMethod VerificationMethod `json:"verification_method"`
+    CreatedAt          time.Time          `json:"created_at"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct SessionInfo {
-    pub session_id: String,
-    pub device_type: Option<String>,   // "desktop", "mobile", "tablet"
-    pub user_agent: Option<String>,
-    pub ip_address: Option<String>,    // coarse — city-level only
-    pub last_active: DateTime<Utc>,
-    pub is_current: bool,
+// SessionInfo represents an active login session.
+type SessionInfo struct {
+    SessionID  string     `json:"session_id"`
+    DeviceType *string    `json:"device_type"`  // "desktop", "mobile", "tablet"
+    UserAgent  *string    `json:"user_agent"`
+    IPAddress  *string    `json:"ip_address"`   // coarse — city-level only
+    LastActive time.Time  `json:"last_active"`
+    IsCurrent  bool       `json:"is_current"`
 }
 
 // --- Enums ---
 
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ExportFormat { Json, Csv }
+type ExportFormat string
 
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ExportStatus { Pending, Processing, Completed, Failed, Expired }
+const (
+    ExportFormatJSON ExportFormat = "json"
+    ExportFormatCSV  ExportFormat = "csv"
+)
 
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DeletionType { Family, Student, Coppa }
+type ExportStatus string
 
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DeletionStatus { Pending, GracePeriod, Processing, Completed, Cancelled }
+const (
+    ExportStatusPending    ExportStatus = "pending"
+    ExportStatusProcessing ExportStatus = "processing"
+    ExportStatusCompleted  ExportStatus = "completed"
+    ExportStatusFailed     ExportStatus = "failed"
+    ExportStatusExpired    ExportStatus = "expired"
+)
 
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum RecoveryStatus { Pending, Verified, Escalated, Completed, Denied }
+type DeletionType string
 
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum VerificationMethod { Email, SupportTicket, IdentityDocument }
+const (
+    DeletionTypeFamily  DeletionType = "family"
+    DeletionTypeStudent DeletionType = "student"
+    DeletionTypeCoppa   DeletionType = "coppa"
+)
+
+type DeletionStatus string
+
+const (
+    DeletionStatusPending     DeletionStatus = "pending"
+    DeletionStatusGracePeriod DeletionStatus = "grace_period"
+    DeletionStatusProcessing  DeletionStatus = "processing"
+    DeletionStatusCompleted   DeletionStatus = "completed"
+    DeletionStatusCancelled   DeletionStatus = "cancelled"
+)
+
+type RecoveryStatus string
+
+const (
+    RecoveryStatusPending   RecoveryStatus = "pending"
+    RecoveryStatusVerified  RecoveryStatus = "verified"
+    RecoveryStatusEscalated RecoveryStatus = "escalated"
+    RecoveryStatusCompleted RecoveryStatus = "completed"
+    RecoveryStatusDenied    RecoveryStatus = "denied"
+)
+
+type VerificationMethod string
+
+const (
+    VerificationMethodEmail            VerificationMethod = "email"
+    VerificationMethodSupportTicket    VerificationMethod = "support_ticket"
+    VerificationMethodIdentityDocument VerificationMethod = "identity_document"
+)
 ```
 
 ---
@@ -578,11 +518,11 @@ pub enum VerificationMethod { Email, SupportTicket, IdentityDocument }
 4. Background job:
    a. Sets status to `processing`
    b. Iterates over registered `ExportHandler` implementations
-   c. Each handler returns `Vec<(filename, bytes)>` for the family
+   c. Each handler returns `[]ExportFile` for the family
    d. Job assembles all files into a ZIP archive
    e. Uploads archive to Cloudflare R2 at `exports/{family_id}/{request_id}.zip`
    f. Sets status to `completed`, stores `archive_key` and `size_bytes`
-   g. Publishes `DataExportCompleted` event → `notify::` sends email with download link
+   g. Publishes `DataExportCompleted` event -> `notify::` sends email with download link
 
 ### §9.2 Export File Structure
 
@@ -637,12 +577,12 @@ homegrown-academy-export-{date}/
 4. Service creates `lifecycle_deletion_requests` record with:
    - `status = 'grace_period'`
    - `grace_period_ends_at = now() + 30 days`
-5. Publishes `AccountDeletionRequested` event → `notify::` sends confirmation email
+5. Publishes `AccountDeletionRequested` event -> `notify::` sends confirmation email
 6. During grace period: family can log in, use the platform, and cancel deletion
 7. After grace period: `ProcessDeletionJob` (recurring daily check) transitions to `processing`
 8. Deletion job:
    a. Revokes all Kratos sessions for the family
-   b. Cancels active subscriptions via `billing::BillingService`
+   b. Cancels active subscriptions via `billing.BillingService`
    c. Iterates over registered `DeletionHandler` implementations
    d. Each handler deletes its domain's data for the family
    e. Updates `domain_status` JSONB as each domain completes
@@ -654,7 +594,7 @@ homegrown-academy-export-{date}/
 
 Same workflow as family deletion, but scoped to a single student:
 - Grace period: 7 days (shorter — less data)
-- Only calls `delete_student_data()` on each handler
+- Only calls `DeleteStudentData()` on each handler
 - Family account remains active
 - Marketplace purchases associated with the student remain (legal retention)
 
@@ -662,7 +602,7 @@ Same workflow as family deletion, but scoped to a single student:
 
 When a parent requests deletion of a child's data under COPPA:
 - Grace period: 0 days (immediate processing per COPPA requirements)
-- Status transitions directly from `pending` → `processing`
+- Status transitions directly from `pending` -> `processing`
 - MUST complete within the timeframe required by COPPA regulations
 - Publishes `CoppaDeleteRequested` event for audit trail
 
@@ -730,14 +670,14 @@ Session management provides visibility and control over active login sessions.
 
 - **Single session**: Revoke via `DELETE /v1/account/sessions/:id`
 - **All sessions**: Revoke via `DELETE /v1/account/sessions` (keeps current session)
-- Revocation calls `iam::KratosAdapter::revoke_session()` and clears Redis session cache
+- Revocation calls `iam.KratosAdapter.RevokeSession()` and clears Redis session cache
 - Publishes `SessionRevoked` event for audit logging
 
 ### §12.3 Suspicious Session Detection
 
 Phase 2: If concurrent sessions are detected from geographically distant locations within
 a short time window (e.g., US East and Europe within 30 minutes), publish a
-`SuspiciousSessionDetected` event → `notify::` sends security alert email.
+`SuspiciousSessionDetected` event -> `notify::` sends security alert email.
 
 ---
 
@@ -777,61 +717,46 @@ For cases where email-based recovery fails (compromised email, lost access):
 
 | Event | Payload | Consumers |
 |-------|---------|-----------|
-| `DataExportRequested` | `{ family_id, export_id, format }` | `notify::` (confirmation email) |
-| `DataExportCompleted` | `{ family_id, export_id, download_url }` | `notify::` (download ready email) |
-| `AccountDeletionRequested` | `{ family_id, deletion_type, grace_period_ends_at }` | `notify::` (confirmation email) |
-| `AccountDeletionCompleted` | `{ family_id }` | Audit log |
-| `CoppaDeleteRequested` | `{ family_id, student_id }` | Audit log |
-| `SessionRevoked` | `{ parent_id, session_id, revoke_type }` | Audit log |
+| `DataExportRequested` | `{ FamilyID, ExportID, Format }` | `notify::` (confirmation email) |
+| `DataExportCompleted` | `{ FamilyID, ExportID, DownloadURL }` | `notify::` (download ready email) |
+| `AccountDeletionRequested` | `{ FamilyID, DeletionType, GracePeriodEndsAt }` | `notify::` (confirmation email) |
+| `AccountDeletionCompleted` | `{ FamilyID }` | Audit log |
+| `CoppaDeleteRequested` | `{ FamilyID, StudentID }` | Audit log |
+| `SessionRevoked` | `{ ParentID, SessionID, RevokeType }` | Audit log |
 
 ---
 
 ## §16 Error Types
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum LifecycleError {
-    #[error("Export request not found")]
-    ExportNotFound,
+```go
+// internal/lifecycle/errors.go
 
-    #[error("Export has expired")]
-    ExportExpired,
+import "errors"
 
-    #[error("An active deletion request already exists")]
-    DeletionAlreadyPending,
-
-    #[error("Cannot cancel deletion — grace period has ended")]
-    GracePeriodExpired,
-
-    #[error("Only the primary parent can request family deletion")]
-    NotPrimaryParent,
-
-    #[error("Recovery request not found or expired")]
-    RecoveryNotFound,
-
-    #[error("Recovery request has expired")]
-    RecoveryExpired,
-
-    #[error("Cannot revoke current session via this endpoint")]
-    CannotRevokeCurrent,
-
-    #[error("Database error")]
-    Database(#[from] sea_orm::DbErr),
-}
+var (
+    ErrExportNotFound        = errors.New("export request not found")
+    ErrExportExpired         = errors.New("export has expired")
+    ErrDeletionAlreadyPending = errors.New("an active deletion request already exists")
+    ErrGracePeriodExpired    = errors.New("cannot cancel deletion — grace period has ended")
+    ErrNotPrimaryParent      = errors.New("only the primary parent can request family deletion")
+    ErrRecoveryNotFound      = errors.New("recovery request not found or expired")
+    ErrRecoveryExpired       = errors.New("recovery request has expired")
+    ErrCannotRevokeCurrent   = errors.New("cannot revoke current session via this endpoint")
+)
 ```
 
 **HTTP mapping**:
 
 | Error | HTTP Status |
 |-------|-------------|
-| `ExportNotFound` | 404 |
-| `ExportExpired` | 410 Gone |
-| `DeletionAlreadyPending` | 409 Conflict |
-| `GracePeriodExpired` | 409 Conflict |
-| `NotPrimaryParent` | 403 Forbidden |
-| `RecoveryNotFound` | 404 |
-| `RecoveryExpired` | 410 Gone |
-| `CannotRevokeCurrent` | 400 Bad Request |
+| `ErrExportNotFound` | 404 |
+| `ErrExportExpired` | 410 Gone |
+| `ErrDeletionAlreadyPending` | 409 Conflict |
+| `ErrGracePeriodExpired` | 409 Conflict |
+| `ErrNotPrimaryParent` | 403 Forbidden |
+| `ErrRecoveryNotFound` | 404 |
+| `ErrRecoveryExpired` | 410 Gone |
+| `ErrCannotRevokeCurrent` | 400 Bad Request |
 
 ---
 
@@ -839,13 +764,13 @@ pub enum LifecycleError {
 
 | Direction | Domain | Interaction |
 |-----------|--------|-------------|
-| lifecycle:: → iam:: | Service call | Look up family, revoke Kratos sessions |
-| lifecycle:: → billing:: | Service call | Cancel active subscriptions before deletion |
-| lifecycle:: → all domains | ExportHandler trait | Each domain exports its family data |
-| lifecycle:: → all domains | DeletionHandler trait | Each domain deletes its family data |
-| lifecycle:: → notify:: | Domain event | Export/deletion notifications |
-| lifecycle:: → media:: | DeletionHandler | Delete R2 objects for family |
-| admin:: → lifecycle:: | Service call | View/manage recovery requests, retention policies |
+| lifecycle:: -> iam:: | Service call | Look up family, revoke Kratos sessions |
+| lifecycle:: -> billing:: | Service call | Cancel active subscriptions before deletion |
+| lifecycle:: -> all domains | ExportHandler interface | Each domain exports its family data |
+| lifecycle:: -> all domains | DeletionHandler interface | Each domain deletes its family data |
+| lifecycle:: -> notify:: | Domain event | Export/deletion notifications |
+| lifecycle:: -> media:: | DeletionHandler | Delete R2 objects for family |
+| admin:: -> lifecycle:: | Service call | View/manage recovery requests, retention policies |
 
 ---
 
@@ -887,13 +812,12 @@ pub enum LifecycleError {
 ## §20 Module Structure
 
 ```
-src/lifecycle/
-├── mod.rs              # Re-exports
-├── handlers.rs         # Axum route handlers
-├── service.rs          # Orchestration logic
-├── repository.rs       # lifecycle_ table queries
-├── models.rs           # DTOs (request/response)
-├── ports.rs            # Service + repository trait definitions
-├── events.rs           # Domain events (export/deletion lifecycle)
-└── entities/           # SeaORM-generated (lifecycle_ tables)
+internal/lifecycle/
+├── handler.go          # Echo route handlers
+├── service.go          # Orchestration logic
+├── repository.go       # lifecycle_ table queries
+├── models.go           # GORM models, DTOs (request/response)
+├── ports.go            # Service + repository interface definitions
+├── errors.go           # Sentinel error values
+└── events.go           # Domain events (export/deletion lifecycle)
 ```

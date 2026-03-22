@@ -11,11 +11,11 @@ source for subscription state; the local database mirrors it via webhooks. `[S§
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/billing/` |
+| **Module path** | `internal/billing/` |
 | **DB prefix** | `bill_` `[ARCH §5.1]` |
 | **Complexity class** | Simple (no `domain/` subdirectory) — Hyperswitch delegation; subscription state machine lives in the payment processor `[ARCH §4.5]` |
 | **CQRS** | No — read and write paths are straightforward; no separated query model needed |
-| **External adapter** | `src/billing/adapters/hyperswitch.rs` (Hyperswitch — processor-agnostic subscription + payment orchestration) `[ARCH §2.9]` |
+| **External adapter** | `internal/billing/adapters/hyperswitch.go` (Hyperswitch — processor-agnostic subscription + payment orchestration) `[ARCH §2.9]` |
 | **Key constraint** | One subscription per family `[S§15.3]`; every user-data query family-scoped via `FamilyScope` `[CODING §2.4, §2.5]`; Hyperswitch is authoritative for subscription state — local table is a mirror |
 
 **What billing:: owns**: Subscription lifecycle (create, update, cancel, reactivate, pause, resume),
@@ -26,7 +26,7 @@ Hyperswitch SetupIntents), subscription pricing estimates, creator payout aggreg
 Hyperswitch webhook processing for subscription events.
 
 **What billing:: does NOT own**: Marketplace payments and split payments (owned by `mkt::` —
-`src/mkt/adapters/payment.rs`) `[07-mkt §7]`, the `subscription_tier` column on `iam_families`
+`internal/mkt/adapters/payment.go`) `[07-mkt §7]`, the `subscription_tier` column on `iam_families`
 (owned by `iam::` — updated via event subscription) `[01-iam §3.2]`, revenue split calculation
 (owned by `mkt::`) `[07-mkt §15]`, creator KYC and sub-merchant onboarding (owned by `mkt::`)
 `[07-mkt §11]`, notification delivery (owned by `notify::`), feature gating logic per domain
@@ -35,7 +35,7 @@ membership (owned by `iam::`).
 
 **What billing:: delegates**: Notification delivery → `notify::` (via domain events). User/family
 email lookup → `iam::IamService`. Subscription state machine → Hyperswitch (self-hosted).
-Background job scheduling → sidekiq-rs `[ARCH §12]`. Creator payout execution → `mkt::` Hyperswitch
+Background task scheduling → asynq `[ARCH §12]`. Creator payout execution → `mkt::` Hyperswitch
 adapter (payouts go to sub-merchant accounts managed by `mkt::`) `[07-mkt §7]`.
 
 ---
@@ -59,8 +59,8 @@ other spec sections are included where the billing domain is involved.
 | Third-party payment processor | `[S§15.4]` | §7 (Hyperswitch adapter, Stripe as connector) |
 | Sales tax collection/remittance | `[S§15.4]` | §7 (Stripe Tax via Hyperswitch) `[ARCH §2.9]` |
 | COPPA micro-charge verification | `[S§1.4]` | §13 (COPPA micro-charge flow) |
-| Family deletion lifecycle | `[S§3.4]` | §5 (`handle_family_deletion_scheduled`), §16 |
-| Primary parent transfer | `[S§3.4]` | §5 (`handle_primary_parent_transferred`), §16 |
+| Family deletion lifecycle | `[S§3.4]` | §5 (`HandleFamilyDeletionScheduled`), §16 |
+| Primary parent transfer | `[S§3.4]` | §5 (`HandlePrimaryParentTransferred`), §16 |
 | Subscription notification types | `[S§13.1]` | §16 (events → `notify::`) |
 | Premium subscription pricing (~$10-15/month, ~20% annual discount) | `[S§20.2]` | §10 (configurable via Hyperswitch price IDs, not hardcoded) |
 
@@ -104,32 +104,32 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 **Subscription status state machine** (Hyperswitch-authoritative, mirrored locally via webhooks):
 
 ```
-[none] ──► incomplete  (payment pending on first subscription)
-               │
-               ├──► active      (payment succeeded)
-               │
-               └──► canceled    (payment failed / expired)
+[none] --> incomplete  (payment pending on first subscription)
+               |
+               +---> active      (payment succeeded)
+               |
+               +---> canceled    (payment failed / expired)
 
-active ──► past_due    (renewal payment failed)
-               │
-               ├──► active      (retry payment succeeded)
-               │
-               └──► canceled    (all retries exhausted)
+active --> past_due    (renewal payment failed)
+               |
+               +---> active      (retry payment succeeded)
+               |
+               +---> canceled    (all retries exhausted)
 
-active ──► paused      (family requested pause — Phase 2)
-               │
-               └──► active      (family resumed)
+active --> paused      (family requested pause — Phase 2)
+               |
+               +---> active      (family resumed)
 
-active ──► canceled    (cancel_at_period_end reached end of term)
+active --> canceled    (cancel_at_period_end reached end of term)
 
-trialing ──► active    (trial ended, payment succeeded — Phase 2)
+trialing --> active    (trial ended, payment succeeded — Phase 2)
 ```
 
 ### §3.2 Tables
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_bill_tables.rs
+-- Migration: YYYYMMDD_000001_create_bill_tables.go
 -- =============================================================================
 
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -292,7 +292,7 @@ Application-layer enforcement via `FamilyScope` extractor `[CODING §2.4, §2.5,
 -- No direct table access without family_id filter.
 
 -- bill_payouts is creator-scoped. Access is via creator_id, which maps
--- to parent_id → family_id through mkt_creators.parent_id → iam_parents.
+-- to parent_id -> family_id through mkt_creators.parent_id -> iam_parents.
 -- Repository methods verify creator ownership before returning payout data.
 ```
 
@@ -314,14 +314,14 @@ if no subscription exists (the default state for all families).
 
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Response**: `200 OK` → `SubscriptionResponse`
-```rust
+```json
 {
-    "tier": "free",                   // "free" | "premium"
-    "status": null,                   // null if no subscription, else subscription status
-    "billing_interval": null,         // "monthly" | "annual" | null
-    "current_period_end": null,       // ISO 8601 | null
+    "tier": "free",
+    "status": null,
+    "billing_interval": null,
+    "current_period_end": null,
     "cancel_at_period_end": false,
-    "amount_cents": null,             // current price | null
+    "amount_cents": null,
     "currency": null
 }
 ```
@@ -334,13 +334,13 @@ Process a COPPA parental consent micro-charge ($0.50 charge + immediate refund).
 
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Body**: `CoppaVerificationCommand`
-```rust
+```json
 {
-    "payment_method_id": "pm_xxx"     // Hyperswitch payment method ID
+    "payment_method_id": "pm_xxx"
 }
 ```
 - **Response**: `200 OK` → `CoppaVerificationResult`
-```rust
+```json
 {
     "verified": true,
     "charge_id": "pay_xxx",
@@ -378,7 +378,7 @@ List financial transactions for the current family (subscription payments, COPPA
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Query**: `TransactionListParams { cursor?, limit? (default 20, max 100) }`
 - **Response**: `200 OK` → `TransactionListResponse`
-```rust
+```json
 {
     "transactions": [
         {
@@ -387,7 +387,7 @@ List financial transactions for the current family (subscription payments, COPPA
             "status": "succeeded",
             "amount_cents": 1499,
             "currency": "usd",
-            "description": "Premium subscription — monthly",
+            "description": "Premium subscription -- monthly",
             "created_at": "2026-03-21T..."
         }
     ],
@@ -405,10 +405,10 @@ Create a new premium subscription via Hyperswitch.
 
 - **Auth**: `AuthContext` + `FamilyScope` + `RequireRole(PrimaryParent)`
 - **Body**: `CreateSubscriptionCommand`
-```rust
+```json
 {
-    "billing_interval": "monthly",     // "monthly" | "annual"
-    "payment_method_id": "pm_xxx"      // Hyperswitch payment method ID
+    "billing_interval": "monthly",
+    "payment_method_id": "pm_xxx"
 }
 ```
 - **Response**: `201 Created` → `SubscriptionResponse`
@@ -424,13 +424,13 @@ Create a new premium subscription via Hyperswitch.
 
 #### PATCH /v1/billing/subscription — Update Subscription
 
-Update billing interval (monthly ↔ annual) with proration.
+Update billing interval (monthly <-> annual) with proration.
 
 - **Auth**: `AuthContext` + `FamilyScope` + `RequireRole(PrimaryParent)`
 - **Body**: `UpdateSubscriptionCommand`
-```rust
+```json
 {
-    "billing_interval": "annual"       // new billing interval
+    "billing_interval": "annual"
 }
 ```
 - **Response**: `200 OK` → `SubscriptionResponse`
@@ -476,18 +476,18 @@ Preview pricing for a new subscription or plan change (before committing).
 
 - **Auth**: `AuthContext` + `FamilyScope`
 - **Body**: `EstimateSubscriptionQuery`
-```rust
+```json
 {
-    "billing_interval": "annual"       // desired interval
+    "billing_interval": "annual"
 }
 ```
 - **Response**: `200 OK` → `EstimateResponse`
-```rust
+```json
 {
     "amount_cents": 11999,
     "currency": "usd",
     "billing_interval": "annual",
-    "proration_credits_cents": 750,    // credit from current period (if upgrading)
+    "proration_credits_cents": 750,
     "total_due_today_cents": 11249,
     "next_billing_date": "2027-03-21"
 }
@@ -505,7 +505,7 @@ Attach a payment method via Hyperswitch SetupIntent flow.
 List attached payment methods for the family's Hyperswitch customer.
 
 - **Auth**: `AuthContext` + `FamilyScope`
-- **Response**: `200 OK` → `Vec<PaymentMethodResponse>`
+- **Response**: `200 OK` → `[]PaymentMethodResponse`
 
 #### DELETE /v1/billing/payment-methods/:id — Detach Payment Method
 
@@ -537,168 +537,113 @@ List payout records for the authenticated creator. Creator-scoped, not family-sc
 
 ## §5 Service Interface
 
-The `BillingService` trait defines all use cases exposed to handlers and event handler
+The `BillingService` interface defines all use cases exposed to handlers and event handler
 structs. No CQRS separation needed — this is a simple domain with straightforward
 read/write paths. `[CODING §8.2]`
 
-```rust
-// src/billing/ports.rs
+```go
+// internal/billing/ports.go
 
-use crate::shared::types::{FamilyId, FamilyScope};
-use crate::shared::error::AppError;
+package billing
 
-#[async_trait]
-pub trait BillingService: Send + Sync {
+import (
+    "context"
+
+    "github.com/google/uuid"
+    "homegrown/internal/shared/types"
+)
+
+// BillingService defines all use cases for the billing domain.
+type BillingService interface {
     // ─── Queries (read, no side effects) ────────────────────────────────
 
-    /// Get current subscription for a family. Returns None if free tier.
-    async fn get_subscription(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Option<SubscriptionResponse>, AppError>;
+    // GetSubscription returns the current subscription for a family. Returns nil if free tier.
+    GetSubscription(ctx context.Context, scope types.FamilyScope) (*SubscriptionResponse, error)
 
-    /// List transaction history for a family.
-    async fn list_transactions(
-        &self,
-        params: TransactionListParams,
-        scope: FamilyScope,
-    ) -> Result<TransactionListResponse, AppError>;
+    // ListTransactions returns transaction history for a family.
+    ListTransactions(ctx context.Context, params TransactionListParams, scope types.FamilyScope) (*TransactionListResponse, error)
 
-    /// List Hyperswitch invoices for a family's subscription. (Phase 2)
-    async fn list_invoices(
-        &self,
-        params: InvoiceListParams,
-        scope: FamilyScope,
-    ) -> Result<InvoiceListResponse, AppError>;
+    // ListInvoices returns Hyperswitch invoices for a family's subscription. (Phase 2)
+    ListInvoices(ctx context.Context, params InvoiceListParams, scope types.FamilyScope) (*InvoiceListResponse, error)
 
-    /// List attached payment methods for a family. (Phase 2)
-    async fn list_payment_methods(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Vec<PaymentMethodResponse>, AppError>;
+    // ListPaymentMethods returns attached payment methods for a family. (Phase 2)
+    ListPaymentMethods(ctx context.Context, scope types.FamilyScope) ([]PaymentMethodResponse, error)
 
-    /// Preview pricing for a subscription or plan change. (Phase 2)
-    async fn estimate_subscription(
-        &self,
-        query: EstimateSubscriptionQuery,
-        scope: FamilyScope,
-    ) -> Result<EstimateResponse, AppError>;
+    // EstimateSubscription previews pricing for a subscription or plan change. (Phase 2)
+    EstimateSubscription(ctx context.Context, query EstimateSubscriptionQuery, scope types.FamilyScope) (*EstimateResponse, error)
 
-    /// List creator payout history. (Phase 2)
-    async fn list_payouts(
-        &self,
-        params: PayoutListParams,
-        creator_id: Uuid,
-    ) -> Result<PayoutListResponse, AppError>;
+    // ListPayouts returns creator payout history. (Phase 2)
+    ListPayouts(ctx context.Context, params PayoutListParams, creatorID uuid.UUID) (*PayoutListResponse, error)
 
     // ─── Commands (write, has side effects) ─────────────────────────────
 
-    /// Create a new premium subscription via Hyperswitch. (Phase 2)
-    async fn create_subscription(
-        &self,
-        cmd: CreateSubscriptionCommand,
-        scope: FamilyScope,
-    ) -> Result<SubscriptionResponse, AppError>;
+    // CreateSubscription creates a new premium subscription via Hyperswitch. (Phase 2)
+    CreateSubscription(ctx context.Context, cmd CreateSubscriptionCommand, scope types.FamilyScope) (*SubscriptionResponse, error)
 
-    /// Update subscription (billing interval change) with proration. (Phase 2)
-    async fn update_subscription(
-        &self,
-        cmd: UpdateSubscriptionCommand,
-        scope: FamilyScope,
-    ) -> Result<SubscriptionResponse, AppError>;
+    // UpdateSubscription updates subscription (billing interval change) with proration. (Phase 2)
+    UpdateSubscription(ctx context.Context, cmd UpdateSubscriptionCommand, scope types.FamilyScope) (*SubscriptionResponse, error)
 
-    /// Cancel subscription at end of current billing period. (Phase 2)
-    async fn cancel_subscription(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<SubscriptionResponse, AppError>;
+    // CancelSubscription cancels subscription at end of current billing period. (Phase 2)
+    CancelSubscription(ctx context.Context, scope types.FamilyScope) (*SubscriptionResponse, error)
 
-    /// Reverse a pending cancellation. (Phase 2)
-    async fn reactivate_subscription(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<SubscriptionResponse, AppError>;
+    // ReactivateSubscription reverses a pending cancellation. (Phase 2)
+    ReactivateSubscription(ctx context.Context, scope types.FamilyScope) (*SubscriptionResponse, error)
 
-    /// Attach a payment method via Hyperswitch SetupIntent. (Phase 2)
-    async fn attach_payment_method(
-        &self,
-        cmd: AttachPaymentMethodCommand,
-        scope: FamilyScope,
-    ) -> Result<PaymentMethodResponse, AppError>;
+    // AttachPaymentMethod attaches a payment method via Hyperswitch SetupIntent. (Phase 2)
+    AttachPaymentMethod(ctx context.Context, cmd AttachPaymentMethodCommand, scope types.FamilyScope) (*PaymentMethodResponse, error)
 
-    /// Detach a payment method. (Phase 2)
-    async fn detach_payment_method(
-        &self,
-        payment_method_id: &str,
-        scope: FamilyScope,
-    ) -> Result<(), AppError>;
+    // DetachPaymentMethod detaches a payment method. (Phase 2)
+    DetachPaymentMethod(ctx context.Context, paymentMethodID string, scope types.FamilyScope) error
 
-    /// Process COPPA micro-charge verification ($0.50 charge + immediate refund).
-    /// Called by iam:: during COPPA consent flow. [S§1.4]
-    async fn process_coppa_verification(
-        &self,
-        cmd: CoppaVerificationCommand,
-        scope: FamilyScope,
-    ) -> Result<CoppaVerificationResult, AppError>;
+    // ProcessCoppaVerification processes a COPPA micro-charge verification ($0.50 charge + immediate refund).
+    // Called by iam:: during COPPA consent flow. [S§1.4]
+    ProcessCoppaVerification(ctx context.Context, cmd CoppaVerificationCommand, scope types.FamilyScope) (*CoppaVerificationResult, error)
 
     // ─── Event handlers ─────────────────────────────────────────────────
     // Each method is called by its corresponding DomainEventHandler struct
-    // in event_handlers.rs. Failures are logged but do not propagate to
+    // in event_handlers.go. Failures are logged but do not propagate to
     // the source domain. [ARCH §4.6]
 
-    /// Handle family deletion: cancel subscription in Hyperswitch.
-    /// Consumed from iam::FamilyDeletionScheduled. [01-iam §13.3]
-    async fn handle_family_deletion_scheduled(
-        &self,
-        event: &FamilyDeletionScheduled,
-    ) -> Result<(), AppError>;
+    // HandleFamilyDeletionScheduled cancels subscription in Hyperswitch.
+    // Consumed from iam::FamilyDeletionScheduled. [01-iam §13.3]
+    HandleFamilyDeletionScheduled(ctx context.Context, event *FamilyDeletionScheduled) error
 
-    /// Handle primary parent transfer: update Hyperswitch customer email.
-    /// Consumed from iam::PrimaryParentTransferred. [01-iam §13.3]
-    async fn handle_primary_parent_transferred(
-        &self,
-        event: &PrimaryParentTransferred,
-    ) -> Result<(), AppError>;
+    // HandlePrimaryParentTransferred updates Hyperswitch customer email.
+    // Consumed from iam::PrimaryParentTransferred. [01-iam §13.3]
+    HandlePrimaryParentTransferred(ctx context.Context, event *PrimaryParentTransferred) error
 
-    /// Handle marketplace purchase: record creator earnings. (Phase 2)
-    /// Consumed from mkt::PurchaseCompleted. [07-mkt §18.3]
-    async fn handle_purchase_completed(
-        &self,
-        event: &PurchaseCompleted,
-    ) -> Result<(), AppError>;
+    // HandlePurchaseCompleted records creator earnings. (Phase 2)
+    // Consumed from mkt::PurchaseCompleted. [07-mkt §18.3]
+    HandlePurchaseCompleted(ctx context.Context, event *PurchaseCompleted) error
 
-    /// Handle marketplace refund: deduct from creator earnings. (Phase 2)
-    /// Consumed from mkt::PurchaseRefunded. [07-mkt §18.3]
-    async fn handle_purchase_refunded(
-        &self,
-        event: &PurchaseRefunded,
-    ) -> Result<(), AppError>;
+    // HandlePurchaseRefunded deducts from creator earnings. (Phase 2)
+    // Consumed from mkt::PurchaseRefunded. [07-mkt §18.3]
+    HandlePurchaseRefunded(ctx context.Context, event *PurchaseRefunded) error
 
     // ─── Webhook processing ─────────────────────────────────────────────
 
-    /// Process a verified Hyperswitch webhook payload.
-    async fn process_hyperswitch_webhook(
-        &self,
-        payload: &[u8],
-        signature: &str,
-    ) -> Result<(), AppError>;
+    // ProcessHyperswitchWebhook processes a verified Hyperswitch webhook payload.
+    ProcessHyperswitchWebhook(ctx context.Context, payload []byte, signature string) error
 }
 ```
 
 ### `BillingServiceImpl`
 
-```rust
-// src/billing/service.rs
+```go
+// internal/billing/service.go
 
-pub struct BillingServiceImpl {
-    subscription_repo: Arc<dyn SubscriptionRepository>,
-    transaction_repo: Arc<dyn TransactionRepository>,
-    customer_repo: Arc<dyn CustomerRepository>,
-    payout_repo: Arc<dyn PayoutRepository>,          // Phase 2
-    adapter: Arc<dyn SubscriptionPaymentAdapter>,
-    iam_service: Arc<dyn IamService>,                // Email lookup for Hyperswitch customer
-    events: Arc<EventBus>,
-    config: BillingConfig,
+package billing
+
+// BillingServiceImpl implements BillingService.
+type BillingServiceImpl struct {
+    subscriptionRepo SubscriptionRepository
+    transactionRepo  TransactionRepository
+    customerRepo     CustomerRepository
+    payoutRepo       PayoutRepository          // Phase 2
+    adapter          SubscriptionPaymentAdapter
+    iamService       IamService                // Email lookup for Hyperswitch customer
+    events           EventBus
+    config           BillingConfig
 }
 ```
 
@@ -709,125 +654,69 @@ pub struct BillingServiceImpl {
 All billing repositories are family-scoped via `FamilyScope` parameter (except
 `PayoutRepository`, which is creator-scoped). `[CODING §8.2]`
 
-```rust
-// src/billing/ports.rs (continued)
+```go
+// internal/billing/ports.go (continued)
 
 // ─── SubscriptionRepository ───────────────────────────────────────────
 // Family-scoped. One subscription per family. [S§15.3]
-#[async_trait]
-pub trait SubscriptionRepository: Send + Sync {
-    /// Create a new subscription record.
-    async fn create(
-        &self,
-        input: CreateSubscriptionRow,
-    ) -> Result<BillSubscription, AppError>;
+type SubscriptionRepository interface {
+    // Create creates a new subscription record.
+    Create(ctx context.Context, input CreateSubscriptionRow) (*BillSubscription, error)
 
-    /// Find subscription by family ID.
-    async fn find_by_family(
-        &self,
-        scope: FamilyScope,
-    ) -> Result<Option<BillSubscription>, AppError>;
+    // FindByFamily finds subscription by family ID.
+    FindByFamily(ctx context.Context, scope types.FamilyScope) (*BillSubscription, error)
 
-    /// Find subscription by Hyperswitch subscription ID (webhook processing).
-    async fn find_by_hyperswitch_id(
-        &self,
-        hyperswitch_subscription_id: &str,
-    ) -> Result<Option<BillSubscription>, AppError>;
+    // FindByHyperswitchID finds subscription by Hyperswitch subscription ID (webhook processing).
+    FindByHyperswitchID(ctx context.Context, hyperswitchSubscriptionID string) (*BillSubscription, error)
 
-    /// Update subscription status and fields (from webhook data).
-    async fn update(
-        &self,
-        subscription_id: Uuid,
-        updates: SubscriptionUpdate,
-    ) -> Result<BillSubscription, AppError>;
+    // Update updates subscription status and fields (from webhook data).
+    Update(ctx context.Context, subscriptionID uuid.UUID, updates SubscriptionUpdate) (*BillSubscription, error)
 
-    /// Delete subscription record (family deletion cascade).
-    async fn delete_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<(), AppError>;
+    // DeleteByFamily deletes subscription record (family deletion cascade).
+    DeleteByFamily(ctx context.Context, familyID types.FamilyID) error
 }
 
 // ─── TransactionRepository ────────────────────────────────────────────
 // Family-scoped. Immutable records — insert only, no updates.
-#[async_trait]
-pub trait TransactionRepository: Send + Sync {
-    /// Create a new transaction record.
-    async fn create(
-        &self,
-        input: CreateTransactionRow,
-    ) -> Result<BillTransaction, AppError>;
+type TransactionRepository interface {
+    // Create creates a new transaction record.
+    Create(ctx context.Context, input CreateTransactionRow) (*BillTransaction, error)
 
-    /// List transactions for a family, paginated by created_at DESC.
-    async fn list_by_family(
-        &self,
-        scope: FamilyScope,
-        params: &TransactionListParams,
-    ) -> Result<Vec<BillTransaction>, AppError>;
+    // ListByFamily lists transactions for a family, paginated by created_at DESC.
+    ListByFamily(ctx context.Context, scope types.FamilyScope, params *TransactionListParams) ([]BillTransaction, error)
 
-    /// Check if a transaction with this Hyperswitch payment ID and type
-    /// already exists (idempotency check for webhook processing).
-    async fn exists_by_payment_id(
-        &self,
-        hyperswitch_payment_id: &str,
-        transaction_type: &str,
-    ) -> Result<bool, AppError>;
+    // ExistsByPaymentID checks if a transaction with this Hyperswitch payment ID and type
+    // already exists (idempotency check for webhook processing).
+    ExistsByPaymentID(ctx context.Context, hyperswitchPaymentID string, transactionType string) (bool, error)
 }
 
 // ─── CustomerRepository ───────────────────────────────────────────────
 // Family-scoped (family_id is PK).
-#[async_trait]
-pub trait CustomerRepository: Send + Sync {
-    /// Create or update a Hyperswitch customer mapping.
-    async fn upsert(
-        &self,
-        family_id: FamilyId,
-        input: UpsertCustomerRow,
-    ) -> Result<BillHyperswitchCustomer, AppError>;
+type CustomerRepository interface {
+    // Upsert creates or updates a Hyperswitch customer mapping.
+    Upsert(ctx context.Context, familyID types.FamilyID, input UpsertCustomerRow) (*BillHyperswitchCustomer, error)
 
-    /// Find customer by family ID.
-    async fn find_by_family(
-        &self,
-        family_id: FamilyId,
-    ) -> Result<Option<BillHyperswitchCustomer>, AppError>;
+    // FindByFamily finds customer by family ID.
+    FindByFamily(ctx context.Context, familyID types.FamilyID) (*BillHyperswitchCustomer, error)
 
-    /// Find customer by Hyperswitch customer ID (webhook processing).
-    async fn find_by_hyperswitch_id(
-        &self,
-        hyperswitch_customer_id: &str,
-    ) -> Result<Option<BillHyperswitchCustomer>, AppError>;
+    // FindByHyperswitchID finds customer by Hyperswitch customer ID (webhook processing).
+    FindByHyperswitchID(ctx context.Context, hyperswitchCustomerID string) (*BillHyperswitchCustomer, error)
 }
 
 // ─── PayoutRepository (Phase 2) ──────────────────────────────────────
 // Creator-scoped — accessed via creator_id.
-#[async_trait]
-pub trait PayoutRepository: Send + Sync {
-    /// Create a new payout record.
-    async fn create(
-        &self,
-        input: CreatePayoutRow,
-    ) -> Result<BillPayout, AppError>;
+type PayoutRepository interface {
+    // Create creates a new payout record.
+    Create(ctx context.Context, input CreatePayoutRow) (*BillPayout, error)
 
-    /// List payouts for a creator, paginated by created_at DESC.
-    async fn list_by_creator(
-        &self,
-        creator_id: Uuid,
-        params: &PayoutListParams,
-    ) -> Result<Vec<BillPayout>, AppError>;
+    // ListByCreator lists payouts for a creator, paginated by created_at DESC.
+    ListByCreator(ctx context.Context, creatorID uuid.UUID, params *PayoutListParams) ([]BillPayout, error)
 
-    /// Update payout status (processing → completed/failed).
-    async fn update_status(
-        &self,
-        payout_id: Uuid,
-        status: &str,
-        hyperswitch_payout_id: Option<&str>,
-    ) -> Result<BillPayout, AppError>;
+    // UpdateStatus updates payout status (processing -> completed/failed).
+    UpdateStatus(ctx context.Context, payoutID uuid.UUID, status string, hyperswitchPayoutID *string) (*BillPayout, error)
 
-    /// Find pending payouts ready for processing.
-    async fn find_pending(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<BillPayout>, AppError>;
+    // FindPending finds pending payouts ready for processing.
+    FindPending(ctx context.Context, limit uint32) ([]BillPayout, error)
 }
 ```
 
@@ -839,241 +728,178 @@ Single adapter wrapping Hyperswitch subscription + payment APIs. Uses the billin
 Hyperswitch business profile (separate from `mkt::`'s marketplace profile). Both adapters
 talk to the same Hyperswitch instance. `[07-mkt §18.5]`
 
-> **Relationship to mkt::PaymentAdapter**: `mkt::` has its own `PaymentAdapter` trait `[07-mkt §7]`
+> **Relationship to mkt::PaymentAdapter**: `mkt::` has its own `PaymentAdapter` interface `[07-mkt §7]`
 > for marketplace-specific operations (split payments, sub-merchant onboarding, marketplace
 > refunds). `billing::` has its own `SubscriptionPaymentAdapter` for subscription-specific
-> operations (subscription CRUD, SetupIntents, invoices). They are separate traits because
+> operations (subscription CRUD, SetupIntents, invoices). They are separate interfaces because
 > the operations are fundamentally different — marketplace payments are one-time split payments,
 > while billing payments are recurring subscriptions. Both wrap the same Hyperswitch REST API
 > but use different endpoints and different business profiles.
 
-```rust
-// src/billing/ports.rs (continued)
+```go
+// internal/billing/ports.go (continued)
 
-/// Processor-agnostic subscription + payment adapter backed by Hyperswitch.
-/// Implementations: HyperswitchSubscriptionAdapter (production),
-///                  MockSubscriptionAdapter (tests).
-///
-/// Uses the billing-specific Hyperswitch business profile, separate from
-/// the marketplace profile used by mkt::PaymentAdapter. [07-mkt §18.5]
-#[async_trait]
-pub trait SubscriptionPaymentAdapter: Send + Sync {
+// SubscriptionPaymentAdapter is a processor-agnostic subscription + payment adapter backed by Hyperswitch.
+// Implementations: HyperswitchSubscriptionAdapter (production),
+//                  MockSubscriptionAdapter (tests).
+//
+// Uses the billing-specific Hyperswitch business profile, separate from
+// the marketplace profile used by mkt::PaymentAdapter. [07-mkt §18.5]
+type SubscriptionPaymentAdapter interface {
     // ─── Customer Management ────────────────────────────────────────────
 
-    /// Create a Hyperswitch customer for a family.
-    /// Returns the Hyperswitch customer ID.
-    async fn create_customer(
-        &self,
-        email: &str,
-        name: &str,
-        metadata: HashMap<String, String>,
-    ) -> Result<String, BillingError>;
+    // CreateCustomer creates a Hyperswitch customer for a family.
+    // Returns the Hyperswitch customer ID.
+    CreateCustomer(ctx context.Context, email string, name string, metadata map[string]string) (string, error)
 
-    /// Update a Hyperswitch customer (e.g., email change on parent transfer).
-    async fn update_customer(
-        &self,
-        customer_id: &str,
-        email: &str,
-        name: &str,
-    ) -> Result<(), BillingError>;
+    // UpdateCustomer updates a Hyperswitch customer (e.g., email change on parent transfer).
+    UpdateCustomer(ctx context.Context, customerID string, email string, name string) error
 
     // ─── Subscriptions ──────────────────────────────────────────────────
-    // Maps to Hyperswitch subscription API:
-    //   POST   /subscriptions
-    //   PATCH  /subscriptions/{id}
-    //   POST   /subscriptions/{id}/cancel
-    //   POST   /subscriptions/{id}/pause
-    //   POST   /subscriptions/{id}/resume
-    //   GET    /subscriptions/{id}/estimate
 
-    /// Create a new subscription in Hyperswitch.
-    async fn create_subscription(
-        &self,
-        customer_id: &str,
-        price_id: &str,
-        payment_method_id: &str,
-        metadata: HashMap<String, String>,
-    ) -> Result<HyperswitchSubscription, BillingError>;
+    // CreateSubscription creates a new subscription in Hyperswitch.
+    CreateSubscription(ctx context.Context, customerID string, priceID string, paymentMethodID string, metadata map[string]string) (*HyperswitchSubscription, error)
 
-    /// Update a subscription (e.g., change billing interval / price).
-    /// Hyperswitch handles proration automatically.
-    async fn update_subscription(
-        &self,
-        subscription_id: &str,
-        new_price_id: &str,
-    ) -> Result<HyperswitchSubscription, BillingError>;
+    // UpdateSubscription updates a subscription (e.g., change billing interval / price).
+    // Hyperswitch handles proration automatically.
+    UpdateSubscription(ctx context.Context, subscriptionID string, newPriceID string) (*HyperswitchSubscription, error)
 
-    /// Cancel a subscription at end of current period.
-    async fn cancel_subscription(
-        &self,
-        subscription_id: &str,
-    ) -> Result<HyperswitchSubscription, BillingError>;
+    // CancelSubscription cancels a subscription at end of current period.
+    CancelSubscription(ctx context.Context, subscriptionID string) (*HyperswitchSubscription, error)
 
-    /// Pause a subscription (Phase 2).
-    async fn pause_subscription(
-        &self,
-        subscription_id: &str,
-    ) -> Result<HyperswitchSubscription, BillingError>;
+    // PauseSubscription pauses a subscription (Phase 2).
+    PauseSubscription(ctx context.Context, subscriptionID string) (*HyperswitchSubscription, error)
 
-    /// Resume a paused subscription (Phase 2).
-    async fn resume_subscription(
-        &self,
-        subscription_id: &str,
-    ) -> Result<HyperswitchSubscription, BillingError>;
+    // ResumeSubscription resumes a paused subscription (Phase 2).
+    ResumeSubscription(ctx context.Context, subscriptionID string) (*HyperswitchSubscription, error)
 
-    /// Preview pricing for a new subscription or plan change.
-    async fn estimate_subscription(
-        &self,
-        customer_id: &str,
-        price_id: &str,
-        current_subscription_id: Option<&str>,
-    ) -> Result<HyperswitchEstimate, BillingError>;
+    // EstimateSubscription previews pricing for a new subscription or plan change.
+    EstimateSubscription(ctx context.Context, customerID string, priceID string, currentSubscriptionID *string) (*HyperswitchEstimate, error)
 
     // ─── Payment Methods ────────────────────────────────────────────────
 
-    /// Create a SetupIntent for attaching a payment method.
-    async fn create_setup_intent(
-        &self,
-        customer_id: &str,
-    ) -> Result<SetupIntentResponse, BillingError>;
+    // CreateSetupIntent creates a SetupIntent for attaching a payment method.
+    CreateSetupIntent(ctx context.Context, customerID string) (*SetupIntentResponse, error)
 
-    /// List payment methods for a customer.
-    async fn list_payment_methods(
-        &self,
-        customer_id: &str,
-    ) -> Result<Vec<HyperswitchPaymentMethod>, BillingError>;
+    // ListPaymentMethods lists payment methods for a customer.
+    ListPaymentMethods(ctx context.Context, customerID string) ([]HyperswitchPaymentMethod, error)
 
-    /// Detach a payment method from a customer.
-    async fn detach_payment_method(
-        &self,
-        payment_method_id: &str,
-    ) -> Result<(), BillingError>;
+    // DetachPaymentMethod detaches a payment method from a customer.
+    DetachPaymentMethod(ctx context.Context, paymentMethodID string) error
 
     // ─── One-Time Payments (COPPA) ──────────────────────────────────────
 
-    /// Process a COPPA micro-charge: charge $0.50 and immediately refund.
-    /// Uses Hyperswitch one-time payment (not subscription).
-    /// Returns (payment_id, refund_id).
-    async fn process_micro_charge(
-        &self,
-        customer_id: &str,
-        payment_method_id: &str,
-        amount_cents: i64,
-        description: &str,
-        metadata: HashMap<String, String>,
-    ) -> Result<(String, String), BillingError>;
+    // ProcessMicroCharge processes a COPPA micro-charge: charge $0.50 and immediately refund.
+    // Uses Hyperswitch one-time payment (not subscription).
+    // Returns (paymentID, refundID, error).
+    ProcessMicroCharge(ctx context.Context, customerID string, paymentMethodID string, amountCents int64, description string, metadata map[string]string) (string, string, error)
 
     // ─── Invoices ───────────────────────────────────────────────────────
 
-    /// List invoices for a customer's subscription.
-    async fn list_invoices(
-        &self,
-        customer_id: &str,
-        limit: u32,
-    ) -> Result<Vec<HyperswitchInvoice>, BillingError>;
+    // ListInvoices lists invoices for a customer's subscription.
+    ListInvoices(ctx context.Context, customerID string, limit uint32) ([]HyperswitchInvoice, error)
 
     // ─── Payouts (Phase 2) ──────────────────────────────────────────────
 
-    /// Create a payout to a creator's sub-merchant account.
-    /// Reuses mkt:: Hyperswitch profile for payouts to creator accounts.
-    async fn create_payout(
-        &self,
-        payment_account_id: &str,
-        amount_cents: i64,
-        currency: &str,
-        metadata: HashMap<String, String>,
-    ) -> Result<HyperswitchPayout, BillingError>;
+    // CreatePayout creates a payout to a creator's sub-merchant account.
+    // Reuses mkt:: Hyperswitch profile for payouts to creator accounts.
+    CreatePayout(ctx context.Context, paymentAccountID string, amountCents int64, currency string, metadata map[string]string) (*HyperswitchPayout, error)
 
     // ─── Webhooks ───────────────────────────────────────────────────────
 
-    /// Verify webhook signature (HMAC).
-    async fn verify_webhook(
-        &self,
-        payload: &[u8],
-        signature: &str,
-    ) -> Result<bool, BillingError>;
+    // VerifyWebhook verifies webhook signature (HMAC).
+    VerifyWebhook(ctx context.Context, payload []byte, signature string) (bool, error)
 
-    /// Parse a verified webhook payload into a billing event.
-    async fn parse_webhook_event(
-        &self,
-        payload: &[u8],
-    ) -> Result<BillingWebhookEvent, BillingError>;
+    // ParseWebhookEvent parses a verified webhook payload into a billing event.
+    ParseWebhookEvent(ctx context.Context, payload []byte) (*BillingWebhookEvent, error)
 }
 
 // ─── Adapter Supporting Types ───────────────────────────────────────────
 
-pub struct HyperswitchSubscription {
-    pub id: String,
-    pub customer_id: String,
-    pub status: String,
-    pub current_period_start: DateTime<Utc>,
-    pub current_period_end: DateTime<Utc>,
-    pub cancel_at_period_end: bool,
-    pub price_id: String,
-    pub amount_cents: i64,
-    pub currency: String,
+type HyperswitchSubscription struct {
+    ID                 string    `json:"id"`
+    CustomerID         string    `json:"customer_id"`
+    Status             string    `json:"status"`
+    CurrentPeriodStart time.Time `json:"current_period_start"`
+    CurrentPeriodEnd   time.Time `json:"current_period_end"`
+    CancelAtPeriodEnd  bool      `json:"cancel_at_period_end"`
+    PriceID            string    `json:"price_id"`
+    AmountCents        int64     `json:"amount_cents"`
+    Currency           string    `json:"currency"`
 }
 
-pub struct HyperswitchEstimate {
-    pub amount_cents: i64,
-    pub currency: String,
-    pub proration_credits_cents: i64,
-    pub total_due_today_cents: i64,
-    pub next_billing_date: NaiveDate,
+type HyperswitchEstimate struct {
+    AmountCents           int64     `json:"amount_cents"`
+    Currency              string    `json:"currency"`
+    ProrationCreditsCents int64     `json:"proration_credits_cents"`
+    TotalDueTodayCents    int64     `json:"total_due_today_cents"`
+    NextBillingDate       time.Time `json:"next_billing_date"`
 }
 
-pub struct SetupIntentResponse {
-    pub client_secret: String,         // for frontend Hyperswitch.js confirmation
+type SetupIntentResponse struct {
+    ClientSecret string `json:"client_secret"` // for frontend Hyperswitch.js confirmation
 }
 
-pub struct HyperswitchPaymentMethod {
-    pub id: String,
-    pub method_type: String,           // "card", "bank_debit", etc.
-    pub last_four: Option<String>,
-    pub brand: Option<String>,         // "visa", "mastercard", etc.
-    pub exp_month: Option<u8>,
-    pub exp_year: Option<u16>,
-    pub is_default: bool,
+type HyperswitchPaymentMethod struct {
+    ID         string  `json:"id"`
+    MethodType string  `json:"method_type"`        // "card", "bank_debit", etc.
+    LastFour   *string `json:"last_four,omitempty"`
+    Brand      *string `json:"brand,omitempty"`     // "visa", "mastercard", etc.
+    ExpMonth   *uint8  `json:"exp_month,omitempty"`
+    ExpYear    *uint16 `json:"exp_year,omitempty"`
+    IsDefault  bool    `json:"is_default"`
 }
 
-pub struct HyperswitchInvoice {
-    pub id: String,
-    pub amount_cents: i64,
-    pub currency: String,
-    pub status: String,
-    pub period_start: DateTime<Utc>,
-    pub period_end: DateTime<Utc>,
-    pub paid_at: Option<DateTime<Utc>>,
-    pub pdf_url: Option<String>,
+type HyperswitchInvoice struct {
+    ID          string     `json:"id"`
+    AmountCents int64      `json:"amount_cents"`
+    Currency    string     `json:"currency"`
+    Status      string     `json:"status"`
+    PeriodStart time.Time  `json:"period_start"`
+    PeriodEnd   time.Time  `json:"period_end"`
+    PaidAt      *time.Time `json:"paid_at,omitempty"`
+    PDFURL      *string    `json:"pdf_url,omitempty"`
 }
 
-pub struct HyperswitchPayout {
-    pub id: String,
-    pub amount_cents: i64,
-    pub status: String,
+type HyperswitchPayout struct {
+    ID          string `json:"id"`
+    AmountCents int64  `json:"amount_cents"`
+    Status      string `json:"status"`
 }
 
-pub enum BillingWebhookEvent {
-    SubscriptionCreated {
-        subscription: HyperswitchSubscription,
-    },
-    SubscriptionUpdated {
-        subscription: HyperswitchSubscription,
-    },
-    SubscriptionDeleted {
-        subscription_id: String,
-    },
-    InvoicePaid {
-        invoice_id: String,
-        subscription_id: String,
-        amount_cents: i64,
-        payment_id: String,
-    },
-    PaymentFailed {
-        payment_id: String,
-        subscription_id: Option<String>,
-        reason: String,
-    },
+type BillingWebhookEvent struct {
+    Type string // discriminator
+    // One of:
+    SubscriptionCreated *BillingWebhookSubscriptionCreated
+    SubscriptionUpdated *BillingWebhookSubscriptionUpdated
+    SubscriptionDeleted *BillingWebhookSubscriptionDeleted
+    InvoicePaid         *BillingWebhookInvoicePaid
+    PaymentFailed       *BillingWebhookPaymentFailed
+}
+
+type BillingWebhookSubscriptionCreated struct {
+    Subscription HyperswitchSubscription
+}
+
+type BillingWebhookSubscriptionUpdated struct {
+    Subscription HyperswitchSubscription
+}
+
+type BillingWebhookSubscriptionDeleted struct {
+    SubscriptionID string
+}
+
+type BillingWebhookInvoicePaid struct {
+    InvoiceID      string
+    SubscriptionID string
+    AmountCents    int64
+    PaymentID      string
+}
+
+type BillingWebhookPaymentFailed struct {
+    PaymentID      string
+    SubscriptionID *string
+    Reason         string
 }
 ```
 
@@ -1083,194 +909,176 @@ pub enum BillingWebhookEvent {
 
 ### §8.1 Request Types
 
-```rust
-// src/billing/models.rs
+```go
+// internal/billing/models.go
 
-use serde::Deserialize;
+package billing
 
-/// Body for POST /v1/billing/subscription (Phase 2)
-#[derive(Debug, Deserialize)]
-pub struct CreateSubscriptionCommand {
-    pub billing_interval: String,      // "monthly" | "annual"
-    pub payment_method_id: String,     // Hyperswitch payment method ID
+import "time"
+
+// CreateSubscriptionCommand is the body for POST /v1/billing/subscription (Phase 2).
+type CreateSubscriptionCommand struct {
+    BillingInterval string `json:"billing_interval" validate:"required,oneof=monthly annual"`
+    PaymentMethodID string `json:"payment_method_id" validate:"required"`
 }
 
-/// Body for PATCH /v1/billing/subscription (Phase 2)
-#[derive(Debug, Deserialize)]
-pub struct UpdateSubscriptionCommand {
-    pub billing_interval: String,      // new billing interval
+// UpdateSubscriptionCommand is the body for PATCH /v1/billing/subscription (Phase 2).
+type UpdateSubscriptionCommand struct {
+    BillingInterval string `json:"billing_interval" validate:"required,oneof=monthly annual"`
 }
 
-/// Body for POST /v1/billing/coppa-verify
-#[derive(Debug, Deserialize)]
-pub struct CoppaVerificationCommand {
-    pub payment_method_id: String,     // Hyperswitch payment method ID
+// CoppaVerificationCommand is the body for POST /v1/billing/coppa-verify.
+type CoppaVerificationCommand struct {
+    PaymentMethodID string `json:"payment_method_id" validate:"required"`
 }
 
-/// Body for POST /v1/billing/payment-methods (Phase 2)
-#[derive(Debug, Deserialize)]
-pub struct AttachPaymentMethodCommand {
-    pub setup_intent_client_secret: String,
+// AttachPaymentMethodCommand is the body for POST /v1/billing/payment-methods (Phase 2).
+type AttachPaymentMethodCommand struct {
+    SetupIntentClientSecret string `json:"setup_intent_client_secret" validate:"required"`
 }
 
-/// Query for POST /v1/billing/subscription/estimate (Phase 2)
-#[derive(Debug, Deserialize)]
-pub struct EstimateSubscriptionQuery {
-    pub billing_interval: String,      // desired interval
+// EstimateSubscriptionQuery is the query for POST /v1/billing/subscription/estimate (Phase 2).
+type EstimateSubscriptionQuery struct {
+    BillingInterval string `json:"billing_interval" validate:"required,oneof=monthly annual"`
 }
 
-/// Query parameters for GET /v1/billing/transactions
-#[derive(Debug, Deserialize)]
-pub struct TransactionListParams {
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,             // Default 20, max 100
+// TransactionListParams holds query parameters for GET /v1/billing/transactions.
+type TransactionListParams struct {
+    Cursor *string `query:"cursor"`
+    Limit  *uint8  `query:"limit"` // Default 20, max 100
 }
 
-/// Query parameters for GET /v1/billing/invoices (Phase 2)
-#[derive(Debug, Deserialize)]
-pub struct InvoiceListParams {
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
+// InvoiceListParams holds query parameters for GET /v1/billing/invoices (Phase 2).
+type InvoiceListParams struct {
+    Cursor *string `query:"cursor"`
+    Limit  *uint8  `query:"limit"`
 }
 
-/// Query parameters for GET /v1/billing/payouts (Phase 2)
-#[derive(Debug, Deserialize)]
-pub struct PayoutListParams {
-    pub cursor: Option<String>,
-    pub limit: Option<u8>,
+// PayoutListParams holds query parameters for GET /v1/billing/payouts (Phase 2).
+type PayoutListParams struct {
+    Cursor *string `query:"cursor"`
+    Limit  *uint8  `query:"limit"`
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-use serde::Serialize;
-
-/// Subscription status response.
-#[derive(Debug, Serialize)]
-pub struct SubscriptionResponse {
-    pub tier: String,                  // "free" | "premium"
-    pub status: Option<String>,        // null if free tier (no subscription)
-    pub billing_interval: Option<String>,
-    pub current_period_end: Option<DateTime<Utc>>,
-    pub cancel_at_period_end: bool,
-    pub amount_cents: Option<i64>,
-    pub currency: Option<String>,
+```go
+// SubscriptionResponse is the subscription status response.
+type SubscriptionResponse struct {
+    Tier              string     `json:"tier"`                           // "free" | "premium"
+    Status            *string    `json:"status"`                        // null if free tier (no subscription)
+    BillingInterval   *string    `json:"billing_interval,omitempty"`
+    CurrentPeriodEnd  *time.Time `json:"current_period_end,omitempty"`
+    CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
+    AmountCents       *int64     `json:"amount_cents,omitempty"`
+    Currency          *string    `json:"currency,omitempty"`
 }
 
-/// A single financial transaction.
-#[derive(Debug, Serialize)]
-pub struct TransactionResponse {
-    pub id: Uuid,
-    pub transaction_type: String,
-    pub status: String,
-    pub amount_cents: i64,
-    pub currency: String,
-    pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
+// TransactionResponse is a single financial transaction.
+type TransactionResponse struct {
+    ID              uuid.UUID `json:"id"`
+    TransactionType string    `json:"transaction_type"`
+    Status          string    `json:"status"`
+    AmountCents     int64     `json:"amount_cents"`
+    Currency        string    `json:"currency"`
+    Description     *string   `json:"description,omitempty"`
+    CreatedAt       time.Time `json:"created_at"`
 }
 
-/// Paginated transaction list.
-#[derive(Debug, Serialize)]
-pub struct TransactionListResponse {
-    pub transactions: Vec<TransactionResponse>,
-    pub next_cursor: Option<String>,
+// TransactionListResponse is a paginated transaction list.
+type TransactionListResponse struct {
+    Transactions []TransactionResponse `json:"transactions"`
+    NextCursor   *string               `json:"next_cursor,omitempty"`
 }
 
-/// Subscription invoice (Phase 2).
-#[derive(Debug, Serialize)]
-pub struct InvoiceResponse {
-    pub id: String,
-    pub amount_cents: i64,
-    pub currency: String,
-    pub status: String,
-    pub period_start: DateTime<Utc>,
-    pub period_end: DateTime<Utc>,
-    pub paid_at: Option<DateTime<Utc>>,
-    pub pdf_url: Option<String>,
+// InvoiceResponse is a subscription invoice (Phase 2).
+type InvoiceResponse struct {
+    ID          string     `json:"id"`
+    AmountCents int64      `json:"amount_cents"`
+    Currency    string     `json:"currency"`
+    Status      string     `json:"status"`
+    PeriodStart time.Time  `json:"period_start"`
+    PeriodEnd   time.Time  `json:"period_end"`
+    PaidAt      *time.Time `json:"paid_at,omitempty"`
+    PDFURL      *string    `json:"pdf_url,omitempty"`
 }
 
-/// Paginated invoice list (Phase 2).
-#[derive(Debug, Serialize)]
-pub struct InvoiceListResponse {
-    pub invoices: Vec<InvoiceResponse>,
-    pub next_cursor: Option<String>,
+// InvoiceListResponse is a paginated invoice list (Phase 2).
+type InvoiceListResponse struct {
+    Invoices   []InvoiceResponse `json:"invoices"`
+    NextCursor *string           `json:"next_cursor,omitempty"`
 }
 
-/// Attached payment method (Phase 2).
-#[derive(Debug, Serialize)]
-pub struct PaymentMethodResponse {
-    pub id: String,
-    pub method_type: String,
-    pub last_four: Option<String>,
-    pub brand: Option<String>,
-    pub exp_month: Option<u8>,
-    pub exp_year: Option<u16>,
-    pub is_default: bool,
+// PaymentMethodResponse is an attached payment method (Phase 2).
+type PaymentMethodResponse struct {
+    ID         string  `json:"id"`
+    MethodType string  `json:"method_type"`
+    LastFour   *string `json:"last_four,omitempty"`
+    Brand      *string `json:"brand,omitempty"`
+    ExpMonth   *uint8  `json:"exp_month,omitempty"`
+    ExpYear    *uint16 `json:"exp_year,omitempty"`
+    IsDefault  bool    `json:"is_default"`
 }
 
-/// Pricing estimate for subscription changes (Phase 2).
-#[derive(Debug, Serialize)]
-pub struct EstimateResponse {
-    pub amount_cents: i64,
-    pub currency: String,
-    pub billing_interval: String,
-    pub proration_credits_cents: i64,
-    pub total_due_today_cents: i64,
-    pub next_billing_date: NaiveDate,
+// EstimateResponse is pricing estimate for subscription changes (Phase 2).
+type EstimateResponse struct {
+    AmountCents           int64     `json:"amount_cents"`
+    Currency              string    `json:"currency"`
+    BillingInterval       string    `json:"billing_interval"`
+    ProrationCreditsCents int64     `json:"proration_credits_cents"`
+    TotalDueTodayCents    int64     `json:"total_due_today_cents"`
+    NextBillingDate       time.Time `json:"next_billing_date"`
 }
 
-/// COPPA micro-charge verification result.
-#[derive(Debug, Serialize)]
-pub struct CoppaVerificationResult {
-    pub verified: bool,
-    pub charge_id: String,
-    pub refund_id: String,
+// CoppaVerificationResult is the COPPA micro-charge verification result.
+type CoppaVerificationResult struct {
+    Verified bool   `json:"verified"`
+    ChargeID string `json:"charge_id"`
+    RefundID string `json:"refund_id"`
 }
 
-/// Creator payout record (Phase 2).
-#[derive(Debug, Serialize)]
-pub struct PayoutResponse {
-    pub id: Uuid,
-    pub status: String,
-    pub amount_cents: i64,
-    pub currency: String,
-    pub period_start: DateTime<Utc>,
-    pub period_end: DateTime<Utc>,
-    pub purchase_count: i32,
-    pub refund_deduction_cents: i64,
-    pub processed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+// PayoutResponse is a creator payout record (Phase 2).
+type PayoutResponse struct {
+    ID                   uuid.UUID  `json:"id"`
+    Status               string     `json:"status"`
+    AmountCents          int64      `json:"amount_cents"`
+    Currency             string     `json:"currency"`
+    PeriodStart          time.Time  `json:"period_start"`
+    PeriodEnd            time.Time  `json:"period_end"`
+    PurchaseCount        int32      `json:"purchase_count"`
+    RefundDeductionCents int64      `json:"refund_deduction_cents"`
+    ProcessedAt          *time.Time `json:"processed_at,omitempty"`
+    CreatedAt            time.Time  `json:"created_at"`
 }
 
-/// Paginated payout list (Phase 2).
-#[derive(Debug, Serialize)]
-pub struct PayoutListResponse {
-    pub payouts: Vec<PayoutResponse>,
-    pub next_cursor: Option<String>,
+// PayoutListResponse is a paginated payout list (Phase 2).
+type PayoutListResponse struct {
+    Payouts    []PayoutResponse `json:"payouts"`
+    NextCursor *string          `json:"next_cursor,omitempty"`
 }
 ```
 
 ### §8.3 Config
 
-```rust
-/// Runtime configuration for billing domain.
-/// All sensitive values loaded from environment variables.
-pub struct BillingConfig {
-    /// Hyperswitch API key (billing profile).
-    pub hyperswitch_api_key: String,
-    /// Hyperswitch billing profile ID (separate from mkt:: profile).
-    pub hyperswitch_profile_id: String,
-    /// Hyperswitch base URL (same instance as mkt::).
-    pub hyperswitch_base_url: String,
-    /// Hyperswitch price ID for monthly premium plan.
-    pub monthly_price_id: String,
-    /// Hyperswitch price ID for annual premium plan.
-    pub annual_price_id: String,
-    /// COPPA micro-charge amount in cents (default: 50 = $0.50).
-    pub coppa_charge_cents: i64,
-    /// Webhook signing secret for signature verification.
-    pub webhook_signing_secret: String,
+```go
+// BillingConfig holds runtime configuration for the billing domain.
+// All sensitive values loaded from environment variables.
+type BillingConfig struct {
+    // HyperswitchAPIKey is the Hyperswitch API key (billing profile).
+    HyperswitchAPIKey string
+    // HyperswitchProfileID is the Hyperswitch billing profile ID (separate from mkt:: profile).
+    HyperswitchProfileID string
+    // HyperswitchBaseURL is the Hyperswitch base URL (same instance as mkt::).
+    HyperswitchBaseURL string
+    // MonthlyPriceID is the Hyperswitch price ID for monthly premium plan.
+    MonthlyPriceID string
+    // AnnualPriceID is the Hyperswitch price ID for annual premium plan.
+    AnnualPriceID string
+    // CoppaChargeCents is the COPPA micro-charge amount in cents (default: 50 = $0.50).
+    CoppaChargeCents int64
+    // WebhookSigningSecret is the webhook signing secret for signature verification.
+    WebhookSigningSecret string
 }
 ```
 
@@ -1285,33 +1093,33 @@ mirrors Hyperswitch via webhook events. Each webhook event maps to a local statu
 optionally publishes a domain event.
 
 ```
-                                  ┌──────────────┐
-                                  │   [none]     │  ← All families start here (free tier)
-                                  └──────┬───────┘
-                                         │ POST /v1/billing/subscription
-                                         ▼
-                                  ┌──────────────┐
-                                  │  incomplete   │  ← Payment pending
-                                  └──────┬───────┘
-                                         │ invoice.paid webhook
-                                         ▼
-                                  ┌──────────────┐
-                              ┌──▶│   active      │◀─┐
-                              │   └──┬───┬───┬───┘   │
-                              │      │   │   │        │
-                  resume      │      │   │   │        │ retry succeeds
-                              │      │   │   │        │
-                   ┌──────────┘      │   │   │   ┌────┴─────┐
-                   │                 │   │   │   │ past_due  │ ← payment.failed webhook
-                   │                 │   │   │   └───────────┘
-              ┌────┴────┐            │   │   │
-              │ paused  │◀───────────┘   │   └────────┐
-              └─────────┘   pause        │            │ cancel_at_period_end
-                                         │            │ + period_end reached
-                                         │            ▼
-                                         │     ┌────────────┐
-                                         └────▶│  canceled   │
-                                   immediate   └────────────┘
+                                  +--------------+
+                                  |   [none]     |  <- All families start here (free tier)
+                                  +------+-------+
+                                         | POST /v1/billing/subscription
+                                         v
+                                  +--------------+
+                                  |  incomplete   |  <- Payment pending
+                                  +------+-------+
+                                         | invoice.paid webhook
+                                         v
+                                  +--------------+
+                              +-->|   active      |<--+
+                              |   +--+---+---+---+   |
+                              |      |   |   |        |
+                  resume      |      |   |   |        | retry succeeds
+                              |      |   |   |        |
+                   +----------+      |   |   |   +----+-----+
+                   |                 |   |   |   | past_due  | <- payment.failed webhook
+                   |                 |   |   |   +-----------+
+              +----+----+            |   |   |
+              | paused  |<-----------+   |   +--------+
+              +---------+   pause        |            | cancel_at_period_end
+                                         |            | + period_end reached
+                                         |            v
+                                         |     +------------+
+                                         +---->|  canceled   |
+                                   immediate   +------------+
                                    cancel
 ```
 
@@ -1329,7 +1137,7 @@ optionally publishes a domain event.
 ### Downgrade Behavior `[S§15.3]`
 
 When `SubscriptionCancelled` fires at the end of the billing period:
-1. `billing::` publishes `SubscriptionCancelled { family_id, effective_at }`
+1. `billing::` publishes `SubscriptionCancelled { FamilyID, EffectiveAt }`
 2. `iam::` event handler sets `iam_families.subscription_tier = 'free'` `[01-iam §13.3, line 1431]`
 3. Per `[S§15.3]`: data is preserved, premium tools become read-only, already-generated
    reports stay downloadable, AI recommendations are disabled
@@ -1351,19 +1159,22 @@ When `SubscriptionCancelled` fires at the end of the billing period:
 Prices are configured as Hyperswitch `item_price_id` values — **not hardcoded in application
 code**. This allows price changes without deployments.
 
-```rust
+```go
 // BillingConfig (from environment)
-pub monthly_price_id: String,    // e.g., "price_monthly_premium_v1"
-pub annual_price_id: String,     // e.g., "price_annual_premium_v1"
+MonthlyPriceID string    // e.g., "price_monthly_premium_v1"
+AnnualPriceID  string    // e.g., "price_annual_premium_v1"
 ```
 
 The service resolves `billing_interval` to the appropriate `price_id`:
-```rust
-fn resolve_price_id(&self, interval: &str) -> Result<&str, BillingError> {
-    match interval {
-        "monthly" => Ok(&self.config.monthly_price_id),
-        "annual" => Ok(&self.config.annual_price_id),
-        _ => Err(BillingError::InvalidBillingInterval),
+```go
+func (s *BillingServiceImpl) resolvePriceID(interval string) (string, error) {
+    switch interval {
+    case "monthly":
+        return s.config.MonthlyPriceID, nil
+    case "annual":
+        return s.config.AnnualPriceID, nil
+    default:
+        return "", ErrInvalidBillingInterval
     }
 }
 ```
@@ -1381,7 +1192,7 @@ domain events. Feature checks are per-domain using the `RequirePremium` extracto
 ### Monthly → Annual (Upgrade within Same Tier)
 
 1. Family calls `PATCH /v1/billing/subscription` with `billing_interval: "annual"`
-2. `billing::` calls `adapter.update_subscription(sub_id, annual_price_id)`
+2. `billing::` calls `adapter.UpdateSubscription(subID, annualPriceID)`
 3. Hyperswitch applies `CreditOption::Prorate` — credits remaining monthly period, charges
    prorated annual amount
 4. Webhook confirms update → local mirror updated → `SubscriptionChanged` event
@@ -1394,7 +1205,7 @@ domain events. Feature checks are per-domain using the `RequirePremium` extracto
 ### Premium → Free (Downgrade Tier)
 
 1. Family calls `DELETE /v1/billing/subscription`
-2. `billing::` calls `adapter.cancel_subscription(sub_id)` with `CancelOption::EndOfTerm`
+2. `billing::` calls `adapter.CancelSubscription(subID)` with `CancelOption::EndOfTerm`
 3. Subscription remains active until `current_period_end`
 4. At period end, Hyperswitch fires `subscription.deleted` webhook
 5. `billing::` publishes `SubscriptionCancelled` → `iam::` sets tier to `free`
@@ -1402,7 +1213,7 @@ domain events. Feature checks are per-domain using the `RequirePremium` extracto
 ### Pricing Preview
 
 The `POST /v1/billing/subscription/estimate` endpoint calls
-`adapter.estimate_subscription()` to preview exactly what the family will be charged,
+`adapter.EstimateSubscription()` to preview exactly what the family will be charged,
 including proration credits. This should be called before any plan change to show the user
 the impact.
 
@@ -1426,15 +1237,15 @@ FROM mkt_purchases
 WHERE creator_id = $1;
 ```
 
-### AggregatePayoutsJob
+### AggregatePayoutsTask
 
 Runs monthly (1st of each month at 6:00 AM UTC). For each creator with unpaid earnings above
 the minimum threshold:
 
 1. Calculate unpaid earnings since last payout
 2. Deduct any refunds in the period
-3. If amount ≥ minimum payout threshold → create `bill_payouts` row with status `pending`
-4. Payout execution is handled by a separate `ExecutePayoutsJob` that processes pending rows
+3. If amount >= minimum payout threshold → create `bill_payouts` row with status `pending`
+4. Payout execution is handled by a separate `ExecutePayoutsTask` that processes pending rows
 
 ### Payout Execution
 
@@ -1442,8 +1253,8 @@ Payouts go to creator sub-merchant accounts managed by `mkt::`. The payout call 
 Hyperswitch profile (since creator sub-merchant accounts are registered under `mkt::`'s profile).
 
 ```
-AggregatePayoutsJob → creates bill_payouts (pending)
-ExecutePayoutsJob   → calls adapter.create_payout() → updates bill_payouts (processing → completed/failed)
+AggregatePayoutsTask -> creates bill_payouts (pending)
+ExecutePayoutsTask   -> calls adapter.CreatePayout() -> updates bill_payouts (processing -> completed/failed)
 ```
 
 ---
@@ -1460,13 +1271,13 @@ during the COPPA consent flow `[01-iam §10.2]`.
 2. Frontend calls POST /v1/billing/coppa-verify with payment_method_id
 3. billing::service:
    a. Get or create Hyperswitch customer for the family
-   b. Call adapter.process_micro_charge($0.50)
-      → Hyperswitch charges $0.50 via one-time payment (not subscription)
-      → Hyperswitch immediately refunds $0.50
+   b. Call adapter.ProcessMicroCharge($0.50)
+      -> Hyperswitch charges $0.50 via one-time payment (not subscription)
+      -> Hyperswitch immediately refunds $0.50
    c. Create bill_transactions row: { type: coppa_charge, status: succeeded }
    d. Create bill_transactions row: { type: coppa_refund, status: succeeded }
-   e. Return CoppaVerificationResult { verified: true, charge_id, refund_id }
-4. iam:: receives success → updates coppa_consent_status to 'verified'
+   e. Return CoppaVerificationResult { Verified: true, ChargeID, RefundID }
+4. iam:: receives success -> updates coppa_consent_status to 'verified'
 ```
 
 ### Error Handling
@@ -1474,13 +1285,13 @@ during the COPPA consent flow `[01-iam §10.2]`.
 | Failure | Response | Recovery |
 |---------|----------|----------|
 | Card declined | `422 PaymentDeclined` | Parent tries different card |
-| Charge succeeds but refund fails | Log error, return success (charge was verified) | Refund retried via background job |
+| Charge succeeds but refund fails | Log error, return success (charge was verified) | Refund retried via background task |
 | Hyperswitch unreachable | `502 PaymentAdapterUnavailable` | Parent retries later |
 
 ### Configuration
 
-```rust
-pub coppa_charge_cents: i64,       // default: 50 ($0.50)
+```go
+CoppaChargeCents int64       // default: 50 ($0.50)
 ```
 
 The COPPA charge amount is configurable via `BillingConfig` but defaults to $0.50 as required
@@ -1501,18 +1312,18 @@ endpoint based on the business profile.
 
 ```
 1. Receive raw payload + signature header
-2. adapter.verify_webhook(payload, signature)
-   → Reject with 200 (log warning) if signature invalid — do NOT return 4xx to avoid retries
-3. adapter.parse_webhook_event(payload)
+2. adapter.VerifyWebhook(payload, signature)
+   -> Reject with 200 (log warning) if signature invalid — do NOT return 4xx to avoid retries
+3. adapter.ParseWebhookEvent(payload)
 4. Check idempotency:
-   → Extract event_id from payload metadata
-   → If transaction_repo.exists_by_payment_id(payment_id, type) → skip (already processed)
-5. Match event type → handler:
-   → SubscriptionCreated  → upsert bill_subscriptions, publish event
-   → SubscriptionUpdated  → update bill_subscriptions, publish event
-   → SubscriptionDeleted  → update bill_subscriptions status=canceled, publish SubscriptionCancelled
-   → InvoicePaid          → create bill_transactions row
-   → PaymentFailed        → update bill_subscriptions status=past_due, log
+   -> Extract event_id from payload metadata
+   -> If transactionRepo.ExistsByPaymentID(paymentID, type) -> skip (already processed)
+5. Switch event type -> handler:
+   -> SubscriptionCreated  -> upsert bill_subscriptions, publish event
+   -> SubscriptionUpdated  -> update bill_subscriptions, publish event
+   -> SubscriptionDeleted  -> update bill_subscriptions status=canceled, publish SubscriptionCancelled
+   -> InvoicePaid          -> create bill_transactions row
+   -> PaymentFailed        -> update bill_subscriptions status=past_due, log
 6. Always return 200 OK
 ```
 
@@ -1538,87 +1349,62 @@ incoming status against the current local status — if unchanged, the update is
 
 ## §15 Error Types
 
-All billing errors use `thiserror` and map to HTTP status codes via `AppError`. Internal
-details are logged but never exposed in API responses. `[CODING §5.2, S§18]`
+All billing errors use custom error types with `errors.Is`/`errors.As` and map to HTTP status
+codes via `AppError`. Internal details are logged but never exposed in API responses. `[CODING §5.2, S§18]`
 
-```rust
-// src/billing/errors.rs
+```go
+// internal/billing/errors.go
 
-use thiserror::Error;
+package billing
 
-#[derive(Debug, Error)]
-pub enum BillingError {
+import "errors"
+
+var (
     // ─── Subscription Errors ────────────────────────────────────────────
-
-    #[error("Subscription not found")]
-    SubscriptionNotFound,
-
-    #[error("Subscription already exists for this family")]
-    SubscriptionAlreadyExists,
-
-    #[error("Cannot reactivate subscription in current state")]
-    CannotReactivate,
-
-    #[error("Subscription is not active")]
-    SubscriptionNotActive,
-
-    #[error("Invalid billing interval")]
-    InvalidBillingInterval,
+    ErrSubscriptionNotFound     = errors.New("subscription not found")
+    ErrSubscriptionAlreadyExists = errors.New("subscription already exists for this family")
+    ErrCannotReactivate         = errors.New("cannot reactivate subscription in current state")
+    ErrSubscriptionNotActive    = errors.New("subscription is not active")
+    ErrInvalidBillingInterval   = errors.New("invalid billing interval")
 
     // ─── Payment Method Errors ──────────────────────────────────────────
-
-    #[error("Payment method not found")]
-    PaymentMethodNotFound,
-
-    #[error("Cannot remove last payment method with active subscription")]
-    CannotRemoveLastPaymentMethod,
+    ErrPaymentMethodNotFound          = errors.New("payment method not found")
+    ErrCannotRemoveLastPaymentMethod = errors.New("cannot remove last payment method with active subscription")
 
     // ─── Payment Errors ─────────────────────────────────────────────────
-
-    #[error("Payment was declined")]
-    PaymentDeclined,
-
-    #[error("COPPA verification failed")]
-    CoppaVerificationFailed,
+    ErrPaymentDeclined         = errors.New("payment was declined")
+    ErrCoppaVerificationFailed = errors.New("COPPA verification failed")
 
     // ─── Adapter Errors ─────────────────────────────────────────────────
-
-    #[error("Payment adapter unavailable")]
-    PaymentAdapterUnavailable,
-
-    #[error("Invalid webhook signature")]
-    InvalidWebhookSignature,
+    ErrPaymentAdapterUnavailable = errors.New("payment adapter unavailable")
+    ErrInvalidWebhookSignature   = errors.New("invalid webhook signature")
 
     // ─── Infrastructure ─────────────────────────────────────────────────
-
-    #[error("Database error")]
-    DbError(#[from] sea_orm::DbErr),   // internal — NOT exposed in API
-
-    #[error("Adapter error")]
-    AdapterError(String),              // internal — NOT exposed in API
-}
+    ErrDatabaseError = errors.New("database error")
+    ErrAdapterError  = errors.New("adapter error")
+)
 ```
 
 ### Error-to-HTTP Mapping
 
 | Error Variant | HTTP Status | Response Code | User-Facing Message |
 |---------------|-------------|---------------|---------------------|
-| `SubscriptionNotFound` | `404 Not Found` | `subscription_not_found` | "Subscription not found" |
-| `SubscriptionAlreadyExists` | `409 Conflict` | `subscription_exists` | "A subscription already exists for this family" |
-| `CannotReactivate` | `409 Conflict` | `cannot_reactivate` | "Subscription cannot be reactivated in its current state" |
-| `SubscriptionNotActive` | `409 Conflict` | `subscription_not_active` | "Subscription is not currently active" |
-| `InvalidBillingInterval` | `422 Unprocessable` | `invalid_billing_interval` | "Invalid billing interval — must be 'monthly' or 'annual'" |
-| `PaymentMethodNotFound` | `404 Not Found` | `payment_method_not_found` | "Payment method not found" |
-| `CannotRemoveLastPaymentMethod` | `409 Conflict` | `cannot_remove_last_payment_method` | "Cannot remove the only payment method while a subscription is active" |
-| `PaymentDeclined` | `422 Unprocessable` | `payment_declined` | "Payment was declined — please try a different payment method" |
-| `CoppaVerificationFailed` | `422 Unprocessable` | `coppa_verification_failed` | "Parental verification failed — please try again" |
-| `PaymentAdapterUnavailable` | `502 Bad Gateway` | `payment_adapter_unavailable` | "Payment service is temporarily unavailable" |
-| `InvalidWebhookSignature` | `200 OK` (logged) | — | — (never exposed — webhook always returns 200) |
-| `DbError` | `500 Internal` | `internal_error` | "An unexpected error occurred" |
-| `AdapterError` | `500 Internal` | `internal_error` | "An unexpected error occurred" |
+| `ErrSubscriptionNotFound` | `404 Not Found` | `subscription_not_found` | "Subscription not found" |
+| `ErrSubscriptionAlreadyExists` | `409 Conflict` | `subscription_exists` | "A subscription already exists for this family" |
+| `ErrCannotReactivate` | `409 Conflict` | `cannot_reactivate` | "Subscription cannot be reactivated in its current state" |
+| `ErrSubscriptionNotActive` | `409 Conflict` | `subscription_not_active` | "Subscription is not currently active" |
+| `ErrInvalidBillingInterval` | `422 Unprocessable` | `invalid_billing_interval` | "Invalid billing interval — must be 'monthly' or 'annual'" |
+| `ErrPaymentMethodNotFound` | `404 Not Found` | `payment_method_not_found` | "Payment method not found" |
+| `ErrCannotRemoveLastPaymentMethod` | `409 Conflict` | `cannot_remove_last_payment_method` | "Cannot remove the only payment method while a subscription is active" |
+| `ErrPaymentDeclined` | `422 Unprocessable` | `payment_declined` | "Payment was declined — please try a different payment method" |
+| `ErrCoppaVerificationFailed` | `422 Unprocessable` | `coppa_verification_failed` | "Parental verification failed — please try again" |
+| `ErrPaymentAdapterUnavailable` | `502 Bad Gateway` | `payment_adapter_unavailable` | "Payment service is temporarily unavailable" |
+| `ErrInvalidWebhookSignature` | `200 OK` (logged) | — | — (never exposed — webhook always returns 200) |
+| `ErrDatabaseError` | `500 Internal` | `internal_error` | "An unexpected error occurred" |
+| `ErrAdapterError` | `500 Internal` | `internal_error` | "An unexpected error occurred" |
 
-> **Security note**: `InvalidWebhookSignature` returns `200 OK` (not `401`) to prevent
-> Hyperswitch from retrying invalid webhooks. The failure is logged with `tracing::warn!`
+> **Security note**: `ErrInvalidWebhookSignature` returns `200 OK` (not `401`) to prevent
+> Hyperswitch from retrying invalid webhooks. The failure is logged with `slog.Warn`
 > for monitoring.
 
 ---
@@ -1629,7 +1415,7 @@ pub enum BillingError {
 
 | Export | Consumers | Mechanism |
 |--------|-----------|-----------|
-| `BillingService::process_coppa_verification()` | `iam::` | `Arc<dyn BillingService>` via AppState — COPPA consent flow `[01-iam §10.2]` |
+| `BillingService.ProcessCoppaVerification()` | `iam::` | `BillingService` interface via AppState — COPPA consent flow `[01-iam §10.2]` |
 | `SubscriptionCreated` event | `iam::`, `notify::` | Domain event — tier sync, welcome email |
 | `SubscriptionChanged` event | `iam::`, `notify::` | Domain event — tier sync (if needed), plan change notification |
 | `SubscriptionCancelled` event | `iam::`, `notify::` | Domain event — set tier=free, cancellation notification |
@@ -1641,7 +1427,7 @@ pub enum BillingError {
 |-----------|--------|---------|
 | `AuthContext` | `iam::` middleware | User identity on every request `[00-core §7.2]` |
 | `FamilyScope` | `iam::` middleware | Family-scoped data access `[00-core §8]` |
-| `IamService::get_family_primary_email()` | `iam::` | Email for Hyperswitch customer creation |
+| `IamService.GetFamilyPrimaryEmail()` | `iam::` | Email for Hyperswitch customer creation |
 | `SubscriptionPaymentAdapter` | Hyperswitch (self-hosted) | Subscription + payment orchestration `[ARCH §2.9]` |
 | `FamilyDeletionScheduled` event | `iam::` | Cancel subscription on family deletion `[01-iam §13.3]` |
 | `PrimaryParentTransferred` event | `iam::` | Update Hyperswitch customer email `[01-iam §13.3]` |
@@ -1650,123 +1436,115 @@ pub enum BillingError {
 
 ### §16.3 Events billing:: Publishes
 
-Defined in `src/billing/events.rs`. `[CODING §8.4]`
+Defined in `internal/billing/events.go`. `[CODING §8.4]`
 
-```rust
-// src/billing/events.rs
+```go
+// internal/billing/events.go
 
-use crate::shared::types::FamilyId;
-use chrono::{DateTime, Utc};
+package billing
 
-/// Published when a family's subscription becomes active for the first time.
-/// Consumed by iam:: (set tier=premium) and notify:: (welcome email).
-#[derive(Clone, Debug)]
-pub struct SubscriptionCreated {
-    pub family_id: FamilyId,
-    pub tier: String,                   // "premium"
-    pub billing_interval: String,       // "monthly" | "annual"
-    pub current_period_end: DateTime<Utc>,
+import (
+    "time"
+
+    "github.com/google/uuid"
+    "homegrown/internal/shared/types"
+)
+
+// SubscriptionCreated is published when a family's subscription becomes active for the first time.
+// Consumed by iam:: (set tier=premium) and notify:: (welcome email).
+type SubscriptionCreated struct {
+    FamilyID         types.FamilyID `json:"family_id"`
+    Tier             string         `json:"tier"`              // "premium"
+    BillingInterval  string         `json:"billing_interval"`  // "monthly" | "annual"
+    CurrentPeriodEnd time.Time      `json:"current_period_end"`
 }
-impl DomainEvent for SubscriptionCreated {}
 
-/// Published when a subscription is modified (interval change, renewal, reactivation).
-/// Consumed by iam:: (update tier if changed) and notify:: (plan change notification).
-#[derive(Clone, Debug)]
-pub struct SubscriptionChanged {
-    pub family_id: FamilyId,
-    pub tier: String,
-    pub billing_interval: String,
-    pub current_period_end: DateTime<Utc>,
-    pub change_type: String,           // "interval_change" | "renewal" | "reactivation"
+// SubscriptionChanged is published when a subscription is modified (interval change, renewal, reactivation).
+// Consumed by iam:: (update tier if changed) and notify:: (plan change notification).
+type SubscriptionChanged struct {
+    FamilyID         types.FamilyID `json:"family_id"`
+    Tier             string         `json:"tier"`
+    BillingInterval  string         `json:"billing_interval"`
+    CurrentPeriodEnd time.Time      `json:"current_period_end"`
+    ChangeType       string         `json:"change_type"` // "interval_change" | "renewal" | "reactivation"
 }
-impl DomainEvent for SubscriptionChanged {}
 
-/// Published when a subscription is fully canceled (end of term reached).
-/// Consumed by iam:: (set tier=free) and notify:: (cancellation confirmation).
-///
-/// IMPORTANT: This event fires at the END of the billing period, not when
-/// the family requests cancellation. Between cancel request and period end,
-/// the subscription remains active. [S§15.3]
-#[derive(Clone, Debug)]
-pub struct SubscriptionCancelled {
-    pub family_id: FamilyId,
-    pub effective_at: DateTime<Utc>,   // when the cancellation took effect
+// SubscriptionCancelled is published when a subscription is fully canceled (end of term reached).
+// Consumed by iam:: (set tier=free) and notify:: (cancellation confirmation).
+//
+// IMPORTANT: This event fires at the END of the billing period, not when
+// the family requests cancellation. Between cancel request and period end,
+// the subscription remains active. [S§15.3]
+type SubscriptionCancelled struct {
+    FamilyID    types.FamilyID `json:"family_id"`
+    EffectiveAt time.Time      `json:"effective_at"` // when the cancellation took effect
 }
-impl DomainEvent for SubscriptionCancelled {}
 
-/// Published when a creator payout is completed. (Phase 2)
-/// Consumed by notify:: (payout confirmation notification).
-#[derive(Clone, Debug)]
-pub struct PayoutCompleted {
-    pub creator_id: Uuid,
-    pub payout_id: Uuid,
-    pub amount_cents: i64,
-    pub currency: String,
+// PayoutCompleted is published when a creator payout is completed. (Phase 2)
+// Consumed by notify:: (payout confirmation notification).
+type PayoutCompleted struct {
+    CreatorID   uuid.UUID `json:"creator_id"`
+    PayoutID    uuid.UUID `json:"payout_id"`
+    AmountCents int64     `json:"amount_cents"`
+    Currency    string    `json:"currency"`
 }
-impl DomainEvent for PayoutCompleted {}
 ```
 
 ### §16.4 Events billing:: Subscribes To
 
 | Event | Source | Effect |
 |-------|--------|--------|
-| `FamilyDeletionScheduled { family_id, delete_after }` | `iam::` | Cancel subscription immediately in Hyperswitch (no end-of-term wait). Delete local records. `[01-iam §13.3]` |
-| `PrimaryParentTransferred { family_id, old_primary, new_primary }` | `iam::` | Update Hyperswitch customer email to new primary parent's email. `[01-iam §13.3]` |
-| `PurchaseCompleted { family_id, purchase_id, listing_id, content_metadata }` | `mkt::` (Phase 2) | No-op in billing:: Phase 1. Phase 2: record creator earnings for payout aggregation. `[07-mkt §18.3]` |
-| `PurchaseRefunded { purchase_id, listing_id, family_id, refund_amount_cents }` | `mkt::` (Phase 2) | No-op in billing:: Phase 1. Phase 2: deduct refund from creator's unpaid earnings. `[07-mkt §18.3]` |
+| `FamilyDeletionScheduled { FamilyID, DeleteAfter }` | `iam::` | Cancel subscription immediately in Hyperswitch (no end-of-term wait). Delete local records. `[01-iam §13.3]` |
+| `PrimaryParentTransferred { FamilyID, OldPrimary, NewPrimary }` | `iam::` | Update Hyperswitch customer email to new primary parent's email. `[01-iam §13.3]` |
+| `PurchaseCompleted { FamilyID, PurchaseID, ListingID, ContentMetadata }` | `mkt::` (Phase 2) | No-op in billing:: Phase 1. Phase 2: record creator earnings for payout aggregation. `[07-mkt §18.3]` |
+| `PurchaseRefunded { PurchaseID, ListingID, FamilyID, RefundAmountCents }` | `mkt::` (Phase 2) | No-op in billing:: Phase 1. Phase 2: deduct refund from creator's unpaid earnings. `[07-mkt §18.3]` |
 
-```rust
-// src/billing/event_handlers.rs
+```go
+// internal/billing/event_handlers.go
 
-use crate::iam::events::{FamilyDeletionScheduled, PrimaryParentTransferred};
-use crate::mkt::events::{PurchaseCompleted, PurchaseRefunded};
+package billing
+
+import (
+    "context"
+
+    iamevents "homegrown/internal/iam/events"
+    mktevents "homegrown/internal/mkt/events"
+)
 
 // ─── iam:: events ─────────────────────────────────────────────────────
 
-pub struct FamilyDeletionScheduledHandler {
-    billing_service: Arc<dyn BillingService>,
+type FamilyDeletionScheduledHandler struct {
+    BillingService BillingService
 }
 
-#[async_trait]
-impl DomainEventHandler<FamilyDeletionScheduled> for FamilyDeletionScheduledHandler {
-    async fn handle(&self, event: &FamilyDeletionScheduled) -> Result<(), AppError> {
-        self.billing_service.handle_family_deletion_scheduled(event).await
-    }
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *iamevents.FamilyDeletionScheduled) error {
+    return h.BillingService.HandleFamilyDeletionScheduled(ctx, event)
 }
 
-pub struct PrimaryParentTransferredHandler {
-    billing_service: Arc<dyn BillingService>,
+type PrimaryParentTransferredHandler struct {
+    BillingService BillingService
 }
 
-#[async_trait]
-impl DomainEventHandler<PrimaryParentTransferred> for PrimaryParentTransferredHandler {
-    async fn handle(&self, event: &PrimaryParentTransferred) -> Result<(), AppError> {
-        self.billing_service.handle_primary_parent_transferred(event).await
-    }
+func (h *PrimaryParentTransferredHandler) Handle(ctx context.Context, event *iamevents.PrimaryParentTransferred) error {
+    return h.BillingService.HandlePrimaryParentTransferred(ctx, event)
 }
 
 // ─── mkt:: events (Phase 2) ──────────────────────────────────────────
 
-pub struct PurchaseCompletedHandler {
-    billing_service: Arc<dyn BillingService>,
+type PurchaseCompletedHandler struct {
+    BillingService BillingService
 }
 
-#[async_trait]
-impl DomainEventHandler<PurchaseCompleted> for PurchaseCompletedHandler {
-    async fn handle(&self, event: &PurchaseCompleted) -> Result<(), AppError> {
-        self.billing_service.handle_purchase_completed(event).await
-    }
+func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event *mktevents.PurchaseCompleted) error {
+    return h.BillingService.HandlePurchaseCompleted(ctx, event)
 }
 
-pub struct PurchaseRefundedHandler {
-    billing_service: Arc<dyn BillingService>,
+type PurchaseRefundedHandler struct {
+    BillingService BillingService
 }
 
-#[async_trait]
-impl DomainEventHandler<PurchaseRefunded> for PurchaseRefundedHandler {
-    async fn handle(&self, event: &PurchaseRefunded) -> Result<(), AppError> {
-        self.billing_service.handle_purchase_refunded(event).await
-    }
+func (h *PurchaseRefundedHandler) Handle(ctx context.Context, event *mktevents.PurchaseRefunded) error {
+    return h.BillingService.HandlePurchaseRefunded(ctx, event)
 }
 ```
 
@@ -1815,12 +1593,12 @@ handlers.
 - Payment method management (attach, list, detach via SetupIntent)
 - Subscription estimate / pricing preview
 - Invoice listing
-- Creator payout aggregation (`AggregatePayoutsJob`, `ExecutePayoutsJob`)
+- Creator payout aggregation (`AggregatePayoutsTask`, `ExecutePayoutsTask`)
 - Creator payout history endpoint
 - Full webhook lifecycle (all subscription events)
 - `PurchaseCompleted` and `PurchaseRefunded` event handlers
 - Pause/resume subscription
-- **~10 additional endpoints, 2 additional event handlers, 2 background jobs**
+- **~10 additional endpoints, 2 additional event handlers, 2 background tasks**
 
 ### Phase 3 — Metering & Tax `[S§19]`
 
@@ -1893,45 +1671,44 @@ Each item is a testable assertion. Implementation is not complete until all asse
 
 ### Error Handling
 
-32. Zero `.unwrap()` / `.expect()` in production code `[CODING §2.2]`
-33. All errors use `BillingError` with `thiserror` `[CODING §2.2, §5.2]`
+32. Zero unchecked errors in production code `[CODING §2.2]`
+33. All errors use sentinel error variables with `errors.Is`/`errors.As` `[CODING §2.2, §5.2]`
 34. Internal error details (adapter errors, DB errors) are logged but never exposed in API
     responses `[CODING §2.2, §5.2]`
-35. All `BillingError` variants map to documented HTTP status codes
+35. All error types map to documented HTTP status codes
 
 ---
 
 ## §19 Module Structure
 
 ```
-src/billing/
-├── mod.rs                    # Re-exports, domain-level doc comments
-├── handlers.rs               # 4 Phase 1 Axum route handlers (thin layer only)
-│                             #   get_subscription, coppa_verify,
-│                             #   hyperswitch_webhook, list_transactions
-├── service.rs                # BillingServiceImpl — subscription lifecycle,
-│                             #   COPPA verification, webhook processing,
-│                             #   event handling
-├── repository.rs             # PgSubscriptionRepo, PgTransactionRepo,
-│                             #   PgCustomerRepo, PgPayoutRepo (Phase 2)
-│                             #   All user-data queries family-scoped via FamilyScope
-├── models.rs                 # Request/response types (serde + OpenAPI derives),
-│                             #   internal types (BillingConfig, etc.)
-├── ports.rs                  # BillingService trait, all repository traits,
-│                             #   SubscriptionPaymentAdapter trait
-├── errors.rs                 # BillingError thiserror enum
-├── events.rs                 # SubscriptionCreated, SubscriptionChanged,
-│                             #   SubscriptionCancelled, PayoutCompleted
-│                             #   [ARCH §4.6]
-├── event_handlers.rs         # 4 DomainEventHandler structs (one per
-│                             #   subscribed event type) [ARCH §4.6]
-├── jobs.rs                   # AggregatePayoutsJob (Phase 2),
-│                             #   ExecutePayoutsJob (Phase 2) [ARCH §12]
-├── adapters/
-│   ├── mod.rs                # Adapter trait re-exports
-│   └── hyperswitch.rs        # HyperswitchSubscriptionAdapter — wraps Hyperswitch
-│                             #   subscription + payment REST API [ARCH §2.9]
-└── entities/                 # SeaORM-generated — never hand-edit [CODING §6.3]
+internal/billing/
++-- handlers.go              # 4 Phase 1 Echo route handlers (thin layer only)
+|                            #   getSubscription, coppaVerify,
+|                            #   hyperswitchWebhook, listTransactions
++-- service.go               # BillingServiceImpl — subscription lifecycle,
+|                            #   COPPA verification, webhook processing,
+|                            #   event handling
++-- repository.go            # PgSubscriptionRepo, PgTransactionRepo,
+|                            #   PgCustomerRepo, PgPayoutRepo (Phase 2)
+|                            #   All user-data queries family-scoped via FamilyScope
+|                            #   (GORM models defined in models.go)
++-- models.go                # Request/response types (struct tags + swaggo),
+|                            #   internal types (BillingConfig, etc.),
+|                            #   GORM models
++-- ports.go                 # BillingService interface, all repository interfaces,
+|                            #   SubscriptionPaymentAdapter interface
++-- errors.go                # Sentinel error variables
++-- events.go                # SubscriptionCreated, SubscriptionChanged,
+|                            #   SubscriptionCancelled, PayoutCompleted
+|                            #   [ARCH §4.6]
++-- event_handlers.go        # 4 DomainEventHandler structs (one per
+|                            #   subscribed event type) [ARCH §4.6]
++-- tasks.go                 # AggregatePayoutsTask (Phase 2),
+|                            #   ExecutePayoutsTask (Phase 2) [ARCH §12]
++-- adapters/
+    +-- hyperswitch.go       # HyperswitchSubscriptionAdapter — wraps Hyperswitch
+                             #   subscription + payment REST API [ARCH §2.9]
 ```
 
 > **Complexity class**: Simple (no `domain/` subdirectory). `billing::` delegates subscription

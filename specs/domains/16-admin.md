@@ -10,11 +10,11 @@ operational backbone for day-to-day platform management. `[S§3.1.5, S§12.7]`
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/admin/` |
+| **Module path** | `internal/admin/` |
 | **DB prefix** | `admin_` |
-| **Complexity class** | Non-complex (no `domain/` subdirectory) `[ARCH §4.5]` |
+| **Complexity class** | Non-complex `[ARCH §4.5]` |
 | **External adapter** | None (aggregates from other domains' service interfaces) |
-| **Key constraint** | All endpoints require `RequireAdmin` extractor `[00-core §13.3]`; admin actions MUST be immutably logged; MUST NOT bypass family-scoped isolation for data reads — use service interfaces |
+| **Key constraint** | All endpoints require `RequireAdmin` middleware `[00-core §13.3]`; admin actions MUST be immutably logged; MUST NOT bypass family-scoped isolation for data reads — use service interfaces |
 
 **What admin:: owns**: Feature flag storage, admin audit log, system health aggregation
 endpoints, admin-specific API endpoints that wrap other domains' services, admin dashboard
@@ -25,10 +25,10 @@ configuration.
 `billing::`). Data export/deletion (owned by `lifecycle::`). The admin domain provides
 *views into* and *actions on* other domains' data via their service interfaces.
 
-**What admin:: delegates**: User suspension → `safety::SafetyService`. Content removal →
-`safety::SafetyService`. Session revocation → `iam::KratosAdapter`. Methodology config
-updates → `method::MethodologyService`. Feature flag evaluation → in-process (Redis-backed).
-Notification delivery → `notify::` (via domain events).
+**What admin:: delegates**: User suspension -> `safety.SafetyService`. Content removal ->
+`safety.SafetyService`. Session revocation -> `iam.KratosAdapter`. Methodology config
+updates -> `method.MethodologyService`. Feature flag evaluation -> in-process (Redis-backed).
+Notification delivery -> `notify::` (via domain events).
 
 ---
 
@@ -52,7 +52,7 @@ All tables use the `admin_` prefix. `[ARCH §5.1]`
 
 ```sql
 -- =============================================================================
--- Migration: YYYYMMDD_000001_create_admin_tables.rs
+-- Migration: YYYYMMDD_000001_create_admin_tables.sql
 -- =============================================================================
 
 -- Feature flags: simple key-value feature toggles
@@ -128,7 +128,7 @@ CREATE INDEX idx_admin_audit_log_created ON admin_audit_log(created_at DESC);
 
 ## §4 API Endpoints
 
-All endpoints require `RequireAdmin` extractor.
+All endpoints require `RequireAdmin` middleware.
 
 ```
 # User Management (delegates to iam:: and safety::)
@@ -174,116 +174,61 @@ POST   /v1/admin/lifecycle/recoveries/:id/resolve  # Resolve recovery request
 
 ## §5 Service Interface
 
-```rust
-#[async_trait]
-pub trait AdminService: Send + Sync {
+```go
+// internal/admin/ports.go
+
+// AdminService defines the admin domain's service interface.
+type AdminService interface {
     // === User Management ===
 
-    /// Search users by email, name, or family ID.
-    async fn search_users(
-        &self,
-        auth: &AuthContext,
-        query: UserSearchQuery,
-        pagination: PaginationParams,
-    ) -> Result<PaginatedResponse<AdminUserSummary>, AppError>;
+    // SearchUsers searches users by email, name, or family ID.
+    SearchUsers(ctx context.Context, auth *AuthContext, query *UserSearchQuery, pagination *PaginationParams) (*PaginatedResponse[AdminUserSummary], error)
 
-    /// Get detailed user info (family + parents + students + subscription + flags).
-    async fn get_user_detail(
-        &self,
-        auth: &AuthContext,
-        family_id: Uuid,
-    ) -> Result<AdminUserDetail, AppError>;
+    // GetUserDetail returns detailed user info (family + parents + students + subscription + flags).
+    GetUserDetail(ctx context.Context, auth *AuthContext, familyID uuid.UUID) (*AdminUserDetail, error)
 
-    /// Get audit trail for a specific family.
-    async fn get_user_audit_trail(
-        &self,
-        auth: &AuthContext,
-        family_id: Uuid,
-        pagination: PaginationParams,
-    ) -> Result<PaginatedResponse<AuditLogEntry>, AppError>;
+    // GetUserAuditTrail returns audit trail for a specific family.
+    GetUserAuditTrail(ctx context.Context, auth *AuthContext, familyID uuid.UUID, pagination *PaginationParams) (*PaginatedResponse[AuditLogEntry], error)
 
     // === Feature Flags ===
 
-    /// List all feature flags.
-    async fn list_flags(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<Vec<FeatureFlag>, AppError>;
+    // ListFlags lists all feature flags.
+    ListFlags(ctx context.Context, auth *AuthContext) ([]FeatureFlag, error)
 
-    /// Create a new feature flag.
-    async fn create_flag(
-        &self,
-        auth: &AuthContext,
-        input: CreateFlagInput,
-    ) -> Result<FeatureFlag, AppError>;
+    // CreateFlag creates a new feature flag.
+    CreateFlag(ctx context.Context, auth *AuthContext, input *CreateFlagInput) (*FeatureFlag, error)
 
-    /// Update a feature flag.
-    async fn update_flag(
-        &self,
-        auth: &AuthContext,
-        key: &str,
-        input: UpdateFlagInput,
-    ) -> Result<FeatureFlag, AppError>;
+    // UpdateFlag updates a feature flag.
+    UpdateFlag(ctx context.Context, auth *AuthContext, key string, input *UpdateFlagInput) (*FeatureFlag, error)
 
-    /// Delete a feature flag.
-    async fn delete_flag(
-        &self,
-        auth: &AuthContext,
-        key: &str,
-    ) -> Result<(), AppError>;
+    // DeleteFlag deletes a feature flag.
+    DeleteFlag(ctx context.Context, auth *AuthContext, key string) error
 
-    /// Evaluate whether a flag is enabled for a specific family.
-    /// Used by other domains to check feature flags at runtime.
-    async fn is_flag_enabled(
-        &self,
-        key: &str,
-        family_id: Option<Uuid>,
-    ) -> Result<bool, AppError>;
+    // IsFlagEnabled evaluates whether a flag is enabled for a specific family.
+    // Used by other domains to check feature flags at runtime.
+    IsFlagEnabled(ctx context.Context, key string, familyID *uuid.UUID) (bool, error)
 
     // === System Health ===
 
-    /// Get aggregated system health status.
-    async fn get_system_health(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<SystemHealthResponse, AppError>;
+    // GetSystemHealth returns aggregated system health status.
+    GetSystemHealth(ctx context.Context, auth *AuthContext) (*SystemHealthResponse, error)
 
-    /// Get background job queue status.
-    async fn get_job_status(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<JobStatusResponse, AppError>;
+    // GetJobStatus returns background job queue status.
+    GetJobStatus(ctx context.Context, auth *AuthContext) (*JobStatusResponse, error)
 
-    /// Get dead-letter queue contents.
-    async fn get_dead_letter_jobs(
-        &self,
-        auth: &AuthContext,
-        pagination: PaginationParams,
-    ) -> Result<PaginatedResponse<DeadLetterJob>, AppError>;
+    // GetDeadLetterJobs returns dead-letter queue contents.
+    GetDeadLetterJobs(ctx context.Context, auth *AuthContext, pagination *PaginationParams) (*PaginatedResponse[DeadLetterJob], error)
 
-    /// Retry a dead-letter job.
-    async fn retry_dead_letter_job(
-        &self,
-        auth: &AuthContext,
-        job_id: &str,
-    ) -> Result<(), AppError>;
+    // RetryDeadLetterJob retries a dead-letter job.
+    RetryDeadLetterJob(ctx context.Context, auth *AuthContext, jobID string) error
 
     // === Audit Log ===
 
-    /// Search/filter the admin audit log.
-    async fn search_audit_log(
-        &self,
-        auth: &AuthContext,
-        query: AuditLogQuery,
-        pagination: PaginationParams,
-    ) -> Result<PaginatedResponse<AuditLogEntry>, AppError>;
+    // SearchAuditLog searches/filters the admin audit log.
+    SearchAuditLog(ctx context.Context, auth *AuthContext, query *AuditLogQuery, pagination *PaginationParams) (*PaginatedResponse[AuditLogEntry], error)
 
-    /// Record an admin action (called internally by other admin methods).
-    async fn log_action(
-        &self,
-        auth: &AuthContext,
-        action: AdminAction,
-    ) -> Result<(), AppError>;
+    // LogAction records an admin action (called internally by other admin methods).
+    LogAction(ctx context.Context, auth *AuthContext, action *AdminAction) error
 }
 ```
 
@@ -291,39 +236,32 @@ pub trait AdminService: Send + Sync {
 
 ## §6 Repository Interfaces
 
-```rust
-#[async_trait]
-pub trait FeatureFlagRepository: Send + Sync {
-    async fn list_all(&self) -> Result<Vec<FeatureFlag>, DbErr>;
+```go
+// internal/admin/ports.go (continued)
 
-    async fn find_by_key(&self, key: &str) -> Result<Option<FeatureFlag>, DbErr>;
+// FeatureFlagRepository defines persistence operations for admin_feature_flags.
+type FeatureFlagRepository interface {
+    ListAll(ctx context.Context) ([]FeatureFlag, error)
 
-    async fn create(&self, input: &CreateFlagInput, admin_id: Uuid) -> Result<FeatureFlag, DbErr>;
+    FindByKey(ctx context.Context, key string) (*FeatureFlag, error)
 
-    async fn update(&self, key: &str, input: &UpdateFlagInput, admin_id: Uuid) -> Result<FeatureFlag, DbErr>;
+    Create(ctx context.Context, input *CreateFlagInput, adminID uuid.UUID) (*FeatureFlag, error)
 
-    async fn delete(&self, key: &str) -> Result<(), DbErr>;
+    Update(ctx context.Context, key string, input *UpdateFlagInput, adminID uuid.UUID) (*FeatureFlag, error)
+
+    Delete(ctx context.Context, key string) error
 }
 
-#[async_trait]
-pub trait AuditLogRepository: Send + Sync {
-    /// Append-only: create a new audit log entry.
-    async fn create(&self, entry: &CreateAuditLogEntry) -> Result<AuditLogEntry, DbErr>;
+// AuditLogRepository defines persistence operations for admin_audit_log.
+type AuditLogRepository interface {
+    // Create appends a new audit log entry (append-only).
+    Create(ctx context.Context, entry *CreateAuditLogEntry) (*AuditLogEntry, error)
 
-    /// Search audit log with filters.
-    async fn search(
-        &self,
-        query: &AuditLogQuery,
-        pagination: &PaginationParams,
-    ) -> Result<Vec<AuditLogEntry>, DbErr>;
+    // Search searches audit log with filters.
+    Search(ctx context.Context, query *AuditLogQuery, pagination *PaginationParams) ([]AuditLogEntry, error)
 
-    /// Get audit entries for a specific target.
-    async fn find_by_target(
-        &self,
-        target_type: &str,
-        target_id: Uuid,
-        pagination: &PaginationParams,
-    ) -> Result<Vec<AuditLogEntry>, DbErr>;
+    // FindByTarget returns audit entries for a specific target.
+    FindByTarget(ctx context.Context, targetType string, targetID uuid.UUID, pagination *PaginationParams) ([]AuditLogEntry, error)
 }
 ```
 
@@ -331,134 +269,136 @@ pub trait AuditLogRepository: Send + Sync {
 
 ## §7 Models (DTOs)
 
-```rust
+```go
+// internal/admin/models.go
+
 // --- Request types ---
 
-#[derive(Deserialize, ToSchema)]
-pub struct UserSearchQuery {
-    pub q: Option<String>,             // search by email or name
-    pub family_id: Option<Uuid>,       // filter by family
-    pub status: Option<String>,        // "active", "suspended", "banned"
-    pub subscription: Option<String>,  // "free", "premium"
+// UserSearchQuery represents search parameters for user lookup.
+type UserSearchQuery struct {
+    Q            *string    `json:"q"`              // search by email or name
+    FamilyID     *uuid.UUID `json:"family_id"`      // filter by family
+    Status       *string    `json:"status"`          // "active", "suspended", "banned"
+    Subscription *string    `json:"subscription"`    // "free", "premium"
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct CreateFlagInput {
-    pub key: String,
-    pub description: String,
-    pub enabled: bool,
-    pub rollout_percentage: Option<i16>,
-    pub allowed_family_ids: Option<Vec<Uuid>>,
+// CreateFlagInput represents input for creating a feature flag.
+type CreateFlagInput struct {
+    Key                string      `json:"key" validate:"required"`
+    Description        string      `json:"description" validate:"required"`
+    Enabled            bool        `json:"enabled"`
+    RolloutPercentage  *int16      `json:"rollout_percentage"`
+    AllowedFamilyIDs   []uuid.UUID `json:"allowed_family_ids"`
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct UpdateFlagInput {
-    pub enabled: Option<bool>,
-    pub description: Option<String>,
-    pub rollout_percentage: Option<Option<i16>>,  // None = don't change, Some(None) = remove
-    pub allowed_family_ids: Option<Option<Vec<Uuid>>>,
+// UpdateFlagInput represents input for updating a feature flag.
+type UpdateFlagInput struct {
+    Enabled           *bool        `json:"enabled"`
+    Description       *string      `json:"description"`
+    RolloutPercentage **int16      `json:"rollout_percentage"`     // nil = don't change, *nil = remove
+    AllowedFamilyIDs  *[]uuid.UUID `json:"allowed_family_ids"`    // nil = don't change
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct AuditLogQuery {
-    pub admin_id: Option<Uuid>,
-    pub action: Option<String>,
-    pub target_type: Option<String>,
-    pub target_id: Option<Uuid>,
-    pub from_date: Option<DateTime<Utc>>,
-    pub to_date: Option<DateTime<Utc>>,
+// AuditLogQuery represents search parameters for the audit log.
+type AuditLogQuery struct {
+    AdminID    *uuid.UUID `json:"admin_id"`
+    Action     *string    `json:"action"`
+    TargetType *string    `json:"target_type"`
+    TargetID   *uuid.UUID `json:"target_id"`
+    FromDate   *time.Time `json:"from_date"`
+    ToDate     *time.Time `json:"to_date"`
 }
 
 // --- Response types ---
 
-#[derive(Serialize, ToSchema)]
-pub struct AdminUserSummary {
-    pub family_id: Uuid,
-    pub family_name: String,
-    pub primary_parent_email: String,
-    pub parent_count: i32,
-    pub student_count: i32,
-    pub subscription_tier: String,
-    pub account_status: String,        // "active", "suspended", "banned", "deletion_pending"
-    pub created_at: DateTime<Utc>,
-    pub last_active_at: Option<DateTime<Utc>>,
+// AdminUserSummary represents a summary view of a user for admin listing.
+type AdminUserSummary struct {
+    FamilyID           uuid.UUID  `json:"family_id"`
+    FamilyName         string     `json:"family_name"`
+    PrimaryParentEmail string     `json:"primary_parent_email"`
+    ParentCount        int32      `json:"parent_count"`
+    StudentCount       int32      `json:"student_count"`
+    SubscriptionTier   string     `json:"subscription_tier"`
+    AccountStatus      string     `json:"account_status"` // "active", "suspended", "banned", "deletion_pending"
+    CreatedAt          time.Time  `json:"created_at"`
+    LastActiveAt       *time.Time `json:"last_active_at"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct AdminUserDetail {
-    pub family: AdminFamilyInfo,
-    pub parents: Vec<AdminParentInfo>,
-    pub students: Vec<AdminStudentInfo>,
-    pub subscription: Option<AdminSubscriptionInfo>,
-    pub moderation_history: Vec<ModerationActionSummary>,
-    pub recent_activity: UserActivitySummary,
+// AdminUserDetail represents the detailed view of a user for admin inspection.
+type AdminUserDetail struct {
+    Family            AdminFamilyInfo            `json:"family"`
+    Parents           []AdminParentInfo          `json:"parents"`
+    Students          []AdminStudentInfo         `json:"students"`
+    Subscription      *AdminSubscriptionInfo     `json:"subscription"`
+    ModerationHistory []ModerationActionSummary  `json:"moderation_history"`
+    RecentActivity    UserActivitySummary        `json:"recent_activity"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct FeatureFlag {
-    pub id: Uuid,
-    pub key: String,
-    pub description: String,
-    pub enabled: bool,
-    pub rollout_percentage: Option<i16>,
-    pub allowed_family_ids: Option<Vec<Uuid>>,
-    pub created_by: Uuid,
-    pub updated_by: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+// FeatureFlag represents a feature flag entity.
+type FeatureFlag struct {
+    ID                uuid.UUID   `json:"id"`
+    Key               string      `json:"key"`
+    Description       string      `json:"description"`
+    Enabled           bool        `json:"enabled"`
+    RolloutPercentage *int16      `json:"rollout_percentage"`
+    AllowedFamilyIDs  []uuid.UUID `json:"allowed_family_ids"`
+    CreatedBy         uuid.UUID   `json:"created_by"`
+    UpdatedBy         *uuid.UUID  `json:"updated_by"`
+    CreatedAt         time.Time   `json:"created_at"`
+    UpdatedAt         time.Time   `json:"updated_at"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct SystemHealthResponse {
-    pub status: String,                // "healthy", "degraded", "unhealthy"
-    pub components: Vec<ComponentHealth>,
-    pub checked_at: DateTime<Utc>,
+// SystemHealthResponse represents the aggregated system health status.
+type SystemHealthResponse struct {
+    Status     string            `json:"status"` // "healthy", "degraded", "unhealthy"
+    Components []ComponentHealth `json:"components"`
+    CheckedAt  time.Time         `json:"checked_at"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct ComponentHealth {
-    pub name: String,                  // "database", "redis", "r2", "kratos"
-    pub status: String,                // "healthy", "degraded", "unhealthy"
-    pub latency_ms: Option<i64>,
-    pub details: Option<String>,
+// ComponentHealth represents the health of a single system component.
+type ComponentHealth struct {
+    Name      string  `json:"name"`       // "database", "redis", "r2", "kratos"
+    Status    string  `json:"status"`     // "healthy", "degraded", "unhealthy"
+    LatencyMs *int64  `json:"latency_ms"`
+    Details   *string `json:"details"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct JobStatusResponse {
-    pub queues: Vec<QueueStatus>,
-    pub dead_letter_count: i64,
+// JobStatusResponse represents background job queue status.
+type JobStatusResponse struct {
+    Queues          []QueueStatus `json:"queues"`
+    DeadLetterCount int64         `json:"dead_letter_count"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct QueueStatus {
-    pub name: String,                  // "critical", "default", "low"
-    pub pending: i64,
-    pub processing: i64,
-    pub completed_24h: i64,
-    pub failed_24h: i64,
+// QueueStatus represents the status of a single job queue.
+type QueueStatus struct {
+    Name         string `json:"name"` // "critical", "default", "low"
+    Pending      int64  `json:"pending"`
+    Processing   int64  `json:"processing"`
+    Completed24h int64  `json:"completed_24h"`
+    Failed24h    int64  `json:"failed_24h"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct DeadLetterJob {
-    pub id: String,
-    pub queue: String,
-    pub job_type: String,
-    pub payload: serde_json::Value,
-    pub error_message: String,
-    pub failed_at: DateTime<Utc>,
-    pub retry_count: i32,
+// DeadLetterJob represents a job in the dead-letter queue.
+type DeadLetterJob struct {
+    ID           string          `json:"id"`
+    Queue        string          `json:"queue"`
+    JobType      string          `json:"job_type"`
+    Payload      json.RawMessage `json:"payload"`
+    ErrorMessage string          `json:"error_message"`
+    FailedAt     time.Time       `json:"failed_at"`
+    RetryCount   int32           `json:"retry_count"`
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct AuditLogEntry {
-    pub id: Uuid,
-    pub admin_id: Uuid,
-    pub admin_email: Option<String>,   // joined from iam_parents
-    pub action: String,
-    pub target_type: String,
-    pub target_id: Option<Uuid>,
-    pub details: serde_json::Value,
-    pub created_at: DateTime<Utc>,
+// AuditLogEntry represents a single audit log entry.
+type AuditLogEntry struct {
+    ID         uuid.UUID       `json:"id"`
+    AdminID    uuid.UUID       `json:"admin_id"`
+    AdminEmail *string         `json:"admin_email"` // joined from iam_parents
+    Action     string          `json:"action"`
+    TargetType string          `json:"target_type"`
+    TargetID   *uuid.UUID      `json:"target_id"`
+    Details    json.RawMessage `json:"details"`
+    CreatedAt  time.Time       `json:"created_at"`
 }
 ```
 
@@ -467,7 +407,7 @@ pub struct AuditLogEntry {
 ## §8 Admin Audit Logging (Domain Deep-Dive 1)
 
 Every admin action MUST produce an immutable audit log entry. This is enforced at
-the service layer — all admin operations call `log_action()` as part of their execution.
+the service layer — all admin operations call `LogAction()` as part of their execution.
 
 ### §8.1 Audit Invariants
 
@@ -478,32 +418,34 @@ the service layer — all admin operations call `log_action()` as part of their 
 
 ### §8.2 Audit Integration Pattern
 
-```rust
+```go
 // In AdminServiceImpl — every action follows this pattern:
-pub async fn suspend_user(&self, auth: &AuthContext, family_id: Uuid, reason: &str)
-    -> Result<(), AppError>
-{
+func (s *AdminServiceImpl) SuspendUser(ctx context.Context, auth *AuthContext, familyID uuid.UUID, reason string) error {
     // 1. Perform the action (delegate to safety::)
-    self.safety_service.suspend_account(family_id, reason).await?;
+    if err := s.safetyService.SuspendAccount(ctx, familyID, reason); err != nil {
+        return fmt.Errorf("suspending account: %w", err)
+    }
 
     // 2. Log the action (append-only, immutable)
-    self.audit_repo.create(&CreateAuditLogEntry {
-        admin_id: auth.parent_id,
-        action: "user_suspend",
-        target_type: "family",
-        target_id: Some(family_id),
-        details: json!({ "reason": reason }),
-        ip_address: auth.ip_address.clone(),
-        user_agent: auth.user_agent.clone(),
-    }).await?;
+    if _, err := s.auditRepo.Create(ctx, &CreateAuditLogEntry{
+        AdminID:    auth.ParentID,
+        Action:     "user_suspend",
+        TargetType: "family",
+        TargetID:   &familyID,
+        Details:    json.RawMessage(fmt.Sprintf(`{"reason": %q}`, reason)),
+        IPAddress:  auth.IPAddress,
+        UserAgent:  auth.UserAgent,
+    }); err != nil {
+        return fmt.Errorf("logging audit: %w", err)
+    }
 
     // 3. Publish event for notifications
-    self.event_bus.publish(AdminActionTaken {
-        action: "user_suspend",
-        target_family_id: Some(family_id),
-    }).await;
+    s.eventBus.Publish(ctx, &AdminActionTaken{
+        Action:         "user_suspend",
+        TargetFamilyID: &familyID,
+    })
 
-    Ok(())
+    return nil
 }
 ```
 
@@ -518,17 +460,17 @@ with the moderation queue.
 ### §9.1 Delegation Pattern
 
 ```
-Admin Dashboard (React) → admin:: handlers → safety::SafetyService
+Admin Dashboard (React) → admin:: handlers → safety.SafetyService
 ```
 
-- `GET /v1/admin/moderation/queue` calls `safety::SafetyService::get_review_queue()`
-- `POST /v1/admin/moderation/queue/:id/action` calls `safety::SafetyService::take_moderation_action()`
+- `GET /v1/admin/moderation/queue` calls `safety.SafetyService.GetReviewQueue()`
+- `POST /v1/admin/moderation/queue/:id/action` calls `safety.SafetyService.TakeModerationAction()`
 - Admin wraps each call with audit logging (§8)
 - Safety domain owns the actual moderation state machine and policy enforcement
 
 ### §9.2 Why Admin Wraps Safety
 
-The `RequireAdmin` extractor is defined in `00-core` and consumed by admin::. Safety's own
+The `RequireAdmin` middleware is defined in `00-core` and consumed by admin::. Safety's own
 endpoints are for *system-level* operations (CSAM reporting, automated scanning). The
 *human review* workflow routes through admin because it needs:
 - Audit logging of every moderator action
@@ -550,59 +492,66 @@ and family allowlist. This is sufficient for:
 
 ### §10.2 Evaluation
 
-```rust
-impl AdminServiceImpl {
-    /// Check if a feature flag is enabled for a given family.
-    /// Used by other domains at request time.
-    pub async fn is_flag_enabled(
-        &self,
-        key: &str,
-        family_id: Option<Uuid>,
-    ) -> Result<bool, AppError> {
-        // 1. Check Redis cache first (1-minute TTL)
-        let cache_key = format!("flag:{}", key);
-        if let Some(cached) = self.redis.get::<FeatureFlag>(&cache_key).await? {
-            return Ok(Self::evaluate_flag(&cached, family_id));
-        }
-
-        // 2. Fall back to database
-        let flag = self.flag_repo.find_by_key(key).await?
-            .ok_or(AppError::NotFound)?;
-
-        // 3. Cache for 1 minute
-        self.redis.set_ex(&cache_key, &flag, 60).await?;
-
-        Ok(Self::evaluate_flag(&flag, family_id))
+```go
+// IsFlagEnabled checks if a feature flag is enabled for a given family.
+// Used by other domains at request time.
+func (s *AdminServiceImpl) IsFlagEnabled(ctx context.Context, key string, familyID *uuid.UUID) (bool, error) {
+    // 1. Check Redis cache first (1-minute TTL)
+    cacheKey := fmt.Sprintf("flag:%s", key)
+    var cached FeatureFlag
+    if err := s.redis.Get(ctx, cacheKey, &cached); err == nil {
+        return evaluateFlag(&cached, familyID), nil
     }
 
-    fn evaluate_flag(flag: &FeatureFlag, family_id: Option<Uuid>) -> bool {
-        if !flag.enabled {
-            return false;
-        }
+    // 2. Fall back to database
+    flag, err := s.flagRepo.FindByKey(ctx, key)
+    if err != nil {
+        return false, fmt.Errorf("looking up flag: %w", err)
+    }
+    if flag == nil {
+        return false, ErrFlagNotFound
+    }
 
-        // If allowlist exists and family is specified, check membership
-        if let (Some(ref allowed), Some(fid)) = (&flag.allowed_family_ids, family_id) {
-            if !allowed.is_empty() {
-                return allowed.contains(&fid);
+    // 3. Cache for 1 minute
+    _ = s.redis.SetEx(ctx, cacheKey, flag, 60*time.Second)
+
+    return evaluateFlag(flag, familyID), nil
+}
+
+func evaluateFlag(flag *FeatureFlag, familyID *uuid.UUID) bool {
+    if !flag.Enabled {
+        return false
+    }
+
+    // If allowlist exists and family is specified, check membership
+    if len(flag.AllowedFamilyIDs) > 0 && familyID != nil {
+        for _, allowed := range flag.AllowedFamilyIDs {
+            if allowed == *familyID {
+                return true
             }
         }
-
-        // If percentage rollout, hash family_id for deterministic bucket
-        if let (Some(pct), Some(fid)) = (flag.rollout_percentage, family_id) {
-            let hash = crc32fast::hash(fid.as_bytes()) % 100;
-            return (hash as i16) < pct;
-        }
-
-        true
+        return false
     }
+
+    // If percentage rollout, hash family_id for deterministic bucket
+    if flag.RolloutPercentage != nil && familyID != nil {
+        hash := crc32.ChecksumIEEE(familyID[:]) % 100
+        return int16(hash) < *flag.RolloutPercentage
+    }
+
+    return true
 }
 ```
 
 ### §10.3 Usage by Other Domains
 
-```rust
+```go
 // In any domain's service:
-if self.admin_service.is_flag_enabled("new_quiz_builder", Some(family_id)).await? {
+enabled, err := s.adminService.IsFlagEnabled(ctx, "new_quiz_builder", &familyID)
+if err != nil {
+    return err
+}
+if enabled {
     // Use new quiz builder flow
 } else {
     // Use existing flow
@@ -643,7 +592,7 @@ Overall status:
 ## §12 Admin Frontend Integration
 
 The admin interface is a **section within the existing React SPA**, not a separate application.
-It is accessed via `/admin/*` routes and protected by the `RequireAdmin` extractor on the
+It is accessed via `/admin/*` routes and protected by the `RequireAdmin` middleware on the
 backend and a route guard on the frontend.
 
 ### §12.1 Route Structure
@@ -676,38 +625,29 @@ The admin dashboard landing page shows at-a-glance:
 
 ## §13 Error Types
 
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum AdminError {
-    #[error("Feature flag not found: {0}")]
-    FlagNotFound(String),
+```go
+// internal/admin/errors.go
 
-    #[error("Feature flag key already exists: {0}")]
-    FlagAlreadyExists(String),
+import "errors"
 
-    #[error("Invalid flag key format")]
-    InvalidFlagKey,
-
-    #[error("User not found")]
-    UserNotFound,
-
-    #[error("Dead-letter job not found")]
-    DeadLetterJobNotFound,
-
-    #[error("Database error")]
-    Database(#[from] sea_orm::DbErr),
-}
+var (
+    ErrFlagNotFound       = errors.New("feature flag not found")
+    ErrFlagAlreadyExists  = errors.New("feature flag key already exists")
+    ErrInvalidFlagKey     = errors.New("invalid flag key format")
+    ErrUserNotFound       = errors.New("user not found")
+    ErrDeadLetterNotFound = errors.New("dead-letter job not found")
+)
 ```
 
 **HTTP mapping**:
 
 | Error | HTTP Status |
 |-------|-------------|
-| `FlagNotFound` | 404 |
-| `FlagAlreadyExists` | 409 Conflict |
-| `InvalidFlagKey` | 400 Bad Request |
-| `UserNotFound` | 404 |
-| `DeadLetterJobNotFound` | 404 |
+| `ErrFlagNotFound` | 404 |
+| `ErrFlagAlreadyExists` | 409 Conflict |
+| `ErrInvalidFlagKey` | 400 Bad Request |
+| `ErrUserNotFound` | 404 |
+| `ErrDeadLetterNotFound` | 404 |
 
 ---
 
@@ -715,14 +655,14 @@ pub enum AdminError {
 
 | Direction | Domain | Interaction |
 |-----------|--------|-------------|
-| admin:: → iam:: | Service call | User lookup, family details |
-| admin:: → safety:: | Service call | Moderation queue, user suspension/ban |
-| admin:: → method:: | Service call | Methodology config read/update |
-| admin:: → billing:: | Service call | Subscription details for user view |
-| admin:: → lifecycle:: | Service call | Deletion and recovery management |
-| admin:: → learn:: | Service call | Activity counts for user summary |
-| admin:: → social:: | Service call | Post/comment counts for user summary |
-| All domains → admin:: | Service call | Feature flag evaluation (`is_flag_enabled`) |
+| admin:: -> iam:: | Service call | User lookup, family details |
+| admin:: -> safety:: | Service call | Moderation queue, user suspension/ban |
+| admin:: -> method:: | Service call | Methodology config read/update |
+| admin:: -> billing:: | Service call | Subscription details for user view |
+| admin:: -> lifecycle:: | Service call | Deletion and recovery management |
+| admin:: -> learn:: | Service call | Activity counts for user summary |
+| admin:: -> social:: | Service call | Post/comment counts for user summary |
+| All domains -> admin:: | Service call | Feature flag evaluation (`IsFlagEnabled`) |
 
 ---
 
@@ -750,7 +690,7 @@ pub enum AdminError {
 
 ## §16 Verification Checklist
 
-- [ ] All admin endpoints require `RequireAdmin` extractor
+- [ ] All admin endpoints require `RequireAdmin` middleware
 - [ ] Every admin action produces an immutable audit log entry
 - [ ] Feature flag evaluation is cached in Redis with reasonable TTL
 - [ ] System health endpoint checks all critical dependencies
@@ -764,12 +704,11 @@ pub enum AdminError {
 ## §17 Module Structure
 
 ```
-src/admin/
-├── mod.rs              # Re-exports
-├── handlers.rs         # Axum route handlers
-├── service.rs          # Admin service orchestration
-├── repository.rs       # admin_ table queries (flags, audit log)
-├── models.rs           # DTOs (request/response)
-├── ports.rs            # Service + repository trait definitions
-└── entities/           # SeaORM-generated (admin_ tables)
+internal/admin/
+├── handler.go          # Echo route handlers
+├── service.go          # Admin service orchestration
+├── repository.go       # admin_ table queries (flags, audit log)
+├── models.go           # GORM models, DTOs (request/response)
+├── ports.go            # Service + repository interface definitions
+└── errors.go           # Sentinel error values
 ```

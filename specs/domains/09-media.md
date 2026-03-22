@@ -12,11 +12,11 @@ publication and CDN delivery. `[S§2.1, ARCH §8]`
 
 | Attribute | Value |
 |-----------|-------|
-| **Module path** | `src/media/` |
+| **Module path** | `internal/media/` |
 | **DB prefix** | `media_` `[ARCH §5.1]` |
-| **Complexity class** | Simple (no `domain/` subdirectory) — pipeline orchestration, no complex domain invariants `[ARCH §4.5]` |
+| **Complexity class** | Simple — pipeline orchestration, no complex domain invariants `[ARCH §4.5]` |
 | **CQRS** | No — read and write paths are straightforward; no separated query model needed |
-| **External adapter** | `src/media/adapters/s3.rs` (S3-compatible object storage — provider-agnostic; Cloudflare R2 configured via endpoint URL) `[ARCH §2.10, §4.2]` |
+| **External adapter** | `internal/media/adapters/s3.go` (S3-compatible object storage — provider-agnostic; Cloudflare R2 configured via endpoint URL) `[ARCH §2.10, §4.2]` |
 | **Key constraint** | Magic byte validation required on all uploads `[CODING §5.2]`; every query family-scoped via `FamilyScope` `[CODING §2.4, §2.5]`; CSAM scan mandatory before publish `[S§12.1]` |
 
 **What media:: owns**: Upload records and lifecycle state machine, presigned URL generation
@@ -27,18 +27,18 @@ rules (size limits, allowed types per context), processing job tracking, domain 
 for upload state transitions.
 
 **What media:: does NOT own**: CSAM detection adapters (owned by `safety::` —
-`src/safety/adapters/thorn.rs`) `[ARCH §2.13]`, content moderation adapters (owned by
-`safety::` — `src/safety/adapters/rekognition.rs`) `[ARCH §2.13]`, NCMEC reporting (owned by
-`safety::service::report_csam()`), social post/message attachment JSONB storage (owned by
+`internal/safety/adapters/thorn.go`) `[ARCH §2.13]`, content moderation adapters (owned by
+`safety::` — `internal/safety/adapters/rekognition.go`) `[ARCH §2.13]`, NCMEC reporting (owned by
+`safety::service.ReportCSAM()`), social post/message attachment JSONB storage (owned by
 `social::`) `[05-social §3.2]`, learning attachment JSONB fields (owned by `learn::`)
 `[06-learn §3.2]`, marketplace file records (owned by `mkt::` — `mkt_listing_files`)
 `[07-mkt §3.2]`, account/auth (owned by `iam::`), subscription tiers and storage quotas
 (owned by `billing::` — Phase 3).
 
-**What media:: delegates**: CSAM hash matching → `safety::ThornAdapter` (Thorn Safer
-PhotoDNA) `[ARCH §2.13]`. Content moderation → `safety::RekognitionAdapter` (AWS
-Rekognition label detection) `[ARCH §2.13]`. NCMEC reporting → `safety::service::report_csam()`.
-Background job scheduling → sidekiq-rs `[ARCH §12]`. Asset compression → FFMPEG worker
+**What media:: delegates**: CSAM hash matching -> `safety.ThornAdapter` (Thorn Safer
+PhotoDNA) `[ARCH §2.13]`. Content moderation -> `safety.RekognitionAdapter` (AWS
+Rekognition label detection) `[ARCH §2.13]`. NCMEC reporting -> `safety.Service.ReportCSAM()`.
+Background job scheduling -> hibiken/asynq `[ARCH §12]`. Asset compression -> FFMPEG worker
 (stateless service, invoked via job queue).
 
 ---
@@ -67,7 +67,7 @@ Cross-references from other domain specs are included where `media::` is the pro
 > **Coverage note on `[S§9.2.3]` (file versioning)**: SPEC.md §9.2.3 requires that purchasers
 > receive updated files when creators publish new versions. This is implemented as follows:
 > `mkt::` owns the `mkt_listing_files.version` column and the business logic for version
-> increments. When a creator uploads a new version, `mkt::` calls `media::MediaService` to
+> increments. When a creator uploads a new version, `mkt::` calls `media.MediaService` to
 > generate the presigned upload URL and manage the new upload. The old file's `storage_key`
 > remains in `media_uploads` (soft-deleted); the new file gets a fresh `media_uploads` record.
 > Media:: does not track versions — it manages individual uploads. Versioning is `mkt::`'s
@@ -253,7 +253,7 @@ CREATE INDEX idx_media_transcode_jobs_status ON media_transcode_jobs(status)
 ### §3.3 RLS Policies
 
 Family-scoped access on `media_uploads` via `family_id`. Enforced at the application layer
-via `FamilyScope` extractor `[CODING §2.4, §2.5, 00-core §8]`:
+via `FamilyScope` `[CODING §2.4, §2.5, 00-core §8]`:
 
 ```sql
 -- Application-layer enforcement: every query on media_uploads MUST include
@@ -278,23 +278,23 @@ family-scoped).
 
 #### POST /v1/media/uploads — Request Upload
 
-Request a presigned upload URL for direct client → S3 upload. `[ARCH §8.1]`
+Request a presigned upload URL for direct client -> S3 upload. `[ARCH §8.1]`
 
 - **Auth**: Required (`FamilyScope`)
 - **Body**: `RequestUploadCommand`
-```rust
+```json
 {
-    "context": "journal_image",        // UploadContext enum value
-    "content_type": "image/jpeg",      // declared MIME type
-    "filename": "nature-walk.jpg",     // original filename (sanitized on storage)
-    "size_bytes": 2048576              // declared file size (validated against context limits)
+    "context": "journal_image",
+    "content_type": "image/jpeg",
+    "filename": "nature-walk.jpg",
+    "size_bytes": 2048576
 }
 ```
-- **Response**: `201 Created` → `UploadResponse`
-```rust
+- **Response**: `201 Created` -> `UploadResponse`
+```json
 {
     "upload_id": "uuid",
-    "presigned_url": "https://...",    // PUT URL for direct upload
+    "presigned_url": "https://...",
     "storage_key": "uploads/{family_id}/{upload_id}/nature-walk.jpg",
     "expires_in_seconds": 3600
 }
@@ -305,7 +305,7 @@ Request a presigned upload URL for direct client → S3 upload. `[ARCH §8.1]`
   - `filename` is sanitized: stripped of path separators, control characters, truncated to 255 bytes
 - **Side effects**:
   - Creates `media_uploads` record with status `pending`
-  - Generates presigned PUT URL via `ObjectStorageAdapter::presigned_put()`
+  - Generates presigned PUT URL via `ObjectStorageAdapter.PresignedPut()`
   - Sets `expires_at` to `now() + 1 hour`
 - **Error codes**:
   - `422` — invalid file type for context (`InvalidFileType`)
@@ -316,8 +316,8 @@ Request a presigned upload URL for direct client → S3 upload. `[ARCH §8.1]`
 Confirm that the client has completed the direct upload. Triggers background processing. `[ARCH §8.1]`
 
 - **Auth**: Required (`FamilyScope`) — must be the upload owner
-- **Response**: `200 OK` → `UploadInfo`
-```rust
+- **Response**: `200 OK` -> `UploadInfo`
+```json
 {
     "upload_id": "uuid",
     "status": "processing",
@@ -325,7 +325,7 @@ Confirm that the client has completed the direct upload. Triggers background pro
     "content_type": "image/jpeg",
     "original_filename": "nature-walk.jpg",
     "size_bytes": 2048576,
-    "urls": null,                      // populated after processing completes
+    "urls": null,
     "has_thumb": false,
     "has_medium": false,
     "created_at": "2026-03-21T..."
@@ -334,10 +334,10 @@ Confirm that the client has completed the direct upload. Triggers background pro
 - **Validation**:
   - Upload must exist and belong to the caller's family
   - Upload must be in `pending` status
-  - Verifies the object exists in S3 via `ObjectStorageAdapter::get_object_head()`
+  - Verifies the object exists in S3 via `ObjectStorageAdapter.GetObjectHead()`
   - Updates `size_bytes` from the actual object size (not the declared value)
 - **Side effects**:
-  - Transitions status: `pending` → `uploaded` → `processing`
+  - Transitions status: `pending` -> `uploaded` -> `processing`
   - Enqueues `ProcessUploadJob` on Default queue `[ARCH §12.2]`
   - Creates `media_processing_jobs` record with type `process_upload`
 - **Error codes**:
@@ -351,8 +351,8 @@ Confirm that the client has completed the direct upload. Triggers background pro
 Get upload status and URLs (original + variants). `[ARCH §8.1]`
 
 - **Auth**: Required (`FamilyScope`)
-- **Response**: `200 OK` → `UploadInfo`
-```rust
+- **Response**: `200 OK` -> `UploadInfo`
+```json
 {
     "upload_id": "uuid",
     "status": "published",
@@ -397,7 +397,7 @@ List uploads for the authenticated family, with optional filtering.
 
 - **Auth**: Required (`FamilyScope`)
 - **Query**: `?context=journal_image&status=published&page=1&per_page=20`
-- **Response**: `200 OK` → `UploadListResponse` (paginated)
+- **Response**: `200 OK` -> `UploadListResponse` (paginated)
 
 #### POST /v1/media/uploads/:upload_id/reprocess — Reprocess Upload (Admin)
 
@@ -405,7 +405,7 @@ Admin endpoint to re-trigger the processing pipeline for a specific upload. Used
 moderation results need re-evaluation or when the processing pipeline has been updated.
 
 - **Auth**: Required (admin role)
-- **Response**: `200 OK` → `UploadInfo`
+- **Response**: `200 OK` -> `UploadInfo`
 - **Side effects**: Re-enqueues `ProcessUploadJob`
 
 ---
@@ -413,132 +413,107 @@ moderation results need re-evaluation or when the processing pipeline has been u
 ## §5 Service Interface
 
 `MediaService` is the **authoritative cross-domain interface** for all media operations.
-Consumer domains (`social::`, `learn::`, `mkt::`) depend on this trait — not on domain-local
+Consumer domains (`social::`, `learn::`, `mkt::`) depend on this interface — not on domain-local
 adapter sketches.
 
 > **Reconciliation note**: `learn::MediaAdapter` (`06-learn §7`) and `mkt::MediaAdapter`
-> (`07-mkt §7`) both sketch adapter traits for media operations. This spec defines the
-> authoritative `MediaService` trait that supersedes both sketches. The existing adapter
-> trait definitions in those specs should be understood as referring to `media::MediaService` —
-> the implementation will inject `Arc<dyn MediaService>` where those specs reference
-> `Arc<dyn MediaAdapter>`. The method signatures here are a superset of both sketches:
-> `mkt::MediaAdapter::presigned_upload()` maps to `request_upload()`;
-> `mkt::MediaAdapter::presigned_get()` maps to `presigned_get()`;
-> `learn::MediaAdapter::validate_attachment()` maps to `validate_attachment()`;
-> `learn::MediaAdapter::get_upload_url()` maps to `request_upload()`.
+> (`07-mkt §7`) both sketch adapter interfaces for media operations. This spec defines the
+> authoritative `MediaService` interface that supersedes both sketches. The existing adapter
+> interface definitions in those specs should be understood as referring to `media.MediaService` —
+> the implementation will inject a `MediaService` interface value where those specs reference
+> `MediaAdapter`. The method signatures here are a superset of both sketches:
+> `mkt.MediaAdapter.PresignedUpload()` maps to `RequestUpload()`;
+> `mkt.MediaAdapter.PresignedGet()` maps to `PresignedGet()`;
+> `learn.MediaAdapter.ValidateAttachment()` maps to `ValidateAttachment()`;
+> `learn.MediaAdapter.GetUploadURL()` maps to `RequestUpload()`.
 
-```rust
-// ─── Service Trait ──────────────────────────────────────────────────────
+```go
+// internal/media/ports.go
 
-/// The authoritative media service interface consumed by all domains.
-///
-/// Supersedes the MediaAdapter sketches in learn:: and mkt:: domain specs.
-/// Injected as Arc<dyn MediaService> into consumer domain services.
-///
-/// All methods that access user data require family_id for family-scoping.
-/// [CODING §2.4]
-#[async_trait]
-pub trait MediaService: Send + Sync {
+// MediaService is the authoritative media service interface consumed by all domains.
+//
+// Supersedes the MediaAdapter sketches in learn:: and mkt:: domain specs.
+// Injected as a MediaService interface value into consumer domain services.
+//
+// All methods that access user data require family_id for family-scoping.
+// [CODING §2.4]
+type MediaService interface {
 
     // ─── Commands ───────────────────────────────────────────────────────
 
-    /// Generate a presigned upload URL for direct client → S3 upload.
-    ///
-    /// Creates a `media_uploads` record in `pending` status, generates a
-    /// presigned PUT URL with context-appropriate size limits, and returns
-    /// the upload metadata. The client uploads directly to S3 — the server
-    /// never sees file bytes. [ARCH §8.1]
-    async fn request_upload(
-        &self,
-        input: RequestUploadInput,
-    ) -> Result<UploadResponse, MediaError>;
+    // RequestUpload generates a presigned upload URL for direct client → S3 upload.
+    //
+    // Creates a media_uploads record in pending status, generates a
+    // presigned PUT URL with context-appropriate size limits, and returns
+    // the upload metadata. The client uploads directly to S3 — the server
+    // never sees file bytes. [ARCH §8.1]
+    RequestUpload(ctx context.Context, input *RequestUploadInput) (*UploadResponse, error)
 
-    /// Confirm that the client has completed a direct upload.
-    ///
-    /// Verifies the object exists in S3, updates size_bytes from actual
-    /// object metadata, transitions status to `processing`, and enqueues
-    /// the ProcessUploadJob for background processing (magic bytes →
-    /// ffprobe → CSAM → moderation → compression → variants → publish).
-    /// [ARCH §8.1, §8.2]
-    async fn confirm_upload(
-        &self,
-        upload_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<UploadInfo, MediaError>;
+    // ConfirmUpload confirms that the client has completed a direct upload.
+    //
+    // Verifies the object exists in S3, updates size_bytes from actual
+    // object metadata, transitions status to processing, and enqueues
+    // the ProcessUploadJob for background processing (magic bytes →
+    // ffprobe → CSAM → moderation → compression → variants → publish).
+    // [ARCH §8.1, §8.2]
+    ConfirmUpload(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) (*UploadInfo, error)
 
-    /// Soft-delete an upload. (Phase 2)
-    ///
-    /// Transitions status to `deleted`. Does not immediately remove the
-    /// S3 object — deferred to a cleanup job.
-    async fn delete_upload(
-        &self,
-        upload_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<(), MediaError>;
+    // DeleteUpload soft-deletes an upload. (Phase 2)
+    //
+    // Transitions status to deleted. Does not immediately remove the
+    // S3 object — deferred to a cleanup job.
+    DeleteUpload(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) error
 
     // ─── Queries ────────────────────────────────────────────────────────
 
-    /// Get upload status and URLs (original + variants).
-    ///
-    /// Returns public CDN URLs for published media. Returns presigned GET
-    /// URLs for marketplace files (purchase verification is the caller's
-    /// responsibility — media:: generates the URL, mkt:: checks the
-    /// purchase). Returns null URLs for non-published statuses.
-    async fn get_upload(
-        &self,
-        upload_id: Uuid,
-        family_id: Uuid,
-    ) -> Result<UploadInfo, MediaError>;
+    // GetUpload returns upload status and URLs (original + variants).
+    //
+    // Returns public CDN URLs for published media. Returns presigned GET
+    // URLs for marketplace files (purchase verification is the caller's
+    // responsibility — media:: generates the URL, mkt:: checks the
+    // purchase). Returns null URLs for non-published statuses.
+    GetUpload(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) (*UploadInfo, error)
 
-    /// Generate a presigned GET URL for secure file download.
-    ///
-    /// Used by mkt:: for purchased file downloads (1-hour expiry).
-    /// Callers are responsible for authorization checks (e.g., verifying
-    /// purchase exists) before calling this method. [ARCH §8.3]
-    async fn presigned_get(
-        &self,
-        storage_key: &str,
-        expires_seconds: u32,
-    ) -> Result<String, MediaError>;
+    // PresignedGet generates a presigned GET URL for secure file download.
+    //
+    // Used by mkt:: for purchased file downloads (1-hour expiry).
+    // Callers are responsible for authorization checks (e.g., verifying
+    // purchase exists) before calling this method. [ARCH §8.3]
+    PresignedGet(ctx context.Context, storageKey string, expiresSeconds uint32) (string, error)
 
-    /// Validate attachment metadata against context-based rules.
-    ///
-    /// Checks content_type and size_bytes against the allowed types and
-    /// max size for the given upload context. Does not touch S3 — this is
-    /// a pre-flight validation before generating a presigned URL.
-    /// Used by learn:: for attachment validation. [CODING §5.2]
-    async fn validate_attachment(
-        &self,
-        ctx: UploadContext,
-        content_type: &str,
-        size_bytes: u64,
-    ) -> Result<(), MediaError>;
+    // ValidateAttachment validates attachment metadata against context-based rules.
+    //
+    // Checks content_type and size_bytes against the allowed types and
+    // max size for the given upload context. Does not touch S3 — this is
+    // a pre-flight validation before generating a presigned URL.
+    // Used by learn:: for attachment validation. [CODING §5.2]
+    ValidateAttachment(ctx context.Context, uploadCtx UploadContext, contentType string, sizeBytes uint64) error
 }
 ```
 
 ### §5.1 Service Implementation
 
-```rust
-/// Concrete implementation of MediaService.
-///
-/// Orchestrates between repository, S3 adapter, safety adapters, and
-/// the background job system.
-pub struct MediaServiceImpl {
-    uploads: Arc<dyn UploadRepository>,
-    jobs: Arc<dyn ProcessingJobRepository>,
-    storage: Arc<dyn ObjectStorageAdapter>,
-    safety: Arc<dyn SafetyScanAdapter>,
-    events: Arc<EventBus>,
-    config: MediaConfig,
+```go
+// MediaServiceImpl is the concrete implementation of MediaService.
+//
+// Orchestrates between repository, S3 adapter, safety adapters, and
+// the background job system.
+type MediaServiceImpl struct {
+    uploads  UploadRepository
+    jobs     ProcessingJobRepository
+    storage  ObjectStorageAdapter
+    safety   SafetyScanAdapter
+    events   *EventBus
+    config   *MediaConfig
 }
 ```
 
 **`MediaConfig`** holds runtime configuration:
-```rust
-pub struct MediaConfig {
-    pub public_url_base: String,       // OBJECT_STORAGE_PUBLIC_URL env var
-    pub presigned_upload_expiry: u32,  // seconds, default 3600
-    pub presigned_download_expiry: u32, // seconds, default 3600
+```go
+type MediaConfig struct {
+    PublicURLBase            string // OBJECT_STORAGE_PUBLIC_URL env var
+    PresignedUploadExpiry    uint32 // seconds, default 3600
+    PresignedDownloadExpiry  uint32 // seconds, default 3600
 }
 ```
 
@@ -548,115 +523,59 @@ pub struct MediaConfig {
 
 ### §6.1 UploadRepository
 
-```rust
-/// Persistence operations for media_uploads. All user-data queries are
-/// family-scoped via FamilyScope parameter. [CODING §2.4]
-#[async_trait]
-pub trait UploadRepository: Send + Sync {
+```go
+// UploadRepository defines persistence operations for media_uploads.
+// All user-data queries are family-scoped via FamilyScope parameter. [CODING §2.4]
+type UploadRepository interface {
 
-    /// Create a new upload record in `pending` status.
-    async fn create(
-        &self,
-        scope: &FamilyScope,
-        input: CreateUploadRow,
-    ) -> Result<Upload, DbErr>;
+    // Create creates a new upload record in pending status.
+    Create(ctx context.Context, scope *FamilyScope, input *CreateUploadRow) (*Upload, error)
 
-    /// Find an upload by ID, scoped to family.
-    async fn find_by_id(
-        &self,
-        scope: &FamilyScope,
-        upload_id: Uuid,
-    ) -> Result<Option<Upload>, DbErr>;
+    // FindByID finds an upload by ID, scoped to family.
+    FindByID(ctx context.Context, scope *FamilyScope, uploadID uuid.UUID) (*Upload, error)
 
-    /// Update upload status and optional fields.
-    async fn update_status(
-        &self,
-        upload_id: Uuid,
-        status: UploadStatus,
-        updates: UploadStatusUpdate,
-    ) -> Result<Upload, DbErr>;
+    // UpdateStatus updates upload status and optional fields.
+    UpdateStatus(ctx context.Context, uploadID uuid.UUID, status UploadStatus, updates *UploadStatusUpdate) (*Upload, error)
 
-    /// Update probe metadata and compression info after processing.
-    async fn update_probe_metadata(
-        &self,
-        upload_id: Uuid,
-        probe: &serde_json::Value,
-        was_compressed: bool,
-        original_size_bytes: Option<i64>,
-    ) -> Result<(), DbErr>;
+    // UpdateProbeMetadata updates probe metadata and compression info after processing.
+    UpdateProbeMetadata(ctx context.Context, uploadID uuid.UUID, probe json.RawMessage, wasCompressed bool, originalSizeBytes *int64) error
 
-    /// Set variant flags after image processing.
-    async fn set_variant_flags(
-        &self,
-        upload_id: Uuid,
-        has_thumb: bool,
-        has_medium: bool,
-    ) -> Result<(), DbErr>;
+    // SetVariantFlags sets variant flags after image processing.
+    SetVariantFlags(ctx context.Context, uploadID uuid.UUID, hasThumb bool, hasMedium bool) error
 
-    /// Set moderation labels (from Rekognition results).
-    async fn set_moderation_labels(
-        &self,
-        upload_id: Uuid,
-        labels: &serde_json::Value,
-    ) -> Result<(), DbErr>;
+    // SetModerationLabels sets moderation labels (from Rekognition results).
+    SetModerationLabels(ctx context.Context, uploadID uuid.UUID, labels json.RawMessage) error
 
-    /// List uploads for a family, filtered by context and/or status. (Phase 2)
-    async fn list(
-        &self,
-        scope: &FamilyScope,
-        filter: UploadListFilter,
-        pagination: Pagination,
-    ) -> Result<PaginatedResult<Upload>, DbErr>;
+    // List lists uploads for a family, filtered by context and/or status. (Phase 2)
+    List(ctx context.Context, scope *FamilyScope, filter *UploadListFilter, pagination *Pagination) (*PaginatedResult[Upload], error)
 
-    /// Find expired pending uploads for orphan cleanup.
-    /// System-internal — not family-scoped (runs as background job).
-    async fn find_expired_pending(
-        &self,
-        before: DateTime<Utc>,
-        limit: u32,
-    ) -> Result<Vec<Upload>, DbErr>;
+    // FindExpiredPending finds expired pending uploads for orphan cleanup.
+    // System-internal — not family-scoped (runs as background job).
+    FindExpiredPending(ctx context.Context, before time.Time, limit uint32) ([]Upload, error)
 }
 ```
 
 ### §6.2 ProcessingJobRepository
 
-```rust
-/// Persistence operations for media_processing_jobs.
-/// System-internal — no family-scoping needed (accessed only by background jobs).
-#[async_trait]
-pub trait ProcessingJobRepository: Send + Sync {
+```go
+// ProcessingJobRepository defines persistence operations for media_processing_jobs.
+// System-internal — no family-scoping needed (accessed only by background jobs).
+type ProcessingJobRepository interface {
 
-    /// Create a new processing job record.
-    async fn create(
-        &self,
-        upload_id: Uuid,
-        job_type: &str,
-    ) -> Result<ProcessingJob, DbErr>;
+    // Create creates a new processing job record.
+    Create(ctx context.Context, uploadID uuid.UUID, jobType string) (*ProcessingJob, error)
 
-    /// Mark a job as running.
-    async fn mark_running(
-        &self,
-        job_id: Uuid,
-    ) -> Result<(), DbErr>;
+    // MarkRunning marks a job as running.
+    MarkRunning(ctx context.Context, jobID uuid.UUID) error
 
-    /// Mark a job as completed.
-    async fn mark_completed(
-        &self,
-        job_id: Uuid,
-    ) -> Result<(), DbErr>;
+    // MarkCompleted marks a job as completed.
+    MarkCompleted(ctx context.Context, jobID uuid.UUID) error
 
-    /// Mark a job as failed with an error message.
-    async fn mark_failed(
-        &self,
-        job_id: Uuid,
-        error_message: &str,
-    ) -> Result<(), DbErr>;
+    // MarkFailed marks a job as failed with an error message.
+    MarkFailed(ctx context.Context, jobID uuid.UUID, errorMessage string) error
 
-    /// Find jobs eligible for retry (failed, attempts < max_attempts).
-    async fn find_retryable(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<ProcessingJob>, DbErr>;
+    // FindRetryable finds jobs eligible for retry (failed, attempts < max_attempts).
+    FindRetryable(ctx context.Context, limit uint32) ([]ProcessingJob, error)
 }
 ```
 
@@ -667,83 +586,57 @@ pub trait ProcessingJobRepository: Send + Sync {
 ### §7.1 ObjectStorageAdapter
 
 **Provider-agnostic S3-compatible interface.** Uses standard S3 API operations (PutObject,
-GetObject, HeadObject, DeleteObject, presigned URLs). Implemented via `aws-sdk-s3` crate
+GetObject, HeadObject, DeleteObject, presigned URLs). Implemented via `aws-sdk-go-v2`
 with custom endpoint URL — works with Cloudflare R2, AWS S3, MinIO, Backblaze B2, or any
 S3-compatible provider. Provider is selected purely by configuration (endpoint URL, region,
 credentials) — **zero code changes to switch providers**. `[ARCH §2.10, §4.2]`
 
-Adapter file: `src/media/adapters/s3.rs` (named for the **protocol**, not the provider).
+Adapter file: `internal/media/adapters/s3.go` (named for the **protocol**, not the provider).
 
-> **Note on naming**: `ARCHITECTURE.md §4.2` lists `src/media/adapters/r2.rs`. This spec
-> renames it to `s3.rs` to accurately reflect the provider-agnostic intent. The adapter
+> **Note on naming**: `ARCHITECTURE.md §4.2` lists `internal/media/adapters/r2.go`. This spec
+> renames it to `s3.go` to accurately reflect the provider-agnostic intent. The adapter
 > uses the S3 protocol, not any R2-specific API. The ARCHITECTURE.md reference should be
 > updated accordingly.
 
-```rust
-/// S3-compatible object storage adapter.
-///
-/// All operations use standard S3 API calls. The underlying provider
-/// (R2, S3, MinIO, etc.) is selected via endpoint URL configuration.
-/// [ARCH §2.10]
-#[async_trait]
-pub trait ObjectStorageAdapter: Send + Sync {
+```go
+// ObjectStorageAdapter defines the S3-compatible object storage interface.
+//
+// All operations use standard S3 API calls. The underlying provider
+// (R2, S3, MinIO, etc.) is selected via endpoint URL configuration.
+// [ARCH §2.10]
+type ObjectStorageAdapter interface {
 
-    /// Generate a presigned PUT URL for direct client upload.
-    ///
-    /// The URL includes Content-Type and Content-Length constraints
-    /// enforced by S3 at upload time.
-    async fn presigned_put(
-        &self,
-        key: &str,
-        max_size_bytes: u64,
-        content_type: &str,
-        expires_seconds: u32,
-    ) -> Result<String, StorageError>;
+    // PresignedPut generates a presigned PUT URL for direct client upload.
+    //
+    // The URL includes Content-Type and Content-Length constraints
+    // enforced by S3 at upload time.
+    PresignedPut(ctx context.Context, key string, maxSizeBytes uint64, contentType string, expiresSeconds uint32) (string, error)
 
-    /// Generate a presigned GET URL for secure file download.
-    async fn presigned_get(
-        &self,
-        key: &str,
-        expires_seconds: u32,
-    ) -> Result<String, StorageError>;
+    // PresignedGet generates a presigned GET URL for secure file download.
+    PresignedGet(ctx context.Context, key string, expiresSeconds uint32) (string, error)
 
-    /// Upload data from the server (for generated variants).
-    ///
-    /// Used when the server generates thumbnails/medium variants and
-    /// needs to write them to S3. NOT used for user uploads (those go
-    /// through presigned PUT URLs).
-    async fn put_object(
-        &self,
-        key: &str,
-        data: Vec<u8>,
-        content_type: &str,
-    ) -> Result<(), StorageError>;
+    // PutObject uploads data from the server (for generated variants).
+    //
+    // Used when the server generates thumbnails/medium variants and
+    // needs to write them to S3. NOT used for user uploads (those go
+    // through presigned PUT URLs).
+    PutObject(ctx context.Context, key string, data []byte, contentType string) error
 
-    /// Get object metadata (size, content type) without downloading.
-    ///
-    /// Used during confirm_upload to verify the object exists and
-    /// record its actual size.
-    async fn get_object_head(
-        &self,
-        key: &str,
-    ) -> Result<ObjectMetadata, StorageError>;
+    // GetObjectHead returns object metadata (size, content type) without downloading.
+    //
+    // Used during confirm_upload to verify the object exists and
+    // record its actual size.
+    GetObjectHead(ctx context.Context, key string) (*ObjectMetadata, error)
 
-    /// Read a byte range from an object.
-    ///
-    /// Used for magic byte validation — reads the first 16 bytes of
-    /// an uploaded file to verify the file type matches the declared
-    /// content_type. [CODING §5.2]
-    async fn get_object_bytes(
-        &self,
-        key: &str,
-        range: std::ops::Range<u64>,
-    ) -> Result<Vec<u8>, StorageError>;
+    // GetObjectBytes reads a byte range from an object.
+    //
+    // Used for magic byte validation — reads the first 16 bytes of
+    // an uploaded file to verify the file type matches the declared
+    // content_type. [CODING §5.2]
+    GetObjectBytes(ctx context.Context, key string, start uint64, end uint64) ([]byte, error)
 
-    /// Delete an object from storage.
-    async fn delete_object(
-        &self,
-        key: &str,
-    ) -> Result<(), StorageError>;
+    // DeleteObject deletes an object from storage.
+    DeleteObject(ctx context.Context, key string) error
 }
 ```
 
@@ -758,28 +651,52 @@ pub trait ObjectStorageAdapter: Send + Sync {
 | `OBJECT_STORAGE_SECRET_ACCESS_KEY` | Credentials | (secret) |
 | `OBJECT_STORAGE_PUBLIC_URL` | CDN/public base URL for published media | `https://media.homegrownacademy.com` |
 
-**Implementation sketch** (`src/media/adapters/s3.rs`):
-```rust
-use aws_sdk_s3::Client as S3Client;
+**Implementation sketch** (`internal/media/adapters/s3.go`):
+```go
+import (
+    "context"
+    "os"
 
-pub struct S3StorageAdapter {
-    client: S3Client,
-    bucket: String,
-    public_url: String,
+    "github.com/aws/aws-sdk-go-v2/config"
+    "github.com/aws/aws-sdk-go-v2/credentials"
+    "github.com/aws/aws-sdk-go-v2/service/s3"
+)
+
+type S3StorageAdapter struct {
+    client    *s3.Client
+    presigner *s3.PresignClient
+    bucket    string
+    publicURL string
 }
 
-impl S3StorageAdapter {
-    pub fn from_env() -> Result<Self, MediaError> {
-        // Build S3 client with custom endpoint from OBJECT_STORAGE_ENDPOINT
-        // This single client works with R2, S3, MinIO, etc.
-        let config = aws_config::from_env()
-            .endpoint_url(std::env::var("OBJECT_STORAGE_ENDPOINT")?)
-            .region(Region::new(std::env::var("OBJECT_STORAGE_REGION")?))
-            .load()
-            .await?;
-        let client = S3Client::new(&config);
-        // ...
+func NewS3StorageAdapter(ctx context.Context) (*S3StorageAdapter, error) {
+    // Build S3 client with custom endpoint from OBJECT_STORAGE_ENDPOINT
+    // This single client works with R2, S3, MinIO, etc.
+    endpoint := os.Getenv("OBJECT_STORAGE_ENDPOINT")
+    region := os.Getenv("OBJECT_STORAGE_REGION")
+
+    cfg, err := config.LoadDefaultConfig(ctx,
+        config.WithRegion(region),
+        config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+            os.Getenv("OBJECT_STORAGE_ACCESS_KEY_ID"),
+            os.Getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
+            "",
+        )),
+    )
+    if err != nil {
+        return nil, fmt.Errorf("loading AWS config: %w", err)
     }
+
+    client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+        o.BaseEndpoint = &endpoint
+    })
+
+    return &S3StorageAdapter{
+        client:    client,
+        presigner: s3.NewPresignClient(client),
+        bucket:    os.Getenv("OBJECT_STORAGE_BUCKET"),
+        publicURL: os.Getenv("OBJECT_STORAGE_PUBLIC_URL"),
+    }, nil
 }
 ```
 
@@ -788,46 +705,35 @@ impl S3StorageAdapter {
 Thin wrapper calling `safety::` domain services. Defined in `media::` as an inbound port —
 implemented by `safety::` or a bridge adapter. `[ARCH §2.13]`
 
-```rust
-/// Safety scanning adapter — delegates to safety:: domain.
-///
-/// media:: calls these methods during ProcessUploadJob. The actual
-/// scanning implementations (Thorn Safer, AWS Rekognition) are owned
-/// by safety:: [ARCH §2.13].
-#[async_trait]
-pub trait SafetyScanAdapter: Send + Sync {
+```go
+// SafetyScanAdapter defines the safety scanning interface — delegates to safety:: domain.
+//
+// media:: calls these methods during ProcessUploadJob. The actual
+// scanning implementations (Thorn Safer, AWS Rekognition) are owned
+// by safety:: [ARCH §2.13].
+type SafetyScanAdapter interface {
 
-    /// Scan for CSAM using Thorn Safer (PhotoDNA hash matching).
-    ///
-    /// Returns scan result. If CSAM is detected, the caller MUST
-    /// quarantine the upload immediately and invoke report_csam().
-    /// [S§12.1]
-    async fn scan_csam(
-        &self,
-        storage_key: &str,
-    ) -> Result<CsamScanResult, ScanError>;
+    // ScanCSAM scans for CSAM using Thorn Safer (PhotoDNA hash matching).
+    //
+    // Returns scan result. If CSAM is detected, the caller MUST
+    // quarantine the upload immediately and invoke ReportCSAM().
+    // [S§12.1]
+    ScanCSAM(ctx context.Context, storageKey string) (*CSAMScanResult, error)
 
-    /// Scan for content moderation violations using Rekognition.
-    ///
-    /// Returns moderation labels (explicit, violence, etc.). If
-    /// violations are detected, the caller flags the upload and
-    /// stores the labels. [S§12.2]
-    async fn scan_moderation(
-        &self,
-        storage_key: &str,
-    ) -> Result<ModerationResult, ScanError>;
+    // ScanModeration scans for content moderation violations using Rekognition.
+    //
+    // Returns moderation labels (explicit, violence, etc.). If
+    // violations are detected, the caller flags the upload and
+    // stores the labels. [S§12.2]
+    ScanModeration(ctx context.Context, storageKey string) (*ModerationResult, error)
 
-    /// Report confirmed/suspected CSAM to NCMEC.
-    ///
-    /// Called when scan_csam returns a positive result. Delegates to
-    /// safety::service::report_csam() which handles NCMEC filing,
-    /// evidence preservation, and account suspension.
-    /// [S§12.1, 18 U.S.C. § 2258A]
-    async fn report_csam(
-        &self,
-        upload_id: Uuid,
-        scan_result: &CsamScanResult,
-    ) -> Result<(), ScanError>;
+    // ReportCSAM reports confirmed/suspected CSAM to NCMEC.
+    //
+    // Called when ScanCSAM returns a positive result. Delegates to
+    // safety.Service.ReportCSAM() which handles NCMEC filing,
+    // evidence preservation, and account suspension.
+    // [S§12.1, 18 U.S.C. § 2258A]
+    ReportCSAM(ctx context.Context, uploadID uuid.UUID, scanResult *CSAMScanResult) error
 }
 ```
 
@@ -837,185 +743,186 @@ pub trait SafetyScanAdapter: Send + Sync {
 
 ### §8.1 Request Types
 
-```rust
-/// Input for requesting a new upload. Used by the HTTP handler and by
-/// other domains calling MediaService::request_upload().
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct RequestUploadCommand {
-    pub context: UploadContext,
-    #[validate(length(min = 1, max = 255))]
-    pub content_type: String,
-    #[validate(length(min = 1, max = 255))]
-    pub filename: String,
-    pub size_bytes: u64,
+```go
+// internal/media/models.go
+
+// RequestUploadCommand is the input for requesting a new upload.
+// Used by the HTTP handler and by other domains calling MediaService.RequestUpload().
+type RequestUploadCommand struct {
+    Context     UploadContext `json:"context" validate:"required"`
+    ContentType string       `json:"content_type" validate:"required,min=1,max=255"`
+    Filename    string       `json:"filename" validate:"required,min=1,max=255"`
+    SizeBytes   uint64       `json:"size_bytes" validate:"required"`
 }
 
-/// Internal input struct passed to MediaService::request_upload().
-/// Includes auth context fields not present in the HTTP body.
-pub struct RequestUploadInput {
-    pub family_id: Uuid,
-    pub uploaded_by: Uuid,
-    pub context: UploadContext,
-    pub content_type: String,
-    pub filename: String,
-    pub size_bytes: u64,
+// RequestUploadInput is the internal input struct passed to MediaService.RequestUpload().
+// Includes auth context fields not present in the HTTP body.
+type RequestUploadInput struct {
+    FamilyID    uuid.UUID
+    UploadedBy  uuid.UUID
+    Context     UploadContext
+    ContentType string
+    Filename    string
+    SizeBytes   uint64
 }
 
-/// Confirm upload command (no body — upload_id from path, family from auth).
-/// Included for completeness; the HTTP handler extracts these from path/auth.
-pub struct ConfirmUploadCommand {
-    pub upload_id: Uuid,
-    pub family_id: Uuid,
+// ConfirmUploadCommand represents the confirm upload command (no body — upload_id from path, family from auth).
+type ConfirmUploadCommand struct {
+    UploadID uuid.UUID
+    FamilyID uuid.UUID
 }
 ```
 
 ### §8.2 Response Types
 
-```rust
-/// Response from request_upload — contains presigned URL for direct upload.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct UploadResponse {
-    pub upload_id: Uuid,
-    pub presigned_url: String,
-    pub storage_key: String,
-    pub expires_in_seconds: u32,
+```go
+// UploadResponse is the response from RequestUpload — contains presigned URL for direct upload.
+type UploadResponse struct {
+    UploadID         uuid.UUID `json:"upload_id"`
+    PresignedURL     string    `json:"presigned_url"`
+    StorageKey       string    `json:"storage_key"`
+    ExpiresInSeconds uint32    `json:"expires_in_seconds"`
 }
 
-/// Upload information — returned by confirm and get endpoints.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct UploadInfo {
-    pub upload_id: Uuid,
-    pub status: String,
-    pub context: String,
-    pub content_type: String,
-    pub original_filename: String,
-    pub size_bytes: Option<i64>,
-    pub urls: Option<UploadUrls>,
-    pub has_thumb: bool,
-    pub has_medium: bool,
-    pub created_at: DateTime<Utc>,
-    pub published_at: Option<DateTime<Utc>>,
+// UploadInfo contains upload information — returned by confirm and get endpoints.
+type UploadInfo struct {
+    UploadID         uuid.UUID   `json:"upload_id"`
+    Status           string      `json:"status"`
+    Context          string      `json:"context"`
+    ContentType      string      `json:"content_type"`
+    OriginalFilename string      `json:"original_filename"`
+    SizeBytes        *int64      `json:"size_bytes"`
+    URLs             *UploadURLs `json:"urls"`
+    HasThumb         bool        `json:"has_thumb"`
+    HasMedium        bool        `json:"has_medium"`
+    CreatedAt        time.Time   `json:"created_at"`
+    PublishedAt      *time.Time  `json:"published_at"`
 }
 
-/// URLs for accessing the upload and its variants.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct UploadUrls {
-    pub original: String,
-    pub thumb: Option<String>,
-    pub medium: Option<String>,
+// UploadURLs contains URLs for accessing the upload and its variants.
+type UploadURLs struct {
+    Original string  `json:"original"`
+    Thumb    *string `json:"thumb"`
+    Medium   *string `json:"medium"`
 }
 
-/// Paginated list of uploads. (Phase 2)
-#[derive(Debug, Serialize, ToSchema)]
-pub struct UploadListResponse {
-    pub uploads: Vec<UploadInfo>,
-    pub total: u64,
-    pub page: u32,
-    pub per_page: u32,
+// UploadListResponse is a paginated list of uploads. (Phase 2)
+type UploadListResponse struct {
+    Uploads []UploadInfo `json:"uploads"`
+    Total   uint64       `json:"total"`
+    Page    uint32       `json:"page"`
+    PerPage uint32       `json:"per_page"`
 }
 ```
 
 ### §8.3 Internal Types
 
-```rust
-/// Upload context — determines validation rules (max size, allowed types).
-/// Maps to the CHECK constraint on media_uploads.context.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum UploadContext {
-    ProfilePhoto,
-    PostAttachment,
-    MessageAttachment,
-    ActivityAttachment,
-    JournalImage,
-    NatureJournalImage,
-    ProjectAttachment,
-    ReadingCover,
-    MarketplaceFile,
-    ListingPreview,
-    ListingThumbnail,
-    CreatorLogo,
-    DataExport,
-    AudioAttachment,
-    VideoLesson,
+```go
+// UploadContext determines validation rules (max size, allowed types).
+// Maps to the CHECK constraint on media_uploads.context.
+type UploadContext string
+
+const (
+    UploadContextProfilePhoto       UploadContext = "profile_photo"
+    UploadContextPostAttachment     UploadContext = "post_attachment"
+    UploadContextMessageAttachment  UploadContext = "message_attachment"
+    UploadContextActivityAttachment UploadContext = "activity_attachment"
+    UploadContextJournalImage       UploadContext = "journal_image"
+    UploadContextNatureJournalImage UploadContext = "nature_journal_image"
+    UploadContextProjectAttachment  UploadContext = "project_attachment"
+    UploadContextReadingCover       UploadContext = "reading_cover"
+    UploadContextMarketplaceFile    UploadContext = "marketplace_file"
+    UploadContextListingPreview     UploadContext = "listing_preview"
+    UploadContextListingThumbnail   UploadContext = "listing_thumbnail"
+    UploadContextCreatorLogo        UploadContext = "creator_logo"
+    UploadContextDataExport         UploadContext = "data_export"
+    UploadContextAudioAttachment    UploadContext = "audio_attachment"
+    UploadContextVideoLesson        UploadContext = "video_lesson"
+)
+
+// UploadStatus maps to CHECK constraint on media_uploads.status.
+type UploadStatus string
+
+const (
+    UploadStatusPending     UploadStatus = "pending"
+    UploadStatusUploaded    UploadStatus = "uploaded"
+    UploadStatusProcessing  UploadStatus = "processing"
+    UploadStatusPublished   UploadStatus = "published"
+    UploadStatusQuarantined UploadStatus = "quarantined"
+    UploadStatusFlagged     UploadStatus = "flagged"
+    UploadStatusExpired     UploadStatus = "expired"
+    UploadStatusDeleted     UploadStatus = "deleted"
+)
+
+// ImageVariant identifies image variant types.
+type ImageVariant int
+
+const (
+    // ImageVariantThumb is 200x200 max, fit-within.
+    ImageVariantThumb ImageVariant = iota
+    // ImageVariantMedium is 800x800 max, fit-within.
+    ImageVariantMedium
+)
+
+// CSAMScanResult is the CSAM scan result from Thorn Safer.
+type CSAMScanResult struct {
+    IsCSAM          bool
+    Hash            *string  // PhotoDNA hash
+    Confidence      *float64
+    MatchedDatabase *string
 }
 
-/// Upload status — maps to CHECK constraint on media_uploads.status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum UploadStatus {
-    Pending,
-    Uploaded,
-    Processing,
-    Published,
-    Quarantined,
-    Flagged,
-    Expired,
-    Deleted,
+// ModerationResult is the content moderation result from Rekognition.
+//
+// AutoReject and Priority are set by SafetyScanBridge (safety:: §11.2.2)
+// based on the platform's label routing table. The RekognitionAdapter returns
+// raw labels; the bridge applies routing decisions.
+type ModerationResult struct {
+    HasViolations bool
+    AutoReject    bool               // true → status = rejected (not flagged)
+    Labels        []ModerationLabel
+    Priority      *string            // nil for auto-reject, "critical"|"high"|"normal" for flagged
 }
 
-/// Image variant identifiers.
-#[derive(Debug, Clone, Copy)]
-pub enum ImageVariant {
-    /// 200x200 max, fit-within
-    Thumb,
-    /// 800x800 max, fit-within
-    Medium,
+// ModerationLabel represents a single moderation label from Rekognition.
+type ModerationLabel struct {
+    Name       string  `json:"name"`
+    Confidence float64 `json:"confidence"`
+    ParentName *string `json:"parent_name"`
 }
 
-/// CSAM scan result from Thorn Safer.
-#[derive(Debug)]
-pub struct CsamScanResult {
-    pub is_csam: bool,
-    pub hash: Option<String>,        // PhotoDNA hash
-    pub confidence: Option<f64>,
-    pub matched_database: Option<String>,
+// ObjectMetadata is returned by HEAD request.
+type ObjectMetadata struct {
+    ContentLength uint64
+    ContentType   *string
 }
 
-/// Content moderation result from Rekognition.
-///
-/// `auto_reject` and `priority` are set by SafetyScanBridge (safety:: §11.2.2)
-/// based on the platform's label routing table. The RekognitionAdapter returns
-/// raw labels; the bridge applies routing decisions.
-#[derive(Debug)]
-pub struct ModerationResult {
-    pub has_violations: bool,
-    pub auto_reject: bool,                    // true → status = rejected (not flagged)
-    pub labels: Vec<ModerationLabel>,
-    pub priority: Option<String>,             // None for auto-reject, Some("critical"|"high"|"normal") for flagged
+// StorageError represents adapter error types.
+type StorageError struct {
+    Code    string
+    Message string
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ModerationLabel {
-    pub name: String,
-    pub confidence: f64,
-    pub parent_name: Option<String>,
+func (e *StorageError) Error() string { return e.Message }
+
+var (
+    ErrObjectNotFound     = &StorageError{Code: "not_found", Message: "object not found"}
+    ErrOperationFailed    = &StorageError{Code: "operation_failed", Message: "S3 operation failed"}
+    ErrPresignFailed      = &StorageError{Code: "presign_failed", Message: "presigned URL generation failed"}
+)
+
+// ScanError represents safety scan error types.
+type ScanError struct {
+    Code    string
+    Message string
 }
 
-/// Object metadata returned by HEAD request.
-pub struct ObjectMetadata {
-    pub content_length: u64,
-    pub content_type: Option<String>,
-}
+func (e *ScanError) Error() string { return e.Message }
 
-/// Adapter error types.
-#[derive(Debug, thiserror::Error)]
-pub enum StorageError {
-    #[error("object not found")]
-    NotFound,
-    #[error("S3 operation failed: {0}")]
-    OperationFailed(String),
-    #[error("presigned URL generation failed: {0}")]
-    PresignFailed(String),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ScanError {
-    #[error("scan service unavailable")]
-    Unavailable,
-    #[error("scan failed: {0}")]
-    Failed(String),
-}
+var (
+    ErrScanUnavailable = &ScanError{Code: "unavailable", Message: "scan service unavailable"}
+    ErrScanFailed      = &ScanError{Code: "failed", Message: "scan failed"}
+)
 ```
 
 ---
@@ -1041,62 +948,90 @@ Each upload context has specific size limits and allowed content types:
 | `nature_journal_image` | 10 MB | `image/jpeg`, `image/png`, `image/webp` |
 | `project_attachment` | 50 MB | `image/jpeg`, `image/png`, `image/webp`, `application/pdf`, `video/mp4` |
 | `reading_cover` | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
-| `marketplace_file` | 500 MB | `application/pdf`, `video/mp4`, `video/webm`, `audio/mpeg`, `audio/mp4`, `image/jpeg`, `image/png` |
+| `marketplace_file` | 500 MB | `application/pdf`, `application/zip`, `video/mp4`, `audio/mpeg` |
 | `listing_preview` | 25 MB | `image/jpeg`, `image/png`, `image/webp`, `video/mp4` |
 | `listing_thumbnail` | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
 | `creator_logo` | 2 MB | `image/jpeg`, `image/png`, `image/webp` |
-| `data_export` | 1 GB | `application/zip`, `application/json` |
+| `data_export` | 5 GB | `application/zip` |
 | `audio_attachment` | 50 MB | `audio/mpeg`, `audio/mp4`, `audio/wav`, `audio/flac`, `audio/aiff` |
 | `video_lesson` | 5 GB | `video/mp4`, `video/quicktime`, `video/x-msvideo`, `video/webm` |
 
-> **Note**: These rules are enforced at **request time** (before generating the presigned URL)
-> as a pre-flight check. The presigned URL also includes a `Content-Length` constraint that
-> S3 enforces at upload time. Magic byte validation (§11) provides post-upload verification.
-
-### §9.2 Storage Key Strategy
-
-Storage keys are deterministic and content-addressed by upload ID:
+### §9.2 Storage Key Format
 
 ```
 uploads/{family_id}/{upload_id}/{sanitized_filename}
 ```
 
-- **Family isolation**: All uploads are namespaced by `family_id` in the storage key
-- **Uniqueness**: The `upload_id` UUID guarantees no collisions within a family
-- **Marketplace files**: `mkt/{upload_id}/{sanitized_filename}` (separate namespace for
-  files that are accessed cross-family via purchase verification)
-- **Filename sanitization**: Strip path separators (`/`, `\`), control characters, NUL bytes.
-  Truncate to 255 bytes. Replace sequences of whitespace with single underscore.
+- `family_id` ensures physical namespace isolation between families
+- `upload_id` ensures uniqueness even for same-named files
+- `sanitized_filename` preserves the original filename for user reference (stripped of path
+  separators and control characters, truncated to 255 bytes)
 
-**Variant keys** are derived from the original storage key:
+### §9.3 Presigned URL Generation
+
+```go
+func (s *MediaServiceImpl) RequestUpload(ctx context.Context, input *RequestUploadInput) (*UploadResponse, error) {
+    // 1. Validate context rules
+    rules := getContextRules(input.Context)
+    if !rules.AllowsContentType(input.ContentType) {
+        return nil, ErrInvalidFileType
+    }
+    if input.SizeBytes > rules.MaxSizeBytes {
+        return nil, ErrFileTooLarge
+    }
+
+    // 2. Generate storage key
+    uploadID := uuid.New()
+    sanitized := sanitizeFilename(input.Filename)
+    storageKey := fmt.Sprintf("uploads/%s/%s/%s", input.FamilyID, uploadID, sanitized)
+
+    // 3. Generate presigned PUT URL
+    presignedURL, err := s.storage.PresignedPut(
+        ctx,
+        storageKey,
+        rules.MaxSizeBytes,
+        input.ContentType,
+        s.config.PresignedUploadExpiry,
+    )
+    if err != nil {
+        return nil, fmt.Errorf("generating presigned URL: %w", err)
+    }
+
+    // 4. Create upload record
+    upload, err := s.uploads.Create(ctx, &FamilyScope{FamilyID: input.FamilyID}, &CreateUploadRow{
+        ID:               uploadID,
+        FamilyID:         input.FamilyID,
+        UploadedBy:       input.UploadedBy,
+        Context:          input.Context,
+        ContentType:      input.ContentType,
+        OriginalFilename: sanitized,
+        StorageKey:       storageKey,
+        ExpiresAt:        time.Now().Add(time.Duration(s.config.PresignedUploadExpiry) * time.Second),
+    })
+    if err != nil {
+        return nil, fmt.Errorf("creating upload record: %w", err)
+    }
+
+    return &UploadResponse{
+        UploadID:         upload.ID,
+        PresignedURL:     presignedURL,
+        StorageKey:       storageKey,
+        ExpiresInSeconds: s.config.PresignedUploadExpiry,
+    }, nil
+}
 ```
-{storage_key}__thumb.{ext}   → 200x200 max, fit-within
-{storage_key}__medium.{ext}  → 800x800 max, fit-within
-```
 
-### §9.3 Presigned URL Parameters
-
-| Parameter | Upload (PUT) | Download (GET) |
-|-----------|-------------|----------------|
-| **Expiry** | 1 hour | 1 hour |
-| **Content-Type** | Enforced (must match declared type) | Not applicable |
-| **Content-Length** | Max enforced (context-specific limit) | Not applicable |
-| **HTTP Method** | PUT | GET |
-
-### §9.4 Upload Flow Sequence
+### §9.4 Upload Sequence
 
 ```
-Client                   API Server               S3 Storage             Workers
-  │                       │                        │                       │
-  │  1. POST /v1/media/   │                        │                       │
+  Client                MediaService           S3 Storage              Job Queue
+  │                        │                        │                       │
+  │  1. POST /v1/media/    │                        │                       │
   │     uploads            │                        │                       │
   │  ─────────────────►    │                        │                       │
-  │                        │  2. Validate context,  │                       │
-  │                        │     size, content_type │                       │
-  │                        │                        │                       │
-  │                        │  3. Create upload      │                       │
-  │                        │     record (pending)   │                       │
-  │                        │                        │                       │
+  │                        │  2. Validate context    │                       │
+  │                        │     rules               │                       │
+  │                        │  3. Create upload record │                       │
   │                        │  4. Generate presigned │                       │
   │                        │     PUT URL            │                       │
   │                        │  ────────────────────► │                       │
@@ -1156,8 +1091,8 @@ architecture.
 
 > **Refinement of ARCH §12.2**: The architecture lists two separate jobs — `ProcessImageJob`
 > (Default queue) and `CsamScanJob` (Default queue). This spec consolidates them into a
-> single `ProcessUploadJob` that handles the entire pipeline (magic bytes → ffprobe → CSAM →
-> moderation → compression → variants → publish). Rationale: CSAM scanning is one step in a
+> single `ProcessUploadJob` that handles the entire pipeline (magic bytes -> ffprobe -> CSAM ->
+> moderation -> compression -> variants -> publish). Rationale: CSAM scanning is one step in a
 > linear pipeline, not an independent job. A single orchestrator job is simpler to reason
 > about, ensures correct ordering, and avoids the coordination overhead of chaining two
 > separate jobs. Additionally, `ProcessUploadJob` handles all asset types (not just images),
@@ -1210,7 +1145,7 @@ ProcessUploadJob
     │      On completion → resume at step 7
     │
     ├─ 7. Variant generation (images only, unconditional)
-    │      Generate thumb (200x200) and medium (800x800) via `image` crate
+    │      Generate thumb (200x200) and medium (800x800) via image processing library
     │      Runs in-process — no external worker needed (milliseconds)
     │      Operates on final file (post-compression if compressed, else original)
     │      Non-image assets: skip this step
@@ -1223,9 +1158,9 @@ ProcessUploadJob
 ```
 
 **Pipeline short-circuits**:
-- CSAM detected at step 3 → quarantine immediately, skip steps 4-8
-- Moderation violation at step 4 → flag, skip steps 5-8
-- Not an image at step 7 → skip variant generation (no variants for PDFs, audio, etc.)
+- CSAM detected at step 3 -> quarantine immediately, skip steps 4-8
+- Moderation violation at step 4 -> flag, skip steps 5-8
+- Not an image at step 7 -> skip variant generation (no variants for PDFs, audio, etc.)
 
 For `video_lesson` context uploads, an additional `TranscodeVideoJob` step runs after the
 standard processing pipeline completes. This job converts the raw video to HLS format
@@ -1233,7 +1168,7 @@ standard processing pipeline completes. This job converts the raw video to HLS f
 
 **Key separation of concerns**:
 - `CompressAssetJob` = **conditional**, heavy, external worker (FFMPEG). Only for oversized assets.
-- Variant generation = **unconditional** (for images), lightweight, in-process (`image` crate). Always runs.
+- Variant generation = **unconditional** (for images), lightweight, in-process. Always runs.
 
 ### §10.2 Compression Profiles
 
@@ -1242,7 +1177,7 @@ modern phones and cameras are already well-compressed and will pass through with
 
 | Asset Type | Trigger Threshold | Target | Tool |
 |------------|------------------|--------|------|
-| **JPEG** | > 1.5 bytes/pixel | Quality 85, strip EXIF (preserve orientation) | `image` crate or FFMPEG |
+| **JPEG** | > 1.5 bytes/pixel | Quality 85, strip EXIF (preserve orientation) | Image library or FFMPEG |
 | **PNG** | > 4 bytes/pixel | Re-encode as optimized PNG or convert to WebP | FFMPEG |
 | **WebP** | > 1.0 bytes/pixel | Quality 82 | FFMPEG |
 | **GIF** | > 5 MB | Re-encode, optimize palette | FFMPEG |
@@ -1252,46 +1187,48 @@ modern phones and cameras are already well-compressed and will pass through with
 | **Audio (compressed)** | > 256 kbps | AAC 192 kbps | FFMPEG |
 | **PDF** | Never | No compression (pass-through) | — |
 
-**Bytes-per-pixel** = `file_size_bytes / (width × height)`. Video bitrate from ffprobe
+**Bytes-per-pixel** = `file_size_bytes / (width * height)`. Video bitrate from ffprobe
 `bit_rate` field. Audio bitrate from ffprobe `bit_rate` field.
 
 ### §10.3 CSAM Scan Step
 
 CSAM scanning is **mandatory** for all image and video uploads before publication. `[S§12.1]`
 
-```rust
+```go
 // Within ProcessUploadJob pipeline
-let csam_result = self.safety.scan_csam(&upload.storage_key).await;
+csamResult, err := s.safety.ScanCSAM(ctx, upload.StorageKey)
 
-match csam_result {
-    Ok(result) if result.is_csam => {
-        // Quarantine immediately — do NOT process further
-        self.uploads.update_status(
-            upload.id,
-            UploadStatus::Quarantined,
-            UploadStatusUpdate::default(),
-        ).await?;
-
-        // Report to NCMEC via safety:: [18 U.S.C. § 2258A]
-        self.safety.report_csam(upload.id, &result).await?;
-
-        // Publish event for safety:: to handle account suspension
-        self.events.publish(UploadQuarantined {
-            upload_id: upload.id,
-            family_id: upload.family_id,
-            context: upload.context.clone(),
-        }).await;
-
-        return Ok(()); // Short-circuit — no further processing
-    }
-    Ok(_) => { /* Clean — continue pipeline */ }
-    Err(ScanError::Unavailable) => {
+if err != nil {
+    var scanErr *ScanError
+    if errors.As(err, &scanErr) && scanErr.Code == "unavailable" {
         // Graceful degradation: log warning, continue processing
         // Upload will be flagged for manual review
-        tracing::warn!(upload_id = %upload.id, "CSAM scan unavailable — flagging for manual review");
+        slog.Warn("CSAM scan unavailable — flagging for manual review",
+            "upload_id", upload.ID)
         // Do NOT block publication — but flag for review
+    } else {
+        return fmt.Errorf("CSAM scan failed: %w", err)
     }
-    Err(e) => return Err(MediaError::ScanFailed(e.to_string())),
+} else if csamResult.IsCSAM {
+    // Quarantine immediately — do NOT process further
+    if _, err := s.uploads.UpdateStatus(ctx, upload.ID, UploadStatusQuarantined,
+        &UploadStatusUpdate{}); err != nil {
+        return fmt.Errorf("quarantining upload: %w", err)
+    }
+
+    // Report to NCMEC via safety:: [18 U.S.C. § 2258A]
+    if err := s.safety.ReportCSAM(ctx, upload.ID, csamResult); err != nil {
+        return fmt.Errorf("reporting CSAM: %w", err)
+    }
+
+    // Publish event for safety:: to handle account suspension
+    s.events.Publish(ctx, &UploadQuarantined{
+        UploadID: upload.ID,
+        FamilyID: upload.FamilyID,
+        Context:  upload.Context,
+    })
+
+    return nil // Short-circuit — no further processing
 }
 ```
 
@@ -1299,65 +1236,61 @@ match csam_result {
 
 Content moderation uses AWS Rekognition to detect policy violations (explicit content,
 violence, etc.). The `ModerationResult` returned by `SafetyScanBridge` includes routing
-decisions (see `[11-safety §11.2.2]`): `auto_reject` for nudity/explicit content, flagging
+decisions (see `[11-safety §11.2.2]`): `AutoReject` for nudity/explicit content, flagging
 for suggestive/violent content, and ignored categories (drugs, hate symbols, weapons) that
 are legitimate educational content on a homeschool platform. `[S§12.2]`
 
-```rust
+```go
 // Within ProcessUploadJob pipeline (after CSAM scan passes)
-let moderation = self.safety.scan_moderation(&upload.storage_key).await;
+modResult, err := s.safety.ScanModeration(ctx, upload.StorageKey)
 
-match moderation {
-    Ok(result) if result.auto_reject => {
-        // Auto-reject — content policy violation (e.g. nudity) [11-safety §11.2.1]
-        self.uploads.set_moderation_labels(
-            upload.id,
-            &serde_json::to_value(&result.labels)?,
-        ).await?;
-        self.uploads.update_status(
-            upload.id,
-            UploadStatus::Rejected,
-            UploadStatusUpdate::default(),
-        ).await?;
-
-        // Publish event for safety:: (creates content flag + user notification)
-        self.events.publish(UploadRejected {
-            upload_id: upload.id,
-            family_id: upload.family_id,
-            context: upload.context.clone(),
-            labels: result.labels,
-        }).await;
-
-        return Ok(()); // Short-circuit — no further processing
+if err != nil {
+    var scanErr *ScanError
+    if errors.As(err, &scanErr) && scanErr.Code == "unavailable" {
+        slog.Warn("Moderation scan unavailable — continuing",
+            "upload_id", upload.ID)
+    } else {
+        return fmt.Errorf("moderation scan failed: %w", err)
     }
-    Ok(result) if result.has_violations => {
-        // Flag for review — admin must assess (e.g. suggestive, violence)
-        self.uploads.set_moderation_labels(
-            upload.id,
-            &serde_json::to_value(&result.labels)?,
-        ).await?;
-        self.uploads.update_status(
-            upload.id,
-            UploadStatus::Flagged,
-            UploadStatusUpdate::default(),
-        ).await?;
-
-        // Publish event for safety:: moderation queue
-        self.events.publish(UploadFlagged {
-            upload_id: upload.id,
-            family_id: upload.family_id,
-            context: upload.context.clone(),
-            labels: result.labels,
-            priority: result.priority,
-        }).await;
-
-        return Ok(()); // Short-circuit — no further processing
+} else if modResult.AutoReject {
+    // Auto-reject — content policy violation (e.g. nudity) [11-safety §11.2.1]
+    labelsJSON, _ := json.Marshal(modResult.Labels)
+    if err := s.uploads.SetModerationLabels(ctx, upload.ID, labelsJSON); err != nil {
+        return fmt.Errorf("setting moderation labels: %w", err)
     }
-    Ok(_) => { /* Clean — continue pipeline */ }
-    Err(ScanError::Unavailable) => {
-        tracing::warn!(upload_id = %upload.id, "Moderation scan unavailable — continuing");
+    if _, err := s.uploads.UpdateStatus(ctx, upload.ID, UploadStatusRejected,
+        &UploadStatusUpdate{}); err != nil {
+        return fmt.Errorf("rejecting upload: %w", err)
     }
-    Err(e) => return Err(MediaError::ScanFailed(e.to_string())),
+
+    s.events.Publish(ctx, &UploadRejected{
+        UploadID: upload.ID,
+        FamilyID: upload.FamilyID,
+        Context:  upload.Context,
+        Labels:   modResult.Labels,
+    })
+
+    return nil // Short-circuit
+} else if modResult.HasViolations {
+    // Flag for review — admin must assess
+    labelsJSON, _ := json.Marshal(modResult.Labels)
+    if err := s.uploads.SetModerationLabels(ctx, upload.ID, labelsJSON); err != nil {
+        return fmt.Errorf("setting moderation labels: %w", err)
+    }
+    if _, err := s.uploads.UpdateStatus(ctx, upload.ID, UploadStatusFlagged,
+        &UploadStatusUpdate{}); err != nil {
+        return fmt.Errorf("flagging upload: %w", err)
+    }
+
+    s.events.Publish(ctx, &UploadFlagged{
+        UploadID: upload.ID,
+        FamilyID: upload.FamilyID,
+        Context:  upload.Context,
+        Labels:   modResult.Labels,
+        Priority: modResult.Priority,
+    })
+
+    return nil // Short-circuit
 }
 ```
 
@@ -1418,7 +1351,7 @@ The FFMPEG worker is a **stateless service** that processes compression jobs:
 - **Writes**: Compressed asset back to S3 at the same storage key (replaces original)
 - **Returns**: Completion status, final file sizes
 
-The worker is invoked via job queue (sidekiq-rs). `media::` enqueues `CompressAssetJob`,
+The worker is invoked via job queue (hibiken/asynq). `media::` enqueues `CompressAssetJob`,
 the worker picks it up, processes, writes the result back, and marks the job complete.
 `ProcessUploadJob` resumes at step 7 (variant generation) after compression completes.
 
@@ -1433,34 +1366,42 @@ the worker picks it up, processes, writes the result back, and marks the job com
 ### §10.7 Variant Generation (Images Only)
 
 Variant generation is a **separate, unconditional step** that runs for all image uploads
-after compression (if any) completes. It uses the `image` crate **in-process** — no
+after compression (if any) completes. It uses an image processing library **in-process** — no
 external worker needed. `[ARCH §8.2]`
 
-```rust
+```go
 // Within ProcessUploadJob, after compression (if any) completes
-if upload.content_type.starts_with("image/") {
-    let variants = vec![
-        ImageVariant::Thumb,   // 200x200 max, fit-within, quality 85
-        ImageVariant::Medium,  // 800x800 max, fit-within, quality 85
-    ];
-
-    // Download the final image (post-compression or original)
-    let image_bytes = self.storage
-        .get_object_bytes(&upload.storage_key, 0..upload.size_bytes)
-        .await?;
-
-    for variant in variants {
-        let (max_w, max_h, suffix) = match variant {
-            ImageVariant::Thumb => (200, 200, "thumb"),
-            ImageVariant::Medium => (800, 800, "medium"),
-        };
-
-        let resized = resize_fit_within(&image_bytes, max_w, max_h, 85)?;
-        let variant_key = format!("{}__{}.{}", upload.storage_key, suffix, upload.extension());
-        self.storage.put_object(&variant_key, resized, &upload.content_type).await?;
+if strings.HasPrefix(upload.ContentType, "image/") {
+    variants := []struct {
+        variant ImageVariant
+        maxW    int
+        maxH    int
+        suffix  string
+    }{
+        {ImageVariantThumb, 200, 200, "thumb"},
+        {ImageVariantMedium, 800, 800, "medium"},
     }
 
-    self.uploads.set_variant_flags(upload.id, true, true).await?;
+    // Download the final image (post-compression or original)
+    imageBytes, err := s.storage.GetObjectBytes(ctx, upload.StorageKey, 0, uint64(upload.SizeBytes))
+    if err != nil {
+        return fmt.Errorf("downloading image for variants: %w", err)
+    }
+
+    for _, v := range variants {
+        resized, err := resizeFitWithin(imageBytes, v.maxW, v.maxH, 85)
+        if err != nil {
+            return fmt.Errorf("generating %s variant: %w", v.suffix, err)
+        }
+        variantKey := fmt.Sprintf("%s__%s.%s", upload.StorageKey, v.suffix, upload.Extension())
+        if err := s.storage.PutObject(ctx, variantKey, resized, upload.ContentType); err != nil {
+            return fmt.Errorf("uploading %s variant: %w", v.suffix, err)
+        }
+    }
+
+    if err := s.uploads.SetVariantFlags(ctx, upload.ID, true, true); err != nil {
+        return fmt.Errorf("setting variant flags: %w", err)
+    }
 }
 ```
 
@@ -1487,7 +1428,7 @@ format for adaptive bitrate delivery.
 2. Generates HLS segments at 2-3 quality levels:
    - **480p** (baseline): ~1 Mbps, suitable for mobile/slow connections
    - **720p** (standard): ~2.5 Mbps, good balance of quality and bandwidth
-   - **1080p** (high): ~5 Mbps, full quality (only if source ≥ 1080p)
+   - **1080p** (high): ~5 Mbps, full quality (only if source >= 1080p)
 3. Generates master HLS playlist (`master.m3u8`) referencing quality variants
 4. Uploads all segments and playlists to R2 under structured keys:
    `media/video/{upload_id}/master.m3u8`
@@ -1550,114 +1491,108 @@ the file signature matches.
 
 ### §11.2 Validation Implementation
 
-```rust
-/// Validate file magic bytes against declared content_type.
-///
-/// Reads the first 16 bytes from S3 and matches against known file
-/// signatures. Returns Ok(()) if magic bytes match the declared type,
-/// or Err(MediaError::InvalidFileType) if they don't. [CODING §5.2]
-pub async fn validate_magic_bytes(
-    storage: &dyn ObjectStorageAdapter,
-    storage_key: &str,
-    declared_content_type: &str,
-) -> Result<(), MediaError> {
-    let header = storage.get_object_bytes(storage_key, 0..16).await
-        .map_err(|_| MediaError::ObjectStorageError("failed to read file header".into()))?;
-
-    let detected_type = detect_file_type(&header);
-
-    if !is_compatible(declared_content_type, &detected_type) {
-        return Err(MediaError::InvalidFileType);
+```go
+// ValidateMagicBytes validates file magic bytes against declared content_type.
+//
+// Reads the first 16 bytes from S3 and matches against known file
+// signatures. Returns nil if magic bytes match the declared type,
+// or ErrInvalidFileType if they don't. [CODING §5.2]
+func ValidateMagicBytes(ctx context.Context, storage ObjectStorageAdapter, storageKey string, declaredContentType string) error {
+    header, err := storage.GetObjectBytes(ctx, storageKey, 0, 16)
+    if err != nil {
+        return fmt.Errorf("failed to read file header: %w", err)
     }
 
-    Ok(())
+    detectedType := detectFileType(header)
+
+    if !isCompatible(declaredContentType, detectedType) {
+        return ErrInvalidFileType
+    }
+
+    return nil
 }
 
-/// Detect file type from magic bytes. Returns a general MIME category.
-fn detect_file_type(header: &[u8]) -> Option<&'static str> {
-    if header.len() < 3 { return None; }
+// detectFileType detects file type from magic bytes. Returns a general MIME category.
+func detectFileType(header []byte) string {
+    if len(header) < 3 {
+        return ""
+    }
 
     // JPEG: FF D8 FF
-    if header[0..3] == [0xFF, 0xD8, 0xFF] {
-        return Some("image/jpeg");
+    if header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF {
+        return "image/jpeg"
     }
 
     // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if header.len() >= 8 && header[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
-        return Some("image/png");
+    if len(header) >= 8 && bytes.Equal(header[0:8], []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}) {
+        return "image/png"
     }
 
     // GIF: 47 49 46 38
-    if header.len() >= 4 && header[0..4] == [0x47, 0x49, 0x46, 0x38] {
-        return Some("image/gif");
+    if len(header) >= 4 && bytes.Equal(header[0:4], []byte{0x47, 0x49, 0x46, 0x38}) {
+        return "image/gif"
     }
 
     // PDF: 25 50 44 46
-    if header.len() >= 4 && header[0..4] == [0x25, 0x50, 0x44, 0x46] {
-        return Some("application/pdf");
+    if len(header) >= 4 && bytes.Equal(header[0:4], []byte{0x25, 0x50, 0x44, 0x46}) {
+        return "application/pdf"
     }
 
     // WebP: RIFF....WEBP
-    if header.len() >= 12
-        && header[0..4] == [0x52, 0x49, 0x46, 0x46]
-        && header[8..12] == [0x57, 0x45, 0x42, 0x50]
-    {
-        return Some("image/webp");
+    if len(header) >= 12 &&
+        bytes.Equal(header[0:4], []byte{0x52, 0x49, 0x46, 0x46}) &&
+        bytes.Equal(header[8:12], []byte{0x57, 0x45, 0x42, 0x50}) {
+        return "image/webp"
     }
 
     // WAV: RIFF....WAVE
-    if header.len() >= 12
-        && header[0..4] == [0x52, 0x49, 0x46, 0x46]
-        && header[8..12] == [0x57, 0x41, 0x56, 0x45]
-    {
-        return Some("audio/wav");
+    if len(header) >= 12 &&
+        bytes.Equal(header[0:4], []byte{0x52, 0x49, 0x46, 0x46}) &&
+        bytes.Equal(header[8:12], []byte{0x57, 0x41, 0x56, 0x45}) {
+        return "audio/wav"
     }
 
     // AIFF: FORM....AIFF
-    if header.len() >= 12
-        && header[0..4] == [0x46, 0x4F, 0x52, 0x4D]
-        && header[8..12] == [0x41, 0x49, 0x46, 0x46]
-    {
-        return Some("audio/aiff");
+    if len(header) >= 12 &&
+        bytes.Equal(header[0:4], []byte{0x46, 0x4F, 0x52, 0x4D}) &&
+        bytes.Equal(header[8:12], []byte{0x41, 0x49, 0x46, 0x46}) {
+        return "audio/aiff"
     }
 
     // FLAC: fLaC
-    if header.len() >= 4 && header[0..4] == [0x66, 0x4C, 0x61, 0x43] {
-        return Some("audio/flac");
+    if len(header) >= 4 && bytes.Equal(header[0:4], []byte{0x66, 0x4C, 0x61, 0x43}) {
+        return "audio/flac"
     }
 
     // MP3: FF FB/F3/F2 or ID3 tag
-    if (header[0] == 0xFF && (header[1] & 0xE0) == 0xE0)
-        || (header.len() >= 3 && header[0..3] == [0x49, 0x44, 0x33])
-    {
-        return Some("audio/mpeg");
+    if (header[0] == 0xFF && (header[1]&0xE0) == 0xE0) ||
+        (len(header) >= 3 && bytes.Equal(header[0:3], []byte{0x49, 0x44, 0x33})) {
+        return "audio/mpeg"
     }
 
     // WebM: EBML header 1A 45 DF A3
-    if header.len() >= 4 && header[0..4] == [0x1A, 0x45, 0xDF, 0xA3] {
-        return Some("video/webm");
+    if len(header) >= 4 && bytes.Equal(header[0:4], []byte{0x1A, 0x45, 0xDF, 0xA3}) {
+        return "video/webm"
     }
 
     // MP4/M4A/MOV: ftyp box at offset 4
-    // Covers video/mp4, video/quicktime, and audio/mp4 — all share ftyp container
-    if header.len() >= 8 && header[4..8] == [0x66, 0x74, 0x79, 0x70] {
-        return Some("video/mp4");
+    if len(header) >= 8 && bytes.Equal(header[4:8], []byte{0x66, 0x74, 0x79, 0x70}) {
+        return "video/mp4"
     }
 
     // AVI: RIFF....AVI\x20
-    if header.len() >= 12
-        && header[0..4] == [0x52, 0x49, 0x46, 0x46]
-        && header[8..12] == [0x41, 0x56, 0x49, 0x20]
-    {
-        return Some("video/x-msvideo");
+    if len(header) >= 12 &&
+        bytes.Equal(header[0:4], []byte{0x52, 0x49, 0x46, 0x46}) &&
+        bytes.Equal(header[8:12], []byte{0x41, 0x56, 0x49, 0x20}) {
+        return "video/x-msvideo"
     }
 
     // ZIP: PK\x03\x04
-    if header.len() >= 4 && header[0..4] == [0x50, 0x4B, 0x03, 0x04] {
-        return Some("application/zip");
+    if len(header) >= 4 && bytes.Equal(header[0:4], []byte{0x50, 0x4B, 0x03, 0x04}) {
+        return "application/zip"
     }
 
-    None
+    return ""
 }
 ```
 
@@ -1666,7 +1601,7 @@ fn detect_file_type(header: &[u8]) -> Option<&'static str> {
 If magic bytes don't match the declared content type:
 1. Update upload status to `flagged` with reason `invalid_magic_bytes`
 2. Log the mismatch internally (declared type vs. detected type) — `[CODING §2.2, §5.2]` never expose in API
-3. Return `MediaError::InvalidFileType` to the processing pipeline
+3. Return `ErrInvalidFileType` to the processing pipeline
 4. The upload is NOT published — it remains in `flagged` status for admin review
 
 ---
@@ -1688,37 +1623,36 @@ crashed, navigated away, or abandoned the upload). These leave `pending` records
      b. Transition status to `expired`
   3. Log count of cleaned-up orphans
 
-```rust
-pub async fn run_cleanup(
-    uploads: &dyn UploadRepository,
-    storage: &dyn ObjectStorageAdapter,
-) -> Result<u32, MediaError> {
-    let orphans = uploads.find_expired_pending(Utc::now(), 1000).await?;
-    let mut cleaned = 0u32;
-
-    for orphan in &orphans {
-        // Best-effort S3 deletion — object may not exist
-        let _ = storage.delete_object(&orphan.storage_key).await;
-
-        uploads.update_status(
-            orphan.id,
-            UploadStatus::Expired,
-            UploadStatusUpdate::default(),
-        ).await?;
-
-        cleaned += 1;
+```go
+func RunCleanup(ctx context.Context, uploads UploadRepository, storage ObjectStorageAdapter) (uint32, error) {
+    orphans, err := uploads.FindExpiredPending(ctx, time.Now(), 1000)
+    if err != nil {
+        return 0, fmt.Errorf("finding expired uploads: %w", err)
     }
 
-    tracing::info!(count = cleaned, "Orphan upload cleanup completed");
-    Ok(cleaned)
+    var cleaned uint32
+    for _, orphan := range orphans {
+        // Best-effort S3 deletion — object may not exist
+        _ = storage.DeleteObject(ctx, orphan.StorageKey)
+
+        if _, err := uploads.UpdateStatus(ctx, orphan.ID, UploadStatusExpired,
+            &UploadStatusUpdate{}); err != nil {
+            return cleaned, fmt.Errorf("expiring orphan %s: %w", orphan.ID, err)
+        }
+
+        cleaned++
+    }
+
+    slog.Info("Orphan upload cleanup completed", "count", cleaned)
+    return cleaned, nil
 }
 ```
 
 ### §12.2 Recurring Schedule
 
-```rust
+```go
 // Added to the shared scheduler [ARCH §12.3]
-scheduler.add("0 4 * * *", CleanupOrphanUploadsJob);  // Daily at 4:00 AM UTC
+scheduler.Register("0 4 * * *", NewCleanupOrphanUploadsTask()) // Daily at 4:00 AM UTC
 ```
 
 ---
@@ -1755,9 +1689,9 @@ Cache-Control: public, max-age=31536000, immutable
   - MinIO: requires separate reverse proxy / CDN
 - This spec explicitly avoids any R2-specific API calls — only standard S3 operations
 - Switching providers requires only environment variable changes:
-  - `OBJECT_STORAGE_ENDPOINT` → new provider endpoint
-  - `OBJECT_STORAGE_PUBLIC_URL` → new CDN base URL
-  - Credentials → new provider credentials
+  - `OBJECT_STORAGE_ENDPOINT` -> new provider endpoint
+  - `OBJECT_STORAGE_PUBLIC_URL` -> new CDN base URL
+  - Credentials -> new provider credentials
 
 ---
 
@@ -1765,95 +1699,68 @@ Cache-Control: public, max-age=31536000, immutable
 
 | Job | Queue | Trigger | Description |
 |-----|-------|---------|-------------|
-| `ProcessUploadJob` | Default | Upload confirmation (`confirm_upload`) | Orchestrator: magic bytes → ffprobe → CSAM → moderation → compression decision → variant generation → publish `[ARCH §12.2]` |
+| `ProcessUploadJob` | Default | Upload confirmation (`ConfirmUpload`) | Orchestrator: magic bytes -> ffprobe -> CSAM -> moderation -> compression decision -> variant generation -> publish `[ARCH §12.2]` |
 | `CompressAssetJob` | Default | Dispatched by `ProcessUploadJob` **only if thresholds exceeded** | Sent to FFMPEG worker: compress asset per profile, write back to S3. Does NOT generate variants. |
 | `TranscodeVideoJob` | Default | Dispatched by `ProcessUploadJob` for `video_lesson` context uploads after safety checks pass | Converts raw video to HLS adaptive bitrate format (480p/720p/1080p segments + master playlist). See §10.8. |
 | `CleanupOrphanUploadsJob` | Low | Daily at 4:00 AM UTC | Expire pending uploads past presigned URL expiry `[ARCH §12.3]` |
 
 > **Note**: Variant generation (thumb + medium) is NOT a separate job — it runs in-process
 > within `ProcessUploadJob` after compression completes (or immediately if no compression
-> needed). It uses the `image` crate and takes milliseconds.
+> needed). It uses an image processing library and takes milliseconds.
 
 ---
 
 ## §15 Error Types
 
-```rust
-/// Media domain error type. [CODING §2.2, §5.2]
-///
-/// Internal error details (storage errors, scan failures) are logged
-/// but NEVER exposed in API responses. The HTTP mapping returns only
-/// generic user-facing messages.
-#[derive(Debug, thiserror::Error)]
-pub enum MediaError {
+```go
+// internal/media/errors.go
+
+// Media domain error types. [CODING §2.2, §5.2]
+//
+// Internal error details (storage errors, scan failures) are logged
+// but NEVER exposed in API responses. The HTTP mapping returns only
+// generic user-facing messages.
+
+import "errors"
+
+var (
     // ─── Upload lifecycle ───────────────────────────────────────────────
-
-    #[error("upload not found")]
-    UploadNotFound,
-
-    #[error("invalid file type for this context")]
-    InvalidFileType,
-
-    #[error("file exceeds maximum size for this context")]
-    FileTooLarge,
-
-    #[error("upload has not been confirmed")]
-    UploadNotConfirmed,
-
-    #[error("upload is quarantined")]
-    UploadQuarantined,
-
-    #[error("upload was rejected by content policy")]
-    UploadRejected,
-
-    #[error("upload is flagged for review")]
-    UploadFlagged,
-
-    #[error("upload has expired")]
-    UploadExpired,
-
-    #[error("not the upload owner")]
-    NotOwner,
+    ErrUploadNotFound    = errors.New("upload not found")
+    ErrInvalidFileType   = errors.New("invalid file type for this context")
+    ErrFileTooLarge      = errors.New("file exceeds maximum size for this context")
+    ErrUploadNotConfirmed = errors.New("upload has not been confirmed")
+    ErrUploadQuarantined = errors.New("upload is quarantined")
+    ErrUploadRejected    = errors.New("upload was rejected by content policy")
+    ErrUploadFlagged     = errors.New("upload is flagged for review")
+    ErrUploadExpired     = errors.New("upload has expired")
+    ErrNotOwner          = errors.New("not the upload owner")
 
     // ─── External service errors ────────────────────────────────────────
-
-    #[error("object storage operation failed")]
-    ObjectStorageError(String),         // internal details — NOT exposed in API
-
-    #[error("safety scan service unavailable")]
-    ScanUnavailable,
-
-    #[error("safety scan failed")]
-    ScanFailed(String),                 // internal details — NOT exposed in API
-
-    // ─── Database ───────────────────────────────────────────────────────
-
-    #[error("database error")]
-    DbError(#[from] sea_orm::DbErr),    // internal — NOT exposed in API
-}
+    ErrObjectStorageError = errors.New("object storage operation failed")
+    ErrScanServiceUnavailable = errors.New("safety scan service unavailable")
+    ErrScanServiceFailed = errors.New("safety scan failed")
+)
 ```
 
 ### §15.1 HTTP Status Code Mapping
 
-| Error Variant | HTTP Status | Error Code | User-Facing Message |
-|---------------|-------------|------------|---------------------|
-| `UploadNotFound` | 404 | `upload_not_found` | "Upload not found" |
-| `InvalidFileType` | 422 | `invalid_file_type` | "File type is not allowed for this upload context" |
-| `FileTooLarge` | 422 | `file_too_large` | "File exceeds the maximum allowed size" |
-| `UploadNotConfirmed` | 409 | `upload_not_confirmed` | "Upload must be confirmed before this operation" |
-| `UploadQuarantined` | 403 | `upload_quarantined` | "This upload has been restricted" |
-| `UploadRejected` | 403 | `upload_rejected` | "This upload was not published because it violates our content guidelines" |
-| `UploadFlagged` | 403 | `upload_flagged` | "This upload is under review" |
-| `UploadExpired` | 410 | `upload_expired` | "Upload link has expired — please request a new one" |
-| `NotOwner` | 403 | `not_owner` | "You do not have permission to access this upload" |
-| `ObjectStorageError` | 502 | `storage_error` | "File storage is temporarily unavailable" |
-| `ScanUnavailable` | 503 | `scan_unavailable` | "Content scanning is temporarily unavailable" |
-| `ScanFailed` | 502 | `scan_failed` | "Content scanning encountered an error" |
-| `DbError` | 500 | `internal_error` | "An unexpected error occurred" |
+| Error | HTTP Status | Error Code | User-Facing Message |
+|-------|-------------|------------|---------------------|
+| `ErrUploadNotFound` | 404 | `upload_not_found` | "Upload not found" |
+| `ErrInvalidFileType` | 422 | `invalid_file_type` | "File type is not allowed for this upload context" |
+| `ErrFileTooLarge` | 422 | `file_too_large` | "File exceeds the maximum allowed size" |
+| `ErrUploadNotConfirmed` | 409 | `upload_not_confirmed` | "Upload must be confirmed before this operation" |
+| `ErrUploadQuarantined` | 403 | `upload_quarantined` | "This upload has been restricted" |
+| `ErrUploadRejected` | 403 | `upload_rejected` | "This upload was not published because it violates our content guidelines" |
+| `ErrUploadFlagged` | 403 | `upload_flagged` | "This upload is under review" |
+| `ErrUploadExpired` | 410 | `upload_expired` | "Upload link has expired — please request a new one" |
+| `ErrNotOwner` | 403 | `not_owner` | "You do not have permission to access this upload" |
+| `ErrObjectStorageError` | 502 | `storage_error` | "File storage is temporarily unavailable" |
+| `ErrScanServiceUnavailable` | 503 | `scan_unavailable` | "Content scanning is temporarily unavailable" |
+| `ErrScanServiceFailed` | 502 | `scan_failed` | "Content scanning encountered an error" |
 
-> **Note**: Internal error details (`ObjectStorageError(String)`, `ScanFailed(String)`,
-> `DbError`) are logged via `tracing::error!` but the API response contains only the
-> generic user-facing message. `[CODING §2.2, §5.2]`
+> **Note**: Internal error details are logged via `slog.Error` but the API response contains
+> only the generic user-facing message. `[CODING §2.2, §5.2]`
 
 ---
 
@@ -1863,12 +1770,12 @@ pub enum MediaError {
 
 | Consumer | Interface | Usage |
 |----------|-----------|-------|
-| `social::` | `MediaService::request_upload()` | Post/message attachment uploads `[05-social §4.1]` |
-| `social::` | `MediaService::validate_attachment()` | Pre-flight attachment validation |
-| `learn::` | `MediaService::request_upload()` | Activity, journal, project attachment uploads `[06-learn §7]` |
-| `learn::` | `MediaService::validate_attachment()` | Attachment validation (replaces `learn::MediaAdapter::validate_attachment`) |
-| `mkt::` | `MediaService::request_upload()` | Listing file, preview, thumbnail uploads `[07-mkt §7]` |
-| `mkt::` | `MediaService::presigned_get()` | Purchased file download URLs (replaces `mkt::MediaAdapter::presigned_get`) `[ARCH §8.3]` |
+| `social::` | `MediaService.RequestUpload()` | Post/message attachment uploads `[05-social §4.1]` |
+| `social::` | `MediaService.ValidateAttachment()` | Pre-flight attachment validation |
+| `learn::` | `MediaService.RequestUpload()` | Activity, journal, project attachment uploads `[06-learn §7]` |
+| `learn::` | `MediaService.ValidateAttachment()` | Attachment validation (replaces `learn.MediaAdapter.ValidateAttachment`) |
+| `mkt::` | `MediaService.RequestUpload()` | Listing file, preview, thumbnail uploads `[07-mkt §7]` |
+| `mkt::` | `MediaService.PresignedGet()` | Purchased file download URLs (replaces `mkt.MediaAdapter.PresignedGet`) `[ARCH §8.3]` |
 | `search::` | `UploadPublished` event | Index media metadata for search |
 | `safety::` | `UploadQuarantined` event | NCMEC report trigger, account suspension |
 | `safety::` | `UploadRejected` event | Auto-rejected content flag + user notification `[11-safety §11.2.1]` |
@@ -1878,63 +1785,55 @@ pub enum MediaError {
 
 | Provider | Interface | Usage |
 |----------|-----------|-------|
-| `iam::` | `AuthContext` extractor | Authentication and authorization `[00-core §7.2]` |
-| `iam::` | `FamilyScope` extractor | Family-scoped data access `[00-core §8]` |
-| `safety::` | `SafetyScanAdapter::scan_csam()` | CSAM hash matching via Thorn Safer `[ARCH §2.13]` |
-| `safety::` | `SafetyScanAdapter::scan_moderation()` | Content moderation via Rekognition `[ARCH §2.13]` |
-| `safety::` | `SafetyScanAdapter::report_csam()` | NCMEC reporting `[S§12.1]` |
+| `iam::` | `AuthContext` middleware | Authentication and authorization `[00-core §7.2]` |
+| `iam::` | `FamilyScope` middleware | Family-scoped data access `[00-core §8]` |
+| `safety::` | `SafetyScanAdapter.ScanCSAM()` | CSAM hash matching via Thorn Safer `[ARCH §2.13]` |
+| `safety::` | `SafetyScanAdapter.ScanModeration()` | Content moderation via Rekognition `[ARCH §2.13]` |
+| `safety::` | `SafetyScanAdapter.ReportCSAM()` | NCMEC reporting `[S§12.1]` |
 
 ### §16.3 Domain Events Published
 
-```rust
-/// Published when an upload completes all processing and is ready for use.
-/// Consumed by search:: (index metadata) and the originating domain
-/// (update attachment status if needed).
-#[derive(Debug, Clone)]
-pub struct UploadPublished {
-    pub upload_id: Uuid,
-    pub family_id: Uuid,
-    pub context: UploadContext,
-    pub storage_key: String,
-    pub content_type: String,
+```go
+// UploadPublished is published when an upload completes all processing and is ready for use.
+// Consumed by search:: (index metadata) and the originating domain
+// (update attachment status if needed).
+type UploadPublished struct {
+    UploadID    uuid.UUID
+    FamilyID    uuid.UUID
+    Context     UploadContext
+    StorageKey  string
+    ContentType string
 }
-impl DomainEvent for UploadPublished {}
 
-/// Published when CSAM is detected in an upload.
-/// Consumed by safety:: for NCMEC reporting and account suspension.
-/// [S§12.1, 18 U.S.C. § 2258A]
-#[derive(Debug, Clone)]
-pub struct UploadQuarantined {
-    pub upload_id: Uuid,
-    pub family_id: Uuid,
-    pub context: UploadContext,
+// UploadQuarantined is published when CSAM is detected in an upload.
+// Consumed by safety:: for NCMEC reporting and account suspension.
+// [S§12.1, 18 U.S.C. § 2258A]
+type UploadQuarantined struct {
+    UploadID uuid.UUID
+    FamilyID uuid.UUID
+    Context  UploadContext
 }
-impl DomainEvent for UploadQuarantined {}
 
-/// Published when content moderation auto-rejects an upload (e.g. nudity).
-/// Consumed by safety:: (creates content flag + user rejection notification).
-/// [S§12.2, 11-safety §11.2.1]
-#[derive(Debug, Clone)]
-pub struct UploadRejected {
-    pub upload_id: Uuid,
-    pub family_id: Uuid,
-    pub context: UploadContext,
-    pub labels: Vec<ModerationLabel>,
+// UploadRejected is published when content moderation auto-rejects an upload (e.g. nudity).
+// Consumed by safety:: (creates content flag + user rejection notification).
+// [S§12.2, 11-safety §11.2.1]
+type UploadRejected struct {
+    UploadID uuid.UUID
+    FamilyID uuid.UUID
+    Context  UploadContext
+    Labels   []ModerationLabel
 }
-impl DomainEvent for UploadRejected {}
 
-/// Published when content moderation flags an upload for admin review.
-/// Consumed by safety:: for moderation queue.
-/// [S§12.2, 11-safety §11.2.2]
-#[derive(Debug, Clone)]
-pub struct UploadFlagged {
-    pub upload_id: Uuid,
-    pub family_id: Uuid,
-    pub context: UploadContext,
-    pub labels: Vec<ModerationLabel>,
-    pub priority: Option<String>,        // "critical", "high", "normal" — from label routing
+// UploadFlagged is published when content moderation flags an upload for admin review.
+// Consumed by safety:: for moderation queue.
+// [S§12.2, 11-safety §11.2.2]
+type UploadFlagged struct {
+    UploadID uuid.UUID
+    FamilyID uuid.UUID
+    Context  UploadContext
+    Labels   []ModerationLabel
+    Priority *string // "critical", "high", "normal" — from label routing
 }
-impl DomainEvent for UploadFlagged {}
 ```
 
 ### §16.4 Domain Events Subscribed To
@@ -1943,20 +1842,20 @@ None in Phase 1. `media::` is a producer (publishes upload lifecycle events), no
 Future phases may subscribe to `FamilyDeletionScheduled` from `iam::` to cascade-delete all
 family media.
 
-### §16.5 Adapter Trait Reconciliation
+### §16.5 Adapter Interface Reconciliation
 
-The following adapter traits in existing domain specs are **superseded** by `media::MediaService`:
+The following adapter interfaces in existing domain specs are **superseded** by `media.MediaService`:
 
 | Existing Sketch | Location | Replacement |
 |----------------|----------|-------------|
-| `mkt::MediaAdapter::presigned_upload()` | `07-mkt §7` | `media::MediaService::request_upload()` |
-| `mkt::MediaAdapter::presigned_get()` | `07-mkt §7` | `media::MediaService::presigned_get()` |
-| `learn::MediaAdapter::validate_attachment()` | `06-learn §7` | `media::MediaService::validate_attachment()` |
-| `learn::MediaAdapter::get_upload_url()` | `06-learn §7` | `media::MediaService::request_upload()` |
+| `mkt.MediaAdapter.PresignedUpload()` | `07-mkt §7` | `media.MediaService.RequestUpload()` |
+| `mkt.MediaAdapter.PresignedGet()` | `07-mkt §7` | `media.MediaService.PresignedGet()` |
+| `learn.MediaAdapter.ValidateAttachment()` | `06-learn §7` | `media.MediaService.ValidateAttachment()` |
+| `learn.MediaAdapter.GetUploadURL()` | `06-learn §7` | `media.MediaService.RequestUpload()` |
 
-Both `07-mkt` and `06-learn` already note that their `MediaAdapter` traits are consumed
+Both `07-mkt` and `06-learn` already note that their `MediaAdapter` interfaces are consumed
 from `media::` — this spec makes the contract authoritative. Implementation injects
-`Arc<dyn media::MediaService>` where those specs reference `Arc<dyn MediaAdapter>`.
+a `media.MediaService` interface value where those specs reference `MediaAdapter`.
 
 ---
 
@@ -1968,7 +1867,7 @@ from `media::` — this spec makes the contract authoritative. Implementation in
 - **Processing**: `ProcessUploadJob` — magic byte validation, ffprobe analysis, CSAM scan,
   content moderation, compression decision + `CompressAssetJob`, image variant generation
   (thumb + medium), publish
-- **Storage**: S3-compatible adapter (`src/media/adapters/s3.rs`)
+- **Storage**: S3-compatible adapter (`internal/media/adapters/s3.go`)
 - **Validation**: Context-based size/type rules, magic byte verification
 - **Safety**: CSAM scan (Thorn Safer), content moderation (Rekognition) — both via `safety::` adapters
 - **Compression**: FFMPEG worker for all asset types (image, video, audio)
@@ -2006,7 +1905,7 @@ from `media::` — this spec makes the contract authoritative. Implementation in
 
 6. `ProcessUploadJob` generates both thumb (200x200) and medium (800x800) variants for all
    image uploads `[ARCH §8.2]`
-7. Variants are generated using the `image` crate in-process (not external worker)
+7. Variants are generated using an image processing library in-process (not external worker)
 8. Variant keys follow the pattern `{storage_key}__thumb.{ext}` and `{storage_key}__medium.{ext}`
 9. Non-image uploads skip variant generation
 10. Compression profiles are applied only when thresholds are exceeded (§10.2)
@@ -2015,11 +1914,11 @@ from `media::` — this spec makes the contract authoritative. Implementation in
 
 11. All image/video uploads are scanned for CSAM before publication `[S§12.1]`
 12. CSAM detection triggers immediate quarantine — no further processing `[S§12.1]`
-13. CSAM is reported to NCMEC via `safety::service::report_csam()` `[18 U.S.C. § 2258A]`
+13. CSAM is reported to NCMEC via `safety.Service.ReportCSAM()` `[18 U.S.C. § 2258A]`
 14. Content moderation runs on all image/video uploads `[S§12.2]`
-15. Nudity/explicit labels above threshold → upload auto-rejected (not just flagged) `[11-safety §11.2.1]`
-16. Suggestive/violence labels → upload flagged for admin review `[11-safety §11.2.2]`
-17. Drugs/tobacco/alcohol, hate symbols, weapons → ignored (legitimate educational content)
+15. Nudity/explicit labels above threshold -> upload auto-rejected (not just flagged) `[11-safety §11.2.1]`
+16. Suggestive/violence labels -> upload flagged for admin review `[11-safety §11.2.2]`
+17. Drugs/tobacco/alcohol, hate symbols, weapons -> ignored (legitimate educational content)
 18. Rejected uploads are appealable; quarantined (CSAM) uploads are not
 19. `UploadQuarantined`, `UploadRejected`, and `UploadFlagged` events are published for `safety::` consumption
 
@@ -2039,54 +1938,54 @@ from `media::` — this spec makes the contract authoritative. Implementation in
 
 ### Error Handling
 
-28. Zero `.unwrap()` / `.expect()` in production code `[CODING §2.2]`
-29. All errors use `MediaError` with `thiserror` `[CODING §2.2, §5.2]`
-30. Internal error details (storage errors, scan failures) are logged but never exposed
+28. All errors use custom error types with `errors.Is`/`errors.As` `[CODING §2.2, §5.2]`
+29. Internal error details (storage errors, scan failures) are logged but never exposed
     in API responses `[CODING §2.2, §5.2]`
-31. `ScanUnavailable` returns 503 — graceful degradation if Thorn/Rekognition is down
+30. `ErrScanServiceUnavailable` returns 503 — graceful degradation if Thorn/Rekognition is down
 
 ### Privacy Invariants
 
-32. Every `media_uploads` query is family-scoped via `FamilyScope` `[CODING §2.4]`
-33. Upload owner is verified before confirm/delete operations
-34. Storage keys are namespaced by `family_id` — no cross-family access
-35. EXIF data stripped during JPEG compression (preserving orientation only)
-36. No GPS coordinates stored or exposed `[ARCH §1.5]`
+31. Every `media_uploads` query is family-scoped via `FamilyScope` `[CODING §2.4]`
+32. Upload owner is verified before confirm/delete operations
+33. Storage keys are namespaced by `family_id` — no cross-family access
+34. EXIF data stripped during JPEG compression (preserving orientation only)
+35. No GPS coordinates stored or exposed `[ARCH §1.5]`
 
 ### Cross-Domain Contracts
 
-37. `MediaService` trait is the authoritative interface — supersedes `learn::MediaAdapter` and
-    `mkt::MediaAdapter` sketches
-38. `social::`, `learn::`, and `mkt::` inject `Arc<dyn media::MediaService>`
-39. Marketplace file downloads use `presigned_get()` with 1-hour expiry `[ARCH §8.3]`
-40. File versioning is `mkt::`'s responsibility — `media::` manages individual uploads only
+36. `MediaService` interface is the authoritative interface — supersedes `learn.MediaAdapter` and
+    `mkt.MediaAdapter` sketches
+37. `social::`, `learn::`, and `mkt::` inject `media.MediaService` interface values
+38. Marketplace file downloads use `PresignedGet()` with 1-hour expiry `[ARCH §8.3]`
+39. File versioning is `mkt::`'s responsibility — `media::` manages individual uploads only
 
 ---
 
 ## §19 Module Structure
 
 ```
-src/media/
-├── mod.rs                # Public exports: MediaService trait, models, errors
-├── handlers.rs           # HTTP handlers (3 Phase 1 endpoints)
-│                         #   request_upload, confirm_upload, get_upload
-├── service.rs            # MediaServiceImpl — orchestration between repo, storage,
+internal/media/
+├── handler.go            # HTTP handlers (3 Phase 1 endpoints)
+│                         #   RequestUpload, ConfirmUpload, GetUpload
+├── service.go            # MediaServiceImpl — orchestration between repo, storage,
 │                         #   safety adapters, and event bus
-├── repository.rs         # PgUploadRepository, PgProcessingJobRepository
+├── repository.go         # GormUploadRepository, GormProcessingJobRepository
 │                         #   All user-data queries family-scoped via FamilyScope
-├── models.rs             # Request/response types (serde + OpenAPI derives),
+├── models.go             # GORM models, request/response types,
 │                         #   internal types (UploadContext, UploadStatus, etc.)
-├── validation.rs         # Magic byte validation (§11), context-based rules (§9.1),
+├── validation.go         # Magic byte validation (§11), context-based rules (§9.1),
 │                         #   filename sanitization
-├── compression.rs        # Compression profiles (§10.2), ffprobe analysis,
+├── compression.go        # Compression profiles (§10.2), ffprobe analysis,
 │                         #   threshold logic, variant generation
-├── adapters/
-│   ├── mod.rs            # Adapter trait re-exports
-│   └── s3.rs             # S3-compatible object storage client (provider-agnostic)
-│                         #   Uses aws-sdk-s3 with custom endpoint URL [ARCH §2.10]
-├── jobs.rs               # ProcessUploadJob, CompressAssetJob, CleanupOrphanUploadsJob
+├── ports.go              # MediaService, UploadRepository, ProcessingJobRepository,
+│                         #   ObjectStorageAdapter, SafetyScanAdapter interfaces
+├── errors.go             # MediaError sentinel errors
+├── events.go             # UploadPublished, UploadQuarantined, UploadRejected, UploadFlagged
+├── jobs.go               # ProcessUploadJob, CompressAssetJob, CleanupOrphanUploadsJob
 │                         #   Job definitions and handlers [ARCH §12.2]
-└── entities/             # SeaORM-generated — never hand-edit [CODING §6.3]
+└── adapters/
+    └── s3.go             # S3-compatible object storage client (provider-agnostic)
+                          #   Uses aws-sdk-go-v2 with custom endpoint URL [ARCH §2.10]
 ```
 
 > **Complexity class**: Simple (no `domain/` subdirectory). `media::` has straightforward
