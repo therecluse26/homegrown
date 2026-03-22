@@ -1,0 +1,159 @@
+package iam
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+)
+
+// ─── Service Interface ────────────────────────────────────────────────────────
+
+// IamService defines all Phase 1 use cases exposed to handlers and other domains.
+// Defined here per [CODING §8.2]. Implementation: IamServiceImpl in service.go.
+type IamService interface {
+	// ─── Queries ──────────────────────────────────────────────────────────────
+
+	// GetCurrentUser returns the current user's info (parent + family summary).
+	// Used by GET /v1/auth/me. Reads from AuthContext + family display_name.
+	GetCurrentUser(ctx context.Context, auth *shared.AuthContext) (*CurrentUserResponse, error)
+
+	// GetFamilyProfile returns the full family profile including parents and student count.
+	// Used by GET /v1/families/profile.
+	GetFamilyProfile(ctx context.Context, scope *shared.FamilyScope) (*FamilyProfileResponse, error)
+
+	// ListStudents lists all students in the family.
+	// Used by GET /v1/families/students.
+	ListStudents(ctx context.Context, scope *shared.FamilyScope) ([]StudentResponse, error)
+
+	// GetConsentStatus returns COPPA consent status from the family record.
+	// Used by GET /v1/families/consent.
+	GetConsentStatus(ctx context.Context, scope *shared.FamilyScope) (*ConsentStatusResponse, error)
+
+	// ─── Commands ─────────────────────────────────────────────────────────────
+
+	// HandlePostRegistration handles the Kratos post-registration webhook.
+	// Creates family + parent atomically. Publishes FamilyCreated. [§10.1]
+	HandlePostRegistration(ctx context.Context, payload KratosWebhookPayload) error
+
+	// HandlePostLogin handles the Kratos post-login webhook.
+	// Syncs Kratos identity traits (email, name) to local DB.
+	HandlePostLogin(ctx context.Context, payload KratosWebhookPayload) error
+
+	// UpdateFamilyProfile updates display_name, state_code, or location_region.
+	// Does NOT update methodology (method:: domain) or subscription tier (billing:: domain).
+	UpdateFamilyProfile(ctx context.Context, scope *shared.FamilyScope, cmd UpdateFamilyCommand) (*FamilyProfileResponse, error)
+
+	// CreateStudent creates a student profile. COPPA consent is enforced by the handler
+	// via RequireCoppaConsent middleware before calling this method. [§4.3]
+	// Publishes StudentCreated.
+	CreateStudent(ctx context.Context, scope *shared.FamilyScope, cmd CreateStudentCommand) (*StudentResponse, error)
+
+	// UpdateStudent updates a student profile.
+	UpdateStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd UpdateStudentCommand) (*StudentResponse, error)
+
+	// DeleteStudent deletes a student profile. Publishes StudentDeleted.
+	DeleteStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error
+
+	// SubmitCoppaConsent submits COPPA parental consent or acknowledges the COPPA notice.
+	// Validates consent method. Publishes CoppaConsentGranted on Consented/ReVerified transition.
+	// Phase 1: credit card micro-charge verification is stubbed (no Stripe call). [§9.3]
+	SubmitCoppaConsent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, cmd CoppaConsentCommand) (*ConsentStatusResponse, error)
+}
+
+// ─── Repository Interfaces ────────────────────────────────────────────────────
+
+// FamilyRepository defines persistence operations for family accounts.
+// Implementations: PgFamilyRepository in repository.go. [CODING §8.2]
+type FamilyRepository interface {
+	// Create creates a new family. NOT family-scoped (family does not exist yet).
+	Create(ctx context.Context, cmd CreateFamily) (*Family, error)
+
+	// FindByID finds a family by ID. NOT family-scoped — used by auth middleware
+	// and webhook handlers before FamilyScope is constructed.
+	FindByID(ctx context.Context, id uuid.UUID) (*Family, error)
+
+	// Update updates family profile fields. Family-scoped.
+	Update(ctx context.Context, scope *shared.FamilyScope, cmd UpdateFamily) (*Family, error)
+
+	// SetPrimaryParent sets the primary_parent_id on the family. NOT family-scoped —
+	// used during registration before FamilyScope is available.
+	SetPrimaryParent(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error
+
+	// UpdateConsentStatus sets the COPPA consent status and consent method. Family-scoped.
+	UpdateConsentStatus(ctx context.Context, scope *shared.FamilyScope, status CoppaConsentStatus, method *string) (*Family, error)
+
+	// SetMethodology sets methodology IDs on the family. Called by method:: service. Family-scoped.
+	SetMethodology(ctx context.Context, scope *shared.FamilyScope, primaryID uuid.UUID, secondaryIDs []uuid.UUID) error
+
+	// SetDeletionRequested sets or clears deletion_requested_at. Family-scoped.
+	SetDeletionRequested(ctx context.Context, scope *shared.FamilyScope, requestedAt *time.Time) error
+}
+
+// ParentRepository defines persistence operations for parent users.
+// Implementations: PgParentRepository in repository.go. [CODING §8.2]
+type ParentRepository interface {
+	// Create creates a new parent. NOT family-scoped — used during registration
+	// and co-parent invite acceptance.
+	Create(ctx context.Context, cmd CreateParent) (*Parent, error)
+
+	// FindByKratosID finds a parent by Kratos identity ID. NOT family-scoped — used by
+	// auth middleware and login webhook before FamilyScope is constructed.
+	FindByKratosID(ctx context.Context, kratosIdentityID uuid.UUID) (*Parent, error)
+
+	// FindByID finds a specific parent by ID. Family-scoped.
+	FindByID(ctx context.Context, scope *shared.FamilyScope, parentID uuid.UUID) (*Parent, error)
+
+	// ListByFamily lists all parents in a family. Family-scoped.
+	ListByFamily(ctx context.Context, scope *shared.FamilyScope) ([]Parent, error)
+
+	// Update updates parent fields (display_name, email sync). Family-scoped.
+	Update(ctx context.Context, scope *shared.FamilyScope, parentID uuid.UUID, cmd UpdateParent) (*Parent, error)
+
+	// Delete removes a parent from the family. Family-scoped.
+	Delete(ctx context.Context, scope *shared.FamilyScope, parentID uuid.UUID) error
+
+	// SetPrimary updates is_primary flag. Family-scoped.
+	SetPrimary(ctx context.Context, scope *shared.FamilyScope, parentID uuid.UUID, isPrimary bool) error
+}
+
+// StudentRepository defines persistence operations for student profiles.
+// Implementations: PgStudentRepository in repository.go. [CODING §8.2]
+type StudentRepository interface {
+	// Create creates a student profile. Family-scoped.
+	Create(ctx context.Context, scope *shared.FamilyScope, cmd CreateStudent) (*Student, error)
+
+	// ListByFamily lists all students in the family. Family-scoped.
+	ListByFamily(ctx context.Context, scope *shared.FamilyScope) ([]Student, error)
+
+	// FindByID finds a specific student by ID. Family-scoped.
+	FindByID(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*Student, error)
+
+	// Update updates a student profile. Family-scoped.
+	Update(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd UpdateStudent) (*Student, error)
+
+	// Delete deletes a student profile. Family-scoped.
+	Delete(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error
+}
+
+// ─── Kratos Adapter Interface ─────────────────────────────────────────────────
+
+// KratosAdapter defines the admin-level Kratos API operations used by the IAM service.
+// The adapter also implements shared.SessionValidator (ValidateSession) for auth middleware.
+// KratosAdapterImpl is in internal/iam/adapters/kratos.go. [CODING §8.1, ARCH §4.2]
+//
+// Note: ValidateSession is on shared.SessionValidator, not here, to avoid conflicting
+// method signatures between the two interfaces.
+type KratosAdapter interface {
+	// GetIdentity retrieves identity traits (email, name) from the Kratos Admin API.
+	// Used by service layer when webhook payload is not sufficient.
+	GetIdentity(ctx context.Context, identityID uuid.UUID) (*KratosIdentity, error)
+
+	// DeleteIdentity deletes a Kratos identity. Used during family deletion (Phase 2).
+	DeleteIdentity(ctx context.Context, identityID uuid.UUID) error
+
+	// RevokeSessions revokes all active sessions for an identity.
+	// Used when removing a co-parent (Phase 2).
+	RevokeSessions(ctx context.Context, identityID uuid.UUID) error
+}

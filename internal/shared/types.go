@@ -88,6 +88,7 @@ type AuthContext struct {
 	ParentID           uuid.UUID        `json:"parent_id"`
 	FamilyID           uuid.UUID        `json:"family_id"`
 	IdentityID         uuid.UUID        `json:"identity_id"`
+	DisplayName        string           `json:"display_name"`         // parent's display name
 	IsPrimaryParent    bool             `json:"is_primary_parent"`
 	IsPlatformAdmin    bool             `json:"is_platform_admin"`  // [S§3.1.5, 11-safety §9]
 	SubscriptionTier   SubscriptionTier `json:"subscription_tier"`

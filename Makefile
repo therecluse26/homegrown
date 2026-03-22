@@ -1,6 +1,6 @@
 # Homegrown Academy — Development Commands
 
-.PHONY: default dev docker-up docker-down check lint test type-check \
+.PHONY: default dev dev-api dev-web docker-up docker-down check lint test type-check \
         migrate db-reset openapi generate-types full-generate audit
 
 # Default: run all quality gates
@@ -8,9 +8,20 @@ default: check
 
 # ─── Development ─────────────────────────────────────────────────────
 
-# Start the Go API server
+# Start backend (air hot-reload) + frontend (Vite HMR) together
 dev:
-	go run ./cmd/server
+	@trap 'kill 0' EXIT; \
+	air & \
+	cd frontend && npm run dev & \
+	wait
+
+# Start only the Go backend with hot-reload
+dev-api:
+	air
+
+# Start only the Vite frontend dev server
+dev-web:
+	cd frontend && npm run dev
 
 # Start all infrastructure services
 docker-up:

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
@@ -29,7 +30,7 @@ type AppState struct {
 	Version  string // Set via -ldflags at build time
 
 	// ─── Domain Services (added incrementally as domains are built) ─
-	// IAM    iam.IamService
+	IAM    iam.IamService
 	// Method method.MethodologyService
 	// Social social.SocialService
 	// ... etc.
@@ -99,17 +100,20 @@ func NewApp(state *AppState) *echo.Echo {
 
 	// ─── Webhook Routes ───────────────────────────────────────────────
 	// Domain webhooks are registered here with rate limiting (10 req/60s per IP).
-	// hooks := e.Group("/hooks")
-	// hooks.Use(middleware.RateLimit(state, 10, 60*time.Second))
-	// 01-iam registers: hooks.POST("/kratos/post-registration", ...)
+	// Webhook secret validation is done per-domain in the handler middleware.
+	hooks := e.Group("/hooks")
+	hooks.Use(middleware.RateLimit(state, 10, 60*time.Second))
 
 	// ─── Authenticated Routes ─────────────────────────────────────────
 	// All domain API routes live under /v1 and require authentication.
 	auth := e.Group("/v1")
 	auth.Use(middleware.RateLimit(state, 100, 60*time.Second))
 	auth.Use(middleware.Auth(state))
-	// Domain routes are registered here as domains are implemented:
-	// 01-iam: iamHandler.Register(auth)
+
+	// ─── Domain Route Registration ────────────────────────────────────
+	if state.IAM != nil {
+		iam.NewHandler(state.IAM, state.Config.AuthWebhookSecret).Register(auth, hooks)
+	}
 	// 02-method: methodHandler.Register(auth)
 	// etc.
 

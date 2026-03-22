@@ -21,6 +21,8 @@ import (
 
 	"github.com/homegrown-academy/homegrown-academy/internal/app"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"github.com/homegrown-academy/homegrown-academy/internal/iam"
+	iamadapters "github.com/homegrown-academy/homegrown-academy/internal/iam/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
@@ -107,16 +109,26 @@ func main() {
 	// eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), social.NewOnFamilyCreatedHandler(socialSvc))
 	// eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), onboard.NewOnFamilyCreatedHandler(onboardSvc))
 
-	// ── Step 7: Wire AppState ─────────────────────────────────────────────────────
+	// ── Step 7: Wire IAM domain ───────────────────────────────────────────────────
+	kratosAdapter := iamadapters.NewKratosAdapter(cfg.AuthAdminURL, cfg.AuthPublicURL)
+
+	familyRepo := iam.NewPgFamilyRepository(db)
+	parentRepo := iam.NewPgParentRepository(db)
+	studentRepo := iam.NewPgStudentRepository(db)
+
+	iamSvc := iam.NewIamService(familyRepo, parentRepo, studentRepo, kratosAdapter, eventBus, db)
+
+	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
 		Cache:    cache,
-		Auth:     nil, // wired in 01-iam via KratosSessionValidator
+		Auth:     kratosAdapter, // KratosAdapterImpl implements shared.SessionValidator
 		Errors:   errReporter,
 		Jobs:     jobs,
 		EventBus: eventBus,
 		Config:   cfg,
 		Version:  version,
+		IAM:      iamSvc,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────
