@@ -63,6 +63,28 @@ go test ./...                  # All tests pass
 npm run type-check             # Zero TypeScript errors (in frontend/)
 ```
 
+Additionally, before every commit verify:
+- [ ] Relevant `specs/` files updated if any architectural or design decision was made or changed
+
+---
+
+## Spec Maintenance (Non-Negotiable)
+
+When any implementation decision changes or extends the current specs, you MUST update the
+relevant spec file(s) in `specs/` before considering the task complete:
+
+| Change type | Update target |
+|-------------|---------------|
+| New or changed architectural decision | `specs/ARCHITECTURE.md` — add/update ADR |
+| New or changed requirements | `specs/SPEC.md` — update relevant § |
+| New coding patterns or rules | `specs/CODING_STANDARDS.md` |
+| New design tokens or UI rules | `specs/DESIGN_TOKENS.md` |
+| Domain-specific changes | `specs/domains/{nn}-{domain}.md` |
+
+Do NOT wait until the end of a session. Update specs **as decisions are made**, inline with
+the implementation work. If you discover during implementation that a spec is wrong or
+incomplete, fix the spec first, then continue coding.
+
 ---
 
 ## Development Commands
