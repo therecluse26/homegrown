@@ -292,6 +292,10 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 | `placeholder` as only label | Placeholders disappear on input; use visible `<label>` elements |
 | `onClick` on non-interactive elements | Use `<button>` or `<a>` for click handlers; `<div onClick>` is not keyboard-accessible |
 | `tabIndex > 0` | Positive tabindex disrupts natural tab order; use 0 or -1 only |
+| Hardcoded hex color values (e.g., `text-[#0c5252]`) | Use design token classes (`text-primary`). All colors defined in `DESIGN_TOKENS.md` §2 |
+| Arbitrary z-index (`z-[999]`, `z-50`) | Use z-index utility tokens (`z-modal`, `z-tooltip`). Scale defined in `DESIGN_TOKENS.md` §10 |
+| `dark:` variant prefix in JSX | Dark mode uses CSS token reassignment, not per-element overrides. `DESIGN_TOKENS.md` §2.9 |
+| `1px solid` borders for layout sectioning | Use tonal surface shifts (`bg-surface-container-low`). Borders prohibited per `DESIGN.md` §2 |
 
 ### §3.7 Accessibility `[ARCH §11.5]`
 
@@ -326,6 +330,27 @@ Accessibility is a first-class concern, not a post-launch enhancement. Violation
 - Print output MUST include a header with family name, date range, and generation timestamp.
 - Color output MUST NOT be required for print readability — all meaning conveyed by color MUST
   also be conveyed by text, icons, or patterns that reproduce in grayscale.
+
+### §3.9 Design System `[DESIGN_TOKENS.md]`
+
+All frontend styling MUST use the design token system defined in `specs/DESIGN_TOKENS.md`.
+That document is the authoritative source for colors, typography, spacing, elevation, motion,
+and responsive behavior.
+
+- All colors MUST use token-derived Tailwind classes (`bg-primary`, `text-on-surface`,
+  `bg-surface-container`). MUST NOT use hardcoded hex values or Tailwind's default palette
+  (`bg-blue-500`, `text-gray-700`).
+- Typography MUST use the MD3 type scale classes (`type-display-lg`, `type-body-lg`) or
+  individual token utilities (`text-body-lg font-body`). See `DESIGN_TOKENS.md` §3.
+- Z-index MUST use the controlled 8-tier scale (`z-modal`, `z-tooltip`). Arbitrary
+  z-index values are forbidden. See `DESIGN_TOKENS.md` §10.
+- Spacing uses Tailwind defaults plus semantic aliases (`spacing-card-padding`,
+  `spacing-section-gap`). See `DESIGN_TOKENS.md` §4.
+- Parent/Student context differences MUST use `parent:` and `student:` Tailwind variants
+  with `data-context` attribute — not separate CSS files or component duplication.
+  See `DESIGN_TOKENS.md` §9.
+- Shadows MUST use ambient shadow tokens (`shadow-ambient-md`). Standard CSS
+  `box-shadow` with arbitrary values is forbidden. See `DESIGN_TOKENS.md` §6.
 
 ---
 

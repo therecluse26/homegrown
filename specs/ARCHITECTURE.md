@@ -2954,11 +2954,17 @@ frontend/
 │   │   ├── queryClient.ts         # TanStack Query configuration
 │   │   └── websocket.ts           # WebSocket connection manager
 │   ├── routes.tsx                 # React Router route definitions
-│   └── types/
-│       └── index.ts               # Shared frontend types (supplement generated types)
+│   ├── types/
+│   │   └── index.ts               # Shared frontend types (supplement generated types)
+│   └── styles/
+│       ├── app.css                # CSS entry: @import "tailwindcss" + token imports
+│       ├── tokens.css             # @theme block: all design tokens [DESIGN_TOKENS.md §17]
+│       ├── base.css               # @font-face, resets, reduced-motion, focus ring
+│       ├── components.css         # Type scale classes, shared patterns
+│       ├── utilities.css          # Custom utilities (touch-target, z-index)
+│       └── print.css              # @media print token overrides
 ├── public/
 ├── index.html
-├── tailwind.config.ts
 ├── vite.config.ts
 ├── tsconfig.json
 └── package.json
@@ -3175,7 +3181,7 @@ WCAG 2.1 Level AA compliance is enforced through design, implementation, and CI:
 - **Semantic HTML** — All interactive elements use proper ARIA roles and labels. Prefer native HTML elements (`<button>`, `<select>`, `<dialog>`) over custom ARIA widgets.
 - **Keyboard navigation** — Every interactive element is reachable via Tab, operable via Enter/Space. Custom components (date pickers, dropdowns, drag-and-drop) follow WAI-ARIA Authoring Practices.
 - **Focus management** — Route transitions move focus to the main content heading. Modals trap focus until dismissed via Escape. Toast notifications do NOT steal focus.
-- **Color contrast** — Tailwind config enforces minimum 4.5:1 contrast ratio for text. Design tokens include a `--color-focus-ring` variable for consistent, high-visibility focus indicators.
+- **Color contrast** — Design tokens enforce minimum 4.5:1 contrast ratio for all text/background pairings (verified in `DESIGN_TOKENS.md` §2.8). Focus ring uses `--color-focus-ring` (#0c5252) with ≥3:1 contrast against all surfaces (`DESIGN_TOKENS.md` §12).
 - **Screen reader support** — All images have alt text; decorative images use `alt=""`. Dynamic content (feed updates, quiz feedback, notification toasts) uses `aria-live` regions with appropriate politeness levels.
 - **Skip navigation** — Every page includes a visually hidden "Skip to main content" link as the first focusable element.
 - **Touch targets** — All interactive elements have a minimum tap target of 44x44 CSS pixels on viewports under 768px.

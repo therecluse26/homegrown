@@ -15,6 +15,8 @@ configuration — not code branches.
    working in. It explains *why* each decision was made.
 3. **Read `specs/SPEC.md` §[n]** for the requirements in your domain before implementing.
 4. **Check `internal/shared/`** for existing utilities before writing new ones.
+5. **For frontend work**, read `specs/DESIGN_TOKENS.md` — the normative design token spec.
+   All colors, typography, spacing, and component styles MUST use tokens defined there.
 
 ---
 
@@ -49,6 +51,7 @@ design. Consult it before making any architectural decision.
 | **File uploads** | Validate magic bytes, not just file extension. |
 | **API errors** | Never expose internal error details in responses. Log internally; return generic message. |
 | **Generated files** | `frontend/src/api/generated/` is generated — never hand-edit. |
+| **Frontend styling** | All colors, spacing, radii, shadows, and z-index MUST use design token classes from `specs/DESIGN_TOKENS.md`. No hardcoded hex values. No arbitrary z-index. No `1px solid` borders for sectioning. |
 
 ---
 
@@ -76,3 +79,5 @@ npm run type-check             # Zero TypeScript errors (in frontend/)
 | Requirements | `specs/SPEC.md` | What the platform must do |
 | Architecture | `specs/ARCHITECTURE.md` | Why each technical decision was made |
 | **Coding Rules** | **`specs/CODING_STANDARDS.md`** | **How to write the code** |
+| Design Vision | `specs/DESIGN.md` | Creative direction ("Curated Hearth" aesthetic) |
+| **Design Tokens** | **`specs/DESIGN_TOKENS.md`** | **Implementable token values for all frontend styling** |
