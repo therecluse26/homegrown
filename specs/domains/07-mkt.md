@@ -2876,12 +2876,12 @@ func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *Fami
 }
 
 type MethodologyConfigUpdatedHandler struct {
-    // Invalidate Redis cache for methodology tag display names
-    redis *redis.Client
+    // Invalidate cache for methodology tag display names
+    cache shared.Cache
 }
 
 func (h *MethodologyConfigUpdatedHandler) Handle(ctx context.Context, event *MethodologyConfigUpdated) error {
-    return h.redis.Del(ctx, "mkt:methodology_tags:*").Err()
+    return h.cache.Delete(ctx, "mkt:methodology_tags:*")
 }
 ```
 

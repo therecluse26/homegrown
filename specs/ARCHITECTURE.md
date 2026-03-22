@@ -1733,11 +1733,11 @@ import (
     "gorm.io/gorm"
 )
 
-// AuthContext holds the authenticated user context extracted from Kratos session.
+// AuthContext holds the authenticated user context extracted from the auth provider session.
 type AuthContext struct {
     ParentID         uuid.UUID
     FamilyID         uuid.UUID
-    KratosIdentityID uuid.UUID
+    IdentityID       uuid.UUID
     IsPrimaryParent  bool
     SubscriptionTier SubscriptionTier
     Email            string
@@ -1790,7 +1790,7 @@ func AuthMiddleware(kratosClient *KratosClient, db *gorm.DB) echo.MiddlewareFunc
             authCtx := AuthContext{
                 ParentID:         parent.ID,
                 FamilyID:         family.ID,
-                KratosIdentityID: kratosIdentityID,
+                IdentityID:       kratosIdentityID,
                 IsPrimaryParent:  parent.IsPrimary,
                 SubscriptionTier: tier,
                 Email:            parent.Email,
@@ -1912,7 +1912,7 @@ func HandlePostRegistration(db *gorm.DB) echo.HandlerFunc {
         // Create parent linked to Kratos identity
         parent := &Parent{
             FamilyID:         family.ID,
-            KratosIdentityID: payload.IdentityID,
+            IdentityID:       payload.IdentityID,
             DisplayName:      payload.Traits.Name,
             Email:            payload.Traits.Email,
             IsPrimary:        true,
@@ -2868,7 +2868,7 @@ Critical state-changing operations support idempotency to ensure safe retries:
 // Client sends `Idempotency-Key: <uuid>` header.
 // Server stores the response and returns the cached response on replay.
 type IdempotencyLayer struct {
-    redis *redis.Client
+    cache shared.Cache
     ttl   time.Duration // 24 hours default
 }
 
@@ -3304,24 +3304,26 @@ The feed uses a **fan-out-on-write** pattern via Redis sorted sets:
 // internal/social/jobs.go
 
 // FanOutPost fans out a new post to all friends' feeds.
-func FanOutPost(ctx context.Context, redisClient *redis.Client, db *gorm.DB, post *Post) error {
+func FanOutPost(ctx context.Context, cache shared.Cache, db *gorm.DB, post *Post) error {
     // Get all accepted friends of the post author [S§7.4]
     friendFamilyIDs, err := getFriendIDs(ctx, db, post.FamilyID)
     if err != nil {
         return fmt.Errorf("failed to get friends: %w", err)
     }
 
-    // Add post to each friend's feed (Redis sorted set, scored by timestamp)
+    // Add post to each friend's feed (sorted set, scored by timestamp)
+    // NOTE: The social domain defines a FeedStore port for sorted set operations.
+    // This example is illustrative — actual implementation uses the domain port.
     score := float64(post.CreatedAt.UnixMilli())
     member := post.ID.String()
 
     for _, friendID := range friendFamilyIDs {
         feedKey := fmt.Sprintf("feed:%s", friendID)
-        if err := redisClient.ZAdd(ctx, feedKey, redis.Z{Score: score, Member: member}).Err(); err != nil {
+        if err := cache.ZAdd(ctx, feedKey, score, member); err != nil {
             return fmt.Errorf("feed zadd failed: %w", err)
         }
         // Trim feed to last 1000 items to bound memory
-        if err := redisClient.ZRemRangeByRank(ctx, feedKey, 0, -1001).Err(); err != nil {
+        if err := cache.ZRemRangeByRank(ctx, feedKey, 0, -1001); err != nil {
             return fmt.Errorf("feed trim failed: %w", err)
         }
     }
@@ -3329,10 +3331,10 @@ func FanOutPost(ctx context.Context, redisClient *redis.Client, db *gorm.DB, pos
     // If post is in a group, also add to group feed [S§7.6]
     if post.GroupID != nil {
         groupFeedKey := fmt.Sprintf("feed:group:%s", *post.GroupID)
-        if err := redisClient.ZAdd(ctx, groupFeedKey, redis.Z{Score: score, Member: member}).Err(); err != nil {
+        if err := cache.ZAdd(ctx, groupFeedKey, score, member); err != nil {
             return fmt.Errorf("group feed zadd failed: %w", err)
         }
-        if err := redisClient.ZRemRangeByRank(ctx, groupFeedKey, 0, -1001).Err(); err != nil {
+        if err := cache.ZRemRangeByRank(ctx, groupFeedKey, 0, -1001); err != nil {
             return fmt.Errorf("group feed trim failed: %w", err)
         }
     }
@@ -3341,7 +3343,7 @@ func FanOutPost(ctx context.Context, redisClient *redis.Client, db *gorm.DB, pos
 }
 
 // GetFeed reads a user's feed. [S§7.2.3]
-func GetFeed(ctx context.Context, redisClient *redis.Client, db *gorm.DB, familyID uuid.UUID, cursor *float64, limit int64) ([]Post, error) {
+func GetFeed(ctx context.Context, cache shared.Cache, db *gorm.DB, familyID uuid.UUID, cursor *float64, limit int64) ([]Post, error) {
     feedKey := fmt.Sprintf("feed:%s", familyID)
 
     maxScore := "+inf"
@@ -3349,12 +3351,8 @@ func GetFeed(ctx context.Context, redisClient *redis.Client, db *gorm.DB, family
         maxScore = fmt.Sprintf("%f", *cursor)
     }
 
-    // Get post IDs from Redis sorted set (reverse chronological) [S§7.2.3]
-    postIDs, err := redisClient.ZRevRangeByScore(ctx, feedKey, &redis.ZRangeBy{
-        Min:   "0",
-        Max:   maxScore,
-        Count: limit,
-    }).Result()
+    // Get post IDs from cache sorted set (reverse chronological) [S§7.2.3]
+    postIDs, err := cache.ZRevRangeByScore(ctx, feedKey, "0", maxScore, limit)
     if err != nil {
         return nil, fmt.Errorf("feed query failed: %w", err)
     }
@@ -3419,13 +3417,13 @@ const (
 ```go
 // internal/shared/webhook.go
 
-// IsDuplicateWebhook checks if a webhook event has already been processed via Redis SET with TTL.
-func IsDuplicateWebhook(ctx context.Context, redisClient *redis.Client, provider, eventID string) (bool, error) {
+// IsDuplicateWebhook checks if a webhook event has already been processed via cache SET with TTL.
+func IsDuplicateWebhook(ctx context.Context, cache shared.Cache, provider, eventID string) (bool, error) {
     key := fmt.Sprintf("webhook:seen:%s:%s", provider, eventID)
-    // SET NX returns true only if the key was newly created
-    isNew, err := redisClient.SetNX(ctx, key, "1", 7*24*time.Hour).Result()
+    // SetNX returns true only if the key was newly created
+    isNew, err := cache.SetNX(ctx, key, "1", 7*24*time.Hour)
     if err != nil {
-        return false, fmt.Errorf("redis setnx failed: %w", err)
+        return false, fmt.Errorf("cache setnx failed: %w", err)
     }
     return !isNew, nil
 }
@@ -3603,7 +3601,7 @@ pg_dump -Fc -h $RDS_ENDPOINT -U $DB_USER homegrown_academy | \
 - **AZ failure**: ECS runs across multiple AZs; automatic rebalancing. Zero downtime.
 - **Region failure**: Promote cross-region read replica to primary. Update DNS. Expected downtime: 15-30 minutes.
 
-**Backup verification**: The off-site backup task MUST include a `pg_restore --list` verification step that confirms the dump is valid. A failed verification MUST trigger a Sentry alert.
+**Backup verification**: The off-site backup task MUST include a `pg_restore --list` verification step that confirms the dump is valid. A failed verification MUST trigger an ErrorReporter alert.
 
 **Revision trigger**: Add cross-region RDS read replica and multi-AZ ECS deployment when the platform handles paying customers (Phase 2).
 

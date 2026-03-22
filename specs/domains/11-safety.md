@@ -742,7 +742,7 @@ type SafetyServiceImpl struct {
     thorn          ThornAdapter
     rekognition    RekognitionAdapter
     iamService     iam.IamService
-    redis          *redis.Client
+    cache          shared.Cache
     events         *shared.EventBus
     config         SafetyConfig
 }
@@ -1511,7 +1511,7 @@ API call latency while providing basic protection. `[S§12.2]`
 // Phase 1: Redis-cached keyword list + regex patterns.
 // Phase 2: AWS Comprehend for ML-based detection.
 type TextScanner struct {
-    redis  *redis.Client
+    cache  shared.Cache
     config SafetyConfig
 }
 
@@ -2893,17 +2893,17 @@ Credential stuffing protection is layered:
 
 ```go
 // RecordFailedLogin tracks failed login attempts for credential stuffing detection.
-func RecordFailedLogin(ctx context.Context, rdb *redis.Client, email, ip string) (LoginAttemptStatus, error) {
+func RecordFailedLogin(ctx context.Context, cache shared.Cache, email, ip string) (LoginAttemptStatus, error) {
     emailKey := fmt.Sprintf("login:fail:email:%s", email)
     ipKey := fmt.Sprintf("login:fail:ip:%s", ip)
 
-    emailCount, err := rdb.Incr(ctx, emailKey).Result()
+    emailCount, err := cache.Incr(ctx, emailKey)
     if err != nil {
         return LoginAttemptStatusNormal, fmt.Errorf("incr email key: %w", err)
     }
-    rdb.Expire(ctx, emailKey, time.Hour) // 1-hour window
+    cache.Expire(ctx, emailKey, time.Hour) // 1-hour window
 
-    ipCount, err := rdb.Incr(ctx, ipKey).Result()
+    ipCount, err := cache.Incr(ctx, ipKey)
     if err != nil {
         return LoginAttemptStatusNormal, fmt.Errorf("incr ip key: %w", err)
     }

@@ -63,8 +63,8 @@ type AppConfig struct {
 	LogLevel string
 
 	// ─── Observability ──────────────────────────────────────────────
-	// Sentry DSN. Optional — omit to disable Sentry. [ARCH §2.14]
-	SentryDSN *string
+	// Error reporting DSN. Optional — omit to disable error reporting (e.g. Sentry). [ARCH §2.14]
+	ErrorReportingDSN *string
 
 	// ─── Environment ────────────────────────────────────────────────
 	// Runtime environment. Controls log format, debug features, etc.
@@ -129,9 +129,9 @@ func LoadConfig() (*AppConfig, error) {
 
 	logLevel := envOrDefault("LOG_LEVEL", "info")
 
-	var sentryDSN *string
-	if v, ok := os.LookupEnv("SENTRY_DSN"); ok {
-		sentryDSN = &v
+	var errorReportingDSN *string
+	if v, ok := os.LookupEnv("ERROR_REPORTING_DSN"); ok {
+		errorReportingDSN = &v
 	}
 
 	envStr := envOrDefault("ENVIRONMENT", "development")
@@ -161,7 +161,7 @@ func LoadConfig() (*AppConfig, error) {
 		ServerHost:             serverHost,
 		ServerPort:             serverPort,
 		LogLevel:               logLevel,
-		SentryDSN:              sentryDSN,
+		ErrorReportingDSN:      errorReportingDSN,
 		Environment:            env,
 	}, nil
 }

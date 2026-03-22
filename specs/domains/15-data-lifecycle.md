@@ -30,7 +30,7 @@ file storage (owned by `media::`). Marketplace purchase records retained for leg
 implementation. Per-domain data deletion -> each domain's `DeletionHandler` implementation.
 Notification delivery -> `notify::` (via domain events). Subscription cancellation ->
 `billing.BillingService`. Session revocation -> `iam.KratosAdapter.RevokeSessions()`.
-Background job scheduling -> hibiken/asynq `[ARCH §12]`.
+Background job scheduling -> `JobEnqueuer` `[ARCH §12]`.
 
 ---
 

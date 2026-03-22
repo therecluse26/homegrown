@@ -536,6 +536,54 @@ The following rules MUST be followed for every adapter method:
   returning. Callers MUST NOT need to import the vendor SDK to handle errors from adapters.
 - MUST NOT define or embed vendor SDK types in any struct used outside the adapter file itself.
 
+#### §8.1b Port/Adapter Boundary Rules
+
+Every third-party dependency MUST be isolated behind a port (interface) defined in
+`internal/shared/`. Concrete implementations are unexported and live in a single file.
+Domain code MUST NOT import third-party packages directly — only shared ports.
+
+**Shared-Level Ports** (owned by core infrastructure):
+
+| External Dependency | Port Interface | Port Location | Implementation File |
+|--------------------|--------------------|--------------------------|--------------------------------|
+| Redis (go-redis) | `Cache` | `internal/shared/cache.go` | `internal/shared/redis.go` |
+| Ory Kratos | `SessionValidator` | `internal/shared/auth.go` | `internal/iam/adapters/kratos.go` |
+| Sentry | `ErrorReporter` | `internal/shared/error_reporter.go` | `cmd/server/main.go` |
+| asynq (hibiken) | `JobEnqueuer` | `internal/shared/jobs.go` | `internal/shared/jobs.go` |
+
+**Domain-Level Ports** (owned by each domain):
+
+| External Dependency | Port Interface | Port Location | Implementation Location |
+|--------------------|--------------------|------------------------------|-------------------------------|
+| Postmark (email) | `EmailAdapter` | `internal/notify/ports.go` | `internal/notify/adapters/postmark.go` |
+| Stripe (billing) | `PaymentProvider` | `internal/billing/ports.go` | `internal/billing/adapters/stripe.go` |
+| AWS S3 (media) | `ObjectStore` | `internal/media/ports.go` | `internal/media/adapters/s3.go` |
+
+**Rules:**
+
+1. **Service structs hold port interfaces, never SDK clients.** A service field like
+   `redis *redis.Client` is forbidden — use `cache shared.Cache` instead.
+
+2. **Adapter files are the ONLY files that import third-party packages.** The `import`
+   statement for a vendor SDK must not appear in `handler.go`, `service.go`,
+   `repository.go`, or `models.go`.
+
+3. **Adapter methods accept and return domain types only.** The adapter converts between
+   domain types and SDK types internally. SDK types MUST NOT appear in method signatures
+   (§8.1a).
+
+4. **Background job task handlers are adapter-layer code.** Files like `tasks.go` that
+   define asynq `HandlerFunc` implementations are adapters — they convert between
+   `shared.JobPayload` and asynq's task types. Service code calls
+   `jobEnqueuer.Enqueue(ctx, payload)` using the port.
+
+5. **Composition root wires concrete implementations.** Only `cmd/server/main.go` (and
+   test setup) creates concrete adapter instances and passes them to services.
+
+6. **Env var names are vendor-agnostic where the port is generic.** Use `AUTH_*` (not
+   `KRATOS_*`), `ERROR_REPORTING_DSN` (not `SENTRY_DSN`). Exception: `DATABASE_URL` and
+   `REDIS_URL` name the infrastructure category, not the vendor, so they are acceptable.
+
 ### §8.2 Port Interface Rules (Inbound + Outbound)
 
 `[ARCH §4.4]`
@@ -585,7 +633,7 @@ Applies to: `learn/`, `social/`, `mkt/`, `safety/`, `comply/`, `method/`.
 - Event handler implementations MUST live in the *consuming* domain, in a file named
   `{event_name}_handler.go` or grouped in `event_handlers.go`.
 - Handlers that perform heavy work (image scanning, search indexing, email sending) MUST
-  enqueue a background job (via asynq) rather than executing the work inline. MUST NOT
+  enqueue a background job (via `JobEnqueuer`) rather than executing the work inline. MUST NOT
   block the request goroutine with expensive operations inside an event handler.
 - `EventBus` subscriptions MUST be registered at application startup (in `app.go` or
   `main.go`). MUST NOT register subscriptions dynamically at runtime.

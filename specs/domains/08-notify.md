@@ -32,7 +32,7 @@ moderation decisions (owned by `safety::`), account verification and password re
 
 **What notify:: delegates**: User/family email lookup → `iam::IamService`. Redis pub/sub
 for WebSocket distribution → shared infrastructure `[ARCH §2.16]`. Background task
-scheduling → asynq `[ARCH §12]`. Email template rendering → Postmark server-side
+scheduling → `JobEnqueuer` `[ARCH §12]`. Email template rendering → Postmark server-side
 templates `[ARCH §2.12]`.
 
 ---
@@ -482,8 +482,8 @@ type NotificationServiceImpl struct {
     digestRepo       DigestRepository        // Phase 2
     emailAdapter     EmailAdapter
     iamService       IamService              // Email lookup
-    redis            *RedisPool              // WebSocket pub/sub + streak counters
-    taskClient       *asynq.Client           // asynq
+    cache            shared.Cache            // WebSocket pub/sub + streak counters
+    jobEnqueuer      shared.JobEnqueuer      // Background job enqueuing [CODING §8.1b]
 }
 ```
 
@@ -843,7 +843,7 @@ No existing code needs modification — the dispatch is type-string-driven, not 
 |  | 1. Check preference: IsEnabled(type, "email")?          |
 |  | 2. If digest_frequency == "immediate":                  |
 |  |    -> Look up family email via iam::IamService          |
-|  |    -> Enqueue SendEmailTask to asynq                    |
+|  |    -> Enqueue SendEmailTask via JobEnqueuer              |
 |  | 3. If digest_frequency in {"daily", "weekly"}:          |
 |  |    -> Skip (CompileDigestTask handles it -- Phase 2)    |
 |  +--------------------------------------------------------+

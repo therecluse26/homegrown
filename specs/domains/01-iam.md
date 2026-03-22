@@ -841,7 +841,7 @@ type Family struct {
 type Parent struct {
     ID               uuid.UUID
     FamilyID         uuid.UUID
-    KratosIdentityID uuid.UUID
+    IdentityID       uuid.UUID
     DisplayName      string
     Email            string
     IsPrimary        bool
@@ -869,7 +869,7 @@ type CreateFamily struct {
 
 type CreateParent struct {
     FamilyID         uuid.UUID
-    KratosIdentityID uuid.UUID
+    IdentityID       uuid.UUID
     DisplayName      string
     Email            string
     IsPrimary        bool
@@ -1135,7 +1135,7 @@ middleware (`internal/middleware/auth.go`, defined in 00-core §13.1) calls IAM'
 5. Constructs `AuthContext` from parent + family data:
    - `ParentID` from parent record
    - `FamilyID` from parent record
-   - `KratosIdentityID` from Kratos session
+   - `IdentityID` from auth provider session
    - `IsPrimaryParent` from parent record
    - `IsPlatformAdmin` from parent record `[S§3.1.5, 11-safety §9]`
    - `SubscriptionTier` from family record

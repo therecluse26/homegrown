@@ -24,7 +24,7 @@ middleware, and all shared types in place.
   event bus, pagination
 - Middleware stack (`internal/middleware/`) — auth, rate limiting, role extractors
 - Health endpoint (`GET /health`)
-- OpenAPI generation command (`cmd/swag-gen/main.go`)
+- OpenAPI generation command (`make openapi` via `swag init`)
 - Bootstrap database migration (PostgreSQL extensions)
 - Local development environment (`docker-compose.yml`, Kratos dev config)
 - Development commands (`Makefile`)
@@ -307,17 +307,17 @@ type AppConfig struct {
 	// Example: "redis://localhost:6379"
 	RedisURL string
 
-	// ─── Ory Kratos ─────────────────────────────────────────────────
-	// Kratos Admin API URL (internal sidecar, never public).
+	// ─── Auth Provider ───────────────────────────────────────────────
+	// Auth provider admin API URL (internal sidecar, never public).
 	// Example: "http://kratos:4434"
-	KratosAdminURL string
+	AuthAdminURL string
 
-	// Kratos Public API URL (browser-facing, session validation).
+	// Auth provider public API URL (browser-facing, session validation).
 	// Example: "http://kratos:4433"
-	KratosPublicURL string
+	AuthPublicURL string
 
-	// Shared secret for Kratos webhook signature validation.
-	KratosWebhookSecret string
+	// Shared secret for auth provider webhook signature validation.
+	AuthWebhookSecret string
 
 	// ─── CORS ───────────────────────────────────────────────────────
 	// Comma-separated list of allowed origins.
@@ -337,8 +337,8 @@ type AppConfig struct {
 	LogLevel string
 
 	// ─── Observability ──────────────────────────────────────────────
-	// Sentry DSN. Optional — omit to disable Sentry. [ARCH §2.14]
-	SentryDSN *string
+	// Error reporting DSN. Optional — omit to disable error reporting (e.g. Sentry). [ARCH §2.14]
+	ErrorReportingDSN *string
 
 	// ─── Environment ────────────────────────────────────────────────
 	// Runtime environment. Controls log format, debug features, etc.
@@ -378,17 +378,17 @@ func LoadConfig() (*AppConfig, error) {
 		return nil, err
 	}
 
-	kratosAdminURL, err := requiredEnv("KRATOS_ADMIN_URL")
+	authAdminURL, err := requiredEnv("AUTH_ADMIN_URL")
 	if err != nil {
 		return nil, err
 	}
 
-	kratosPublicURL, err := requiredEnv("KRATOS_PUBLIC_URL")
+	authPublicURL, err := requiredEnv("AUTH_PUBLIC_URL")
 	if err != nil {
 		return nil, err
 	}
 
-	kratosWebhookSecret, err := requiredEnv("KRATOS_WEBHOOK_SECRET")
+	authWebhookSecret, err := requiredEnv("AUTH_WEBHOOK_SECRET")
 	if err != nil {
 		return nil, err
 	}
@@ -420,9 +420,9 @@ func LoadConfig() (*AppConfig, error) {
 
 	logLevel := envOrDefault("LOG_LEVEL", "info")
 
-	var sentryDSN *string
-	if v, ok := os.LookupEnv("SENTRY_DSN"); ok {
-		sentryDSN = &v
+	var errorReportingDSN *string
+	if v, ok := os.LookupEnv("ERROR_REPORTING_DSN"); ok {
+		errorReportingDSN = &v
 	}
 
 	envStr := envOrDefault("ENVIRONMENT", "development")
@@ -445,14 +445,14 @@ func LoadConfig() (*AppConfig, error) {
 		DatabaseURL:            databaseURL,
 		DatabaseMaxConnections: maxConns,
 		RedisURL:               redisURL,
-		KratosAdminURL:         kratosAdminURL,
-		KratosPublicURL:        kratosPublicURL,
-		KratosWebhookSecret:    kratosWebhookSecret,
+		AuthAdminURL:           authAdminURL,
+		AuthPublicURL:          authPublicURL,
+		AuthWebhookSecret:      authWebhookSecret,
 		CORSAllowedOrigins:     origins,
 		ServerHost:             serverHost,
 		ServerPort:             serverPort,
 		LogLevel:               logLevel,
-		SentryDSN:              sentryDSN,
+		ErrorReportingDSN:      errorReportingDSN,
 		Environment:            env,
 	}, nil
 }
@@ -493,10 +493,10 @@ DATABASE_MAX_CONNECTIONS=5
 # Redis
 REDIS_URL=redis://localhost:6379
 
-# Ory Kratos (sidecar)
-KRATOS_ADMIN_URL=http://localhost:4434
-KRATOS_PUBLIC_URL=http://localhost:4433
-KRATOS_WEBHOOK_SECRET=dev-webhook-secret-change-in-production
+# Auth Provider (Ory Kratos sidecar)
+AUTH_ADMIN_URL=http://localhost:4434
+AUTH_PUBLIC_URL=http://localhost:4433
+AUTH_WEBHOOK_SECRET=dev-webhook-secret-change-in-production
 
 # CORS (comma-separated)
 CORS_ALLOWED_ORIGINS=http://localhost:5173
@@ -511,13 +511,13 @@ LOG_LEVEL=debug
 # Environment
 ENVIRONMENT=development
 
-# Sentry (optional — omit to disable)
-# SENTRY_DSN=https://key@sentry.io/project
+# Error Reporting (optional — omit to disable Sentry)
+# ERROR_REPORTING_DSN=https://key@sentry.io/project
 ```
 
 ### §3.4 Secret Injection (Production)
 
-In production, secrets (`DATABASE_URL`, `KRATOS_WEBHOOK_SECRET`, `SENTRY_DSN`) are injected
+In production, secrets (`DATABASE_URL`, `AUTH_WEBHOOK_SECRET`, `ERROR_REPORTING_DSN`) are injected
 via ECS task definition secrets referencing AWS Secrets Manager or SSM Parameter Store.
 `[ARCH §2.17]` — CDK stack handles the wiring. This spec does not define CDK resources; it
 only documents the contract (env var names) that the deployment stack must satisfy.
@@ -633,17 +633,21 @@ package app
 import (
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 // AppState holds shared infrastructure and domain service interfaces.
+// All third-party dependencies are held as port interfaces (§8.1b).
 type AppState struct {
 	// ─── Infrastructure ─────────────────────────────────────────────
 	DB       *gorm.DB
-	Redis    *redis.Client
+	Cache    shared.Cache          // Redis behind Cache port [CODING §8.1b]
+	Auth     shared.SessionValidator // Kratos behind SessionValidator port (nil until 01-iam)
+	Errors   shared.ErrorReporter  // Sentry behind ErrorReporter port [CODING §8.1b]
+	Jobs     shared.JobEnqueuer    // asynq behind JobEnqueuer port [CODING §8.1b]
 	EventBus *shared.EventBus
 	Config   *config.AppConfig
+	Version  string                // set via -ldflags at build time
 
 	// ─── Domain Services (added incrementally as domains are built) ─
 	// IAM    IamService
@@ -1081,7 +1085,7 @@ func ParseSubscriptionTier(s string) SubscriptionTier {
 type AuthContext struct {
 	ParentID         uuid.UUID        `json:"parent_id"`
 	FamilyID         uuid.UUID        `json:"family_id"`
-	KratosIdentityID uuid.UUID        `json:"kratos_identity_id"`
+	IdentityID       uuid.UUID        `json:"identity_id"`
 	IsPrimaryParent  bool             `json:"is_primary_parent"`
 	IsPlatformAdmin  bool             `json:"is_platform_admin"`  // [S§3.1.5, 11-safety §9]
 	SubscriptionTier SubscriptionTier `json:"subscription_tier"`
@@ -1321,88 +1325,86 @@ UPDATE, DELETE` on all tables. `[ARCH §2.5, §5.2]`
 
 ---
 
-## §10 Redis Infrastructure (`internal/shared/redis.go`)
+## §10 Cache Infrastructure (`internal/shared/cache.go` + `internal/shared/redis.go`)
 
-### §10.1 Client Creation
+The cache layer is abstracted behind a `Cache` port interface defined in
+`internal/shared/cache.go`. The Redis implementation lives in `internal/shared/redis.go`
+and is the only file that imports `github.com/redis/go-redis/v9`. Domain code interacts
+exclusively with the `Cache` interface and `CacheGet`/`CacheSet`/`CacheDelete` helpers.
+`[CODING §8.1b]`
+
+### §10.1 Cache Interface & Factory
 
 ```go
+// internal/shared/cache.go
+
 package shared
 
 import (
 	"context"
-	"fmt"
-
-	"github.com/homegrown-academy/homegrown-academy/internal/config"
-	"github.com/redis/go-redis/v9"
+	"time"
 )
 
-// CreateRedisClient creates a Redis client and validates connectivity.
-func CreateRedisClient(ctx context.Context, cfg *config.AppConfig) (*redis.Client, error) {
-	opts, err := redis.ParseURL(cfg.RedisURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid redis URL: %w", err)
-	}
+// Cache defines the port interface for cache operations.
+// The concrete implementation (Redis) lives in redis.go.
+type Cache interface {
+	Get(ctx context.Context, key string) (string, error)
+	Set(ctx context.Context, key string, value string, ttl time.Duration) error
+	Delete(ctx context.Context, key string) error
+	Incr(ctx context.Context, key string) (int64, error)
+	Expire(ctx context.Context, key string, ttl time.Duration) error
+	Close() error
+}
+```
 
-	client := redis.NewClient(opts)
+```go
+// internal/shared/redis.go — factory function (implementation details are internal)
 
-	// Validate connectivity with PING
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis ping failed: %w", err)
-	}
-
-	return client, nil
+// CreateCache creates a Cache backed by Redis and validates connectivity.
+func CreateCache(ctx context.Context, cfg *config.AppConfig) (Cache, error) {
+	// Parses cfg.RedisURL, creates go-redis client, pings, returns Cache.
 }
 ```
 
 ### §10.2 Phase 1 Helpers
 
-Generic get/set with TTL and delete. These are the only Redis operations needed in Phase 1
-(rate limiting + methodology config caching).
+Generic get/set with TTL and delete. These are the only cache operations needed in Phase 1
+(rate limiting + methodology config caching). All helpers accept the `Cache` interface.
 
 ```go
-package shared
+// internal/shared/cache.go
 
-import (
-	"context"
-	"encoding/json"
-	"time"
-
-	"github.com/redis/go-redis/v9"
-)
-
-// RedisGet retrieves a JSON-serialized value from Redis.
-func RedisGet[T any](ctx context.Context, client *redis.Client, key string) (*T, error) {
-	val, err := client.Get(ctx, key).Result()
-	if err == redis.Nil {
-		return nil, nil
-	}
+// CacheGet retrieves a JSON-serialized value from the cache.
+// Returns nil (not an error) on cache miss.
+func CacheGet[T any](ctx context.Context, cache Cache, key string) (*T, error) {
+	val, err := cache.Get(ctx, key)
 	if err != nil {
-		return nil, ErrInternal(fmt.Errorf("redis get: %w", err))
+		return nil, nil // cache miss
 	}
 
 	var result T
 	if err := json.Unmarshal([]byte(val), &result); err != nil {
-		return nil, ErrInternal(fmt.Errorf("redis unmarshal: %w", err))
+		return nil, ErrInternal(fmt.Errorf("cache unmarshal: %w", err))
 	}
 	return &result, nil
 }
 
-// RedisSet stores a JSON-serialized value in Redis with a TTL.
-func RedisSet[T any](ctx context.Context, client *redis.Client, key string, value T, ttl time.Duration) error {
+// CacheSet stores a JSON-serialized value in the cache with a TTL.
+func CacheSet[T any](ctx context.Context, cache Cache, key string, value T, ttl time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return ErrInternal(fmt.Errorf("redis marshal: %w", err))
+		return ErrInternal(fmt.Errorf("cache marshal: %w", err))
 	}
-	if err := client.Set(ctx, key, string(data), ttl).Err(); err != nil {
-		return ErrInternal(fmt.Errorf("redis set: %w", err))
+	if err := cache.Set(ctx, key, string(data), ttl); err != nil {
+		return ErrInternal(fmt.Errorf("cache set: %w", err))
 	}
 	return nil
 }
 
-// RedisDelete removes a key from Redis.
-func RedisDelete(ctx context.Context, client *redis.Client, key string) error {
-	if err := client.Del(ctx, key).Err(); err != nil {
-		return ErrInternal(fmt.Errorf("redis del: %w", err))
+// CacheDelete removes a key from the cache.
+func CacheDelete(ctx context.Context, cache Cache, key string) error {
+	if err := cache.Delete(ctx, key); err != nil {
+		return ErrInternal(fmt.Errorf("cache delete: %w", err))
 	}
 	return nil
 }
@@ -1413,18 +1415,18 @@ func RedisDelete(ctx context.Context, client *redis.Client, key string) error {
 Atomic increment with expiry for rate limiting (§13.2).
 
 ```go
-// RedisIncrementWithExpiry increments a counter and sets expiry if this is
+// CacheIncrementWithExpiry increments a counter and sets expiry if this is
 // the first increment in the window. Returns the new counter value.
-func RedisIncrementWithExpiry(ctx context.Context, client *redis.Client, key string, window time.Duration) (int64, error) {
-	count, err := client.Incr(ctx, key).Result()
+func CacheIncrementWithExpiry(ctx context.Context, cache Cache, key string, window time.Duration) (int64, error) {
+	count, err := cache.Incr(ctx, key)
 	if err != nil {
-		return 0, ErrInternal(fmt.Errorf("redis incr: %w", err))
+		return 0, ErrInternal(fmt.Errorf("cache incr: %w", err))
 	}
 
 	if count == 1 {
 		// First request in window — set expiry
-		if err := client.Expire(ctx, key, window).Err(); err != nil {
-			return 0, ErrInternal(fmt.Errorf("redis expire: %w", err))
+		if err := cache.Expire(ctx, key, window); err != nil {
+			return 0, ErrInternal(fmt.Errorf("cache expire: %w", err))
 		}
 	}
 
@@ -1711,7 +1713,7 @@ func Auth(state *app.AppState) echo.MiddlewareFunc {
 
 1. Extract session cookie from the `Cookie` header
 2. Call Kratos public API to validate the session (via `KratosAdapter` port from IAM)
-3. Look up the parent in the local database by `kratos_identity_id` (unscoped — FamilyScope
+3. Look up the parent in the local database by `identity_id` (unscoped — FamilyScope
    does not exist yet)
 4. Look up the parent's family
 5. Build `AuthContext` from parent + family data (including `is_platform_admin`)
@@ -1750,7 +1752,7 @@ Token-bucket rate limiting via Redis. `[ARCH §3.3, S§2.3]`
 | Sensitive endpoints | Per user ID | 20 requests | 60 seconds |
 
 **Behavior**:
-- Uses `RedisIncrementWithExpiry` from `internal/shared/redis.go` (§10.3)
+- Uses `CacheIncrementWithExpiry` from `internal/shared/cache.go` (§10.3)
 - On exceeded limit: return 429 Too Many Requests with `Retry-After` header (seconds until
   window expires)
 - Rate limit key format: `rl:{scope}:{identifier}:{window_start}`
@@ -1926,10 +1928,10 @@ func initLogger(cfg *config.AppConfig) {
 
 	slog.SetDefault(slog.New(handler))
 
-	// Optional Sentry integration [ARCH §2.14]
-	if cfg.SentryDSN != nil {
+	// Optional error reporting integration [ARCH §2.14]
+	if cfg.ErrorReportingDSN != nil {
 		err := sentry.Init(sentry.ClientOptions{
-			Dsn:              *cfg.SentryDSN,
+			Dsn:              *cfg.ErrorReportingDSN,
 			Release:          version, // set via -ldflags at build time
 			TracesSampleRate: 0.1,
 		})
@@ -2562,10 +2564,10 @@ Phase 1 items organized by dependency order. Each item maps to a section in this
 - [ ] Create bootstrap migration with PostgreSQL extensions (§9.4)
 - [ ] Set up goose migration runner in `cmd/server/main.go`
 
-#### Redis
-- [ ] Implement `CreateRedisClient()` (§10.1)
-- [ ] Implement generic `RedisGet`, `RedisSet`, `RedisDelete` helpers (§10.2)
-- [ ] Implement `RedisIncrementWithExpiry` (§10.3)
+#### Cache
+- [ ] Implement `Cache` interface and `CreateCache()` factory (§10.1)
+- [ ] Implement generic `CacheGet`, `CacheSet`, `CacheDelete` helpers (§10.2)
+- [ ] Implement `CacheIncrementWithExpiry` (§10.3)
 
 #### Event Bus
 - [ ] Implement `DomainEvent` and `DomainEventHandler` interfaces (§11.1)

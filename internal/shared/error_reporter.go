@@ -14,8 +14,8 @@ type ErrorReporter interface {
 	Flush(timeout time.Duration) bool
 }
 
-// NoopErrorReporter satisfies ErrorReporter when Sentry is not configured.
-// Used in development and test environments where SENTRY_DSN is absent.
+// NoopErrorReporter satisfies ErrorReporter when error reporting is not configured.
+// Used in development and test environments where ERROR_REPORTING_DSN is absent.
 type NoopErrorReporter struct{}
 
 func (NoopErrorReporter) CaptureException(_ error)        {}

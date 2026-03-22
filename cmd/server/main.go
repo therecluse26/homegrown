@@ -88,9 +88,9 @@ func main() {
 
 	// ── Step 5.5: Init Sentry error reporter ──────────────────────────────────────
 	var errReporter shared.ErrorReporter = shared.NoopErrorReporter{}
-	if cfg.SentryDSN != nil {
+	if cfg.ErrorReportingDSN != nil {
 		if initErr := sentry.Init(sentry.ClientOptions{
-			Dsn:              *cfg.SentryDSN,
+			Dsn:              *cfg.ErrorReportingDSN,
 			Release:          version,
 			TracesSampleRate: 0.1,
 		}); initErr != nil {

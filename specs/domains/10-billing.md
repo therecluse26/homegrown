@@ -35,7 +35,7 @@ membership (owned by `iam::`).
 
 **What billing:: delegates**: Notification delivery → `notify::` (via domain events). User/family
 email lookup → `iam::IamService`. Subscription state machine → Hyperswitch (self-hosted).
-Background task scheduling → asynq `[ARCH §12]`. Creator payout execution → `mkt::` Hyperswitch
+Background task scheduling → `JobEnqueuer` `[ARCH §12]`. Creator payout execution → `mkt::` Hyperswitch
 adapter (payouts go to sub-merchant accounts managed by `mkt::`) `[07-mkt §7]`.
 
 ---
