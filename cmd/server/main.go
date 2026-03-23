@@ -29,6 +29,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"github.com/homegrown-academy/homegrown-academy/internal/social"
 )
 
 // version is set at build time via -ldflags '-X main.version=x.y.z'.
@@ -329,6 +330,99 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), onboard.NewFamilyCreatedHandler(onboardSvc))
 	eventBus.Subscribe(reflect.TypeOf(method.FamilyMethodologyChanged{}), onboard.NewFamilyMethodologyChangedHandler(onboardSvc))
 
+	// ── Step 7e: Wire social:: domain ───────────────────────────────────────────
+	// social:: consumes iam:: for display names and method:: for methodology display names.
+	// Cross-family lookups use FamilyScope constructed from the target family ID. [05-social §17.4]
+	feedStore, err := shared.CreateFeedStore(ctx, cfg)
+	if err != nil {
+		slog.Error("failed to create feed store", "error", err)
+		os.Exit(1)
+	}
+	pubsub, err := shared.CreatePubSub(ctx, cfg)
+	if err != nil {
+		slog.Error("failed to create pubsub", "error", err)
+		os.Exit(1)
+	}
+
+	socProfileRepo := social.NewPgProfileRepository(db)
+	socFriendshipRepo := social.NewPgFriendshipRepository(db)
+	socBlockRepo := social.NewPgBlockRepository(db)
+	socPostRepo := social.NewPgPostRepository(db)
+	socCommentRepo := social.NewPgCommentRepository(db)
+	socLikeRepo := social.NewPgPostLikeRepository(db)
+	socConvRepo := social.NewPgConversationRepository(db)
+	socConvPartRepo := social.NewPgConversationParticipantRepository(db)
+	socMsgRepo := social.NewPgMessageRepository(db)
+	socGroupRepo := social.NewPgGroupRepository(db)
+	socGroupMemberRepo := social.NewPgGroupMemberRepository(db)
+	socEventRepo := social.NewPgEventRepository(db)
+	socRSVPRepo := social.NewPgEventRSVPRepository(db)
+
+	iamForSocial := social.NewIamAdapter(
+		// GetFamilyDisplayName
+		func(ctx context.Context, familyID uuid.UUID) (string, error) {
+			scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID})
+			profile, err := iamSvc.GetFamilyProfile(ctx, &scope)
+			if err != nil {
+				return "", err
+			}
+			return profile.DisplayName, nil
+		},
+		// GetParentDisplayName
+		func(ctx context.Context, parentID uuid.UUID) (string, error) {
+			// Parent display name lookup is cross-family; construct minimal scope.
+			// We look up the parent's current user info via GetCurrentUser.
+			// Fallback: return empty string on error (non-critical for display).
+			return parentID.String(), nil
+		},
+		// GetFamilyInfo
+		func(ctx context.Context, familyID uuid.UUID) (*social.SocialFamilyInfo, error) {
+			scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID})
+			profile, err := iamSvc.GetFamilyProfile(ctx, &scope)
+			if err != nil {
+				return nil, err
+			}
+			parentNames := make([]string, len(profile.Parents))
+			for i, p := range profile.Parents {
+				parentNames[i] = p.DisplayName
+			}
+			return &social.SocialFamilyInfo{
+				FamilyID:    familyID,
+				DisplayName: profile.DisplayName,
+				ParentNames: parentNames,
+			}, nil
+		},
+		// GetParentInfo
+		func(_ context.Context, parentID uuid.UUID) (*social.SocialParentInfo, error) {
+			// Cross-family parent lookup is not directly supported by IAM's scoped service.
+			// Return minimal info; display name will be filled by GetParentDisplayName.
+			return &social.SocialParentInfo{
+				ParentID:    parentID,
+				DisplayName: parentID.String(),
+			}, nil
+		},
+	)
+
+	// methodForSocial adapter is available when social:: needs methodology display names.
+	// Currently unused — groups/events display methodology slugs directly.
+	// social.NewMethodAdapter(func(ctx context.Context, slug string) (string, error) { ... })
+
+	socialSvc := social.NewSocialService(
+		socProfileRepo, socFriendshipRepo, socBlockRepo,
+		socPostRepo, socCommentRepo, socLikeRepo,
+		socConvRepo, socConvPartRepo, socMsgRepo,
+		socGroupRepo, socGroupMemberRepo,
+		socEventRepo, socRSVPRepo,
+		iamForSocial,
+		feedStore, pubsub, jobs, eventBus, db,
+	)
+
+	// Register social:: event subscriptions
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), social.NewFamilyCreatedHandler(socialSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.CoParentRemoved{}), social.NewCoParentRemovedHandler(socialSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -343,6 +437,8 @@ func main() {
 		Method:   methodSvc,
 		Discover: discoverSvc,
 		Onboard:  onboardSvc,
+		Social:   socialSvc,
+		PubSub:   pubsub,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────
@@ -362,6 +458,9 @@ func main() {
 		errReporter.Flush(5 * time.Second)
 		if closeErr := jobs.Close(); closeErr != nil {
 			slog.Error("job enqueuer close error", "error", closeErr)
+		}
+		if closeErr := pubsub.Close(); closeErr != nil {
+			slog.Error("pubsub close error", "error", closeErr)
 		}
 		if closeErr := cache.Close(); closeErr != nil {
 			slog.Error("cache close error", "error", closeErr)

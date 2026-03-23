@@ -13,6 +13,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"github.com/homegrown-academy/homegrown-academy/internal/social"
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	"gorm.io/gorm"
@@ -37,8 +38,8 @@ type AppState struct {
 	Method   method.MethodologyService
 	Discover discover.DiscoveryService
 	Onboard  onboard.OnboardingService
-	// Social social.SocialService
-	// ... etc.
+	Social   social.SocialService
+	PubSub   shared.PubSub // needed by social handler for WebSocket
 }
 
 // ─── authDeps and rateLimitDeps interface satisfaction ──────────────────────
@@ -133,7 +134,9 @@ func NewApp(state *AppState) *echo.Echo {
 	if state.Onboard != nil {
 		onboard.NewHandler(state.Onboard).Register(auth)
 	}
-	// etc.
+	if state.Social != nil {
+		social.NewHandler(state.Social, state.PubSub).Register(auth)
+	}
 
 	return e
 }

@@ -38,3 +38,6 @@ coverage.html
 
 # Swaggo generated docs
 docs/
+
+# Reflex search index
+.reflex/

@@ -31,7 +31,12 @@ require (
 	gorm.io/gorm v1.25.12
 )
 
-require github.com/testcontainers/testcontainers-go v0.41.0
+require (
+	github.com/gorilla/websocket v1.5.3
+	github.com/matoous/go-nanoid/v2 v2.1.0
+	github.com/swaggo/swag v1.16.6
+	github.com/testcontainers/testcontainers-go v0.41.0
+)
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -81,7 +86,6 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/matoous/go-nanoid/v2 v2.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
@@ -104,7 +108,6 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
-	github.com/swaggo/swag v1.16.6 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

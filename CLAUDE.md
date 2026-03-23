@@ -20,6 +20,22 @@ configuration — not code branches.
 
 ---
 
+## Code Searching (Reflex MCP)
+
+This project uses [Reflex](https://github.com/reflex-search/reflex) as an MCP tool for all
+code searching. The Reflex MCP tools (`search_code`, `search_regex`, `search_ast`,
+`list_locations`, `count_occurrences`) **MUST** be used instead of Grep/Glob for searching
+code content. The `Read` tool is still used for reading full files.
+
+- **Index maintenance:** Run `./node_modules/.bin/rfx index` if the index becomes stale.
+- **Binary location:** `./node_modules/.bin/rfx`
+- **Subagent delegation:** When launching Explore or Plan agents via the Task tool, the
+  prompt MUST instruct the agent to use `mcp__reflex__*` tools (search_code, search_regex,
+  list_locations, count_occurrences) instead of Grep/Glob for all code content searches.
+  Glob is still acceptable for file-name-only pattern matching (e.g., finding `*.go` files).
+
+---
+
 ## Coding Standards & Architecture
 
 All implementation work MUST follow `specs/CODING_STANDARDS.md`. That document is the
@@ -103,3 +119,22 @@ incomplete, fix the spec first, then continue coding.
 | **Coding Rules** | **`specs/CODING_STANDARDS.md`** | **How to write the code** |
 | Design Vision | `specs/DESIGN.md` | Creative direction ("Curated Hearth" aesthetic) |
 | **Design Tokens** | **`specs/DESIGN_TOKENS.md`** | **Implementable token values for all frontend styling** |
+
+---
+
+## Auto-Memory Policy
+
+The specs in `specs/` are the single source of truth. Auto-memory (`memory/MEMORY.md`) is
+only for information that **cannot be found** in specs or code. Before writing to memory:
+
+1. **Do not duplicate specs.** Architecture, coding rules, domain requirements, design tokens
+   — all live in `specs/`. Never copy them to memory.
+2. **Do not store implementation details** that are discoverable by reading code (function
+   names, test counts, migration numbers, wiring patterns).
+3. **Only store:**
+   - Current project status (which domains are implemented)
+   - Dev environment quirks (tooling paths, OS-specific workarounds)
+   - Recurring cross-domain patterns not yet promoted to `specs/CODING_STANDARDS.md`
+4. **Keep it under 40 lines.** If adding a new entry would exceed this, remove or condense
+   an existing entry first.
+5. **When a memory entry gets promoted to a spec**, delete it from memory immediately.

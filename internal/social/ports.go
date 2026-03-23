@@ -1,0 +1,289 @@
+package social
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+)
+
+// ─── Service Interface ───────────────────────────────────────────────────────
+
+// SocialService defines all use cases for the social domain. [05-social §5]
+// CQRS: commands modify state; queries are read-only. [ARCH §4.7]
+type SocialService interface {
+	// ─── Profile Commands ────────────────────────────────────────────────
+	CreateProfile(ctx context.Context, familyID uuid.UUID) error
+	UpdateProfile(ctx context.Context, scope *shared.FamilyScope, cmd UpdateProfileCommand) (*ProfileResponse, error)
+
+	// ─── Profile Queries ────────────────────────────────────────────────
+	GetOwnProfile(ctx context.Context, scope *shared.FamilyScope) (*ProfileResponse, error)
+	GetFamilyProfile(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) (*ProfileResponse, error)
+
+	// ─── Friend Commands ────────────────────────────────────────────────
+	SendFriendRequest(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) (*FriendshipResponse, error)
+	AcceptFriendRequest(ctx context.Context, auth *shared.AuthContext, friendshipID uuid.UUID) (*FriendshipResponse, error)
+	RejectFriendRequest(ctx context.Context, auth *shared.AuthContext, friendshipID uuid.UUID) error
+	Unfriend(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
+	BlockFamily(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
+	UnblockFamily(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
+
+	// ─── Friend Queries ─────────────────────────────────────────────────
+	ListFriends(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]ProfileResponse, error)
+	ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
+	ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
+	ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockResponse, error)
+
+	// ─── Post Commands ──────────────────────────────────────────────────
+	CreatePost(ctx context.Context, auth *shared.AuthContext, cmd CreatePostCommand) (*PostResponse, error)
+	DeletePost(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID) error
+	LikePost(ctx context.Context, scope *shared.FamilyScope, postID uuid.UUID) error
+	UnlikePost(ctx context.Context, scope *shared.FamilyScope, postID uuid.UUID) error
+
+	// ─── Post / Feed Queries ────────────────────────────────────────────
+	GetPost(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID) (*PostDetailResponse, error)
+	GetFeed(ctx context.Context, auth *shared.AuthContext, offset, limit int) (*FeedResponse, error)
+
+	// ─── Comment Commands ───────────────────────────────────────────────
+	CreateComment(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID, cmd CreateCommentCommand) (*CommentResponse, error)
+	DeleteComment(ctx context.Context, auth *shared.AuthContext, commentID uuid.UUID) error
+
+	// ─── Comment Queries ────────────────────────────────────────────────
+	ListComments(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID) ([]CommentResponse, error)
+
+	// ─── Messaging Commands ─────────────────────────────────────────────
+	CreateConversation(ctx context.Context, auth *shared.AuthContext, cmd CreateConversationCommand) (*ConversationResponse, error)
+	SendMessage(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID, cmd SendMessageCommand) (*MessageResponse, error)
+	MarkConversationRead(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID) error
+	DeleteConversation(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID) error
+	ReportMessage(ctx context.Context, auth *shared.AuthContext, messageID uuid.UUID, cmd ReportMessageCommand) error
+
+	// ─── Messaging Queries ──────────────────────────────────────────────
+	ListConversations(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationResponse, error)
+	GetConversationMessages(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID, offset, limit int) ([]MessageResponse, error)
+
+	// ─── Group Commands ─────────────────────────────────────────────────
+	JoinGroup(ctx context.Context, scope *shared.FamilyScope, groupID uuid.UUID) error
+	LeaveGroup(ctx context.Context, scope *shared.FamilyScope, groupID uuid.UUID) error
+	CreateGroup(ctx context.Context, auth *shared.AuthContext, cmd CreateGroupCommand) (*GroupResponse, error)
+	UpdateGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, cmd UpdateGroupCommand) (*GroupResponse, error)
+	DeleteGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) error
+	ApproveMember(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
+	RejectMember(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
+	BanMember(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
+	InviteToGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
+	PromoteMember(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
+
+	// ─── Group Queries ──────────────────────────────────────────────────
+	GetGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) (*GroupResponse, error)
+	ListMyGroups(ctx context.Context, scope *shared.FamilyScope) ([]GroupResponse, error)
+	ListPlatformGroups(ctx context.Context) ([]GroupResponse, error)
+	ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error)
+	ListGroupPosts(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
+
+	// ─── Event Commands ─────────────────────────────────────────────────
+	CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventResponse, error)
+	UpdateEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error)
+	CancelEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) error
+	RSVPEvent(ctx context.Context, scope *shared.FamilyScope, eventID uuid.UUID, cmd RSVPCommand) error
+	RemoveRSVP(ctx context.Context, scope *shared.FamilyScope, eventID uuid.UUID) error
+
+	// ─── Event Queries ──────────────────────────────────────────────────
+	GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventResponse, error)
+	ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventResponse, error)
+
+	// ─── Event Handlers (no auth context) ───────────────────────────────
+	HandleFamilyCreated(ctx context.Context, familyID uuid.UUID) error
+}
+
+// FriendRequestResponse is the response for friend request list endpoints.
+type FriendRequestResponse struct {
+	FriendshipID uuid.UUID `json:"friendship_id"`
+	FamilyID     uuid.UUID `json:"family_id"`
+	DisplayName  string    `json:"display_name"`
+	CreatedAt    string    `json:"created_at"`
+}
+
+// BlockResponse is the response for block list endpoints.
+type BlockResponse struct {
+	BlockID     uuid.UUID `json:"block_id"`
+	FamilyID    uuid.UUID `json:"family_id"`
+	DisplayName string    `json:"display_name"`
+	CreatedAt   string    `json:"created_at"`
+}
+
+// ─── Repository Interfaces ───────────────────────────────────────────────────
+// Each repo maps to one soc_ table. Methods marked CROSS-FAMILY require
+// BypassRLSTransaction or unscoped access. [CODING §2.4]
+
+// ProfileRepository provides persistence for soc_profiles.
+type ProfileRepository interface {
+	Create(ctx context.Context, profile *Profile) error
+	FindByFamilyID(ctx context.Context, familyID uuid.UUID) (*Profile, error)
+	Update(ctx context.Context, profile *Profile) error
+}
+
+// FriendshipRepository provides persistence for soc_friendships.
+type FriendshipRepository interface {
+	Create(ctx context.Context, friendship *Friendship) error
+	// CROSS-FAMILY: finds friendship between two families (checks both directions).
+	FindBetween(ctx context.Context, familyA, familyB uuid.UUID) (*Friendship, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*Friendship, error)
+	Update(ctx context.Context, friendship *Friendship) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	// CROSS-FAMILY: lists accepted friends for a family (paginated).
+	ListFriends(ctx context.Context, familyID uuid.UUID, offset, limit int) ([]uuid.UUID, error)
+	// CROSS-FAMILY: lists incoming pending requests for a family.
+	ListIncoming(ctx context.Context, familyID uuid.UUID) ([]Friendship, error)
+	// CROSS-FAMILY: lists outgoing pending requests for a family.
+	ListOutgoing(ctx context.Context, familyID uuid.UUID) ([]Friendship, error)
+	// CROSS-FAMILY: checks if two families are friends (accepted).
+	AreFriends(ctx context.Context, familyA, familyB uuid.UUID) (bool, error)
+	// DeleteBetween removes friendship between two families (for unfriend/block).
+	DeleteBetween(ctx context.Context, familyA, familyB uuid.UUID) error
+}
+
+// BlockRepository provides persistence for soc_blocks.
+type BlockRepository interface {
+	Create(ctx context.Context, block *Block) error
+	// CROSS-FAMILY: checks if either family has blocked the other.
+	IsEitherBlocked(ctx context.Context, familyA, familyB uuid.UUID) (bool, error)
+	// IsBlocked checks if blockerID has blocked blockedID (one direction).
+	IsBlocked(ctx context.Context, blockerID, blockedID uuid.UUID) (bool, error)
+	Delete(ctx context.Context, blockerID, blockedID uuid.UUID) error
+	ListByBlocker(ctx context.Context, blockerID uuid.UUID) ([]Block, error)
+}
+
+// PostRepository provides persistence for soc_posts.
+type PostRepository interface {
+	Create(ctx context.Context, post *Post) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Post, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+	// CROSS-FAMILY: lists posts by multiple family IDs for feed.
+	ListByFamilyIDs(ctx context.Context, familyIDs []uuid.UUID, offset, limit int) ([]Post, error)
+	// FindByIDs retrieves posts by a list of IDs (for Redis feed resolution).
+	FindByIDs(ctx context.Context, ids []uuid.UUID) ([]Post, error)
+	// ListByGroup lists posts in a specific group.
+	ListByGroup(ctx context.Context, groupID uuid.UUID, offset, limit int) ([]Post, error)
+	IncrementLikes(ctx context.Context, id uuid.UUID) error
+	DecrementLikes(ctx context.Context, id uuid.UUID) error
+	IncrementComments(ctx context.Context, id uuid.UUID) error
+	DecrementComments(ctx context.Context, id uuid.UUID) error
+}
+
+// CommentRepository provides persistence for soc_comments.
+type CommentRepository interface {
+	Create(ctx context.Context, comment *Comment) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Comment, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByPost(ctx context.Context, postID uuid.UUID) ([]Comment, error)
+}
+
+// PostLikeRepository provides persistence for soc_post_likes.
+type PostLikeRepository interface {
+	Create(ctx context.Context, like *PostLike) error
+	Delete(ctx context.Context, postID, familyID uuid.UUID) error
+	Exists(ctx context.Context, postID, familyID uuid.UUID) (bool, error)
+	// ListByPostAndFamily returns whether the family has liked each post in the list.
+	ListByPostIDs(ctx context.Context, postIDs []uuid.UUID, familyID uuid.UUID) (map[uuid.UUID]bool, error)
+}
+
+// ConversationRepository provides persistence for soc_conversations.
+type ConversationRepository interface {
+	Create(ctx context.Context, conv *Conversation) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Conversation, error)
+	// CROSS-FAMILY: lists conversations for a parent (paginated).
+	ListByParent(ctx context.Context, parentID uuid.UUID, offset, limit int) ([]Conversation, error)
+}
+
+// ConversationParticipantRepository provides persistence for soc_conversation_participants.
+type ConversationParticipantRepository interface {
+	Create(ctx context.Context, participant *ConversationParticipant) error
+	// CROSS-FAMILY: lists participants for a conversation.
+	ListByConversation(ctx context.Context, conversationID uuid.UUID) ([]ConversationParticipant, error)
+	// IsParticipant checks if a parent is part of a conversation.
+	IsParticipant(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) (bool, error)
+	// FindBetweenParents finds an existing conversation between two parents.
+	// CROSS-FAMILY: used for create-or-get conversation semantics.
+	FindBetweenParents(ctx context.Context, parentA, parentB uuid.UUID) (*uuid.UUID, error)
+	UpdateLastRead(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
+	SoftDelete(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
+}
+
+// MessageRepository provides persistence for soc_messages.
+type MessageRepository interface {
+	Create(ctx context.Context, msg *Message) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Message, error)
+	// CROSS-FAMILY: lists messages in a conversation.
+	ListByConversation(ctx context.Context, conversationID uuid.UUID, offset, limit int) ([]Message, error)
+	// LastByConversation returns the most recent message in a conversation.
+	LastByConversation(ctx context.Context, conversationID uuid.UUID) (*Message, error)
+	// CountUnread counts messages after lastReadAt.
+	CountUnread(ctx context.Context, conversationID uuid.UUID, lastReadAt *time.Time) (int, error)
+}
+
+// GroupRepository provides persistence for soc_groups.
+type GroupRepository interface {
+	Create(ctx context.Context, group *Group) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Group, error)
+	Update(ctx context.Context, group *Group) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListPlatform(ctx context.Context) ([]Group, error)
+	IncrementMemberCount(ctx context.Context, id uuid.UUID) error
+	DecrementMemberCount(ctx context.Context, id uuid.UUID) error
+}
+
+// GroupMemberRepository provides persistence for soc_group_members.
+type GroupMemberRepository interface {
+	Create(ctx context.Context, member *GroupMember) error
+	FindByGroupAndFamily(ctx context.Context, groupID, familyID uuid.UUID) (*GroupMember, error)
+	Update(ctx context.Context, member *GroupMember) error
+	Delete(ctx context.Context, groupID, familyID uuid.UUID) error
+	ListByGroup(ctx context.Context, groupID uuid.UUID) ([]GroupMember, error)
+	// ListGroupsByFamily returns group IDs where the family is an active member.
+	ListGroupsByFamily(ctx context.Context, familyID uuid.UUID) ([]uuid.UUID, error)
+	// IsMember checks if a family is an active member of a group.
+	IsMember(ctx context.Context, groupID, familyID uuid.UUID) (bool, error)
+}
+
+// EventRepository provides persistence for soc_events.
+type EventRepository interface {
+	Create(ctx context.Context, event *Event) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Event, error)
+	Update(ctx context.Context, event *Event) error
+	// CROSS-FAMILY: lists events visible to a family (friends, groups, discoverable), paginated.
+	ListVisible(ctx context.Context, familyID uuid.UUID, friendIDs []uuid.UUID, groupIDs []uuid.UUID, offset, limit int) ([]Event, error)
+	IncrementAttendeeCount(ctx context.Context, id uuid.UUID) error
+	DecrementAttendeeCount(ctx context.Context, id uuid.UUID) error
+}
+
+// EventRSVPRepository provides persistence for soc_event_rsvps.
+type EventRSVPRepository interface {
+	Create(ctx context.Context, rsvp *EventRSVP) error
+	FindByEventAndFamily(ctx context.Context, eventID, familyID uuid.UUID) (*EventRSVP, error)
+	Update(ctx context.Context, rsvp *EventRSVP) error
+	Delete(ctx context.Context, eventID, familyID uuid.UUID) error
+	// CountGoing returns the number of "going" RSVPs for an event. Used for capacity enforcement.
+	CountGoing(ctx context.Context, eventID uuid.UUID) (int, error)
+	// ListByEvent returns all RSVPs for an event.
+	ListByEvent(ctx context.Context, eventID uuid.UUID) ([]EventRSVP, error)
+	// ListGoingFamilyIDs returns family IDs with "going" status. Used by EventCancelled event.
+	ListGoingFamilyIDs(ctx context.Context, eventID uuid.UUID) ([]uuid.UUID, error)
+}
+
+// ─── Consumer-Defined Cross-Domain Interfaces ────────────────────────────────
+// Narrow interfaces for cross-domain service calls. Adapters wired in main.go. [ARCH §4.2]
+
+// IamServiceForSocial is the subset of iam::IamService that social:: needs.
+type IamServiceForSocial interface {
+	GetFamilyDisplayName(ctx context.Context, familyID uuid.UUID) (string, error)
+	GetParentDisplayName(ctx context.Context, parentID uuid.UUID) (string, error)
+	GetFamilyInfo(ctx context.Context, familyID uuid.UUID) (*SocialFamilyInfo, error)
+	GetParentInfo(ctx context.Context, parentID uuid.UUID) (*SocialParentInfo, error)
+}
+
+// MethodServiceForSocial is the subset of method::MethodologyService that social:: needs.
+type MethodServiceForSocial interface {
+	GetMethodologyDisplayName(ctx context.Context, slug string) (string, error)
+}

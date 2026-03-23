@@ -283,9 +283,9 @@ CREATE TABLE soc_groups (
     description           TEXT,
     cover_photo_url       TEXT,
     creator_family_id     UUID REFERENCES iam_families(id), -- NULL for platform groups
-    methodology_id        UUID REFERENCES method_definitions(id),
-                          -- app-level ref only for platform groups; FK because methodology
-                          -- drives group discovery and matching
+    methodology_slug      TEXT,
+                          -- app-level ref only for platform groups; matches the slug PK
+                          -- in method_definitions (Natural String PK Refactor)
     join_policy           TEXT NOT NULL DEFAULT 'open'
                           CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
     member_count          INTEGER NOT NULL DEFAULT 0,
@@ -294,8 +294,8 @@ CREATE TABLE soc_groups (
 );
 
 CREATE INDEX idx_soc_groups_type ON soc_groups(group_type);
-CREATE INDEX idx_soc_groups_methodology ON soc_groups(methodology_id)
-    WHERE methodology_id IS NOT NULL;
+CREATE INDEX idx_soc_groups_methodology ON soc_groups(methodology_slug)
+    WHERE methodology_slug IS NOT NULL;
 -- Full-text search index on groups [S§14.1]
 CREATE INDEX idx_soc_groups_search ON soc_groups
     USING GIN(to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')));
@@ -338,8 +338,9 @@ CREATE TABLE soc_events (
                           CHECK (visibility IN ('friends', 'group', 'discoverable')),
     status                TEXT NOT NULL DEFAULT 'active'
                           CHECK (status IN ('active', 'cancelled')),
-    methodology_id        UUID REFERENCES method_definitions(id),
-                          -- methodology tagging for discovery; app-level ref
+    methodology_slug      TEXT,
+                          -- methodology tagging for discovery; matches slug PK
+                          -- in method_definitions (Natural String PK Refactor)
     attendee_count        INTEGER NOT NULL DEFAULT 0,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -480,7 +481,7 @@ Updates the authenticated family's social profile.
 
 Returns another family's social profile, filtered by privacy settings.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: `ProfileResponse` (200 OK) — fields filtered by privacy settings and friendship status
 - **404**: Profile not found OR blocked (silent block → 404) `[S§7.4]`
 - **Note**: CROSS-FAMILY read. Block check is performed first; if blocked, returns 404.
@@ -495,32 +496,32 @@ Lists the authenticated family's friends.
 - **Query**: `?cursor=<uuid>&limit=20`
 - **Response**: `PaginatedResponse<FriendResponse>` (200 OK)
 
-##### `POST /v1/social/friends/request`
+##### `POST /v1/social/friends/request/:familyId`
 
 Sends a friend request to another family.
 
-- **Auth**: Required (`FamilyScope`)
-- **Body**: `SendFriendRequestCommand` (`target_family_id`)
+- **Auth**: Required (`AuthContext`)
+- **Path**: `familyId` — target family UUID
 - **Validation**: Cannot friend self; cannot send if blocked; cannot send if already friends or pending
 - **Response**: `FriendshipResponse` (201 Created)
 - **Events**: `FriendRequestSent`
 - **Error codes**: `already_friends` (409), `already_pending` (409), `blocked` (404, silent)
 
-##### `POST /v1/social/friends/request/:friendship_id/accept`
+##### `POST /v1/social/friends/accept/:friendshipId`
 
 Accepts a pending friend request.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Precondition**: Caller must be the accepter (not the requester)
 - **Response**: `FriendshipResponse` (200 OK)
 - **Events**: `FriendRequestAccepted`
 - **Error codes**: `not_pending` (409), `not_accepter` (403)
 
-##### `POST /v1/social/friends/request/:friendship_id/reject`
+##### `POST /v1/social/friends/reject/:friendshipId`
 
 Rejects (deletes) a pending friend request.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Precondition**: Caller must be the accepter
 - **Response**: 204 No Content
 
@@ -546,12 +547,12 @@ Unfriends a family. Silent — no notification sent. `[S§7.4]`
 - **Response**: 204 No Content
 - **Error codes**: `not_friends` (404)
 
-##### `POST /v1/social/blocks`
+##### `POST /v1/social/blocks/:familyId`
 
 Blocks a family. Silent — blocked user is not notified. `[S§7.4]`
 
-- **Auth**: Required (`FamilyScope`)
-- **Body**: `BlockFamilyCommand` (`target_family_id`)
+- **Auth**: Required (`AuthContext`)
+- **Path**: `familyId` — target family UUID
 - **Side effects**: Removes any existing friendship; purges blocked family's posts from blocker's feed (inline)
 - **Response**: 201 Created
 - **Error codes**: `already_blocked` (409), `cannot_block_self` (422)
@@ -576,16 +577,16 @@ Lists families blocked by the authenticated family.
 
 Returns the authenticated family's timeline feed (reverse chronological). `[S§7.2.3]`
 
-- **Auth**: Required (`FamilyScope`)
-- **Query**: `?cursor=<timestamp>&limit=20`
-- **Response**: `PaginatedResponse<PostResponse>` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Query**: `?offset=0&limit=20`
+- **Response**: `FeedResponse` (200 OK)
 - **Note**: Reads from Redis sorted set first; falls back to PostgreSQL. Block filter applied in application layer.
 
 ##### `POST /v1/social/posts`
 
 Creates a new post. `[S§7.2]`
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Body**: `CreatePostCommand` (`post_type`, `content`, `attachments`, `group_id`)
 - **Validation**: `content` required for text posts; `attachments` required for photo posts; `group_id` requires active membership
 - **Response**: `PostResponse` (201 Created)
@@ -596,7 +597,7 @@ Creates a new post. `[S§7.2]`
 
 Returns a single post with comments.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: `PostDetailResponse` (200 OK)
 - **404**: Post not found OR not visible to caller (visibility/block check)
 
@@ -604,7 +605,7 @@ Returns a single post with comments.
 
 Deletes a post. Only the author's family can delete.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: 204 No Content
 - **Error codes**: `not_post_author` (403)
 
@@ -626,16 +627,16 @@ Unlikes a post.
 
 Adds a comment to a post. `[S§7.3]`
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Body**: `CreateCommentCommand` (`content`, `parent_comment_id?`)
 - **Validation**: `parent_comment_id` must reference a top-level comment on the same post (one level only)
 - **Response**: `CommentResponse` (201 Created)
 
-##### `DELETE /v1/social/posts/:post_id/comments/:comment_id`
+##### `DELETE /v1/social/comments/:id`
 
 Deletes a comment. Author or post author can delete. `[S§7.3]`
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: 204 No Content
 - **Error codes**: `not_comment_author_or_post_author` (403)
 
@@ -645,16 +646,16 @@ Deletes a comment. Author or post author can delete. `[S§7.3]`
 
 Lists the authenticated parent's conversations.
 
-- **Auth**: Required (`FamilyScope`)
-- **Query**: `?cursor=<timestamp>&limit=20`
-- **Response**: `PaginatedResponse<ConversationSummaryResponse>` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Query**: `?offset=0&limit=20`
+- **Response**: `[]ConversationResponse` (200 OK)
 - **Note**: Excludes conversations where `deleted_at` is set for this participant.
 
 ##### `POST /v1/social/conversations`
 
 Creates or retrieves a conversation with another parent. Friends-only guard. `[S§7.5]`
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Body**: `CreateConversationCommand` (`recipient_parent_id`)
 - **Validation**: Recipient must be a friend; not blocked
 - **Response**: `ConversationResponse` (201 Created or 200 OK if exists)
@@ -664,16 +665,16 @@ Creates or retrieves a conversation with another parent. Friends-only guard. `[S
 
 Returns messages in a conversation.
 
-- **Auth**: Required (`FamilyScope`)
-- **Query**: `?cursor=<timestamp>&limit=50`
-- **Response**: `PaginatedResponse<MessageResponse>` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Query**: `?offset=0&limit=50`
+- **Response**: `[]MessageResponse` (200 OK)
 - **Note**: Only returns messages created after participant's `deleted_at` (if set).
 
 ##### `POST /v1/social/conversations/:conversation_id/messages`
 
 Sends a message in a conversation. `[S§7.5]`
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Body**: `SendMessageCommand` (`content`, `attachments`)
 - **Validation**: Caller must be a participant; friendship still active; not blocked
 - **Response**: `MessageResponse` (201 Created)
@@ -684,14 +685,14 @@ Sends a message in a conversation. `[S§7.5]`
 
 Marks all messages in a conversation as read (updates `last_read_at`).
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: 204 No Content
 
 ##### `DELETE /v1/social/conversations/:conversation_id`
 
 Soft-deletes a conversation for the authenticated user (sets `deleted_at`). `[S§7.5]`
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: 204 No Content
 - **Note**: Does not delete messages. Other participant still sees the conversation.
 
@@ -699,7 +700,7 @@ Soft-deletes a conversation for the authenticated user (sets `deleted_at`). `[S�
 
 Reports a message for moderation review. `[S§7.5, S§12.3]`
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Body**: `ReportMessageCommand` (`reason`)
 - **Response**: 201 Created
 - **Events**: `MessageReported`
@@ -724,8 +725,8 @@ Lists platform-managed methodology groups. `[S§7.6]`
 
 Returns group details. Requires membership for user-created groups.
 
-- **Auth**: Required (`FamilyScope`)
-- **Response**: `GroupDetailResponse` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Response**: `GroupResponse` (200 OK)
 - **404**: Group not found or not a member (for non-platform groups)
 
 ##### `POST /v1/social/groups/:group_id/join`
@@ -740,7 +741,7 @@ Joins a group or submits a join request. `[S§7.6]`
 - **Response**: `GroupMemberResponse` (201 Created)
 - **Error codes**: `already_member` (409), `invite_only` (403), `banned` (403)
 
-##### `DELETE /v1/social/groups/:group_id/leave`
+##### `POST /v1/social/groups/:group_id/leave`
 
 Leaves a group. Owners cannot leave without transferring ownership.
 
@@ -752,9 +753,9 @@ Leaves a group. Owners cannot leave without transferring ownership.
 
 Lists posts in a group. Requires membership. `[S§7.6]`
 
-- **Auth**: Required (`FamilyScope`)
-- **Query**: `?cursor=<timestamp>&limit=20`
-- **Response**: `PaginatedResponse<PostResponse>` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Query**: `?offset=0&limit=20`
+- **Response**: `[]PostResponse` (200 OK)
 
 #### Events
 
@@ -762,8 +763,8 @@ Lists posts in a group. Requires membership. `[S§7.6]`
 
 Creates an event. `[S§7.7]`
 
-- **Auth**: Required (`FamilyScope`)
-- **Body**: `CreateEventCommand` (`title`, `description`, `event_date`, `end_date?`, `location_name?`, `location_region?`, `is_virtual`, `virtual_url?`, `capacity?`, `visibility`, `group_id?`, `methodology_id?`)
+- **Auth**: Required (`AuthContext`)
+- **Body**: `CreateEventCommand` (`title`, `description`, `event_date`, `end_date?`, `location_name?`, `location_region?`, `is_virtual`, `virtual_url?`, `capacity?`, `visibility`, `group_id?`, `methodology_slug?`)
 - **Validation**: `event_date` must be in the future; `group_id` requires membership; `visibility = 'group'` requires `group_id`
 - **Response**: `EventResponse` (201 Created)
 
@@ -771,23 +772,23 @@ Creates an event. `[S§7.7]`
 
 Lists events visible to the authenticated family (own events, friend events, group events, discoverable events).
 
-- **Auth**: Required (`FamilyScope`)
-- **Query**: `?filter=upcoming|past&cursor=<timestamp>&limit=20`
-- **Response**: `PaginatedResponse<EventSummaryResponse>` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Query**: `?offset=0&limit=20`
+- **Response**: `[]EventResponse` (200 OK)
 
 ##### `GET /v1/social/events/:event_id`
 
-Returns event details with RSVP list.
+Returns event details with RSVP info.
 
-- **Auth**: Required (`FamilyScope`)
-- **Response**: `EventDetailResponse` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Response**: `EventResponse` (200 OK)
 - **404**: Event not found or not visible
 
 ##### `PATCH /v1/social/events/:event_id`
 
 Updates an event. Creator only.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Body**: `UpdateEventCommand` (partial fields)
 - **Response**: `EventResponse` (200 OK)
 - **Error codes**: `not_event_creator` (403)
@@ -796,8 +797,8 @@ Updates an event. Creator only.
 
 Cancels an event. Creator only. Notifies RSVPed attendees. `[S§7.7]`
 
-- **Auth**: Required (`FamilyScope`)
-- **Response**: `EventResponse` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Response**: 204 No Content
 - **Events**: `EventCancelled`
 - **Error codes**: `not_event_creator` (403), `already_cancelled` (409)
 
@@ -837,23 +838,23 @@ WebSocket upgrade endpoint for real-time messaging and notifications. `[ARCH §2
 
 Creates a user-created group. `[S§7.6]`
 
-- **Auth**: Required (`FamilyScope`)
-- **Body**: `CreateGroupCommand` (`name`, `description`, `join_policy`, `methodology_id?`)
-- **Response**: `GroupDetailResponse` (201 Created)
+- **Auth**: Required (`AuthContext`)
+- **Body**: `CreateGroupCommand` (`name`, `description`, `join_policy`, `methodology_slug?`)
+- **Response**: `GroupResponse` (201 Created)
 
 ##### `PATCH /v1/social/groups/:group_id`
 
 Updates group settings. Owner or moderator only.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Body**: `UpdateGroupCommand` (partial fields)
-- **Response**: `GroupDetailResponse` (200 OK)
+- **Response**: `GroupResponse` (200 OK)
 
 ##### `DELETE /v1/social/groups/:group_id`
 
 Deletes a user-created group. Owner only. Platform groups cannot be deleted.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: 204 No Content
 - **Error codes**: `cannot_delete_platform_group` (403)
 
@@ -863,44 +864,44 @@ Deletes a user-created group. Owner only. Platform groups cannot be deleted.
 
 Lists group members. Requires membership.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: `[]GroupMemberResponse` (200 OK)
 
 ##### `POST /v1/social/groups/:group_id/members/:family_id/approve`
 
 Approves a pending join request. Moderator/owner only.
 
-- **Auth**: Required (`FamilyScope`)
-- **Response**: `GroupMemberResponse` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Response**: 204 No Content
 
 ##### `POST /v1/social/groups/:group_id/members/:family_id/reject`
 
 Rejects a pending join request. Moderator/owner only.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: 204 No Content
 
 ##### `POST /v1/social/groups/:group_id/members/:family_id/ban`
 
 Bans a member from the group. Moderator/owner only.
 
-- **Auth**: Required (`FamilyScope`)
+- **Auth**: Required (`AuthContext`)
 - **Response**: 204 No Content
 
 ##### `POST /v1/social/groups/:group_id/members/:family_id/promote`
 
 Promotes a member to moderator. Owner only.
 
-- **Auth**: Required (`FamilyScope`)
-- **Response**: `GroupMemberResponse` (200 OK)
+- **Auth**: Required (`AuthContext`)
+- **Response**: 204 No Content
 
-##### `POST /v1/social/groups/:group_id/invite`
+##### `POST /v1/social/groups/:group_id/members/:familyId/invite`
 
 Invites a family to an invite-only group. Moderator/owner only.
 
-- **Auth**: Required (`FamilyScope`)
-- **Body**: `InviteToGroupCommand` (`family_id`)
-- **Response**: `GroupMemberResponse` (201 Created)
+- **Auth**: Required (`AuthContext`)
+- **Path**: `familyId` — target family UUID
+- **Response**: 204 No Content
 
 #### Discovery
 
@@ -909,7 +910,7 @@ Invites a family to an invite-only group. Moderator/owner only.
 Discovers nearby families (opt-in location). `[S§7.8]`
 
 - **Auth**: Required (`FamilyScope`)
-- **Query**: `?methodology_id=<uuid>&radius_km=50`
+- **Query**: `?methodology_slug=<string>&radius_km=50`
 - **Response**: `[]DiscoverableFamilyResponse` (200 OK)
 
 ##### `GET /v1/social/discover/events`
@@ -917,7 +918,7 @@ Discovers nearby families (opt-in location). `[S§7.8]`
 Discovers events by location and/or methodology. `[S§7.7]`
 
 - **Auth**: Required (`FamilyScope`)
-- **Query**: `?methodology_id=<uuid>&location_region=<string>`
+- **Query**: `?methodology_slug=<string>&location_region=<string>`
 - **Response**: `[]EventSummaryResponse` (200 OK)
 
 ##### `GET /v1/social/discover/groups`
@@ -925,7 +926,7 @@ Discovers events by location and/or methodology. `[S§7.7]`
 Discovers groups by methodology. `[S§7.6]`
 
 - **Auth**: Required (`FamilyScope`)
-- **Query**: `?methodology_id=<uuid>`
+- **Query**: `?methodology_slug=<string>`
 - **Response**: `[]GroupSummaryResponse` (200 OK)
 
 #### Post Editing
@@ -987,30 +988,38 @@ type SocialService interface {
     // --- Friend Commands ------------------------------------------------
 
     // SendFriendRequest sends a friend request. [S§7.4]
-    SendFriendRequest(ctx context.Context, scope *FamilyScope, cmd SendFriendRequestCommand) (*FriendshipResponse, error)
+    // CROSS-FAMILY: reads target family's block/friendship status.
+    SendFriendRequest(ctx context.Context, auth *AuthContext, targetFamilyID uuid.UUID) (*FriendshipResponse, error)
 
     // AcceptFriendRequest accepts a pending friend request. [S§7.4]
-    AcceptFriendRequest(ctx context.Context, scope *FamilyScope, friendshipID uuid.UUID) (*FriendshipResponse, error)
+    // CROSS-FAMILY: friendship spans two families.
+    AcceptFriendRequest(ctx context.Context, auth *AuthContext, friendshipID uuid.UUID) (*FriendshipResponse, error)
 
     // RejectFriendRequest rejects (deletes) a pending friend request. [S§7.4]
-    RejectFriendRequest(ctx context.Context, scope *FamilyScope, friendshipID uuid.UUID) error
+    // CROSS-FAMILY: friendship spans two families.
+    RejectFriendRequest(ctx context.Context, auth *AuthContext, friendshipID uuid.UUID) error
 
     // Unfriend removes an existing friendship. Silent, no notification. [S§7.4]
-    Unfriend(ctx context.Context, scope *FamilyScope, targetFamilyID uuid.UUID) error
+    // CROSS-FAMILY: friendship spans two families.
+    Unfriend(ctx context.Context, auth *AuthContext, targetFamilyID uuid.UUID) error
 
     // BlockFamily blocks a family. Removes friendship if exists, purges feed. [S§7.4]
-    BlockFamily(ctx context.Context, scope *FamilyScope, cmd BlockFamilyCommand) error
+    // CROSS-FAMILY: reads/writes across two families.
+    BlockFamily(ctx context.Context, auth *AuthContext, targetFamilyID uuid.UUID) error
 
     // UnblockFamily unblocks a family. [S§7.4]
-    UnblockFamily(ctx context.Context, scope *FamilyScope, targetFamilyID uuid.UUID) error
+    // CROSS-FAMILY: block record spans two families.
+    UnblockFamily(ctx context.Context, auth *AuthContext, targetFamilyID uuid.UUID) error
 
     // --- Post Commands --------------------------------------------------
 
     // CreatePost creates a post and triggers feed fan-out. [S§7.2]
-    CreatePost(ctx context.Context, scope *FamilyScope, cmd CreatePostCommand) (*PostResponse, error)
+    // CROSS-FAMILY: triggers feed fan-out to friends' feeds.
+    CreatePost(ctx context.Context, auth *AuthContext, cmd CreatePostCommand) (*PostResponse, error)
 
     // DeletePost deletes a post. Author's family only. [S§7.2]
-    DeletePost(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
+    // CROSS-FAMILY: removes from friends' feeds.
+    DeletePost(ctx context.Context, auth *AuthContext, postID uuid.UUID) error
 
     // LikePost likes a post. Idempotent. [S§7.2]
     LikePost(ctx context.Context, scope *FamilyScope, postID uuid.UUID) error
@@ -1021,27 +1030,34 @@ type SocialService interface {
     // --- Comment Commands ------------------------------------------------
 
     // CreateComment creates a comment on a post. [S§7.3]
-    CreateComment(ctx context.Context, scope *FamilyScope, postID uuid.UUID, cmd CreateCommentCommand) (*CommentResponse, error)
+    // CROSS-FAMILY: can comment on friends' posts.
+    CreateComment(ctx context.Context, auth *AuthContext, postID uuid.UUID, cmd CreateCommentCommand) (*CommentResponse, error)
 
     // DeleteComment deletes a comment. Author or post author can delete. [S§7.3]
-    DeleteComment(ctx context.Context, scope *FamilyScope, postID uuid.UUID, commentID uuid.UUID) error
+    // CROSS-FAMILY: may delete comment on another family's post (if post author).
+    DeleteComment(ctx context.Context, auth *AuthContext, commentID uuid.UUID) error
 
     // --- Messaging Commands ----------------------------------------------
 
     // CreateConversation creates or retrieves a conversation. Friends-only guard. [S§7.5]
-    CreateConversation(ctx context.Context, scope *FamilyScope, cmd CreateConversationCommand) (*ConversationResponse, error)
+    // CROSS-FAMILY: conversation spans two parents from different families.
+    CreateConversation(ctx context.Context, auth *AuthContext, cmd CreateConversationCommand) (*ConversationResponse, error)
 
     // SendMessage sends a message in a conversation. [S§7.5]
-    SendMessage(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID, cmd SendMessageCommand) (*MessageResponse, error)
+    // CROSS-FAMILY: message delivered to other participant's family.
+    SendMessage(ctx context.Context, auth *AuthContext, conversationID uuid.UUID, cmd SendMessageCommand) (*MessageResponse, error)
 
     // MarkConversationRead marks a conversation as read. [S§7.5]
-    MarkConversationRead(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID) error
+    // CROSS-FAMILY: conversation spans two families.
+    MarkConversationRead(ctx context.Context, auth *AuthContext, conversationID uuid.UUID) error
 
     // DeleteConversation soft-deletes a conversation for the authenticated user. [S§7.5]
-    DeleteConversation(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID) error
+    // CROSS-FAMILY: conversation spans two families.
+    DeleteConversation(ctx context.Context, auth *AuthContext, conversationID uuid.UUID) error
 
     // ReportMessage reports a message for moderation review. [S§7.5, S§12.3]
-    ReportMessage(ctx context.Context, scope *FamilyScope, messageID uuid.UUID, cmd ReportMessageCommand) error
+    // CROSS-FAMILY: may report message from another family.
+    ReportMessage(ctx context.Context, auth *AuthContext, messageID uuid.UUID, cmd ReportMessageCommand) error
 
     // --- Group Commands ------------------------------------------------──
 
@@ -1052,45 +1068,55 @@ type SocialService interface {
     LeaveGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) error
 
     // CreateGroup creates a user-created group. (Phase 2) [S§7.6]
-    CreateGroup(ctx context.Context, scope *FamilyScope, cmd CreateGroupCommand) (*GroupDetailResponse, error)
+    // CROSS-FAMILY: group membership spans families.
+    CreateGroup(ctx context.Context, auth *AuthContext, cmd CreateGroupCommand) (*GroupResponse, error)
 
     // UpdateGroup updates group settings. Moderator/owner only. (Phase 2) [S§7.6]
-    UpdateGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, cmd UpdateGroupCommand) (*GroupDetailResponse, error)
+    // CROSS-FAMILY: reads other families' membership for authorization.
+    UpdateGroup(ctx context.Context, auth *AuthContext, groupID uuid.UUID, cmd UpdateGroupCommand) (*GroupResponse, error)
 
     // DeleteGroup deletes a user-created group. Owner only. (Phase 2) [S§7.6]
-    DeleteGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) error
+    // CROSS-FAMILY: affects all group members across families.
+    DeleteGroup(ctx context.Context, auth *AuthContext, groupID uuid.UUID) error
 
     // ApproveMember approves a pending join request. Moderator/owner only. (Phase 2)
-    ApproveMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) (*GroupMemberResponse, error)
+    // CROSS-FAMILY: reads/writes another family's membership.
+    ApproveMember(ctx context.Context, auth *AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
 
     // RejectMember rejects a pending join request. Moderator/owner only. (Phase 2)
-    RejectMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) error
+    // CROSS-FAMILY: reads/writes another family's membership.
+    RejectMember(ctx context.Context, auth *AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
 
     // BanMember bans a member. Moderator/owner only. (Phase 2)
-    BanMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) error
+    // CROSS-FAMILY: reads/writes another family's membership.
+    BanMember(ctx context.Context, auth *AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
 
     // PromoteMember promotes a member to moderator. Owner only. (Phase 2)
-    PromoteMember(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, familyID uuid.UUID) (*GroupMemberResponse, error)
+    // CROSS-FAMILY: reads/writes another family's membership.
+    PromoteMember(ctx context.Context, auth *AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
 
     // InviteToGroup invites a family to an invite-only group. Moderator/owner only. (Phase 2)
-    InviteToGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, cmd InviteToGroupCommand) (*GroupMemberResponse, error)
+    // CROSS-FAMILY: creates membership for another family.
+    InviteToGroup(ctx context.Context, auth *AuthContext, groupID uuid.UUID, familyID uuid.UUID) error
 
     // --- Event Commands ------------------------------------------------──
 
     // CreateEvent creates an event. [S§7.7]
-    CreateEvent(ctx context.Context, scope *FamilyScope, cmd CreateEventCommand) (*EventResponse, error)
+    // CROSS-FAMILY: event visible to friends and group members.
+    CreateEvent(ctx context.Context, auth *AuthContext, cmd CreateEventCommand) (*EventResponse, error)
 
     // UpdateEvent updates an event. Creator only. [S§7.7]
-    UpdateEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error)
+    UpdateEvent(ctx context.Context, auth *AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error)
 
     // CancelEvent cancels an event. Creator only. Notifies attendees. [S§7.7]
-    CancelEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) (*EventResponse, error)
+    // CROSS-FAMILY: reads attendee list across families for notification.
+    CancelEvent(ctx context.Context, auth *AuthContext, eventID uuid.UUID) error
 
-    // RsvpEvent RSVPs to an event. [S§7.7]
-    RsvpEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID, cmd RsvpCommand) (*RsvpResponse, error)
+    // RSVPEvent RSVPs to an event. [S§7.7]
+    RSVPEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID, cmd RSVPCommand) error
 
-    // RemoveRsvp removes RSVP from an event. [S§7.7]
-    RemoveRsvp(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) error
+    // RemoveRSVP removes RSVP from an event. [S§7.7]
+    RemoveRSVP(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) error
 
     // --- Event Handlers ------------------------------------------------──
 
@@ -1114,13 +1140,13 @@ type SocialService interface {
     GetOwnProfile(ctx context.Context, scope *FamilyScope) (*ProfileResponse, error)
 
     // GetFamilyProfile returns another family's profile, filtered by privacy settings. [S§7.1]
-    // CROSS-FAMILY read.
-    GetFamilyProfile(ctx context.Context, scope *FamilyScope, targetFamilyID uuid.UUID) (*ProfileResponse, error)
+    // CROSS-FAMILY: reads another family's profile.
+    GetFamilyProfile(ctx context.Context, auth *AuthContext, targetFamilyID uuid.UUID) (*ProfileResponse, error)
 
     // --- Friend Queries ------------------------------------------------──
 
     // ListFriends lists the authenticated family's friends.
-    ListFriends(ctx context.Context, scope *FamilyScope, pagination *PaginationParams) (*PaginatedResponse[FriendResponse], error)
+    ListFriends(ctx context.Context, scope *FamilyScope, offset, limit int) ([]ProfileResponse, error)
 
     // ListIncomingRequests lists incoming friend requests.
     ListIncomingRequests(ctx context.Context, scope *FamilyScope) ([]FriendRequestResponse, error)
@@ -1129,48 +1155,61 @@ type SocialService interface {
     ListOutgoingRequests(ctx context.Context, scope *FamilyScope) ([]FriendRequestResponse, error)
 
     // ListBlocks lists blocked families.
-    ListBlocks(ctx context.Context, scope *FamilyScope) ([]BlockedFamilyResponse, error)
+    ListBlocks(ctx context.Context, scope *FamilyScope) ([]BlockResponse, error)
 
     // --- Feed Queries ------------------------------------------------────
 
     // GetFeed returns the authenticated family's timeline feed. [S§7.2.3]
-    GetFeed(ctx context.Context, scope *FamilyScope, pagination *CursorPaginationParams) (*PaginatedResponse[PostResponse], error)
+    // CROSS-FAMILY: reads friends' posts.
+    GetFeed(ctx context.Context, auth *AuthContext, offset, limit int) (*FeedResponse, error)
 
     // GetPost returns a single post with comments. Visibility-checked.
-    GetPost(ctx context.Context, scope *FamilyScope, postID uuid.UUID) (*PostDetailResponse, error)
+    // CROSS-FAMILY: may read another family's post.
+    GetPost(ctx context.Context, auth *AuthContext, postID uuid.UUID) (*PostDetailResponse, error)
+
+    // ListComments lists comments on a post. Visibility-checked.
+    // CROSS-FAMILY: may read comments from multiple families.
+    ListComments(ctx context.Context, auth *AuthContext, postID uuid.UUID) ([]CommentResponse, error)
 
     // --- Messaging Queries -----------------------------------------------
 
     // ListConversations lists the authenticated parent's conversations. [S§7.5]
-    ListConversations(ctx context.Context, scope *FamilyScope, pagination *CursorPaginationParams) (*PaginatedResponse[ConversationSummaryResponse], error)
+    // CROSS-FAMILY: conversations span two families.
+    ListConversations(ctx context.Context, auth *AuthContext, offset, limit int) ([]ConversationResponse, error)
 
     // GetConversationMessages returns messages in a conversation. [S§7.5]
-    GetConversationMessages(ctx context.Context, scope *FamilyScope, conversationID uuid.UUID, pagination *CursorPaginationParams) (*PaginatedResponse[MessageResponse], error)
+    // CROSS-FAMILY: messages from both participants.
+    GetConversationMessages(ctx context.Context, auth *AuthContext, conversationID uuid.UUID, offset, limit int) ([]MessageResponse, error)
 
     // --- Group Queries ------------------------------------------------───
 
     // ListMyGroups lists groups the authenticated family is a member of. [S§7.6]
-    ListMyGroups(ctx context.Context, scope *FamilyScope) ([]GroupSummaryResponse, error)
+    ListMyGroups(ctx context.Context, scope *FamilyScope) ([]GroupResponse, error)
 
     // ListPlatformGroups lists platform-managed methodology groups. [S§7.6]
-    ListPlatformGroups(ctx context.Context, scope *FamilyScope) ([]GroupSummaryResponse, error)
+    ListPlatformGroups(ctx context.Context) ([]GroupResponse, error)
 
     // GetGroup returns group details. Membership check for user-created groups. [S§7.6]
-    GetGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) (*GroupDetailResponse, error)
+    // CROSS-FAMILY: reads group with members from multiple families.
+    GetGroup(ctx context.Context, auth *AuthContext, groupID uuid.UUID) (*GroupResponse, error)
 
     // ListGroupPosts lists posts in a group. Requires membership. [S§7.6]
-    ListGroupPosts(ctx context.Context, scope *FamilyScope, groupID uuid.UUID, pagination *CursorPaginationParams) (*PaginatedResponse[PostResponse], error)
+    // CROSS-FAMILY: reads posts from all group members.
+    ListGroupPosts(ctx context.Context, auth *AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
 
     // ListGroupMembers lists group members. (Phase 2)
-    ListGroupMembers(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) ([]GroupMemberResponse, error)
+    // CROSS-FAMILY: members from multiple families.
+    ListGroupMembers(ctx context.Context, auth *AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error)
 
     // --- Event Queries ------------------------------------------------───
 
     // ListEvents lists events visible to the authenticated family. [S§7.7]
-    ListEvents(ctx context.Context, scope *FamilyScope, filter *EventFilter, pagination *CursorPaginationParams) (*PaginatedResponse[EventSummaryResponse], error)
+    // CROSS-FAMILY: reads friends' and discoverable events.
+    ListEvents(ctx context.Context, auth *AuthContext, offset, limit int) ([]EventResponse, error)
 
-    // GetEvent returns event details with RSVP list. [S§7.7]
-    GetEvent(ctx context.Context, scope *FamilyScope, eventID uuid.UUID) (*EventDetailResponse, error)
+    // GetEvent returns event details with RSVP info. [S§7.7]
+    // CROSS-FAMILY: reads event with RSVPs from multiple families.
+    GetEvent(ctx context.Context, auth *AuthContext, eventID uuid.UUID) (*EventResponse, error)
 
     // --- Discovery Queries (Phase 2) -------------------------------------
 
@@ -1193,6 +1232,7 @@ type SocialService interface {
 - `CommentRepository (interface)`
 - `PostLikeRepository (interface)`
 - `ConversationRepository (interface)`
+- `ConversationParticipantRepository (interface)`
 - `MessageRepository (interface)`
 - `GroupRepository (interface)`
 - `GroupMemberRepository (interface)`
@@ -1248,7 +1288,7 @@ type FriendshipRepository interface {
     DeleteBetween(ctx context.Context, familyA uuid.UUID, familyB uuid.UUID) error
 
     // ListFriends lists accepted friends for a family, paginated.
-    ListFriends(ctx context.Context, scope *FamilyScope, pagination *PaginationParams) ([]Friendship, error)
+    ListFriends(ctx context.Context, scope *FamilyScope, offset, limit int) ([]Friendship, error)
 
     // ListIncomingPending lists incoming pending requests.
     ListIncomingPending(ctx context.Context, scope *FamilyScope) ([]Friendship, error)
@@ -1348,27 +1388,37 @@ type PostLikeRepository interface {
 }
 
 type ConversationRepository interface {
-    // Creates a conversation with two participants.
-    CreateWithParticipants(ctx context.Context, participantAParentID uuid.UUID, participantAFamilyID uuid.UUID, participantBParentID uuid.UUID, participantBFamilyID uuid.UUID) (Conversation, error)
+    // Creates a conversation record.
+    Create(ctx context.Context, conv *Conversation) error
 
-    // Finds an existing conversation between two parents.
+    // Finds a conversation by ID.
+    FindByID(ctx context.Context, id uuid.UUID) (*Conversation, error)
+
+    // Lists conversations for a parent (excludes soft-deleted, paginated).
     // CROSS-FAMILY: Conversations span two families.
-    FindBetweenParents(ctx context.Context, parentA uuid.UUID, parentB uuid.UUID) (*Conversation, error)
+    ListByParent(ctx context.Context, parentID uuid.UUID, offset, limit int) ([]Conversation, error)
+}
 
-    // Lists conversations for a parent (excludes soft-deleted).
-    ListByParent(ctx context.Context, parentID uuid.UUID, pagination *CursorPaginationParams) ([]ConversationWithParticipants, error)
+type ConversationParticipantRepository interface {
+    // Creates a participant record.
+    Create(ctx context.Context, participant *ConversationParticipant) error
 
-    // Marks conversation read for a participant.
-    MarkRead(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
-
-    // Soft-deletes a conversation for a participant.
-    SoftDeleteForParticipant(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
-
-    // Clears deleted_at for a participant (new message restores conversation).
-    RestoreForParticipant(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
+    // Lists participants for a conversation.
+    // CROSS-FAMILY: Participants from different families.
+    ListByConversation(ctx context.Context, conversationID uuid.UUID) ([]ConversationParticipant, error)
 
     // Checks if a parent is a participant in a conversation.
     IsParticipant(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) (bool, error)
+
+    // Finds an existing conversation between two parents (create-or-get semantics).
+    // CROSS-FAMILY: Conversations span two families.
+    FindBetweenParents(ctx context.Context, parentA, parentB uuid.UUID) (*uuid.UUID, error)
+
+    // Marks conversation read for a participant.
+    UpdateLastRead(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
+
+    // Soft-deletes a conversation for a participant.
+    SoftDelete(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
 }
 
 type MessageRepository interface {
@@ -1405,8 +1455,8 @@ type GroupRepository interface {
     // Decrements member_count.
     DecrementMemberCount(ctx context.Context, groupID uuid.UUID) error
 
-    // Lists groups by methodology_id. Used for discovery.
-    ListByMethodology(ctx context.Context, methodologyID uuid.UUID) ([]Group, error)
+    // Lists groups by methodology_slug. Used for discovery.
+    ListByMethodology(ctx context.Context, methodologySlug string) ([]Group, error)
 }
 
 type GroupMemberRepository interface {
@@ -1450,10 +1500,10 @@ type EventRepository interface {
 
     // Lists events visible to a family (own, friends', group, discoverable).
     // CROSS-FAMILY: Events from friends and discoverable events.
-    ListVisible(ctx context.Context, familyID uuid.UUID, friendFamilyIDs []uuid.UUID, groupIDs []uuid.UUID, filter *EventFilter, pagination *CursorPaginationParams) ([]Event, error)
+    ListVisible(ctx context.Context, familyID uuid.UUID, friendFamilyIDs []uuid.UUID, groupIDs []uuid.UUID, offset, limit int) ([]Event, error)
 
     // Lists discoverable events by location/methodology.
-    ListDiscoverable(ctx context.Context, methodologyID *uuid.UUID, locationRegion *string) ([]Event, error)
+    ListDiscoverable(ctx context.Context, methodologySlug *string, locationRegion *string) ([]Event, error)
 
     // Increments attendee_count.
     IncrementAttendeeCount(ctx context.Context, eventID uuid.UUID) error
@@ -1580,7 +1630,7 @@ type CreateGroupCommand struct {
     Name string `json:"name"`
     Description *string `json:"description"`
     JoinPolicy *string `json:"join_policy"` // defaults to "open"
-    MethodologyID *uuid.UUID `json:"methodology_id"`
+    MethodologySlug *string `json:"methodology_slug"`
 }
 
 // Update a group (Phase 2). [S§7.6]
@@ -1612,7 +1662,7 @@ type CreateEventCommand struct {
     Capacity *int32 `json:"capacity"`
     Visibility string `json:"visibility"` // "friends" | "group" | "discoverable"
     GroupID *uuid.UUID `json:"group_id"`
-    MethodologyID *uuid.UUID `json:"methodology_id"`
+    MethodologySlug *string `json:"methodology_slug"`
 }
 
 // Update an event. [S§7.7]
@@ -2025,7 +2075,7 @@ type Group struct {
     Description *string `json:"description"`
     CoverPhotoURL *string `json:"cover_photo_url"`
     CreatorFamilyID *uuid.UUID `json:"creator_family_id"`
-    MethodologyID *uuid.UUID `json:"methodology_id"`
+    MethodologySlug *string `json:"methodology_slug"`
     JoinPolicy string `json:"join_policy"`
     MemberCount int32 `json:"member_count"`
     CreatedAt time.Time `json:"created_at"`
@@ -2063,7 +2113,7 @@ type Event struct {
     Capacity *int32 `json:"capacity"`
     Visibility string `json:"visibility"`
     Status string `json:"status"`
-    MethodologyID *uuid.UUID `json:"methodology_id"`
+    MethodologySlug *string `json:"methodology_slug"`
     AttendeeCount int32 `json:"attendee_count"`
     CreatedAt time.Time `json:"created_at"`
     UpdatedAt time.Time `json:"updated_at"`
@@ -2104,17 +2154,17 @@ type WsMessage struct {
 // Discovery query params.
 
 type DiscoverFamiliesQuery struct {
-    MethodologyID *uuid.UUID `json:"methodology_id"`
+    MethodologySlug *string `json:"methodology_slug"`
     RadiusKm *float64 `json:"radius_km"`
 }
 
 type DiscoverEventsQuery struct {
-    MethodologyID *uuid.UUID `json:"methodology_id"`
+    MethodologySlug *string `json:"methodology_slug"`
     LocationRegion *string `json:"location_region"`
 }
 
 type DiscoverGroupsQuery struct {
-    MethodologyID *uuid.UUID `json:"methodology_id"`
+    MethodologySlug *string `json:"methodology_slug"`
 }
 ```
 
@@ -2411,7 +2461,7 @@ All messaging operations check friendship status: `[S§7.5]`
 | Created by | Database seed / admin | Any user |
 | Deletable | No | Yes (owner only) |
 | `group_type` | `'platform'` | `'user_created'` |
-| `methodology_id` | Required (one per methodology) | Optional |
+| `methodology_slug` | Required (one per methodology) | Optional |
 | `join_policy` | Always `'open'` | User's choice |
 | Moderation | Platform moderators | Creator (owner) + promoted moderators |
 | Visibility | All authenticated users | Members only |
@@ -2526,7 +2576,7 @@ LIMIT 50;
 ```
 
 **Nearby events** (Phase 2): Filter `soc_events` where `visibility = 'discoverable'`
-and `location_region` matches or `methodology_id` matches.
+and `location_region` matches or `methodology_slug` matches.
 
 ---
 
@@ -2806,7 +2856,7 @@ func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *Fami
 - Block enforcement (silent → 404)
 - ~39 Phase 1 endpoints
 - `SocialService` interface + `SocialServiceImpl`
-- 12 repository interfaces + PostgreSQL implementations
+- 13 repository interfaces + PostgreSQL implementations
 - Domain `domain/` subdirectory: friendship.go, post.go, group_membership.go,
   visibility.go, errors.go
 - `SocialError` types + HTTP mapping
@@ -3043,11 +3093,13 @@ internal/social/
 ├── repository.go             # PgProfileRepository, PgFriendshipRepository,
 │                             # PgBlockRepository, PgPostRepository,
 │                             # PgCommentRepository, PgPostLikeRepository,
-│                             # PgConversationRepository, PgMessageRepository,
-│                             # PgGroupRepository, PgGroupMemberRepository,
-│                             # PgEventRepository, PgEventRsvpRepository
+│                             # PgConversationRepository,
+│                             # PgConversationParticipantRepository,
+│                             # PgMessageRepository, PgGroupRepository,
+│                             # PgGroupMemberRepository, PgEventRepository,
+│                             # PgEventRsvpRepository
 ├── models.go                 # Request/response types, internal types, GORM models
-├── ports.go                  # SocialService interface, all 12 repository interfaces
+├── ports.go                  # SocialService interface, all 13 repository interfaces
 ├── events.go                 # PostCreated, FriendRequestSent, FriendRequestAccepted,
 │                             # MessageSent, EventCancelled, MessageReported
 ├── event_handlers.go         # FamilyCreatedHandler, CoParentRemovedHandler,
