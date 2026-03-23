@@ -138,3 +138,12 @@ func (m *mockIamService) DeleteStudent(_ context.Context, _ *shared.FamilyScope,
 func (m *mockIamService) SubmitCoppaConsent(_ context.Context, _ *shared.FamilyScope, _ *shared.AuthContext, _ CoppaConsentCommand) (*ConsentStatusResponse, error) {
 	panic("not implemented")
 }
+func (m *mockIamService) GetFamilyMethodologyIDs(_ context.Context, _ *shared.FamilyScope) (string, []string, error) {
+	panic("not implemented")
+}
+func (m *mockIamService) GetStudent(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*StudentResponse, error) {
+	panic("not implemented")
+}
+func (m *mockIamService) SetFamilyMethodology(_ context.Context, _ *shared.FamilyScope, _ string, _ []string) error {
+	panic("not implemented")
+}

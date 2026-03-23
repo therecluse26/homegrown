@@ -4,44 +4,55 @@
 -- Phase 2 tables (co-parent invites, student sessions) included for schema stability.
 
 -- COPPA consent status enum [S§17.2, ARCH §6.3]
-CREATE TYPE iam_coppa_consent_enum AS ENUM (
-    'registered',  -- Account created, no COPPA notice shown yet
-    'noticed',     -- Parent has acknowledged COPPA notice
-    'consented',   -- Parent has provided verifiable consent
-    're_verified', -- Parent has re-verified consent
-    'withdrawn'    -- Parent has withdrawn consent; student data must be deleted
-);
+-- StatementBegin/End prevents goose from splitting the DO block on internal semicolons
+-- +goose StatementBegin
+DO $$ BEGIN
+    CREATE TYPE iam_coppa_consent_enum AS ENUM (
+        'registered',  -- Account created, no COPPA notice shown yet
+        'noticed',     -- Parent has acknowledged COPPA notice
+        'consented',   -- Parent has provided verifiable consent
+        're_verified', -- Parent has re-verified consent
+        'withdrawn'    -- Parent has withdrawn consent; student data must be deleted
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+-- +goose StatementEnd
 
 -- Co-parent invite status enum [S§3.4]
-CREATE TYPE iam_invite_status_enum AS ENUM (
-    'pending',   -- Invite sent, awaiting acceptance
-    'accepted',  -- Invite accepted, co-parent joined family
-    'expired',   -- Invite expired (72-hour window)
-    'cancelled'  -- Primary parent cancelled the invite
-);
+-- +goose StatementBegin
+DO $$ BEGIN
+    CREATE TYPE iam_invite_status_enum AS ENUM (
+        'pending',   -- Invite sent, awaiting acceptance
+        'accepted',  -- Invite accepted, co-parent joined family
+        'expired',   -- Invite expired (72-hour window)
+        'cancelled'  -- Primary parent cancelled the invite
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+-- +goose StatementEnd
 
 -- Top-level family entity [S§3.1.1]
 CREATE TABLE iam_families (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    display_name              TEXT NOT NULL,                              -- [S§6.2]
-    state_code                CHAR(2),                                   -- for compliance [S§6.2]
-    location_region           TEXT,                                      -- coarse location [S§7.8]
-    location_point            GEOMETRY(Point, 4326),                     -- PostGIS centroid [ARCH §5.4]
-    primary_parent_id         UUID,                                      -- set after first parent created
-    primary_methodology_id    UUID NOT NULL,                             -- FK to method_definitions [S§4.3]
-    secondary_methodology_ids UUID[] NOT NULL DEFAULT '{}',              -- [S§4.3]
-    subscription_tier         TEXT NOT NULL DEFAULT 'free'
-                              CHECK (subscription_tier IN ('free', 'premium')),  -- [S§15.2]
-    coppa_consent_status      iam_coppa_consent_enum NOT NULL DEFAULT 'registered', -- [S§17.2, ARCH §6.3]
-    coppa_consented_at        TIMESTAMPTZ,                               -- when consent was granted
-    coppa_consent_method      TEXT,                                      -- e.g. 'credit_card_verification'
-    deletion_requested_at     TIMESTAMPTZ,                               -- NULL if no deletion pending [S§16.3]
-    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    display_name                TEXT NOT NULL,                              -- [S§6.2]
+    state_code                  CHAR(2),                                   -- for compliance [S§6.2]
+    location_region             TEXT,                                      -- coarse location [S§7.8]
+    location_point              GEOMETRY(Point, 4326),                     -- PostGIS centroid [ARCH §5.4]
+    primary_parent_id           UUID,                                      -- set after first parent created
+    primary_methodology_slug    TEXT NOT NULL,                             -- FK to method_definitions [S§4.3]
+    secondary_methodology_slugs TEXT[] NOT NULL DEFAULT '{}',              -- [S§4.3]
+    subscription_tier           TEXT NOT NULL DEFAULT 'free'
+                                CHECK (subscription_tier IN ('free', 'premium')),  -- [S§15.2]
+    coppa_consent_status        iam_coppa_consent_enum NOT NULL DEFAULT 'registered', -- [S§17.2, ARCH §6.3]
+    coppa_consented_at          TIMESTAMPTZ,                               -- when consent was granted
+    coppa_consent_method        TEXT,                                      -- e.g. 'credit_card_verification'
+    deletion_requested_at       TIMESTAMPTZ,                               -- NULL if no deletion pending [S§16.3]
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- NOTE: FK to method_definitions deferred until method:: migration runs.
--- Phase 1 uses a platform-default UUID constant at application level.
+-- NOTE: FK to method_definitions(slug) deferred until method:: migration runs.
+-- Phase 1 uses 'charlotte-mason' as the application-level default slug.
 
 CREATE INDEX idx_iam_families_subscription_tier ON iam_families(subscription_tier);
 CREATE INDEX idx_iam_families_location ON iam_families USING GIST(location_point)
@@ -68,14 +79,14 @@ CREATE INDEX idx_iam_parents_kratos ON iam_parents(kratos_identity_id);
 -- Student profiles [S§3.1.3]
 -- Students do NOT have credentials — they are parent-mediated [S§3.3]
 CREATE TABLE iam_students (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    family_id               UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
-    display_name            TEXT NOT NULL,                    -- [S§3.1.3]
-    birth_year              SMALLINT,                        -- [S§3.1.3]
-    grade_level             TEXT,                             -- optional [S§3.1.3]
-    methodology_override_id UUID,                            -- FK to method_definitions [S§4.6]
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    family_id                UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
+    display_name             TEXT NOT NULL,                    -- [S§3.1.3]
+    birth_year               SMALLINT,                        -- [S§3.1.3]
+    grade_level              TEXT,                             -- optional [S§3.1.3]
+    methodology_override_slug TEXT,                           -- FK to method_definitions(slug) [S§4.6]
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_iam_students_family ON iam_students(family_id);

@@ -10,18 +10,18 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 5673,
     proxy: {
       "/v1": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3500",
         changeOrigin: true,
       },
       "/hooks": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3500",
         changeOrigin: true,
       },
       "/health": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3500",
         changeOrigin: true,
       },
     },

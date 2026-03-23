@@ -16,11 +16,11 @@ import (
 type CoppaConsentStatus string
 
 const (
-	CoppaConsentRegistered  CoppaConsentStatus = "registered"
-	CoppaConsentNoticed     CoppaConsentStatus = "noticed"
-	CoppaConsentConsented   CoppaConsentStatus = "consented"
-	CoppaConsentReVerified  CoppaConsentStatus = "re_verified"
-	CoppaConsentWithdrawn   CoppaConsentStatus = "withdrawn"
+	CoppaConsentRegistered CoppaConsentStatus = "registered"
+	CoppaConsentNoticed    CoppaConsentStatus = "noticed"
+	CoppaConsentConsented  CoppaConsentStatus = "consented"
+	CoppaConsentReVerified CoppaConsentStatus = "re_verified"
+	CoppaConsentWithdrawn  CoppaConsentStatus = "withdrawn"
 )
 
 // CanCreateStudents returns true when consent status allows student profile creation. [S§17.2]
@@ -30,24 +30,20 @@ func (s CoppaConsentStatus) CanCreateStudents() bool {
 
 // ─── Custom DB Types ──────────────────────────────────────────────────────────
 
-// UUIDArray is a custom type for PostgreSQL UUID arrays.
+// SlugArray is a custom type for PostgreSQL TEXT[] columns holding methodology slugs.
 // Implements database/sql.Scanner and driver.Valuer without requiring lib/pq. [Plan §2]
-type UUIDArray []uuid.UUID
+type SlugArray []string
 
 // Value implements driver.Valuer. Serializes to PostgreSQL array literal.
-func (a UUIDArray) Value() (driver.Value, error) {
+func (a SlugArray) Value() (driver.Value, error) {
 	if len(a) == 0 {
 		return "{}", nil
 	}
-	elements := make([]string, len(a))
-	for i, id := range a {
-		elements[i] = id.String()
-	}
-	return "{" + strings.Join(elements, ",") + "}", nil
+	return "{" + strings.Join(a, ",") + "}", nil
 }
 
-// Scan implements sql.Scanner. Parses PostgreSQL array literal {uuid1,uuid2,...}.
-func (a *UUIDArray) Scan(src interface{}) error {
+// Scan implements sql.Scanner. Parses PostgreSQL array literal {slug1,slug2,...}.
+func (a *SlugArray) Scan(src interface{}) error {
 	if src == nil {
 		*a = nil
 		return nil
@@ -59,22 +55,18 @@ func (a *UUIDArray) Scan(src interface{}) error {
 	case string:
 		str = v
 	default:
-		return fmt.Errorf("UUIDArray.Scan: unsupported type %T", src)
+		return fmt.Errorf("SlugArray.Scan: unsupported type %T", src)
 	}
 	str = strings.TrimPrefix(str, "{")
 	str = strings.TrimSuffix(str, "}")
 	if str == "" {
-		*a = UUIDArray{}
+		*a = SlugArray{}
 		return nil
 	}
 	parts := strings.Split(str, ",")
-	result := make(UUIDArray, len(parts))
+	result := make(SlugArray, len(parts))
 	for i, p := range parts {
-		id, err := uuid.Parse(strings.TrimSpace(p))
-		if err != nil {
-			return fmt.Errorf("UUIDArray.Scan: invalid UUID %q: %w", p, err)
-		}
-		result[i] = id
+		result[i] = strings.TrimSpace(p)
 	}
 	*a = result
 	return nil
@@ -84,20 +76,20 @@ func (a *UUIDArray) Scan(src interface{}) error {
 
 // FamilyModel is the GORM model for the iam_families table.
 type FamilyModel struct {
-	ID                     uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	DisplayName            string     `gorm:"not null"`
-	StateCode              *string    `gorm:"type:char(2)"`
-	LocationRegion         *string
-	PrimaryParentID        *uuid.UUID `gorm:"type:uuid"`
-	PrimaryMethodologyID   uuid.UUID  `gorm:"type:uuid;not null"`
-	SecondaryMethodologyIDs UUIDArray  `gorm:"type:uuid[]"`
-	SubscriptionTier       string     `gorm:"not null;default:free"`
-	CoppaConsentStatus     string     `gorm:"not null;default:registered"`
-	CoppaConsentedAt       *time.Time
-	CoppaConsentMethod     *string
-	DeletionRequestedAt    *time.Time
-	CreatedAt              time.Time  `gorm:"not null"`
-	UpdatedAt              time.Time  `gorm:"not null"`
+	ID                       uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	DisplayName              string     `gorm:"not null"`
+	StateCode                *string    `gorm:"type:char(2)"`
+	LocationRegion           *string
+	PrimaryParentID          *uuid.UUID `gorm:"type:uuid"`
+	PrimaryMethodologySlug   string     `gorm:"not null"`
+	SecondaryMethodologySlugs SlugArray  `gorm:"type:text[]"`
+	SubscriptionTier         string     `gorm:"not null;default:free"`
+	CoppaConsentStatus       string     `gorm:"not null;default:registered"`
+	CoppaConsentedAt         *time.Time
+	CoppaConsentMethod       *string
+	DeletionRequestedAt      *time.Time
+	CreatedAt                time.Time  `gorm:"not null"`
+	UpdatedAt                time.Time  `gorm:"not null"`
 }
 
 func (FamilyModel) TableName() string { return "iam_families" }
@@ -110,25 +102,25 @@ func (m *FamilyModel) BeforeCreate(_ *gorm.DB) error {
 }
 
 func (m *FamilyModel) toDomain() *Family {
-	var secondary []uuid.UUID
-	if m.SecondaryMethodologyIDs != nil {
-		secondary = []uuid.UUID(m.SecondaryMethodologyIDs)
+	var secondary []string
+	if m.SecondaryMethodologySlugs != nil {
+		secondary = []string(m.SecondaryMethodologySlugs)
 	}
 	return &Family{
-		ID:                     m.ID,
-		DisplayName:            m.DisplayName,
-		StateCode:              m.StateCode,
-		LocationRegion:         m.LocationRegion,
-		PrimaryParentID:        m.PrimaryParentID,
-		PrimaryMethodologyID:   m.PrimaryMethodologyID,
-		SecondaryMethodologyIDs: secondary,
-		SubscriptionTier:       m.SubscriptionTier,
-		CoppaConsentStatus:     CoppaConsentStatus(m.CoppaConsentStatus),
-		CoppaConsentedAt:       m.CoppaConsentedAt,
-		CoppaConsentMethod:     m.CoppaConsentMethod,
-		DeletionRequestedAt:    m.DeletionRequestedAt,
-		CreatedAt:              m.CreatedAt,
-		UpdatedAt:              m.UpdatedAt,
+		ID:                       m.ID,
+		DisplayName:              m.DisplayName,
+		StateCode:                m.StateCode,
+		LocationRegion:           m.LocationRegion,
+		PrimaryParentID:          m.PrimaryParentID,
+		PrimaryMethodologySlug:   m.PrimaryMethodologySlug,
+		SecondaryMethodologySlugs: secondary,
+		SubscriptionTier:         m.SubscriptionTier,
+		CoppaConsentStatus:       CoppaConsentStatus(m.CoppaConsentStatus),
+		CoppaConsentedAt:         m.CoppaConsentedAt,
+		CoppaConsentMethod:       m.CoppaConsentMethod,
+		DeletionRequestedAt:      m.DeletionRequestedAt,
+		CreatedAt:                m.CreatedAt,
+		UpdatedAt:                m.UpdatedAt,
 	}
 }
 
@@ -170,14 +162,14 @@ func (m *ParentModel) toDomain() *Parent {
 
 // StudentModel is the GORM model for the iam_students table.
 type StudentModel struct {
-	ID                    uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	FamilyID              uuid.UUID  `gorm:"type:uuid;not null"`
-	DisplayName           string     `gorm:"not null"`
-	BirthYear             *int16
-	GradeLevel            *string
-	MethodologyOverrideID *uuid.UUID `gorm:"type:uuid"`
-	CreatedAt             time.Time  `gorm:"not null"`
-	UpdatedAt             time.Time  `gorm:"not null"`
+	ID                      uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FamilyID                uuid.UUID `gorm:"type:uuid;not null"`
+	DisplayName             string    `gorm:"not null"`
+	BirthYear               *int16
+	GradeLevel              *string
+	MethodologyOverrideSlug *string
+	CreatedAt               time.Time `gorm:"not null"`
+	UpdatedAt               time.Time `gorm:"not null"`
 }
 
 func (StudentModel) TableName() string { return "iam_students" }
@@ -191,14 +183,14 @@ func (m *StudentModel) BeforeCreate(_ *gorm.DB) error {
 
 func (m *StudentModel) toDomain() *Student {
 	return &Student{
-		ID:                    m.ID,
-		FamilyID:              m.FamilyID,
-		DisplayName:           m.DisplayName,
-		BirthYear:             m.BirthYear,
-		GradeLevel:            m.GradeLevel,
-		MethodologyOverrideID: m.MethodologyOverrideID,
-		CreatedAt:             m.CreatedAt,
-		UpdatedAt:             m.UpdatedAt,
+		ID:                      m.ID,
+		FamilyID:                m.FamilyID,
+		DisplayName:             m.DisplayName,
+		BirthYear:               m.BirthYear,
+		GradeLevel:              m.GradeLevel,
+		MethodologyOverrideSlug: m.MethodologyOverrideSlug,
+		CreatedAt:               m.CreatedAt,
+		UpdatedAt:               m.UpdatedAt,
 	}
 }
 
@@ -228,20 +220,20 @@ func (m *CoppaAuditLogModel) BeforeCreate(_ *gorm.DB) error {
 
 // Family is the internal domain representation of a family account. [S§3.1.1]
 type Family struct {
-	ID                     uuid.UUID
-	DisplayName            string
-	StateCode              *string
-	LocationRegion         *string
-	PrimaryParentID        *uuid.UUID
-	PrimaryMethodologyID   uuid.UUID
-	SecondaryMethodologyIDs []uuid.UUID
-	SubscriptionTier       string
-	CoppaConsentStatus     CoppaConsentStatus
-	CoppaConsentedAt       *time.Time
-	CoppaConsentMethod     *string
-	DeletionRequestedAt    *time.Time
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	ID                       uuid.UUID
+	DisplayName              string
+	StateCode                *string
+	LocationRegion           *string
+	PrimaryParentID          *uuid.UUID
+	PrimaryMethodologySlug   string
+	SecondaryMethodologySlugs []string
+	SubscriptionTier         string
+	CoppaConsentStatus       CoppaConsentStatus
+	CoppaConsentedAt         *time.Time
+	CoppaConsentMethod       *string
+	DeletionRequestedAt      *time.Time
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
 }
 
 // Parent is the internal domain representation of a parent user. [S§3.1.2]
@@ -259,14 +251,14 @@ type Parent struct {
 
 // Student is the internal domain representation of a student profile. [S§3.1.3]
 type Student struct {
-	ID                    uuid.UUID
-	FamilyID              uuid.UUID
-	DisplayName           string
-	BirthYear             *int16
-	GradeLevel            *string
-	MethodologyOverrideID *uuid.UUID
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
+	ID                      uuid.UUID
+	FamilyID                uuid.UUID
+	DisplayName             string
+	BirthYear               *int16
+	GradeLevel              *string
+	MethodologyOverrideSlug *string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 // KratosSession holds session data returned by the Kratos public API.
@@ -287,8 +279,8 @@ type KratosIdentity struct {
 
 // CreateFamily is the command type for FamilyRepository.Create.
 type CreateFamily struct {
-	DisplayName          string
-	PrimaryMethodologyID uuid.UUID
+	DisplayName            string
+	PrimaryMethodologySlug string
 }
 
 // CreateParent is the command type for ParentRepository.Create.
@@ -302,10 +294,10 @@ type CreateParent struct {
 
 // CreateStudent is the command type for StudentRepository.Create.
 type CreateStudent struct {
-	DisplayName           string
-	BirthYear             *int16
-	GradeLevel            *string
-	MethodologyOverrideID *uuid.UUID
+	DisplayName             string
+	BirthYear               *int16
+	GradeLevel              *string
+	MethodologyOverrideSlug *string
 }
 
 // UpdateFamily is the command type for FamilyRepository.Update.
@@ -323,28 +315,28 @@ type UpdateParent struct {
 
 // UpdateStudent is the command type for StudentRepository.Update.
 type UpdateStudent struct {
-	DisplayName           *string
-	BirthYear             *int16
-	GradeLevel            *string
-	MethodologyOverrideID **uuid.UUID // nil = don't change; non-nil pointing to nil = clear
+	DisplayName             *string
+	BirthYear               *int16
+	GradeLevel              *string
+	MethodologyOverrideSlug **string // nil = don't change; non-nil pointing to nil = clear
 }
 
 // ─── API Request Types ────────────────────────────────────────────────────────
 
 // CreateStudentCommand is the request body for POST /v1/families/students. [§4.3]
 type CreateStudentCommand struct {
-	DisplayName           string     `json:"display_name"            validate:"required,min=1,max=100"`
-	BirthYear             *int16     `json:"birth_year,omitempty"    validate:"omitempty,min=2000,max=2030"`
-	GradeLevel            *string    `json:"grade_level,omitempty"   validate:"omitempty,max=20"`
-	MethodologyOverrideID *uuid.UUID `json:"methodology_override_id,omitempty"`
+	DisplayName             string  `json:"display_name"                    validate:"required,min=1,max=100"`
+	BirthYear               *int16  `json:"birth_year,omitempty"            validate:"omitempty,min=2000,max=2030"`
+	GradeLevel              *string `json:"grade_level,omitempty"           validate:"omitempty,max=20"`
+	MethodologyOverrideSlug *string `json:"methodology_override_slug,omitempty"`
 }
 
 // UpdateStudentCommand is the request body for PATCH /v1/families/students/:id. [§4.3]
 type UpdateStudentCommand struct {
-	DisplayName           *string    `json:"display_name,omitempty"           validate:"omitempty,min=1,max=100"`
-	BirthYear             *int16     `json:"birth_year,omitempty"             validate:"omitempty,min=2000,max=2030"`
-	GradeLevel            *string    `json:"grade_level,omitempty"            validate:"omitempty,max=20"`
-	MethodologyOverrideID **uuid.UUID `json:"methodology_override_id,omitempty"`
+	DisplayName             *string  `json:"display_name,omitempty"              validate:"omitempty,min=1,max=100"`
+	BirthYear               *int16   `json:"birth_year,omitempty"               validate:"omitempty,min=2000,max=2030"`
+	GradeLevel              *string  `json:"grade_level,omitempty"              validate:"omitempty,max=20"`
+	MethodologyOverrideSlug **string `json:"methodology_override_slug,omitempty"`
 }
 
 // UpdateFamilyCommand is the request body for PATCH /v1/families/profile. [§4.3]
@@ -391,17 +383,17 @@ type CurrentUserResponse struct {
 
 // FamilyProfileResponse is returned by GET/PATCH /v1/families/profile. [§4.3]
 type FamilyProfileResponse struct {
-	ID                      uuid.UUID       `json:"id"`
-	DisplayName             string          `json:"display_name"`
-	StateCode               *string         `json:"state_code,omitempty"`
-	LocationRegion          *string         `json:"location_region,omitempty"`
-	PrimaryMethodologyID    uuid.UUID       `json:"primary_methodology_id"`
-	SecondaryMethodologyIDs []uuid.UUID     `json:"secondary_methodology_ids"`
-	SubscriptionTier        string          `json:"subscription_tier"`
-	CoppaConsentStatus      string          `json:"coppa_consent_status"`
-	Parents                 []ParentSummary `json:"parents"`
-	StudentCount            int             `json:"student_count"`
-	CreatedAt               time.Time       `json:"created_at"`
+	ID                       uuid.UUID       `json:"id"`
+	DisplayName              string          `json:"display_name"`
+	StateCode                *string         `json:"state_code,omitempty"`
+	LocationRegion           *string         `json:"location_region,omitempty"`
+	PrimaryMethodologySlug   string          `json:"primary_methodology_slug"`
+	SecondaryMethodologySlugs []string        `json:"secondary_methodology_slugs"`
+	SubscriptionTier         string          `json:"subscription_tier"`
+	CoppaConsentStatus       string          `json:"coppa_consent_status"`
+	Parents                  []ParentSummary `json:"parents"`
+	StudentCount             int             `json:"student_count"`
+	CreatedAt                time.Time       `json:"created_at"`
 }
 
 // ParentSummary is embedded in FamilyProfileResponse.
@@ -413,13 +405,13 @@ type ParentSummary struct {
 
 // StudentResponse is returned by student CRUD endpoints. [§4.3]
 type StudentResponse struct {
-	ID                    uuid.UUID  `json:"id"`
-	DisplayName           string     `json:"display_name"`
-	BirthYear             *int16     `json:"birth_year,omitempty"`
-	GradeLevel            *string    `json:"grade_level,omitempty"`
-	MethodologyOverrideID *uuid.UUID `json:"methodology_override_id,omitempty"`
-	CreatedAt             time.Time  `json:"created_at"`
-	UpdatedAt             time.Time  `json:"updated_at"`
+	ID                      uuid.UUID `json:"id"`
+	DisplayName             string    `json:"display_name"`
+	BirthYear               *int16    `json:"birth_year,omitempty"`
+	GradeLevel              *string   `json:"grade_level,omitempty"`
+	MethodologyOverrideSlug *string   `json:"methodology_override_slug,omitempty"`
+	CreatedAt               time.Time `json:"created_at"`
+	UpdatedAt               time.Time `json:"updated_at"`
 }
 
 // ConsentStatusResponse is returned by GET/POST /v1/families/consent. [§4.3]

@@ -25,11 +25,11 @@ func NewPgFamilyRepository(db *gorm.DB) *PgFamilyRepository {
 
 func (r *PgFamilyRepository) Create(ctx context.Context, cmd CreateFamily) (*Family, error) {
 	model := &FamilyModel{
-		DisplayName:             cmd.DisplayName,
-		PrimaryMethodologyID:    cmd.PrimaryMethodologyID,
-		SecondaryMethodologyIDs: UUIDArray{},
-		SubscriptionTier:        "free",
-		CoppaConsentStatus:      string(CoppaConsentRegistered),
+		DisplayName:               cmd.DisplayName,
+		PrimaryMethodologySlug:    cmd.PrimaryMethodologySlug,
+		SecondaryMethodologySlugs: SlugArray{},
+		SubscriptionTier:          "free",
+		CoppaConsentStatus:        string(CoppaConsentRegistered),
 	}
 	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -110,8 +110,8 @@ func (r *PgFamilyRepository) UpdateConsentStatus(ctx context.Context, scope *sha
 	return r.FindByID(ctx, scope.FamilyID())
 }
 
-func (r *PgFamilyRepository) SetMethodology(ctx context.Context, scope *shared.FamilyScope, primaryID uuid.UUID, secondaryIDs []uuid.UUID) error {
-	arr := UUIDArray(secondaryIDs)
+func (r *PgFamilyRepository) SetMethodology(ctx context.Context, scope *shared.FamilyScope, primarySlug string, secondarySlugs []string) error {
+	arr := SlugArray(secondarySlugs)
 	val, err := arr.Value()
 	if err != nil {
 		return shared.ErrDatabase(err)
@@ -119,9 +119,9 @@ func (r *PgFamilyRepository) SetMethodology(ctx context.Context, scope *shared.F
 	if err := r.db.WithContext(ctx).Model(&FamilyModel{}).
 		Where("id = ?", scope.FamilyID()).
 		Updates(map[string]interface{}{
-			"primary_methodology_id":    primaryID,
-			"secondary_methodology_ids": val,
-			"updated_at":                time.Now(),
+			"primary_methodology_slug":    primarySlug,
+			"secondary_methodology_slugs": val,
+			"updated_at":                  time.Now(),
 		}).Error; err != nil {
 		return shared.ErrDatabase(err)
 	}
@@ -264,11 +264,11 @@ func NewPgStudentRepository(db *gorm.DB) *PgStudentRepository {
 
 func (r *PgStudentRepository) Create(ctx context.Context, scope *shared.FamilyScope, cmd CreateStudent) (*Student, error) {
 	model := &StudentModel{
-		FamilyID:              scope.FamilyID(),
-		DisplayName:           cmd.DisplayName,
-		BirthYear:             cmd.BirthYear,
-		GradeLevel:            cmd.GradeLevel,
-		MethodologyOverrideID: cmd.MethodologyOverrideID,
+		FamilyID:                scope.FamilyID(),
+		DisplayName:             cmd.DisplayName,
+		BirthYear:               cmd.BirthYear,
+		GradeLevel:              cmd.GradeLevel,
+		MethodologyOverrideSlug: cmd.MethodologyOverrideSlug,
 	}
 	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -313,9 +313,9 @@ func (r *PgStudentRepository) Update(ctx context.Context, scope *shared.FamilySc
 	if cmd.GradeLevel != nil {
 		updates["grade_level"] = *cmd.GradeLevel
 	}
-	if cmd.MethodologyOverrideID != nil {
-		// **uuid.UUID: outer nil = don't change; non-nil pointing to nil = clear
-		updates["methodology_override_id"] = *cmd.MethodologyOverrideID
+	if cmd.MethodologyOverrideSlug != nil {
+		// **string: outer nil = don't change; non-nil pointing to nil = clear
+		updates["methodology_override_slug"] = *cmd.MethodologyOverrideSlug
 	}
 	if len(updates) == 0 {
 		return r.FindByID(ctx, scope, studentID)

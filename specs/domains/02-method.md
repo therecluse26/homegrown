@@ -1298,7 +1298,7 @@ within method:: itself.
 
 **In scope**:
 - method_ tables: `method_definitions`, `method_tools`, `method_tool_activations`
-- Seed migration: 6 methodologies, 18 tools, all activation mappings
+- Seed migration: 6 methodologies, 22 tools, all activation mappings
 - FK migration: `iam_families.primary_methodology_id` → `method_definitions`, `iam_students.methodology_override_id` → `method_definitions`
 - Public endpoints: `GET /v1/methodologies`, `GET /v1/methodologies/:slug`, `GET /v1/methodologies/:slug/tools`
 - Authenticated endpoints: `GET /v1/families/tools`, `GET /v1/families/students/:id/tools`, `PATCH /v1/families/methodology`
@@ -1332,7 +1332,7 @@ as acceptance criteria for code review and integration testing.
 1. `GET /v1/methodologies` returns exactly 6 methodologies in display_order (after seed migration)
 2. `GET /v1/methodologies/charlotte-mason` returns full philosophy module as structured JSON
 3. `GET /v1/methodologies/nonexistent` returns 404
-4. `GET /v1/methodologies/charlotte-mason/tools` returns 10 tools with methodology-specific config overrides
+4. `GET /v1/methodologies/charlotte-mason/tools` returns 13 tools with methodology-specific config overrides (9 CM-specific + lesson-sequences + video-lessons + content-viewer + video-player)
 5. Tool resolution for a single-methodology family returns exactly the tools activated for that methodology
 6. Tool resolution for a multi-methodology family returns the **union** (no duplicates) of all activated tools
 7. When a tool is activated by both primary and secondary methodologies, the **primary methodology's config overrides** are used
@@ -1356,70 +1356,70 @@ as acceptance criteria for code review and integration testing.
 ### Phase 1 — Foundation
 
 #### Database
-- [ ] Create migration: `method_definitions` table
-- [ ] Create migration: `method_tools` table
-- [ ] Create migration: `method_tool_activations` table
-- [ ] Create seed migration: 6 methodologies with philosophy content
-- [ ] Create seed migration: 18 tools in master catalog
-- [ ] Create seed migration: all tool activation mappings with config overrides
-- [ ] Create FK migration: `iam_families.primary_methodology_id` → `method_definitions(id)`
-- [ ] Create FK migration: `iam_students.methodology_override_id` → `method_definitions(id)`
+- [x] Create migration: `method_definitions` table
+- [x] Create migration: `method_tools` table
+- [x] Create migration: `method_tool_activations` table
+- [x] Create seed migration: 6 methodologies with philosophy content
+- [x] Create seed migration: 22 tools in master catalog
+- [x] Create seed migration: all tool activation mappings with config overrides
+- [x] Create FK migration: `iam_families.primary_methodology_id` → `method_definitions(id)`
+- [x] Create FK migration: `iam_students.methodology_override_id` → `method_definitions(id)`
 
 #### Interfaces
-- [ ] Define `MethodologyService` interface in `internal/method/ports.go`
-- [ ] Define `MethodologyDefinitionRepository` interface in `internal/method/ports.go`
-- [ ] Define `ToolRepository` interface in `internal/method/ports.go`
-- [ ] Define `ToolActivationRepository` interface in `internal/method/ports.go`
+- [x] Define `MethodologyService` interface in `internal/method/ports.go`
+- [x] Define `MethodologyDefinitionRepository` interface in `internal/method/ports.go`
+- [x] Define `ToolRepository` interface in `internal/method/ports.go`
+- [x] Define `ToolActivationRepository` interface in `internal/method/ports.go`
 
 #### Domain Layer
-- [ ] Create `internal/method/domain/tool_resolver.go`
-- [ ] Implement `ToolResolver` aggregate
-- [ ] Define `MethodError` types in `internal/method/domain/errors.go`
-- [ ] Implement error-to-AppError conversion
+- [x] Create `internal/method/domain/tool_resolver.go`
+- [x] Implement `ToolResolver` aggregate
+- [x] Define `MethodError` types in `internal/method/domain/errors.go`
+- [x] Implement error-to-AppError conversion
 
 #### Repository Implementations
-- [ ] Implement `PgMethodologyDefinitionRepository`
-- [ ] Implement `PgToolRepository`
-- [ ] Implement `PgToolActivationRepository`
+- [x] Implement `PgMethodologyDefinitionRepository`
+- [x] Implement `PgToolRepository`
+- [x] Implement `PgToolActivationRepository`
 
 #### Service Implementation
-- [ ] Implement `MethodologyServiceImpl` with all Phase 1 methods
-- [ ] Wire `MethodologyServiceImpl` in `main.go` with `MethodologyService` interface
+- [x] Implement `MethodologyServiceImpl` with all Phase 1 methods
+- [x] Wire `MethodologyServiceImpl` in `main.go` with `MethodologyService` interface
 
 #### API Endpoints
-- [ ] `GET  /v1/methodologies` — list active methodologies
-- [ ] `GET  /v1/methodologies/:slug` — get methodology detail
-- [ ] `GET  /v1/methodologies/:slug/tools` — list tools for methodology
-- [ ] `GET  /v1/families/tools` — resolve family's active tool set
-- [ ] `GET  /v1/families/students/:id/tools` — resolve student's tool set
-- [ ] `PATCH /v1/families/methodology` — update family methodology selection
+- [x] `GET  /v1/methodologies` — list active methodologies
+- [x] `GET  /v1/methodologies/:slug` — get methodology detail
+- [x] `GET  /v1/methodologies/:slug/tools` — list tools for methodology
+- [x] `GET  /v1/families/tools` — resolve family's active tool set
+- [x] `GET  /v1/families/students/:id/tools` — resolve student's tool set
+- [x] `PATCH /v1/families/methodology` — update family methodology selection
 
 #### Models (DTOs)
-- [ ] `UpdateMethodologyCommand` with validator tags
-- [ ] `MethodologySummaryResponse` with json + swaggo tags
-- [ ] `MethodologyDetailResponse` with json + swaggo tags
-- [ ] `ActiveToolResponse` with json + swaggo tags
-- [ ] `MethodologySelectionResponse` with json + swaggo tags
-- [ ] All internal types (`MethodologyDefinition`, `Tool`, `ToolActivationWithTool`) as GORM models
+- [x] `UpdateMethodologyCommand` with validator tags
+- [x] `MethodologySummaryResponse` with json + swaggo tags
+- [x] `MethodologyDetailResponse` with json + swaggo tags
+- [x] `ActiveToolResponse` with json + swaggo tags
+- [x] `MethodologySelectionResponse` with json + swaggo tags
+- [x] All internal types (`MethodologyDefinition`, `Tool`, `ToolActivationWithTool`) as GORM models
 
 #### Domain Events
-- [ ] Define `FamilyMethodologyChanged` event in `internal/method/events.go`
-- [ ] Register event subscriptions in `main.go`
+- [x] Define `FamilyMethodologyChanged` event in `internal/method/events.go`
+- [x] Register event subscriptions in `main.go`
 
 #### Tests
-- [ ] Integration test: seed migration produces 6 methodologies and 18 tools
-- [ ] Integration test: `GET /v1/methodologies` returns all 6 in order
-- [ ] Integration test: `GET /v1/methodologies/:slug` returns full detail
-- [ ] Integration test: `GET /v1/methodologies/:slug/tools` returns correct tool set
-- [ ] Unit test: `ToolResolver` dedup — same tool in primary + secondary → primary config wins
-- [ ] Unit test: `ToolResolver` union — tools from multiple methodologies are combined
-- [ ] Unit test: `ToolResolver` filters inactive tools
-- [ ] Integration test: `PATCH /v1/families/methodology` validates IDs and publishes event
-- [ ] Integration test: `PATCH /v1/families/methodology` with invalid IDs returns 422
-- [ ] Integration test: student tool resolution with/without override
-- [ ] Verify: no methodology name branching in `internal/method/`
-- [ ] Verify: `golangci-lint run ./...` passes
-- [ ] Verify: `go test ./...` passes
+- [x] Integration test: seed migration produces 6 methodologies and 22 tools
+- [x] Integration test: `GET /v1/methodologies` returns all 6 in order (`TestListActive_OrderedByDisplayOrder`)
+- [x] Integration test: `GET /v1/methodologies/:slug` returns full detail (`TestGetMethodologyBySlug_PhilosophyJSON`)
+- [x] Integration test: `GET /v1/methodologies/:slug/tools` returns correct tool set (`TestGetCharlotteMasonTools_CorrectCount`)
+- [x] Unit test: `ToolResolver` dedup — same tool in primary + secondary → primary config wins
+- [x] Unit test: `ToolResolver` union — tools from multiple methodologies are combined
+- [x] Unit test: `ToolResolver` filters inactive tools
+- [x] Integration test: `PATCH /v1/families/methodology` validates IDs and publishes event (`TestUpdateFamilyMethodology_ValidIDs_PublishesEvent`)
+- [x] Integration test: `PATCH /v1/families/methodology` with invalid IDs returns 422 (`TestUpdateFamilyMethodology_InvalidID_ReturnsError`)
+- [x] Integration test: student tool resolution with/without override (`TestStudentTools_WithOverride`, `TestStudentTools_NoOverrideFallsBackToFamily`)
+- [x] Verify: no methodology name branching in `internal/method/`
+- [x] Verify: `golangci-lint run ./...` passes
+- [x] Verify: `go test ./...` passes
 
 #### Code Generation
 - [ ] Generate OpenAPI spec with swaggo (`swag init`)

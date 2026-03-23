@@ -1,7 +1,7 @@
 // @title Homegrown Academy API
 // @version 0.1.0
 // @description API for the Homegrown Academy homeschooling platform
-// @host localhost:3000
+// @host localhost:3500
 // @BasePath /v1
 package main
 
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/pressly/goose/v3"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	iamadapters "github.com/homegrown-academy/homegrown-academy/internal/iam/adapters"
+	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
@@ -118,6 +120,62 @@ func main() {
 
 	iamSvc := iam.NewIamService(familyRepo, parentRepo, studentRepo, kratosAdapter, eventBus, db)
 
+	// ── Step 7b: Wire method:: domain ────────────────────────────────────────────
+	// method:: is constructed after iam:: because iam:: is a dependency of method::.
+	// method:: validates methodology IDs; iam:: persists them. [02-method §11.2]
+	defRepo := method.NewPgMethodologyDefinitionRepository(db)
+	toolRepo := method.NewPgToolRepository(db)
+	activationRepo := method.NewPgToolActivationRepository(db)
+
+	// Adapter bridges iam.IamService → method.IamServiceForMethod without circular import.
+	// Closures convert between iam's plain string slugs and method's typed MethodologyID. [02-method §11.2]
+	iamForMethod := method.NewIamAdapter(
+		func(ctx context.Context, scope *shared.FamilyScope) (method.MethodologyID, []method.MethodologyID, error) {
+			primary, secondary, err := iamSvc.GetFamilyMethodologyIDs(ctx, scope)
+			if err != nil {
+				return "", nil, err
+			}
+			secondaryIDs := make([]method.MethodologyID, len(secondary))
+			for i, s := range secondary {
+				secondaryIDs[i] = method.MethodologyID(s)
+			}
+			return method.MethodologyID(primary), secondaryIDs, nil
+		},
+		func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*method.StudentInfo, error) {
+			resp, err := iamSvc.GetStudent(ctx, scope, studentID)
+			if err != nil {
+				return nil, err
+			}
+			var overrideSlug *method.MethodologyID
+			if resp.MethodologyOverrideSlug != nil {
+				s := method.MethodologyID(*resp.MethodologyOverrideSlug)
+				overrideSlug = &s
+			}
+			return &method.StudentInfo{
+				ID:                      resp.ID,
+				MethodologyOverrideSlug: overrideSlug,
+			}, nil
+		},
+		func(ctx context.Context, scope *shared.FamilyScope, primarySlug method.MethodologyID, secondarySlugs []method.MethodologyID) error {
+			secondary := make([]string, len(secondarySlugs))
+			for i, s := range secondarySlugs {
+				secondary[i] = string(s)
+			}
+			return iamSvc.SetFamilyMethodology(ctx, scope, string(primarySlug), secondary)
+		},
+	)
+	methodSvc := method.NewMethodologyService(defRepo, toolRepo, activationRepo, iamForMethod, eventBus)
+
+	// Inject default methodology resolver into IAM now that method:: is wired. [02-method Gap 5b]
+	// Wraps method.MethodologyID → string for iam.DefaultMethodologyResolver.
+	iamSvc.SetDefaultMethodologyResolver(func(ctx context.Context) (string, error) {
+		slug, err := methodSvc.GetDefaultMethodologySlug(ctx)
+		if err != nil {
+			return "", err
+		}
+		return string(slug), nil
+	})
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -129,6 +187,7 @@ func main() {
 		Config:   cfg,
 		Version:  version,
 		IAM:      iamSvc,
+		Method:   methodSvc,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────

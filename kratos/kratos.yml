@@ -4,11 +4,11 @@ dsn: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
 
 serve:
   public:
-    base_url: http://localhost:4433
+    base_url: http://localhost:4933
     cors:
       enabled: true
       allowed_origins:
-        - http://localhost:5173
+        - http://localhost:5673
       allowed_methods:
         - GET
         - POST
@@ -23,20 +23,20 @@ serve:
         - Set-Cookie
       allow_credentials: true
   admin:
-    base_url: http://localhost:4434
+    base_url: http://localhost:4934
 
 selfservice:
-  default_browser_return_url: http://localhost:5173/
+  default_browser_return_url: http://localhost:5673/
 
   flows:
     registration:
-      ui_url: http://localhost:5173/auth/registration
+      ui_url: http://localhost:5673/auth/registration
       after:
         password:
           hooks:
             - hook: web_hook
               config:
-                url: http://host.docker.internal:3000/hooks/kratos/post-registration
+                url: http://host.docker.internal:3500/hooks/kratos/post-registration
                 method: POST
                 body: file:///etc/kratos/webhook-body.jsonnet
                 auth:
@@ -47,13 +47,13 @@ selfservice:
                     in: header
 
     login:
-      ui_url: http://localhost:5173/auth/login
+      ui_url: http://localhost:5673/auth/login
       after:
         password:
           hooks:
             - hook: web_hook
               config:
-                url: http://host.docker.internal:3000/hooks/kratos/post-login
+                url: http://host.docker.internal:3500/hooks/kratos/post-login
                 method: POST
                 body: file:///etc/kratos/webhook-body.jsonnet
                 auth:
@@ -65,11 +65,11 @@ selfservice:
 
     verification:
       enabled: true
-      ui_url: http://localhost:5173/auth/verification
+      ui_url: http://localhost:5673/auth/verification
 
     recovery:
       enabled: true
-      ui_url: http://localhost:5173/auth/recovery
+      ui_url: http://localhost:5673/auth/recovery
 
   methods:
     password:

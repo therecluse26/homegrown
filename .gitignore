@@ -20,6 +20,9 @@ dist/
 # OpenAPI generated output
 openapi/spec.yaml
 openapi/docs.go
+openapi/swagger.json
+openapi/swagger.yaml
+openapi/openapi3.json
 
 # Frontend
 node_modules/

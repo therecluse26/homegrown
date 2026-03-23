@@ -10,21 +10,25 @@ import (
 	"gorm.io/gorm"
 )
 
-// defaultMethodologyID is a placeholder UUID for the platform-default methodology.
-// Used during registration until the method:: domain is implemented. [Plan §5]
-//
-// TODO(02-method): Replace with method.Service.GetDefaultMethodologyID() call.
-var defaultMethodologyID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+// DefaultMethodologyResolver is a function that returns the default methodology slug.
+// Injected by main.go after method:: is wired. Before injection, falls back to the
+// charlotte-mason slug (display_order=1 in seed data).
+type DefaultMethodologyResolver func(ctx context.Context) (string, error)
+
+// fallbackMethodologySlug is the last-resort default if the resolver is not yet set.
+// Matches Charlotte Mason (display_order=1) from the seed migration.
+const fallbackMethodologySlug = "charlotte-mason"
 
 // IamServiceImpl implements IamService.
 // Holds references to repositories, adapters, the event bus, and the raw DB for transactions.
 type IamServiceImpl struct {
-	familyRepo   FamilyRepository
-	parentRepo   ParentRepository
-	studentRepo  StudentRepository
-	kratosAdapter KratosAdapter
-	eventBus     *shared.EventBus
-	db           *gorm.DB // for transaction management
+	familyRepo               FamilyRepository
+	parentRepo               ParentRepository
+	studentRepo              StudentRepository
+	kratosAdapter            KratosAdapter
+	eventBus                 *shared.EventBus
+	db                       *gorm.DB // for transaction management
+	defaultMethodologyResolver DefaultMethodologyResolver
 }
 
 // NewIamService creates a new IamServiceImpl.
@@ -44,6 +48,26 @@ func NewIamService(
 		eventBus:      eventBus,
 		db:            db,
 	}
+}
+
+// SetDefaultMethodologyResolver injects the methodology resolver after method:: is wired.
+// Called from cmd/server/main.go. [02-method Gap 5b]
+func (s *IamServiceImpl) SetDefaultMethodologyResolver(resolver DefaultMethodologyResolver) {
+	s.defaultMethodologyResolver = resolver
+}
+
+// getDefaultMethodologySlug returns the default methodology slug using the injected resolver,
+// or the fallback slug if the resolver is not set.
+func (s *IamServiceImpl) getDefaultMethodologySlug(ctx context.Context) string {
+	if s.defaultMethodologyResolver != nil {
+		slug, err := s.defaultMethodologyResolver(ctx)
+		if err != nil {
+			slog.Error("failed to resolve default methodology slug, using fallback", "error", err)
+			return fallbackMethodologySlug
+		}
+		return slug
+	}
+	return fallbackMethodologySlug
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -148,7 +172,7 @@ func (s *IamServiceImpl) HandlePostRegistration(ctx context.Context, payload Kra
 
 		family, err := familyRepo.Create(ctx, CreateFamily{
 			DisplayName:          displayNameFromTraits(payload.Traits),
-			PrimaryMethodologyID: defaultMethodologyID,
+			PrimaryMethodologySlug: s.getDefaultMethodologySlug(ctx),
 		})
 		if err != nil {
 			return err
@@ -312,6 +336,45 @@ func (s *IamServiceImpl) SubmitCoppaConsent(ctx context.Context, scope *shared.F
 	return toConsentStatusResponse(family), nil
 }
 
+// ─── Cross-Domain Methods (consumed by method::) ─────────────────────────────
+
+func (s *IamServiceImpl) GetFamilyMethodologyIDs(ctx context.Context, scope *shared.FamilyScope) (string, []string, error) {
+	var family *Family
+	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		var err error
+		family, err = NewPgFamilyRepository(tx).FindByID(ctx, scope.FamilyID())
+		return err
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	secondary := family.SecondaryMethodologySlugs
+	if secondary == nil {
+		secondary = []string{}
+	}
+	return family.PrimaryMethodologySlug, secondary, nil
+}
+
+func (s *IamServiceImpl) GetStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*StudentResponse, error) {
+	var student *Student
+	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		var err error
+		student, err = NewPgStudentRepository(tx).FindByID(ctx, scope, studentID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := toStudentResponse(student)
+	return &result, nil
+}
+
+func (s *IamServiceImpl) SetFamilyMethodology(ctx context.Context, scope *shared.FamilyScope, primarySlug string, secondarySlugs []string) error {
+	return shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		return NewPgFamilyRepository(tx).SetMethodology(ctx, scope, primarySlug, secondarySlugs)
+	})
+}
+
 // ─── COPPA State Machine ──────────────────────────────────────────────────────
 
 // resolveConsentTransition determines the target COPPA status from the current status and command.
@@ -365,34 +428,34 @@ func buildFamilyProfileResponse(family *Family, parents []Parent, students []Stu
 			IsPrimary:   p.IsPrimary,
 		}
 	}
-	secondary := family.SecondaryMethodologyIDs
+	secondary := family.SecondaryMethodologySlugs
 	if secondary == nil {
-		secondary = []uuid.UUID{}
+		secondary = []string{}
 	}
 	return &FamilyProfileResponse{
-		ID:                      family.ID,
-		DisplayName:             family.DisplayName,
-		StateCode:               family.StateCode,
-		LocationRegion:          family.LocationRegion,
-		PrimaryMethodologyID:    family.PrimaryMethodologyID,
-		SecondaryMethodologyIDs: secondary,
-		SubscriptionTier:        family.SubscriptionTier,
-		CoppaConsentStatus:      string(family.CoppaConsentStatus),
-		Parents:                 parentSummaries,
-		StudentCount:            len(students),
-		CreatedAt:               family.CreatedAt,
+		ID:                       family.ID,
+		DisplayName:              family.DisplayName,
+		StateCode:                family.StateCode,
+		LocationRegion:           family.LocationRegion,
+		PrimaryMethodologySlug:   family.PrimaryMethodologySlug,
+		SecondaryMethodologySlugs: secondary,
+		SubscriptionTier:         family.SubscriptionTier,
+		CoppaConsentStatus:       string(family.CoppaConsentStatus),
+		Parents:                  parentSummaries,
+		StudentCount:             len(students),
+		CreatedAt:                family.CreatedAt,
 	}
 }
 
 func toStudentResponse(s *Student) StudentResponse {
 	return StudentResponse{
-		ID:                    s.ID,
-		DisplayName:           s.DisplayName,
-		BirthYear:             s.BirthYear,
-		GradeLevel:            s.GradeLevel,
-		MethodologyOverrideID: s.MethodologyOverrideID,
-		CreatedAt:             s.CreatedAt,
-		UpdatedAt:             s.UpdatedAt,
+		ID:                      s.ID,
+		DisplayName:             s.DisplayName,
+		BirthYear:               s.BirthYear,
+		GradeLevel:              s.GradeLevel,
+		MethodologyOverrideSlug: s.MethodologyOverrideSlug,
+		CreatedAt:               s.CreatedAt,
+		UpdatedAt:               s.UpdatedAt,
 	}
 }
 

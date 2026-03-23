@@ -56,6 +56,20 @@ type IamService interface {
 	// DeleteStudent deletes a student profile. Publishes StudentDeleted.
 	DeleteStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error
 
+	// ─── Cross-Domain Methods (consumed by method::) ──────────────────────────
+
+	// GetFamilyMethodologyIDs returns the family's primary and secondary methodology slugs.
+	// Used by method:: for tool resolution. [02-method §11.2]
+	GetFamilyMethodologyIDs(ctx context.Context, scope *shared.FamilyScope) (primarySlug string, secondarySlugs []string, err error)
+
+	// GetStudent returns a single student by ID. Used by method:: for student tool resolution.
+	// [02-method §10.2]
+	GetStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*StudentResponse, error)
+
+	// SetFamilyMethodology persists the family's methodology selection.
+	// Called by method:: service after validation. [02-method §11.2, Appendix A]
+	SetFamilyMethodology(ctx context.Context, scope *shared.FamilyScope, primarySlug string, secondarySlugs []string) error
+
 	// SubmitCoppaConsent submits COPPA parental consent or acknowledges the COPPA notice.
 	// Validates consent method. Publishes CoppaConsentGranted on Consented/ReVerified transition.
 	// Phase 1: credit card micro-charge verification is stubbed (no Stripe call). [§9.3]
@@ -84,8 +98,8 @@ type FamilyRepository interface {
 	// UpdateConsentStatus sets the COPPA consent status and consent method. Family-scoped.
 	UpdateConsentStatus(ctx context.Context, scope *shared.FamilyScope, status CoppaConsentStatus, method *string) (*Family, error)
 
-	// SetMethodology sets methodology IDs on the family. Called by method:: service. Family-scoped.
-	SetMethodology(ctx context.Context, scope *shared.FamilyScope, primaryID uuid.UUID, secondaryIDs []uuid.UUID) error
+	// SetMethodology sets methodology slugs on the family. Called by method:: service. Family-scoped.
+	SetMethodology(ctx context.Context, scope *shared.FamilyScope, primarySlug string, secondarySlugs []string) error
 
 	// SetDeletionRequested sets or clears deletion_requested_at. Family-scoped.
 	SetDeletionRequested(ctx context.Context, scope *shared.FamilyScope, requestedAt *time.Time) error

@@ -7,7 +7,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "generate-types": "openapi-typescript ../openapi/spec.yaml -o src/api/generated/schema.ts",
+    "convert-spec": "swagger2openapi ../openapi/swagger.json -o ../openapi/openapi3.json",
+    "generate-types": "npm run convert-spec && openapi-typescript ../openapi/openapi3.json -o src/api/generated/schema.ts",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "postcss": "^8",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "swagger2openapi": "^7",
     "vite": "^6"
   }
 }

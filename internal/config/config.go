@@ -22,7 +22,7 @@ const (
 type AppConfig struct {
 	// ─── Database ───────────────────────────────────────────────────
 	// PostgreSQL connection string.
-	// Example: "postgres://user:pass@localhost:5432/homegrown"
+	// Example: "postgres://user:pass@localhost:5932/homegrown"
 	DatabaseURL string
 
 	// Maximum connections in the GORM pool. Default: 10.
@@ -30,7 +30,7 @@ type AppConfig struct {
 
 	// ─── Redis ──────────────────────────────────────────────────────
 	// Redis connection string.
-	// Example: "redis://localhost:6379"
+	// Example: "redis://localhost:6879"
 	RedisURL string
 
 	// ─── Auth Provider ───────────────────────────────────────────────
@@ -47,14 +47,14 @@ type AppConfig struct {
 
 	// ─── CORS ───────────────────────────────────────────────────────
 	// Comma-separated list of allowed origins.
-	// Example: "http://localhost:5173,https://app.homegrown.academy"
+	// Example: "http://localhost:5673,https://app.homegrown.academy"
 	CORSAllowedOrigins []string
 
 	// ─── Server ─────────────────────────────────────────────────────
 	// Host to bind to. Default: "0.0.0.0".
 	ServerHost string
 
-	// Port to bind to. Default: 3000.
+	// Port to bind to. Default: 3500.
 	ServerPort int
 
 	// ─── Logging ────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ func LoadConfig() (*AppConfig, error) {
 
 	serverHost := envOrDefault("SERVER_HOST", "0.0.0.0")
 
-	serverPort := 3000
+	serverPort := 3500
 	if v, ok := os.LookupEnv("SERVER_PORT"); ok {
 		parsed, parseErr := strconv.Atoi(v)
 		if parseErr != nil {

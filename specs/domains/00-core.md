@@ -257,18 +257,18 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 5673,
     proxy: {
       "/v1": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3500",
         changeOrigin: true,
       },
       "/hooks": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3500",
         changeOrigin: true,
       },
       "/health": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3500",
         changeOrigin: true,
       },
     },
@@ -300,7 +300,7 @@ const (
 type AppConfig struct {
 	// ─── Database ───────────────────────────────────────────────────
 	// PostgreSQL connection string.
-	// Example: "postgres://user:pass@localhost:5432/homegrown"
+	// Example: "postgres://user:pass@localhost:5932/homegrown"
 	DatabaseURL string
 
 	// Maximum connections in the GORM pool. Default: 10.
@@ -308,7 +308,7 @@ type AppConfig struct {
 
 	// ─── Redis ──────────────────────────────────────────────────────
 	// Redis connection string.
-	// Example: "redis://localhost:6379"
+	// Example: "redis://localhost:6879"
 	RedisURL string
 
 	// ─── Auth Provider ───────────────────────────────────────────────
@@ -325,7 +325,7 @@ type AppConfig struct {
 
 	// ─── CORS ───────────────────────────────────────────────────────
 	// Comma-separated list of allowed origins.
-	// Example: "http://localhost:5173,https://app.homegrown.academy"
+	// Example: "http://localhost:5673,https://app.homegrown.academy"
 	CORSAllowedOrigins []string
 
 	// ─── Server ─────────────────────────────────────────────────────
@@ -491,23 +491,23 @@ is gitignored.
 # =============================================================================
 
 # Database
-DATABASE_URL=postgres://homegrown:homegrown@localhost:5432/homegrown
+DATABASE_URL=postgres://homegrown:homegrown@localhost:5932/homegrown
 DATABASE_MAX_CONNECTIONS=5
 
 # Redis
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://localhost:6879
 
 # Auth Provider (Ory Kratos sidecar)
-AUTH_ADMIN_URL=http://localhost:4434
-AUTH_PUBLIC_URL=http://localhost:4433
+AUTH_ADMIN_URL=http://localhost:4934
+AUTH_PUBLIC_URL=http://localhost:4933
 AUTH_WEBHOOK_SECRET=dev-webhook-secret-change-in-production
 
 # CORS (comma-separated)
-CORS_ALLOWED_ORIGINS=http://localhost:5173
+CORS_ALLOWED_ORIGINS=http://localhost:5673
 
 # Server
 SERVER_HOST=0.0.0.0
-SERVER_PORT=3000
+SERVER_PORT=3500
 
 # Logging
 LOG_LEVEL=debug
@@ -2048,7 +2048,7 @@ services:
       POSTGRES_PASSWORD: homegrown
       POSTGRES_DB: homegrown
     ports:
-      - "5432:5432"
+      - "5932:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -2060,25 +2060,33 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6879:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1525:1025"   # SMTP
+      - "8525:8025"   # Web UI
+
   kratos:
     image: oryd/kratos:v1.3
     depends_on:
       postgres:
         condition: service_healthy
+      mailhog:
+        condition: service_started
     environment:
       DSN: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
-      SERVE_PUBLIC_BASE_URL: http://localhost:4433
-      SERVE_ADMIN_BASE_URL: http://localhost:4434
+      SERVE_PUBLIC_BASE_URL: http://localhost:4933
+      SERVE_ADMIN_BASE_URL: http://localhost:4934
     ports:
-      - "4433:4433"   # Public API
-      - "4434:4434"   # Admin API
+      - "4933:4433"   # Public API
+      - "4934:4434"   # Admin API
     volumes:
       - ./kratos:/etc/kratos
     command: serve --config /etc/kratos/kratos.yml --dev --watch-courier
@@ -2122,11 +2130,11 @@ dsn: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
 
 serve:
   public:
-    base_url: http://localhost:4433
+    base_url: http://localhost:4933
     cors:
       enabled: true
       allowed_origins:
-        - http://localhost:5173
+        - http://localhost:5673
       allowed_methods:
         - GET
         - POST
@@ -2141,20 +2149,20 @@ serve:
         - Set-Cookie
       allow_credentials: true
   admin:
-    base_url: http://localhost:4434
+    base_url: http://localhost:4934
 
 selfservice:
-  default_browser_return_url: http://localhost:5173/
+  default_browser_return_url: http://localhost:5673/
 
   flows:
     registration:
-      ui_url: http://localhost:5173/auth/registration
+      ui_url: http://localhost:5673/auth/registration
       after:
         password:
           hooks:
             - hook: web_hook
               config:
-                url: http://host.docker.internal:3000/hooks/kratos/post-registration
+                url: http://host.docker.internal:3500/hooks/kratos/post-registration
                 method: POST
                 body: file:///etc/kratos/webhook-body.jsonnet
                 auth:
@@ -2165,13 +2173,13 @@ selfservice:
                     in: header
 
     login:
-      ui_url: http://localhost:5173/auth/login
+      ui_url: http://localhost:5673/auth/login
       after:
         password:
           hooks:
             - hook: web_hook
               config:
-                url: http://host.docker.internal:3000/hooks/kratos/post-login
+                url: http://host.docker.internal:3500/hooks/kratos/post-login
                 method: POST
                 body: file:///etc/kratos/webhook-body.jsonnet
                 auth:
@@ -2183,11 +2191,11 @@ selfservice:
 
     verification:
       enabled: true
-      ui_url: http://localhost:5173/auth/verification
+      ui_url: http://localhost:5673/auth/verification
 
     recovery:
       enabled: true
-      ui_url: http://localhost:5173/auth/recovery
+      ui_url: http://localhost:5673/auth/recovery
 
   methods:
     password:

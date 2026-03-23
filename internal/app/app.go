@@ -8,6 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
+	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
@@ -31,7 +32,7 @@ type AppState struct {
 
 	// ─── Domain Services (added incrementally as domains are built) ─
 	IAM    iam.IamService
-	// Method method.MethodologyService
+	Method method.MethodologyService
 	// Social social.SocialService
 	// ... etc.
 }
@@ -110,11 +111,18 @@ func NewApp(state *AppState) *echo.Echo {
 	auth.Use(middleware.RateLimit(state, 100, 60*time.Second))
 	auth.Use(middleware.Auth(state))
 
+	// ─── Public API Routes ─────────────────────────────────────────────
+	// Some domain routes are public (no auth required), e.g. methodology exploration.
+	pub := e.Group("/v1")
+	pub.Use(middleware.RateLimit(state, 100, 60*time.Second))
+
 	// ─── Domain Route Registration ────────────────────────────────────
 	if state.IAM != nil {
 		iam.NewHandler(state.IAM, state.Config.AuthWebhookSecret).Register(auth, hooks)
 	}
-	// 02-method: methodHandler.Register(auth)
+	if state.Method != nil {
+		method.NewHandler(state.Method).Register(pub, auth)
+	}
 	// etc.
 
 	return e

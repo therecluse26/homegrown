@@ -19,27 +19,24 @@ cd homegrown-academy
 # 2. Copy env file and configure
 cp .env.example .env
 
-# 3. Start infrastructure (Postgres, Redis, Kratos)
-make docker-up
-
-# 4. Install frontend dependencies
+# 3. Install frontend dependencies
 cd frontend && npm install && cd ..
 
-# 5. Install Air (one-time)
+# 4. Install Air (one-time)
 go install github.com/air-verse/air@latest
 
-# 6. Start development servers (backend + frontend with hot-reload)
+# 5. Start development servers (auto-starts Docker infrastructure)
 make dev
 ```
 
-The backend runs on `localhost:3000` and the frontend on `localhost:5173`.
+The backend runs on `localhost:3500` and the frontend on `localhost:5673`.
 
 ## Available Commands
 
 | Command | Description |
 |---------|-------------|
-| `make dev` | Start backend (Air hot-reload) + frontend (Vite HMR) |
-| `make dev-api` | Start only the Go backend with hot-reload |
+| `make dev` | Start backend (Air hot-reload) + frontend (Vite HMR); auto-starts Docker services |
+| `make dev-api` | Start only the Go backend with hot-reload; auto-starts Docker services |
 | `make dev-web` | Start only the Vite frontend dev server |
 | `make docker-up` | Start infrastructure services |
 | `make docker-down` | Stop infrastructure services |

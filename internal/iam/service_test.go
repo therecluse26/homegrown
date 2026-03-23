@@ -198,28 +198,24 @@ func TestCoppaConsentGrantedEvent(t *testing.T) {
 	}
 }
 
-// ─── UUIDArray Tests ──────────────────────────────────────────────────────────
+// ─── SlugArray Tests ──────────────────────────────────────────────────────────
 
-func TestUUIDArray(t *testing.T) {
-	id1 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
-	id2 := uuid.MustParse("b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
-
-	t.Run("scan two UUIDs from string", func(t *testing.T) {
-		var arr UUIDArray
-		err := arr.Scan("{a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11,b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12}")
-		if err != nil {
+func TestSlugArray(t *testing.T) {
+	t.Run("scan two slugs from string", func(t *testing.T) {
+		var arr SlugArray
+		if err := arr.Scan("{charlotte-mason,classical}"); err != nil {
 			t.Fatal(err)
 		}
 		if len(arr) != 2 {
 			t.Fatalf("want 2 elements, got %d", len(arr))
 		}
-		if arr[0] != id1 || arr[1] != id2 {
+		if arr[0] != "charlotte-mason" || arr[1] != "classical" {
 			t.Errorf("unexpected values: %v", arr)
 		}
 	})
 
 	t.Run("scan empty array", func(t *testing.T) {
-		var arr UUIDArray
+		var arr SlugArray
 		if err := arr.Scan("{}"); err != nil {
 			t.Fatal(err)
 		}
@@ -229,29 +225,28 @@ func TestUUIDArray(t *testing.T) {
 	})
 
 	t.Run("scan nil", func(t *testing.T) {
-		var arr UUIDArray
+		var arr SlugArray
 		if err := arr.Scan(nil); err != nil {
 			t.Fatal(err)
 		}
 		if arr != nil {
-			t.Error("expected nil UUIDArray after scanning nil")
+			t.Error("expected nil SlugArray after scanning nil")
 		}
 	})
 
-	t.Run("value for two UUIDs", func(t *testing.T) {
-		arr := UUIDArray{id1, id2}
+	t.Run("value for two slugs", func(t *testing.T) {
+		arr := SlugArray{"charlotte-mason", "classical"}
 		val, err := arr.Value()
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := "{a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11,b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12}"
-		if val != want {
-			t.Errorf("got %v, want %v", val, want)
+		if val != "{charlotte-mason,classical}" {
+			t.Errorf("got %v, want {charlotte-mason,classical}", val)
 		}
 	})
 
 	t.Run("value for empty array", func(t *testing.T) {
-		arr := UUIDArray{}
+		arr := SlugArray{}
 		val, err := arr.Value()
 		if err != nil {
 			t.Fatal(err)
