@@ -141,7 +141,7 @@ Listed here for reference only — search does not create or modify these.
 -- incremental indexing. Created in Phase 1 migration but unused until Phase 2.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE search_index_state (
-    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID        PRIMARY KEY DEFAULT uuidv7(),
     collection_name TEXT        NOT NULL UNIQUE
                     CHECK (collection_name IN (
                         'marketplace_listings', 'social_posts',

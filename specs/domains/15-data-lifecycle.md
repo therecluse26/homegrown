@@ -64,7 +64,7 @@ All tables use the `lifecycle_` prefix. `[ARCH §5.1]`
 
 -- Export requests: tracks family data export jobs
 CREATE TABLE lifecycle_export_requests (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     requested_by    UUID NOT NULL REFERENCES iam_parents(id),
     status          VARCHAR(20) NOT NULL DEFAULT 'pending'
@@ -93,7 +93,7 @@ CREATE INDEX idx_lifecycle_export_requests_status
 
 -- Deletion requests: tracks account deletion with grace period
 CREATE TABLE lifecycle_deletion_requests (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     requested_by    UUID NOT NULL REFERENCES iam_parents(id),
     reason          TEXT,                -- optional user-provided reason
@@ -124,7 +124,7 @@ CREATE INDEX idx_lifecycle_deletion_requests_grace
 
 -- Account recovery requests
 CREATE TABLE lifecycle_recovery_requests (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     email           VARCHAR(255) NOT NULL,
     -- Verification method used
     verification_method VARCHAR(20) NOT NULL
@@ -146,7 +146,7 @@ CREATE INDEX idx_lifecycle_recovery_requests_email
 
 -- Retention policy configuration
 CREATE TABLE lifecycle_retention_policies (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     data_category   VARCHAR(50) NOT NULL UNIQUE
                     CHECK (data_category IN (
                         'user_content',         -- posts, comments, messages

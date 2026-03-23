@@ -100,7 +100,7 @@ CREATE TYPE onb_roadmap_item_type_enum AS ENUM (
 -- Wizard progress tracking [S§6]
 -- One row per family. Created when FamilyCreated event is received.
 CREATE TABLE onb_wizard_progress (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL UNIQUE REFERENCES iam_families(id) ON DELETE CASCADE,
     status                onb_wizard_status_enum NOT NULL DEFAULT 'in_progress',
     current_step          onb_wizard_step_enum NOT NULL DEFAULT 'family_profile',
@@ -121,7 +121,7 @@ CREATE INDEX idx_onb_wizard_status ON onb_wizard_progress(status)
 -- Getting-started roadmap items [S§6.4]
 -- Materialized from method_definitions.onboarding_config when methodology step completes.
 CREATE TABLE onb_roadmap_items (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     wizard_id             UUID NOT NULL REFERENCES onb_wizard_progress(id) ON DELETE CASCADE,
     methodology_id        UUID NOT NULL,                       -- source methodology (for display);
@@ -144,7 +144,7 @@ CREATE INDEX idx_onb_roadmap_wizard ON onb_roadmap_items(wizard_id);
 -- Materialized from method_definitions.onboarding_config.starter_recs.
 -- Phase 1: static data from config. Phase 2: live marketplace queries.
 CREATE TABLE onb_starter_recommendations (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     wizard_id             UUID NOT NULL REFERENCES onb_wizard_progress(id) ON DELETE CASCADE,
     methodology_id        UUID NOT NULL,                       -- source methodology;
@@ -165,7 +165,7 @@ CREATE INDEX idx_onb_recs_wizard ON onb_starter_recommendations(wizard_id);
 -- Materialized from method_definitions.community_config.
 -- Phase 1: static group references. Phase 2: live social queries for nearby families/mentors.
 CREATE TABLE onb_community_suggestions (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     wizard_id             UUID NOT NULL REFERENCES onb_wizard_progress(id) ON DELETE CASCADE,
     methodology_id        UUID NOT NULL,                       -- source methodology;

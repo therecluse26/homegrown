@@ -171,7 +171,7 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 -- Activity/lesson definitions [S§8.1.1]
 -- Structured templates that families optionally reference when logging activities.
 CREATE TABLE learn_activity_defs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     description           TEXT,
@@ -199,7 +199,7 @@ CREATE INDEX idx_learn_activity_defs_search ON learn_activity_defs USING GIN(sea
 
 -- Assessment/test definitions [S§8.1.2] (Phase 2)
 CREATE TABLE learn_assessment_defs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     description           TEXT,
@@ -217,7 +217,7 @@ CREATE INDEX idx_learn_assessment_defs_publisher ON learn_assessment_defs(publis
 -- Reading item definitions [S§8.1.3]
 -- Book/reading material definitions. Can be created by families or publishers.
 CREATE TABLE learn_reading_items (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     author                TEXT,
@@ -244,7 +244,7 @@ CREATE INDEX idx_learn_reading_items_search ON learn_reading_items USING GIN(sea
 
 -- Project definitions [S§8.1.5] (Phase 2)
 CREATE TABLE learn_project_defs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     description           TEXT,
@@ -261,7 +261,7 @@ CREATE INDEX idx_learn_project_defs_publisher ON learn_project_defs(publisher_id
 -- Marketplace integration — metadata for purchased video content.
 -- Supports both self-hosted (HLS) and external (YouTube/Vimeo) video.
 CREATE TABLE learn_video_defs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     description           TEXT,
@@ -286,7 +286,7 @@ CREATE INDEX idx_learn_video_defs_methodology ON learn_video_defs(methodology_id
 -- Question bank [S§8.1.9]
 -- Individual questions created by publishers via authoring tools.
 CREATE TABLE learn_questions (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     question_type         TEXT NOT NULL
                           CHECK (question_type IN (
@@ -328,7 +328,7 @@ CREATE INDEX idx_learn_questions_search ON learn_questions USING GIN(search_vect
 -- Quiz definitions [S§8.1.9]
 -- Assembled from questions by publishers via quiz builder authoring tools.
 CREATE TABLE learn_quiz_defs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     description           TEXT,
@@ -370,7 +370,7 @@ CREATE INDEX idx_learn_quiz_questions_question ON learn_quiz_questions(question_
 -- Sequence definitions [S§8.1.12]
 -- Ordered content paths created by publishers via sequence builder.
 CREATE TABLE learn_sequence_defs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
     description           TEXT,
@@ -397,7 +397,7 @@ CREATE INDEX idx_learn_sequence_defs_search ON learn_sequence_defs USING GIN(sea
 -- Sequence items [S§8.1.12]
 -- Individual content steps within a sequence.
 CREATE TABLE learn_sequence_items (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     sequence_def_id       UUID NOT NULL REFERENCES learn_sequence_defs(id) ON DELETE CASCADE,
     sort_order            SMALLINT NOT NULL,
     content_type          TEXT NOT NULL
@@ -420,7 +420,7 @@ CREATE INDEX idx_learn_sequence_items_sequence ON learn_sequence_items(sequence_
 -- Polymorphic links between published content [§9 deep-dive]
 -- "This test is about this book", "This activity is part of this project"
 CREATE TABLE learn_artifact_links (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     source_type           TEXT NOT NULL CHECK (source_type IN (
                               'activity_def', 'assessment_def', 'reading_item',
                               'project_def', 'video_def', 'quiz_def', 'sequence_def'
@@ -455,7 +455,7 @@ CREATE INDEX idx_learn_artifact_links_target ON learn_artifact_links(target_type
 -- Daily activity entries. Optional content_id references an activity_def for
 -- curriculum-linked activities; NULL for ad-hoc family-logged activities.
 CREATE TABLE learn_activity_logs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     title                 TEXT NOT NULL,
@@ -489,7 +489,7 @@ CREATE INDEX idx_learn_activity_logs_search ON learn_activity_logs USING GIN(sea
 -- Narration records, free-form journals, and reflections.
 -- Optional content_id for prompted entries (e.g., from a curriculum).
 CREATE TABLE learn_journal_entries (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     entry_type            TEXT NOT NULL CHECK (entry_type IN ('freeform', 'narration', 'reflection')),
@@ -518,7 +518,7 @@ CREATE INDEX idx_learn_journal_entries_search ON learn_journal_entries USING GIN
 -- Progress snapshots [S§8.1.7]
 -- Periodic computed summaries. Written by background job, read by dashboard.
 CREATE TABLE learn_progress_snapshots (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     snapshot_date         DATE NOT NULL,
@@ -534,7 +534,7 @@ CREATE UNIQUE INDEX idx_learn_progress_snapshots_unique
 -- Reading progress [S§8.1.3]
 -- Per-student tracking of reading status for a specific reading item.
 CREATE TABLE learn_reading_progress (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     reading_item_id       UUID NOT NULL REFERENCES learn_reading_items(id) ON DELETE CASCADE,
@@ -555,7 +555,7 @@ CREATE INDEX idx_learn_reading_progress_family_student
 -- Assessment results [S§8.1.2] (Phase 2)
 -- Per-student test scores referencing an assessment definition.
 CREATE TABLE learn_assessment_results (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     assessment_def_id     UUID NOT NULL REFERENCES learn_assessment_defs(id) ON DELETE CASCADE,
@@ -574,7 +574,7 @@ CREATE INDEX idx_learn_assessment_results_family_student
 -- Project progress [S§8.1.5] (Phase 2)
 -- Per-student project tracking with milestone completion.
 CREATE TABLE learn_project_progress (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     project_def_id        UUID NOT NULL REFERENCES learn_project_defs(id) ON DELETE CASCADE,
@@ -595,7 +595,7 @@ CREATE INDEX idx_learn_project_progress_family_student
 -- Video progress [S§8.1.6] (Phase 2)
 -- Per-student video watch progress.
 CREATE TABLE learn_video_progress (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     video_def_id          UUID NOT NULL REFERENCES learn_video_defs(id) ON DELETE CASCADE,
@@ -614,7 +614,7 @@ CREATE INDEX idx_learn_video_progress_family_student
 -- Quiz sessions [S§8.1.9] (family-scoped)
 -- Per-student quiz-taking sessions. Tracks in-progress and completed quiz attempts.
 CREATE TABLE learn_quiz_sessions (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     quiz_def_id           UUID NOT NULL REFERENCES learn_quiz_defs(id) ON DELETE CASCADE,
@@ -643,7 +643,7 @@ CREATE INDEX idx_learn_quiz_sessions_status
 -- Sequence progress [S§8.1.12] (family-scoped)
 -- Per-student progress through a lesson sequence.
 CREATE TABLE learn_sequence_progress (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     sequence_def_id       UUID NOT NULL REFERENCES learn_sequence_defs(id) ON DELETE CASCADE,
@@ -666,7 +666,7 @@ CREATE INDEX idx_learn_sequence_progress_sequence
 -- Student assignments [S§8.6.3] (family-scoped)
 -- Parent-assigned content for supervised student sessions.
 CREATE TABLE learn_student_assignments (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id            UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     assigned_by           UUID NOT NULL REFERENCES iam_parents(id),
@@ -697,7 +697,7 @@ CREATE INDEX idx_learn_assignments_due
 -- Platform-managed hierarchical taxonomy. No family_id — shared across platform.
 -- Admin-editable, no code changes required to add subjects.
 CREATE TABLE learn_subject_taxonomy (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     parent_id             UUID REFERENCES learn_subject_taxonomy(id) ON DELETE CASCADE,
     name                  TEXT NOT NULL,
     slug                  TEXT NOT NULL UNIQUE,           -- e.g., 'math.algebra.linear-equations'
@@ -714,7 +714,7 @@ CREATE INDEX idx_learn_subject_taxonomy_level ON learn_subject_taxonomy(level, d
 -- Family-scoped custom subjects [S§8.3]
 -- Extend (not replace) the platform taxonomy within a family's scope.
 CREATE TABLE learn_custom_subjects (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     parent_taxonomy_id    UUID REFERENCES learn_subject_taxonomy(id),
     name                  TEXT NOT NULL,
@@ -728,7 +728,7 @@ CREATE INDEX idx_learn_custom_subjects_family ON learn_custom_subjects(family_id
 -- Reading lists [S§8.1.3]
 -- Named groupings of reading items. Family-scoped.
 CREATE TABLE learn_reading_lists (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     name                  TEXT NOT NULL,
     description           TEXT,
@@ -751,7 +751,7 @@ CREATE TABLE learn_reading_list_items (
 -- Grading scales [S§8.1.2] (Phase 2)
 -- Custom grading scales per family.
 CREATE TABLE learn_grading_scales (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     name                  TEXT NOT NULL,                  -- e.g., "Standard Letter Grades"
     scale_type            TEXT NOT NULL CHECK (scale_type IN ('letter', 'pass_fail', 'custom')),
@@ -765,7 +765,7 @@ CREATE INDEX idx_learn_grading_scales_family ON learn_grading_scales(family_id);
 
 -- Data export requests [S§8.5]
 CREATE TABLE learn_export_requests (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     requested_by          UUID NOT NULL REFERENCES iam_parents(id),
     status                TEXT NOT NULL DEFAULT 'pending'

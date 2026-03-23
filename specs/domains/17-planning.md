@@ -57,7 +57,7 @@ All tables use the `plan_` prefix. `[ARCH §5.1]`
 -- Schedule items: family-created calendar entries
 -- These are plan::-owned data, NOT duplicates of learning activities or events
 CREATE TABLE plan_schedule_items (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     -- Who this item is for (NULL = whole family)
     student_id      UUID REFERENCES iam_students(id),
@@ -105,7 +105,7 @@ CREATE INDEX idx_plan_schedule_items_linked_activity
 
 -- Schedule templates (Phase 2): reusable weekly schedule patterns
 CREATE TABLE plan_schedule_templates (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     name            VARCHAR(100) NOT NULL,
     description     TEXT,

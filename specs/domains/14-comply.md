@@ -196,7 +196,7 @@ CREATE TABLE comply_family_configs (
 -- is assumed.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_custom_schedules (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     name                      TEXT NOT NULL,                -- e.g., "4-Day Week", "Year-Round"
     school_days               BOOLEAN[] NOT NULL DEFAULT '{true,true,true,true,true,false,false}',
@@ -227,7 +227,7 @@ CREATE INDEX idx_comply_custom_schedules_family
 -- (family_id, student_id, attendance_date) prevents duplicates.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_attendance (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id                UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     attendance_date           DATE NOT NULL,
@@ -269,7 +269,7 @@ CREATE INDEX idx_comply_attendance_status
 -- (no cross-domain FKs). Each record represents a single gradeable item.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_assessment_records (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id                UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     title                     TEXT NOT NULL,
@@ -310,7 +310,7 @@ CREATE INDEX idx_comply_assessments_subject
 -- from Iowa Assessments differ from state-specific tests).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_standardized_tests (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id                UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     test_name                 TEXT NOT NULL,                -- e.g., "Iowa Assessments", "SAT", "ACT"
@@ -340,7 +340,7 @@ CREATE INDEX idx_comply_tests_family_student
 -- lifecycle: configuring → generating → ready → expired (with failed + retry).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_portfolios (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id                UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     title                     TEXT NOT NULL,
@@ -389,7 +389,7 @@ CREATE INDEX idx_comply_portfolios_expired
 -- PDF generation. References learn:: data by UUID without FK.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_portfolio_items (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     portfolio_id              UUID NOT NULL REFERENCES comply_portfolios(id) ON DELETE CASCADE,
     source_type               TEXT NOT NULL
                               CHECK (source_type IN (
@@ -431,7 +431,7 @@ CREATE UNIQUE INDEX idx_comply_portfolio_items_unique
 -- generation time (stored in snapshot_gpa).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_transcripts (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id                UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     title                     TEXT NOT NULL,                -- e.g., "Official Transcript — 2025-2026"
@@ -469,7 +469,7 @@ CREATE INDEX idx_comply_transcripts_family_student
 -- independently. GPA is computed from this table.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE comply_courses (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id                UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     transcript_id             UUID REFERENCES comply_transcripts(id) ON DELETE SET NULL,

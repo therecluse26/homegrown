@@ -142,7 +142,7 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 -- platform-provided content. [06-learn §3.2]
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_publishers (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     name                  TEXT NOT NULL,
     slug                  TEXT NOT NULL UNIQUE,          -- URL-safe identifier
     description           TEXT,
@@ -166,7 +166,7 @@ CREATE INDEX idx_mkt_publishers_slug ON mkt_publishers(slug);
 -- app level).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_publisher_members (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id) ON DELETE CASCADE,
     creator_id            UUID NOT NULL REFERENCES mkt_creators(id) ON DELETE CASCADE,
     role                  TEXT NOT NULL DEFAULT 'member'
@@ -186,7 +186,7 @@ CREATE INDEX idx_mkt_publisher_members_creator ON mkt_publisher_members(creator_
 -- tos_accepted_at for legal compliance. [supersedes ADR-007]
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_creators (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     parent_id             UUID NOT NULL UNIQUE REFERENCES iam_parents(id),
     payment_account_id    TEXT,                          -- Hyperswitch sub-merchant ID [supersedes ADR-007]
     onboarding_status     TEXT NOT NULL DEFAULT 'pending'
@@ -212,7 +212,7 @@ CREATE INDEX idx_mkt_creators_status ON mkt_creators(onboarding_status);
 -- taxonomy consistency. [06-learn §13]
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_listings (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     creator_id            UUID NOT NULL REFERENCES mkt_creators(id),
     publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
     title                 TEXT NOT NULL,
@@ -273,7 +273,7 @@ CREATE INDEX idx_mkt_listings_title_trgm ON mkt_listings USING GIN(title gin_trg
 -- listing, with storage keys for R2 signed-URL delivery. [ARCH §8.3]
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_listing_files (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     listing_id            UUID NOT NULL REFERENCES mkt_listings(id) ON DELETE CASCADE,
     file_name             TEXT NOT NULL,                 -- original filename
     file_size_bytes       BIGINT NOT NULL,
@@ -293,7 +293,7 @@ CREATE INDEX idx_mkt_listing_files_listing ON mkt_listing_files(listing_id);
 -- automatically when a listing is updated after publication.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_listing_versions (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     listing_id            UUID NOT NULL REFERENCES mkt_listings(id) ON DELETE CASCADE,
     version               INTEGER NOT NULL,
     title                 TEXT NOT NULL,
@@ -314,7 +314,7 @@ CREATE INDEX idx_mkt_listing_versions_listing ON mkt_listing_versions(listing_id
 -- Revenue split recorded immutably at purchase time. [supersedes ADR-007]
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_purchases (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id),
     listing_id            UUID NOT NULL REFERENCES mkt_listings(id),
     creator_id            UUID NOT NULL REFERENCES mkt_creators(id),
@@ -342,7 +342,7 @@ CREATE INDEX idx_mkt_purchases_payment ON mkt_purchases(payment_id) WHERE paymen
 -- is_anonymous flag for privacy, and creator_response_at timestamp.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_reviews (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     listing_id            UUID NOT NULL REFERENCES mkt_listings(id),
     purchase_id           UUID NOT NULL REFERENCES mkt_purchases(id),
     family_id             UUID NOT NULL REFERENCES iam_families(id),
@@ -369,7 +369,7 @@ CREATE INDEX idx_mkt_reviews_moderation ON mkt_reviews(moderation_status) WHERE 
 -- mirrors the family-level purchase model. Persistent in DB (not session-based).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_cart_items (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     listing_id            UUID NOT NULL REFERENCES mkt_listings(id) ON DELETE CASCADE,
     added_by_parent_id    UUID NOT NULL REFERENCES iam_parents(id),
@@ -387,7 +387,7 @@ CREATE INDEX idx_mkt_cart_items_family ON mkt_cart_items(family_id);
 -- jobs. [S§9.3]
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_curated_sections (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     slug                  TEXT NOT NULL UNIQUE,          -- e.g., 'featured', 'trending'
     display_name          TEXT NOT NULL,
     description           TEXT,
@@ -402,7 +402,7 @@ CREATE TABLE mkt_curated_sections (
 -- TABLE 11: mkt_curated_section_items — Links listings to curated sections
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE mkt_curated_section_items (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     section_id            UUID NOT NULL REFERENCES mkt_curated_sections(id) ON DELETE CASCADE,
     listing_id            UUID NOT NULL REFERENCES mkt_listings(id) ON DELETE CASCADE,
     sort_order            SMALLINT NOT NULL DEFAULT 0,

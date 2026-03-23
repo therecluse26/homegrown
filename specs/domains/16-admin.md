@@ -57,7 +57,7 @@ All tables use the `admin_` prefix. `[ARCH §5.1]`
 
 -- Feature flags: simple key-value feature toggles
 CREATE TABLE admin_feature_flags (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     key             VARCHAR(100) NOT NULL UNIQUE,
     description     TEXT NOT NULL,
     -- Flag state
@@ -78,7 +78,7 @@ CREATE TABLE admin_feature_flags (
 
 -- Admin audit log: immutable record of all admin actions
 CREATE TABLE admin_audit_log (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     admin_id        UUID NOT NULL REFERENCES iam_parents(id),
     action          VARCHAR(50) NOT NULL
                     CHECK (action IN (

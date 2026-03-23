@@ -160,7 +160,7 @@ CREATE UNIQUE INDEX idx_bill_hs_customers_hs_id
 -- family (enforced by UNIQUE constraint on family_id).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE bill_subscriptions (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL UNIQUE REFERENCES iam_families(id) ON DELETE CASCADE,
     hyperswitch_subscription_id TEXT NOT NULL UNIQUE,   -- Hyperswitch subscription ID
     hyperswitch_customer_id   TEXT NOT NULL,            -- denormalized for webhook fast-path
@@ -205,7 +205,7 @@ CREATE INDEX idx_bill_subscriptions_active
 -- payment/invoice IDs link back to the payment processor for reconciliation.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE bill_transactions (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                 UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     transaction_type          TEXT NOT NULL
                               CHECK (transaction_type IN (
@@ -248,7 +248,7 @@ CREATE INDEX idx_bill_transactions_hs_payment
 -- accounts). Creator-scoped (not family-scoped).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE bill_payouts (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                        UUID PRIMARY KEY DEFAULT uuidv7(),
     creator_id                UUID NOT NULL REFERENCES mkt_creators(id),
     status                    TEXT NOT NULL DEFAULT 'pending'
                               CHECK (status IN (

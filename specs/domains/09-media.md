@@ -120,7 +120,7 @@ rejected  ──► published  (admin override via appeal, Phase 2)
 -- here regardless of which domain initiated the upload. Family-scoped.
 -- [S§2.1, ARCH §8.1]
 CREATE TABLE media_uploads (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     uploaded_by           UUID NOT NULL REFERENCES iam_parents(id) ON DELETE CASCADE,
 
@@ -201,7 +201,7 @@ CREATE INDEX idx_media_uploads_csam_rescan
 -- Tracks background processing jobs for each upload. Supports retry logic
 -- and failure diagnosis. Internal only — never exposed via API.
 CREATE TABLE media_processing_jobs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     upload_id             UUID NOT NULL REFERENCES media_uploads(id),
     job_type              TEXT NOT NULL
                           CHECK (job_type IN (
@@ -230,7 +230,7 @@ CREATE INDEX idx_media_processing_jobs_queued
 -- Creator uploads video → raw stored in R2 → transcode job generates
 -- HLS playlist + segments at multiple quality levels. [S§8.1.11]
 CREATE TABLE media_transcode_jobs (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     upload_id             UUID NOT NULL REFERENCES media_uploads(id) ON DELETE CASCADE,
     status                TEXT NOT NULL DEFAULT 'pending'
                           CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -981,7 +981,7 @@ func (s *MediaServiceImpl) RequestUpload(ctx context.Context, input *RequestUplo
     }
 
     // 2. Generate storage key
-    uploadID := uuid.New()
+    uploadID := uuid.NewV7()
     sanitized := sanitizeFilename(input.Filename)
     storageKey := fmt.Sprintf("uploads/%s/%s/%s", input.FamilyID, uploadID, sanitized)
 

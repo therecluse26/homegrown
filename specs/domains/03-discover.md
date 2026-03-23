@@ -112,7 +112,7 @@ CREATE TYPE disc_content_status_enum AS ENUM (
 -- Quiz definitions: versioned question sets with scoring weights [S§5.1.2]
 -- Exactly one row should have status = 'active' at any given time.
 CREATE TABLE disc_quiz_definitions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     version         SMALLINT NOT NULL,                  -- monotonically increasing
     title           TEXT NOT NULL,                       -- e.g., "What methodology fits your family?"
     description     TEXT NOT NULL,                       -- introductory text shown before quiz
@@ -146,7 +146,7 @@ CREATE UNIQUE INDEX idx_disc_quiz_definitions_active
 
 -- Quiz results: anonymous, shareable [S§5.1.2]
 CREATE TABLE disc_quiz_results (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     quiz_definition_id UUID NOT NULL REFERENCES disc_quiz_definitions(id),
     -- URL-safe shareable identifier (nanoid, 12 chars, base62)
     -- Used for sharing and pre-to-post-account transfer [S§5.1.3]
@@ -175,7 +175,7 @@ CREATE INDEX idx_disc_quiz_results_family ON disc_quiz_results(family_id)
 
 -- State legal guides: structured data for all 50 states + DC [S§5.3]
 CREATE TABLE disc_state_guides (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     -- Two-letter state code (e.g., 'TX', 'CA', 'DC')
     state_code      CHAR(2) NOT NULL UNIQUE,
     state_name      TEXT NOT NULL,
@@ -199,7 +199,7 @@ CREATE INDEX idx_disc_state_guides_status ON disc_state_guides(status)
 
 -- Content pages: Homeschooling 101 and advocacy content [S§5.4]
 CREATE TABLE disc_content_pages (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     slug            TEXT NOT NULL UNIQUE,                -- e.g., 'socialization', 'getting-started'
     title           TEXT NOT NULL,
     -- Category for grouping in navigation
@@ -729,7 +729,7 @@ type ContentPageSummaryResponse struct {
 // QuizDefinition is the full quiz definition from database (includes weights — never serialize to API).
 // GORM model for disc_quiz_definitions table.
 type QuizDefinition struct {
-    ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
     Version      int16           `gorm:"not null"`
     Title        string          `gorm:"not null"`
     Description  string          `gorm:"not null"`
@@ -745,7 +745,7 @@ func (QuizDefinition) TableName() string { return "disc_quiz_definitions" }
 // QuizResult is a quiz result from database.
 // GORM model for disc_quiz_results table.
 type QuizResult struct {
-    ID               uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ID               uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
     QuizDefinitionID uuid.UUID       `gorm:"type:uuid;not null"`
     ShareID          string          `gorm:"uniqueIndex;not null"`
     SessionToken     *string
@@ -761,7 +761,7 @@ func (QuizResult) TableName() string { return "disc_quiz_results" }
 // StateGuide is a state guide from database.
 // GORM model for disc_state_guides table.
 type StateGuide struct {
-    ID              uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ID              uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
     StateCode       string          `gorm:"type:char(2);uniqueIndex;not null"`
     StateName       string          `gorm:"not null"`
     Status          string          `gorm:"not null;default:'draft'"`
@@ -788,7 +788,7 @@ type StateGuideSummary struct {
 // ContentPage is a content page from database.
 // GORM model for disc_content_pages table.
 type ContentPage struct {
-    ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
     Slug            string    `gorm:"uniqueIndex;not null"`
     Title           string    `gorm:"not null"`
     Category        string    `gorm:"not null"`

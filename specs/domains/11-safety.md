@@ -140,7 +140,7 @@ Implemented as `CHECK` constraints (not PostgreSQL ENUM types) per `[CODING §4.
 
 -- TABLE 1: safety_reports — User-submitted content reports [S§12.3]
 CREATE TABLE safety_reports (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     reporter_family_id    UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     reporter_parent_id    UUID NOT NULL REFERENCES iam_parents(id),
 
@@ -198,7 +198,7 @@ CREATE INDEX idx_safety_reports_assigned
 
 -- TABLE 2: safety_content_flags — Automated content screening results [S§12.2]
 CREATE TABLE safety_content_flags (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     source                TEXT NOT NULL
                           CHECK (source IN ('automated', 'community_report')),
 
@@ -245,7 +245,7 @@ CREATE INDEX idx_safety_content_flags_target
 -- TABLE 3: safety_mod_actions — Immutable moderation action audit trail [S§12.7]
 -- This table is APPEND-ONLY. Rows are never updated or deleted.
 CREATE TABLE safety_mod_actions (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     admin_id              UUID NOT NULL REFERENCES iam_parents(id),
     target_family_id      UUID NOT NULL REFERENCES iam_families(id),
     target_parent_id      UUID REFERENCES iam_parents(id),     -- NULL for family-level actions
@@ -299,7 +299,7 @@ CREATE INDEX idx_safety_account_status_restricted
 
 -- TABLE 5: safety_appeals — Moderation action appeals [S§12.2]
 CREATE TABLE safety_appeals (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     action_id             UUID NOT NULL REFERENCES safety_mod_actions(id),
     appeal_text           TEXT NOT NULL,
@@ -327,7 +327,7 @@ CREATE INDEX idx_safety_appeals_family
 -- TABLE 6: safety_ncmec_reports — NCMEC filing audit trail [S§12.1, 18 U.S.C. § 2258A]
 -- This table is APPEND-ONLY. Rows are never updated or deleted (legal evidence).
 CREATE TABLE safety_ncmec_reports (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     upload_id             UUID NOT NULL,            -- the quarantined upload (NOT FK — upload may be preserved separately)
     family_id             UUID NOT NULL,            -- the offending family (NOT FK — family may be deleted but report persists)
     parent_id             UUID NOT NULL,            -- the offending user (NOT FK — same reason)
@@ -358,7 +358,7 @@ CREATE INDEX idx_safety_ncmec_pending
 
 -- TABLE 7: safety_bot_signals — Behavioral bot detection signals [S§12.4]
 CREATE TABLE safety_bot_signals (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     parent_id             UUID NOT NULL REFERENCES iam_parents(id),
     signal_type           TEXT NOT NULL
@@ -2607,7 +2607,7 @@ func NewModerationReport(
     }
 
     return &ModerationReport{
-        id:               uuid.New(),
+        id:               uuid.NewV7(),
         reporterFamilyID: reporterFamilyID,
         reporterParentID: reporterParentID,
         targetType:       targetType,

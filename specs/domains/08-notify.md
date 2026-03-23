@@ -137,7 +137,7 @@ PostgreSQL enum migration limitations. `[ARCH §5.2]`
 -- feed).
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE notify_notifications (
-    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID        PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID        NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     notification_type TEXT      NOT NULL CHECK (notification_type IN (
         'friend_request_sent', 'friend_request_accepted',
@@ -188,7 +188,7 @@ CREATE UNIQUE INDEX idx_notify_notifications_idempotency
 -- exist.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE notify_preferences (
-    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID        PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID        NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     notification_type TEXT      NOT NULL CHECK (notification_type IN (
         'friend_request_sent', 'friend_request_accepted',
@@ -225,7 +225,7 @@ CREATE INDEX idx_notify_preferences_family
 -- Phase 1 migration but unused until Phase 2.
 -- ═══════════════════════════════════════════════════════════════════════════════
 CREATE TABLE notify_digests (
-    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID        PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID        NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     digest_type     TEXT        NOT NULL CHECK (digest_type IN ('daily', 'weekly')),
     period_start    TIMESTAMPTZ NOT NULL,

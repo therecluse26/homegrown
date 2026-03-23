@@ -78,7 +78,7 @@ not user data. There are no RLS policies on method_ tables. `[ARCH §5.1, ARCH �
 -- Platform-defined methodologies [S§4.1, S§4.5]
 -- These are global config rows, NOT user data — no RLS needed.
 CREATE TABLE method_definitions (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                UUID PRIMARY KEY DEFAULT uuidv7(),
     slug              TEXT NOT NULL UNIQUE,              -- e.g., 'charlotte-mason'
     display_name      TEXT NOT NULL,                     -- e.g., 'Charlotte Mason'
     short_desc        TEXT NOT NULL,                     -- one-line summary for lists
@@ -107,7 +107,7 @@ CREATE INDEX idx_method_definitions_slug ON method_definitions(slug);
 -- Master tool catalog [S§4.2, S§8.1]
 -- Every learning tool on the platform. Tools exist independently of methodologies.
 CREATE TABLE method_tools (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                UUID PRIMARY KEY DEFAULT uuidv7(),
     slug              TEXT NOT NULL UNIQUE,              -- e.g., 'reading-lists'
     display_name      TEXT NOT NULL,                     -- e.g., 'Reading Lists'
     description       TEXT,                              -- tool description for UI
@@ -911,7 +911,7 @@ type MethodologyContext struct {
 // MethodologyDefinition is the full methodology record from database.
 // GORM model for method_definitions table.
 type MethodologyDefinition struct {
-    ID               uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ID               uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
     Slug             string          `gorm:"uniqueIndex;not null"`
     DisplayName      string          `gorm:"not null"`
     ShortDesc        string          `gorm:"not null"`
@@ -932,7 +932,7 @@ func (MethodologyDefinition) TableName() string { return "method_definitions" }
 // Tool is a tool record from database.
 // GORM model for method_tools table.
 type Tool struct {
-    ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
     Slug         string          `gorm:"uniqueIndex;not null"`
     DisplayName  string          `gorm:"not null"`
     Description  *string

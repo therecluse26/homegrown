@@ -1136,7 +1136,7 @@ Tables are prefixed by domain to avoid collision and provide clear ownership. `[
 ```sql
 -- Top-level family entity [S§3.1.1]
 CREATE TABLE iam_families (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     display_name    TEXT NOT NULL,
     state_code      CHAR(2),                    -- for compliance [S§6.2]
     location_region TEXT,                        -- coarse location [S§7.8]
@@ -1150,7 +1150,7 @@ CREATE TABLE iam_families (
 
 -- Parent users [S§3.1.2]
 CREATE TABLE iam_parents (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     kratos_identity_id UUID NOT NULL UNIQUE,     -- links to Ory Kratos
     display_name    TEXT NOT NULL,
@@ -1164,7 +1164,7 @@ CREATE INDEX idx_parents_family ON iam_parents(family_id);
 
 -- Student profiles [S§3.1.3]
 CREATE TABLE iam_students (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     display_name    TEXT NOT NULL,
     birth_year      SMALLINT,
@@ -1182,7 +1182,7 @@ CREATE INDEX idx_students_family ON iam_students(family_id);
 ```sql
 -- Platform-defined methodologies [S§4.1, S§4.5]
 CREATE TABLE method_definitions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     slug            TEXT NOT NULL UNIQUE,        -- e.g., 'charlotte-mason'
     display_name    TEXT NOT NULL,
     short_desc      TEXT NOT NULL,
@@ -1199,7 +1199,7 @@ CREATE TABLE method_definitions (
 
 -- Learning tool definitions [S§4.2]
 CREATE TABLE method_tools (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     slug            TEXT NOT NULL UNIQUE,        -- e.g., 'reading-lists'
     display_name    TEXT NOT NULL,
     description     TEXT,
@@ -1232,7 +1232,7 @@ CREATE TABLE soc_profiles (
 
 -- Friendships (bidirectional) [S§7.4]
 CREATE TABLE soc_friendships (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     requester_family_id UUID NOT NULL REFERENCES iam_families(id),
     accepter_family_id  UUID NOT NULL REFERENCES iam_families(id),
     status          TEXT NOT NULL DEFAULT 'pending'
@@ -1247,7 +1247,7 @@ CREATE INDEX idx_friendships_accepter ON soc_friendships(accepter_family_id, sta
 
 -- Posts [S§7.2]
 CREATE TABLE soc_posts (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     author_parent_id UUID NOT NULL REFERENCES iam_parents(id),
     post_type       TEXT NOT NULL CHECK (post_type IN (
@@ -1275,7 +1275,7 @@ CREATE INDEX idx_posts_search ON soc_posts USING GIN(search_vector);
 
 -- Direct messages [S§7.5]
 CREATE TABLE soc_messages (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     conversation_id UUID NOT NULL,               -- groups two users' messages
     sender_parent_id UUID NOT NULL REFERENCES iam_parents(id),
     recipient_parent_id UUID NOT NULL REFERENCES iam_parents(id),
@@ -1293,7 +1293,7 @@ CREATE INDEX idx_messages_conversation ON soc_messages(conversation_id, created_
 ```sql
 -- Activities [S§8.1.1]
 CREATE TABLE learn_activities (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     student_id      UUID NOT NULL REFERENCES iam_students(id),
     title           TEXT NOT NULL,
@@ -1319,7 +1319,7 @@ CREATE INDEX idx_activities_search ON learn_activities USING GIN(search_vector);
 
 -- Journal entries [S§8.1.4]
 CREATE TABLE learn_journals (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     student_id      UUID NOT NULL REFERENCES iam_students(id),
     entry_type      TEXT NOT NULL CHECK (entry_type IN ('freeform', 'narration', 'reflection')),
@@ -1334,14 +1334,14 @@ CREATE INDEX idx_journals_family_student ON learn_journals(family_id, student_id
 
 -- Reading lists [S§8.1.3]
 CREATE TABLE learn_reading_lists (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     name            TEXT NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE learn_reading_list_items (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     list_id         UUID NOT NULL REFERENCES learn_reading_lists(id) ON DELETE CASCADE,
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     title           TEXT NOT NULL,
@@ -1361,7 +1361,7 @@ CREATE INDEX idx_reading_items_family ON learn_reading_list_items(family_id);
 -- Interactive Assessment Engine [S§8.1.9]
 -- Layer 1: Publisher-scoped content definitions (no RLS)
 CREATE TABLE learn_questions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id    UUID NOT NULL,                  -- references mkt_publishers
     question_type   TEXT NOT NULL CHECK (question_type IN (
                         'multiple_choice', 'fill_in_blank', 'true_false',
@@ -1379,7 +1379,7 @@ CREATE TABLE learn_questions (
 );
 
 CREATE TABLE learn_quiz_defs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id    UUID NOT NULL,
     title           TEXT NOT NULL,
     description     TEXT,
@@ -1396,7 +1396,7 @@ CREATE TABLE learn_quiz_defs (
 
 -- Layer 3: Family-scoped quiz taking (RLS-protected)
 CREATE TABLE learn_quiz_sessions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     student_id      UUID NOT NULL REFERENCES iam_students(id),
     quiz_def_id     UUID NOT NULL REFERENCES learn_quiz_defs(id),
@@ -1416,7 +1416,7 @@ CREATE INDEX idx_quiz_sessions_family ON learn_quiz_sessions(family_id, student_
 
 -- Lesson Sequences [S§8.1.12]
 CREATE TABLE learn_sequence_defs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     publisher_id    UUID NOT NULL,
     title           TEXT NOT NULL,
     description     TEXT,
@@ -1428,7 +1428,7 @@ CREATE TABLE learn_sequence_defs (
 );
 
 CREATE TABLE learn_sequence_progress (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     student_id      UUID NOT NULL REFERENCES iam_students(id),
     sequence_def_id UUID NOT NULL REFERENCES learn_sequence_defs(id),
@@ -1445,7 +1445,7 @@ CREATE INDEX idx_sequence_progress_family ON learn_sequence_progress(family_id, 
 
 -- Student Assignments [S§8.6]
 CREATE TABLE learn_student_assignments (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     student_id      UUID NOT NULL REFERENCES iam_students(id),
     assigned_by     UUID NOT NULL REFERENCES iam_parents(id),
@@ -1476,7 +1476,7 @@ CREATE INDEX idx_assignments_family ON learn_student_assignments(family_id, stud
 ```sql
 -- Creator accounts [S§9.1]
 CREATE TABLE mkt_creators (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     parent_id       UUID REFERENCES iam_parents(id), -- may be NULL for standalone
     stripe_account_id TEXT,                           -- Stripe Connect [S§15.4]
     store_name      TEXT NOT NULL,
@@ -1488,7 +1488,7 @@ CREATE TABLE mkt_creators (
 
 -- Content listings [S§9.2]
 CREATE TABLE mkt_listings (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     creator_id      UUID NOT NULL REFERENCES mkt_creators(id),
     title           TEXT NOT NULL,
     description     TEXT NOT NULL,
@@ -1525,7 +1525,7 @@ CREATE INDEX idx_listings_status ON mkt_listings(status) WHERE status = 'publish
 
 -- Purchases [S§9.4]
 CREATE TABLE mkt_purchases (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
     listing_id      UUID NOT NULL REFERENCES mkt_listings(id),
     stripe_payment_id TEXT,
@@ -1538,7 +1538,7 @@ CREATE TABLE mkt_purchases (
 
 -- Reviews (verified purchaser only) [S§9.5]
 CREATE TABLE mkt_reviews (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     listing_id      UUID NOT NULL REFERENCES mkt_listings(id),
     purchase_id     UUID NOT NULL REFERENCES mkt_purchases(id),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
@@ -4250,7 +4250,7 @@ This causes page splits and write amplification under sustained insert load.
 - **PostgreSQL version**: Upgraded from `postgis/postgis:16-3.4` to `postgis/postgis:18-3.6`
   to gain native `uuidv7()`. The Docker volume path also changed from
   `/var/lib/postgresql/data` to `/var/lib/postgresql` (PG18 default).
-- **Tests**: `uuid.Must(uuid.NewV7())` is used instead of `uuid.New()`. `uuid.Must` is
+- **Tests**: `uuid.Must(uuid.NewV7())` is used instead of `uuid.NewV7()`. `uuid.Must` is
   appropriate in tests because a random source failure is catastrophic, not a test concern.
 - **Method domain**: Unaffected — uses `slug TEXT PRIMARY KEY` (ADR-015).
 

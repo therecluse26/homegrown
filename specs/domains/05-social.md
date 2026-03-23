@@ -146,7 +146,7 @@ CREATE TABLE soc_profiles (
 -- Friendships (bidirectional) [S§7.4]
 -- Status: pending → accepted. Block is tracked separately in soc_blocks.
 CREATE TABLE soc_friendships (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     requester_family_id   UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     accepter_family_id    UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     status                TEXT NOT NULL DEFAULT 'pending'
@@ -164,7 +164,7 @@ CREATE INDEX idx_soc_friendships_accepter ON soc_friendships(accepter_family_id,
 -- Separate from friendships for O(1) block checks.
 -- Blocking can happen without a prior friendship.
 CREATE TABLE soc_blocks (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     blocker_family_id     UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     blocked_family_id     UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -178,7 +178,7 @@ CREATE INDEX idx_soc_blocks_blocked ON soc_blocks(blocked_family_id);
 -- Posts [S§7.2]
 -- 6 post types, visibility friends/group only (no public). [S§7.2.2]
 CREATE TABLE soc_posts (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     author_parent_id      UUID NOT NULL REFERENCES iam_parents(id),
     post_type             TEXT NOT NULL CHECK (post_type IN (
@@ -214,7 +214,7 @@ CREATE INDEX idx_soc_posts_search ON soc_posts USING GIN(search_vector);
 -- Comments [S§7.3]
 -- One level of threading via parent_comment_id.
 CREATE TABLE soc_comments (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     post_id               UUID NOT NULL REFERENCES soc_posts(id) ON DELETE CASCADE,
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     author_parent_id      UUID NOT NULL REFERENCES iam_parents(id),
@@ -229,7 +229,7 @@ CREATE INDEX idx_soc_comments_post ON soc_comments(post_id, created_at);
 -- Post likes [S§7.2]
 -- Deduplicated: one like per family per post.
 CREATE TABLE soc_post_likes (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     post_id               UUID NOT NULL REFERENCES soc_posts(id) ON DELETE CASCADE,
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -241,7 +241,7 @@ CREATE INDEX idx_soc_post_likes_post ON soc_post_likes(post_id);
 -- DM conversation abstraction [S§7.5]
 -- Groups messages between two parents. Supports per-user deletion.
 CREATE TABLE soc_conversations (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -263,7 +263,7 @@ CREATE INDEX idx_soc_conv_participants_parent ON soc_conversation_participants(p
 -- Direct messages [S§7.5]
 -- Parent-to-parent only. Messages reference a conversation.
 CREATE TABLE soc_messages (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     conversation_id       UUID NOT NULL REFERENCES soc_conversations(id) ON DELETE CASCADE,
     sender_parent_id      UUID NOT NULL REFERENCES iam_parents(id),
     sender_family_id      UUID NOT NULL REFERENCES iam_families(id),
@@ -277,7 +277,7 @@ CREATE INDEX idx_soc_messages_conversation ON soc_messages(conversation_id, crea
 -- Groups [S§7.6]
 -- Platform-managed (one per methodology) and user-created.
 CREATE TABLE soc_groups (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     group_type            TEXT NOT NULL CHECK (group_type IN ('platform', 'user_created')),
     name                  TEXT NOT NULL,
     description           TEXT,
@@ -302,7 +302,7 @@ CREATE INDEX idx_soc_groups_search ON soc_groups
 
 -- Group members [S§7.6]
 CREATE TABLE soc_group_members (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     group_id              UUID NOT NULL REFERENCES soc_groups(id) ON DELETE CASCADE,
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     role                  TEXT NOT NULL DEFAULT 'member'
@@ -321,7 +321,7 @@ CREATE INDEX idx_soc_group_members_family ON soc_group_members(family_id, status
 -- Events [S§7.7]
 -- Visibility includes 'discoverable' (unique to events, not posts).
 CREATE TABLE soc_events (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     creator_family_id     UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     creator_parent_id     UUID NOT NULL REFERENCES iam_parents(id),
     group_id              UUID REFERENCES soc_groups(id) ON DELETE SET NULL,
@@ -357,7 +357,7 @@ CREATE INDEX idx_soc_events_search ON soc_events
 
 -- Event RSVPs [S§7.7]
 CREATE TABLE soc_event_rsvps (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     event_id              UUID NOT NULL REFERENCES soc_events(id) ON DELETE CASCADE,
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     status                TEXT NOT NULL DEFAULT 'going'

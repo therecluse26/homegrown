@@ -133,7 +133,7 @@ Family-scoped. Records each learning signal derived from domain events. 90-day r
 
 ```sql
 CREATE TABLE recs_signals (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id      UUID REFERENCES iam_students(id) ON DELETE SET NULL,
     signal_type     TEXT NOT NULL CHECK (signal_type IN (
@@ -176,7 +176,7 @@ has a 14-day TTL and is expired by the batch task on next run.
 
 ```sql
 CREATE TABLE recs_recommendations (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id           UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     -- Optional: student-specific recommendation (NULL = family-wide)
     student_id          UUID REFERENCES iam_students(id) ON DELETE CASCADE,
@@ -231,7 +231,7 @@ expires — blocked sources stay blocked indefinitely until the parent explicitl
 
 ```sql
 CREATE TABLE recs_recommendation_feedback (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id           UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     recommendation_id   UUID NOT NULL REFERENCES recs_recommendations(id) ON DELETE CASCADE,
     action              TEXT NOT NULL CHECK (action IN ('dismiss', 'block')),
@@ -263,7 +263,7 @@ methodology. Powers the "Popular with [Methodology] families" signal. Computed b
 
 ```sql
 CREATE TABLE recs_popularity_scores (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     listing_id      UUID NOT NULL,
     methodology_id  UUID NOT NULL,
     -- Rolling window start (e.g., 90 days ago from computation time)
@@ -297,7 +297,7 @@ personally identifiable information.
 
 ```sql
 CREATE TABLE recs_anonymized_interactions (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY DEFAULT uuidv7(),
     -- One-way HMAC-SHA256(family_id, server_secret) -> anonymous_id
     -- Cannot be reversed to recover family_id [§14]
     anonymous_id        TEXT NOT NULL,
@@ -333,7 +333,7 @@ first access with defaults).
 
 ```sql
 CREATE TABLE recs_preferences (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id               UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     -- Which recommendation types are enabled (all by default)
     enabled_types           TEXT[] NOT NULL DEFAULT ARRAY[
