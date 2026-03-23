@@ -68,6 +68,9 @@ func (m *mockDiscoveryService) GetStateRequirements(ctx context.Context, stateCo
 	}
 	return nil, &DiscoverError{Err: ErrStateGuideNotFound, StateCode: stateCode}
 }
+func (m *mockDiscoveryService) ClaimQuizResult(_ context.Context, _ string, _ any) error {
+	return nil
+}
 
 // ─── GET /v1/discovery/quiz ───────────────────────────────────────────────────
 

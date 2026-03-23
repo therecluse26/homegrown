@@ -362,6 +362,13 @@ func (s *discoveryServiceImpl) GetStateGuide(ctx context.Context, stateCode stri
 	}, nil
 }
 
+// ─── ClaimQuizResult ──────────────────────────────────────────────────────────
+
+// ClaimQuizResult delegates to the quiz result repository. [04-onboard §9.4]
+func (s *discoveryServiceImpl) ClaimQuizResult(ctx context.Context, shareID string, familyID any) error {
+	return s.quizResRepo.ClaimForFamily(ctx, shareID, familyID)
+}
+
 // ─── GetStateRequirements ─────────────────────────────────────────────────────
 
 // GetStateRequirements returns structured requirements for a state for comply:: consumption.

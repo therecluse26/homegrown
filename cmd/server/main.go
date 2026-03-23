@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"syscall"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	iamadapters "github.com/homegrown-academy/homegrown-academy/internal/iam/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
+	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
@@ -108,9 +110,8 @@ func main() {
 
 	// ── Step 6: Init EventBus + register subscriptions ───────────────────────────
 	eventBus := shared.NewEventBus()
-	// Domain subscriptions are registered here as domains are built:
+	// Domain subscriptions registered after domains are wired (Step 7d for onboard::).
 	// eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), social.NewOnFamilyCreatedHandler(socialSvc))
-	// eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), onboard.NewOnFamilyCreatedHandler(onboardSvc))
 
 	// ── Step 7: Wire IAM domain ───────────────────────────────────────────────────
 	kratosAdapter := iamadapters.NewKratosAdapter(cfg.AuthAdminURL, cfg.AuthPublicURL)
@@ -201,6 +202,132 @@ func main() {
 	)
 	discoverSvc := discover.NewDiscoveryService(quizDefRepo, quizResRepo, discStateRepo, discoverMethod)
 
+	// ── Step 7d: Wire onboard:: domain ──────────────────────────────────────────
+	// onboard:: orchestrates iam::, method::, and discover:: through consumer-defined
+	// interfaces. Closures bridge domain types at the composition root. [04-onboard §11]
+	wizardRepo := onboard.NewPgWizardProgressRepository(db)
+	roadmapRepo := onboard.NewPgRoadmapItemRepository(db)
+	recRepo := onboard.NewPgStarterRecommendationRepository(db)
+	communityRepo := onboard.NewPgCommunitySuggestionRepository(db)
+
+	iamForOnboard := onboard.NewIamAdapter(
+		func(ctx context.Context, scope *shared.FamilyScope, cmd onboard.UpdateFamilyProfileCommand) error {
+			_, err := iamSvc.UpdateFamilyProfile(ctx, scope, iam.UpdateFamilyCommand{
+				DisplayName:    cmd.DisplayName,
+				StateCode:      cmd.StateCode,
+				LocationRegion: cmd.LocationRegion,
+			})
+			return err
+		},
+		func(ctx context.Context, scope *shared.FamilyScope, cmd onboard.AddChildCommand) error {
+			_, err := iamSvc.CreateStudent(ctx, scope, iam.CreateStudentCommand{
+				DisplayName: cmd.DisplayName,
+				BirthYear:   cmd.BirthYear,
+				GradeLevel:  cmd.GradeLevel,
+			})
+			return err
+		},
+		func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error {
+			return iamSvc.DeleteStudent(ctx, scope, studentID)
+		},
+		func(ctx context.Context, familyID uuid.UUID) ([]onboard.OnboardStudentInfo, error) {
+			// Construct FamilyScope from familyID for IAM service call.
+			// Used by event handler path where no auth context is available.
+			scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID})
+			students, err := iamSvc.ListStudents(ctx, &scope)
+			if err != nil {
+				return nil, err
+			}
+			result := make([]onboard.OnboardStudentInfo, len(students))
+			for i, s := range students {
+				result[i] = onboard.OnboardStudentInfo{
+					ID:        s.ID,
+					BirthYear: s.BirthYear,
+				}
+			}
+			return result, nil
+		},
+	)
+
+	methodForOnboard := onboard.NewMethodAdapter(
+		func(ctx context.Context, slug string) (*onboard.OnboardMethodologyConfig, error) {
+			detail, err := methodSvc.GetMethodology(ctx, slug)
+			if err != nil {
+				return nil, err
+			}
+			return &onboard.OnboardMethodologyConfig{
+				Slug:             string(detail.Slug),
+				DisplayName:      detail.DisplayName,
+				OnboardingConfig: detail.OnboardingConfig,
+				CommunityConfig:  detail.CommunityConfig,
+			}, nil
+		},
+		func(ctx context.Context) (string, error) {
+			slug, err := methodSvc.GetDefaultMethodologySlug(ctx)
+			if err != nil {
+				return "", err
+			}
+			return string(slug), nil
+		},
+		func(ctx context.Context, slugs []string) (bool, error) {
+			for _, s := range slugs {
+				valid, err := methodSvc.ValidateMethodologySlug(ctx, method.MethodologyID(s))
+				if err != nil {
+					return false, err
+				}
+				if !valid {
+					return false, nil
+				}
+			}
+			return true, nil
+		},
+		func(ctx context.Context, scope *shared.FamilyScope, primarySlug string, secondarySlugs []string) error {
+			secondaryIDs := make([]method.MethodologyID, len(secondarySlugs))
+			for i, s := range secondarySlugs {
+				secondaryIDs[i] = method.MethodologyID(s)
+			}
+			_, err := methodSvc.UpdateFamilyMethodology(ctx, scope, method.UpdateMethodologyCommand{
+				PrimaryMethodologySlug:    method.MethodologyID(primarySlug),
+				SecondaryMethodologySlugs: secondaryIDs,
+			})
+			return err
+		},
+	)
+
+	discoverForOnboard := onboard.NewDiscoverAdapter(
+		func(ctx context.Context, shareID string) (*onboard.OnboardQuizResult, error) {
+			result, err := discoverSvc.GetQuizResult(ctx, shareID)
+			if err != nil {
+				return nil, err
+			}
+			recs := make([]onboard.OnboardQuizRecommendation, len(result.Recommendations))
+			for i, r := range result.Recommendations {
+				recs[i] = onboard.OnboardQuizRecommendation{
+					MethodologySlug: r.MethodologySlug,
+					MethodologyName: r.MethodologyName,
+					ScorePercentage: r.ScorePercentage,
+				}
+			}
+			return &onboard.OnboardQuizResult{
+				ShareID:         result.ShareID,
+				Recommendations: recs,
+			}, nil
+		},
+		func(ctx context.Context, shareID string, familyID uuid.UUID) error {
+			return discoverSvc.ClaimQuizResult(ctx, shareID, familyID)
+		},
+	)
+
+	onboardSvc := onboard.NewOnboardingService(
+		wizardRepo, roadmapRepo, recRepo, communityRepo,
+		iamForOnboard, methodForOnboard, discoverForOnboard,
+		eventBus, db,
+	)
+
+	// Register onboard:: event subscriptions
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), onboard.NewFamilyCreatedHandler(onboardSvc))
+	eventBus.Subscribe(reflect.TypeOf(method.FamilyMethodologyChanged{}), onboard.NewFamilyMethodologyChangedHandler(onboardSvc))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -214,6 +341,7 @@ func main() {
 		IAM:      iamSvc,
 		Method:   methodSvc,
 		Discover: discoverSvc,
+		Onboard:  onboardSvc,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────

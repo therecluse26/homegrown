@@ -1339,3 +1339,44 @@ internal/onboard/
 **Note**: No `domain/` subdirectory (non-complex domain — workflow orchestration, no aggregate
 roots). No `adapters/` directory (no external service integrations). Event handlers are in a
 separate file because onboard:: subscribes to events from two other domains. `[ARCH §4.5]`
+
+---
+
+## §17 Implementation Adaptation — Methodology Slugs (2026-03-23)
+
+The original spec uses `UUID` for all methodology references (`methodology_id`,
+`PrimaryMethodologyID`, `SecondaryMethodologyIDs`). The actual codebase uses **string slugs**
+(`method.MethodologyID` is `type string`) with a natural primary key on `method_definitions`.
+This adaptation was established during the 02-method implementation (see `02-method.md`).
+
+### Schema changes
+
+All `methodology_id UUID NOT NULL` columns in onb_ tables become `methodology_slug TEXT NOT NULL`:
+
+| Spec column | Implemented column |
+|---|---|
+| `onb_roadmap_items.methodology_id UUID` | `onb_roadmap_items.methodology_slug TEXT` |
+| `onb_starter_recommendations.methodology_id UUID` | `onb_starter_recommendations.methodology_slug TEXT` |
+| `onb_community_suggestions.methodology_id UUID` | `onb_community_suggestions.methodology_slug TEXT` |
+
+### API / type changes
+
+| Spec type | Implemented type |
+|---|---|
+| `PrimaryMethodologyID uuid.UUID` | `PrimaryMethodologySlug string` |
+| `SecondaryMethodologyIDs []uuid.UUID` | `SecondaryMethodologySlugs []string` |
+| `HandleMethodologyChanged(_, _, primaryMethodologyID uuid.UUID, secondaryMethodologyIDs []uuid.UUID)` | `HandleMethodologyChanged(_, _, primarySlug string, secondarySlugs []string)` |
+| All response types: `MethodologyID uuid.UUID` | `MethodologySlug string` |
+
+### Consumer-defined interfaces
+
+The three cross-domain interfaces (`IamServiceForOnboard`, `MethodologyServiceForOnboard`,
+`DiscoveryServiceForOnboard`) use function-based adapters wired in `main.go`, following the
+pattern established in `discover/method_adapter.go` and `method/iam_adapter.go`. Type bridging
+between `string` and `method.MethodologyID` is done at the composition root.
+
+### Validation extraction
+
+`validateCompleteWizard()`, `applyCompleteWizard()`, `validateSkipWizard()`, `applySkipWizard()`
+are extracted as package-level pure functions in `service.go` to support unit testing without a
+real database (service methods use `ScopedTransaction` which requires `*gorm.DB`).

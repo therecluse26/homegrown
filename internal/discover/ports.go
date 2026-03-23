@@ -33,6 +33,11 @@ type DiscoveryService interface {
 	// Not an HTTP endpoint — internal service call only. [03-discover §5, §13.1]
 	// Returns requirements regardless of guide published status (comply:: needs data before publish).
 	GetStateRequirements(ctx context.Context, stateCode string) (*StateGuideRequirements, error)
+
+	// ClaimQuizResult sets family_id on a quiz result.
+	// Used by onboard:: to claim a quiz result during import. [04-onboard §9.4]
+	// Returns ErrQuizResultAlreadyClaimed if already owned by a different family.
+	ClaimQuizResult(ctx context.Context, shareID string, familyID any) error
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────

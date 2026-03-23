@@ -11,6 +11,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
+	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
@@ -35,6 +36,7 @@ type AppState struct {
 	IAM      iam.IamService
 	Method   method.MethodologyService
 	Discover discover.DiscoveryService
+	Onboard  onboard.OnboardingService
 	// Social social.SocialService
 	// ... etc.
 }
@@ -127,6 +129,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Discover != nil {
 		discover.NewHandler(state.Discover).Register(pub)
+	}
+	if state.Onboard != nil {
+		onboard.NewHandler(state.Onboard).Register(auth)
 	}
 	// etc.
 
