@@ -1,0 +1,6 @@
+pre-commit:
+  commands:
+    generate:
+      glob: "**/*.go"
+      run: make full-generate && git add openapi/ frontend/src/api/generated/
+      fail_text: "Code generation failed — run 'make full-generate' manually and stage the output"

@@ -105,8 +105,8 @@ CREATE TABLE iam_families (
     location_region           TEXT,                                      -- coarse location [S§7.8]
     location_point            GEOMETRY(Point, 4326),                     -- PostGIS centroid [ARCH §5.4]
     primary_parent_id         UUID,                                      -- set after first parent created
-    primary_methodology_id    UUID NOT NULL,                             -- FK to method_definitions [S§4.3]
-    secondary_methodology_ids UUID[] NOT NULL DEFAULT '{}',              -- array of method IDs [S§4.3]
+    primary_methodology_slug    TEXT NOT NULL,                             -- FK to method_definitions(slug) [S§4.3]
+    secondary_methodology_slugs TEXT[] NOT NULL DEFAULT '{}',              -- array of methodology slugs [S§4.3]
     subscription_tier         TEXT NOT NULL DEFAULT 'free'
                               CHECK (subscription_tier IN ('free', 'premium')),  -- [S§15.2]
     coppa_consent_status      iam_coppa_consent_enum NOT NULL DEFAULT 'registered', -- [S§17.2, ARCH §6.3]
@@ -151,7 +151,7 @@ CREATE TABLE iam_students (
     display_name             TEXT NOT NULL,                    -- [S§3.1.3]
     birth_year               SMALLINT,                        -- [S§3.1.3]
     grade_level              TEXT,                             -- optional [S§3.1.3]
-    methodology_override_id  UUID,                            -- FK to method_definitions [S§4.6]
+    methodology_override_slug  TEXT,                            -- FK to method_definitions(slug) [S§4.6]
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );

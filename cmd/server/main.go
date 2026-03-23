@@ -22,6 +22,7 @@ import (
 
 	"github.com/homegrown-academy/homegrown-academy/internal/app"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	iamadapters "github.com/homegrown-academy/homegrown-academy/internal/iam/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
@@ -176,6 +177,30 @@ func main() {
 		return string(slug), nil
 	})
 
+	// ── Step 7c: Wire discover:: domain ──────────────────────────────────────────
+	// discover:: consumes method:: for methodology display names in quiz results.
+	// The adapter bridges method::MethodologyService → discover::MethodologyServiceForDiscover
+	// without importing the method package from discover::. [ARCH §4.2]
+	quizDefRepo := discover.NewPgQuizDefinitionRepository(db)
+	quizResRepo := discover.NewPgQuizResultRepository(db)
+	discStateRepo := discover.NewPgStateGuideRepository(db)
+
+	discoverMethod := discover.NewMethodAdapter(
+		func(ctx context.Context, slug string) (string, error) {
+			all, err := methodSvc.ListMethodologies(ctx)
+			if err != nil {
+				return slug, nil // graceful fallback to slug on error [03-discover §15.27]
+			}
+			for _, m := range all {
+				if string(m.Slug) == slug {
+					return m.DisplayName, nil
+				}
+			}
+			return slug, nil
+		},
+	)
+	discoverSvc := discover.NewDiscoveryService(quizDefRepo, quizResRepo, discStateRepo, discoverMethod)
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -188,6 +213,7 @@ func main() {
 		Version:  version,
 		IAM:      iamSvc,
 		Method:   methodSvc,
+		Discover: discoverSvc,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────

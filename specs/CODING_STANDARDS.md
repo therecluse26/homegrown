@@ -475,6 +475,26 @@ When making a change that touches all layers:
 5. Regenerate TypeScript types (`§6.2`)
 6. Update frontend components/hooks to use new types
 
+### §6.4 Git Hook Enforcement
+
+The code generation pipeline is enforced automatically via `lefthook` pre-commit hooks.
+
+Setup (one-time per clone):
+```bash
+make install-hooks
+```
+
+Behavior:
+- When any `.go` file is staged, `make full-generate` runs automatically before the commit finalizes
+- Generated files (`openapi/`, `frontend/src/api/generated/`) are auto-staged into the commit
+- The hook fails (and blocks the commit) if generation errors out
+
+Manual override (if hook is skipped):
+```bash
+make full-generate
+git add openapi/ frontend/src/api/generated/
+```
+
 ---
 
 ## §7 AI-Assisted Development Protocol

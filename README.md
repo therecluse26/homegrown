@@ -25,7 +25,10 @@ cd frontend && npm install && cd ..
 # 4. Install Air (one-time)
 go install github.com/air-verse/air@latest
 
-# 5. Start development servers (auto-starts Docker infrastructure)
+# 5. Install git hooks (one-time, activates automatic code generation)
+make install-hooks
+
+# 6. Start development servers (auto-starts Docker infrastructure)
 make dev
 ```
 
@@ -47,6 +50,7 @@ The backend runs on `localhost:3500` and the frontend on `localhost:5673`.
 | `make migrate` | Run pending database migrations |
 | `make db-reset` | Drop, recreate, and re-migrate the database |
 | `make full-generate` | Generate OpenAPI spec + TypeScript types |
+| `make install-hooks` | Install lefthook and register pre-commit git hooks (one-time per clone) |
 | `make audit` | Run vulnerability check |
 
 ## Architecture

@@ -1141,8 +1141,8 @@ CREATE TABLE iam_families (
     state_code      CHAR(2),                    -- for compliance [S§6.2]
     location_region TEXT,                        -- coarse location [S§7.8]
     primary_parent_id UUID,                      -- set after first parent created
-    primary_methodology_id UUID NOT NULL REFERENCES method_definitions(id),
-    secondary_methodology_ids UUID[] DEFAULT '{}', -- array of methodology IDs [S§4.3]
+    primary_methodology_slug TEXT NOT NULL REFERENCES method_definitions(slug),
+    secondary_methodology_slugs TEXT[] NOT NULL DEFAULT '{}', -- array of methodology slugs [S§4.3]
     subscription_tier TEXT NOT NULL DEFAULT 'free' CHECK (subscription_tier IN ('free', 'premium')),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1169,7 +1169,7 @@ CREATE TABLE iam_students (
     display_name    TEXT NOT NULL,
     birth_year      SMALLINT,
     grade_level     TEXT,
-    methodology_override_id UUID REFERENCES method_definitions(id), -- [S§4.6]
+    methodology_override_slug TEXT REFERENCES method_definitions(slug), -- [S§4.6]
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -1210,10 +1210,10 @@ CREATE TABLE method_tools (
 
 -- Many-to-many: which tools are active per methodology [S§4.2]
 CREATE TABLE method_tool_activations (
-    methodology_id  UUID NOT NULL REFERENCES method_definitions(id),
-    tool_id         UUID NOT NULL REFERENCES method_tools(id),
-    config_overrides JSONB NOT NULL DEFAULT '{}', -- methodology-specific labels, guidance
-    PRIMARY KEY (methodology_id, tool_id)
+    methodology_slug TEXT NOT NULL REFERENCES method_definitions(slug),
+    tool_slug        TEXT NOT NULL REFERENCES method_tools(slug),
+    is_default       BOOLEAN NOT NULL DEFAULT false,
+    PRIMARY KEY (methodology_slug, tool_slug)
 );
 ```
 
@@ -4198,6 +4198,34 @@ WHERE f1.requester_family_id = $1  -- current user
 - **Mitigation**: Each domain implements an `ExportHandler` and `DeletionHandler` interface. Lifecycle orchestrates but does not access other domains' data directly — it calls their service interfaces. Registration is at startup (like event bus handlers), so missing domains are caught immediately.
 
 **Revision trigger**: None. COPPA and privacy regulation make this a legal requirement.
+
+---
+
+### ADR-015: Natural String PKs for Methodology Identity
+
+**Status**: Accepted
+**Date**: 2026-03-22
+
+**Context**: `method_definitions` and `method_tools` are immutable, human-curated seed
+tables where the slug IS the canonical identifier. UUID PKs add indirection with no
+benefit; slug is already unique and stable. IAM tables reference methodology identity
+via FK and needed the same treatment for consistency.
+
+**Decision**: Use `slug TEXT PRIMARY KEY` for `method_definitions` and `method_tools`.
+Use `(methodology_slug, tool_slug) TEXT` composite PK for `method_tool_activations`.
+IAM tables reference `method_definitions(slug)` directly as TEXT FKs (not UUID).
+
+**Consequences**:
+- Eliminates UUID-to-slug joins throughout the method domain.
+- Go layer uses typed newtypes (`MethodologyID`, `ToolSlug`) to preserve compile-time
+  safety despite the underlying `string` representation.
+- New methodologies require both a migration and a new constant in `models.go`.
+- UUIDs remain in use for all user-data tables (families, parents, students) where
+  natural keys do not exist.
+
+**Revision trigger**: If methodology slugs ever need to change (rename), a multi-step
+migration will be required since slug is the PK. This is acceptable given that slugs are
+platform-managed constants declared in code.
 
 ---
 

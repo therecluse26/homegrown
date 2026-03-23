@@ -1,0 +1,649 @@
+basePath: /v1
+definitions:
+  app.HealthResponse:
+    properties:
+      status:
+        type: string
+      version:
+        type: string
+    type: object
+  iam.ConsentStatusResponse:
+    properties:
+      can_create_students:
+        type: boolean
+      consent_method:
+        type: string
+      consented_at:
+        type: string
+      status:
+        type: string
+    type: object
+  iam.CoppaConsentCommand:
+    properties:
+      coppa_notice_acknowledged:
+        type: boolean
+      method:
+        type: string
+      verification_token:
+        type: string
+    required:
+    - coppa_notice_acknowledged
+    - method
+    - verification_token
+    type: object
+  iam.CreateStudentCommand:
+    properties:
+      birth_year:
+        maximum: 2030
+        minimum: 2000
+        type: integer
+      display_name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      grade_level:
+        maxLength: 20
+        type: string
+      methodology_override_id:
+        type: string
+    required:
+    - display_name
+    type: object
+  iam.CurrentUserResponse:
+    properties:
+      coppa_consent_status:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      family_display_name:
+        type: string
+      family_id:
+        type: string
+      is_primary_parent:
+        type: boolean
+      parent_id:
+        type: string
+      subscription_tier:
+        type: string
+    type: object
+  iam.FamilyProfileResponse:
+    properties:
+      coppa_consent_status:
+        type: string
+      created_at:
+        type: string
+      display_name:
+        type: string
+      id:
+        type: string
+      location_region:
+        type: string
+      parents:
+        items:
+          $ref: '#/definitions/iam.ParentSummary'
+        type: array
+      primary_methodology_id:
+        type: string
+      secondary_methodology_ids:
+        items:
+          type: string
+        type: array
+      state_code:
+        type: string
+      student_count:
+        type: integer
+      subscription_tier:
+        type: string
+    type: object
+  iam.ParentSummary:
+    properties:
+      display_name:
+        type: string
+      id:
+        type: string
+      is_primary:
+        type: boolean
+    type: object
+  iam.StudentResponse:
+    properties:
+      birth_year:
+        type: integer
+      created_at:
+        type: string
+      display_name:
+        type: string
+      grade_level:
+        type: string
+      id:
+        type: string
+      methodology_override_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  iam.UpdateFamilyCommand:
+    properties:
+      display_name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      location_region:
+        maxLength: 200
+        type: string
+      state_code:
+        type: string
+    type: object
+  iam.UpdateStudentCommand:
+    properties:
+      birth_year:
+        maximum: 2030
+        minimum: 2000
+        type: integer
+      display_name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      grade_level:
+        maxLength: 20
+        type: string
+      methodology_override_id:
+        type: string
+    type: object
+  method.ActiveToolResponse:
+    properties:
+      config_overrides:
+        type: object
+      description:
+        type: string
+      display_name:
+        type: string
+      guidance:
+        type: string
+      label:
+        type: string
+      slug:
+        type: string
+      sort_order:
+        type: integer
+      tier:
+        type: string
+      tool_id:
+        type: string
+    type: object
+  method.MethodologyDetailResponse:
+    properties:
+      community_config:
+        type: object
+      display_name:
+        type: string
+      icon_url:
+        type: string
+      id:
+        type: string
+      mastery_paths:
+        type: object
+      onboarding_config:
+        type: object
+      philosophy:
+        type: object
+      short_desc:
+        type: string
+      slug:
+        type: string
+      terminology:
+        type: object
+    type: object
+  method.MethodologySelectionResponse:
+    properties:
+      active_tool_count:
+        type: integer
+      primary:
+        $ref: '#/definitions/method.MethodologySummaryResponse'
+      secondary:
+        items:
+          $ref: '#/definitions/method.MethodologySummaryResponse'
+        type: array
+    type: object
+  method.MethodologySummaryResponse:
+    properties:
+      display_name:
+        type: string
+      icon_url:
+        type: string
+      id:
+        type: string
+      short_desc:
+        type: string
+      slug:
+        type: string
+    type: object
+  method.UpdateMethodologyCommand:
+    properties:
+      primary_methodology_id:
+        type: string
+      secondary_methodology_ids:
+        items:
+          type: string
+        maxItems: 5
+        type: array
+    required:
+    - primary_methodology_id
+    type: object
+  shared.ErrorBody:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  shared.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/shared.ErrorBody'
+    type: object
+host: localhost:3500
+info:
+  contact: {}
+  description: API for the Homegrown Academy homeschooling platform
+  title: Homegrown Academy API
+  version: 0.1.0
+paths:
+  /auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/iam.CurrentUserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get current user
+      tags:
+      - auth
+  /families/consent:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/iam.ConsentStatusResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get COPPA consent status
+      tags:
+      - families
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Consent details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/iam.CoppaConsentCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/iam.ConsentStatusResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Submit COPPA consent
+      tags:
+      - families
+  /families/methodology:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Methodology selection
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/method.UpdateMethodologyCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/method.MethodologySelectionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Update family methodology selection
+      tags:
+      - families
+  /families/profile:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/iam.FamilyProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get family profile
+      tags:
+      - families
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/iam.UpdateFamilyCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/iam.FamilyProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Update family profile
+      tags:
+      - families
+  /families/students:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/iam.StudentResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: List family students
+      tags:
+      - students
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/iam.CreateStudentCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/iam.StudentResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Create student profile
+      tags:
+      - students
+  /families/students/{id}:
+    delete:
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Delete student profile
+      tags:
+      - students
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/iam.UpdateStudentCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/iam.StudentResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Update student profile
+      tags:
+      - students
+  /families/students/{id}/tools:
+    get:
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/method.ActiveToolResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get student's resolved tool set
+      tags:
+      - families
+  /families/tools:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/method.ActiveToolResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get family's resolved active tool set
+      tags:
+      - families
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/app.HealthResponse'
+      summary: Health check
+      tags:
+      - health
+  /hooks/kratos/post-login:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Kratos post-login webhook
+      tags:
+      - hooks
+  /hooks/kratos/post-registration:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Kratos post-registration webhook
+      tags:
+      - hooks
+  /methodologies:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/method.MethodologySummaryResponse'
+            type: array
+      summary: List active methodologies
+      tags:
+      - methodologies
+  /methodologies/{slug}:
+    get:
+      parameters:
+      - description: Methodology slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/method.MethodologyDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get methodology detail
+      tags:
+      - methodologies
+  /methodologies/{slug}/tools:
+    get:
+      parameters:
+      - description: Methodology slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/method.ActiveToolResponse'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: List tools for a methodology
+      tags:
+      - methodologies
+swagger: "2.0"

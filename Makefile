@@ -8,7 +8,7 @@ GOBIN := $(shell $(GO) env GOPATH)/bin
 SWAG := $(GOBIN)/swag
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check lint test type-check \
-        migrate db-reset openapi generate-types full-generate audit install-tools
+        migrate db-reset openapi generate-types full-generate audit install-tools install-hooks
 
 # Default: run all quality gates
 default: check
@@ -72,6 +72,11 @@ db-reset:
 # Install required build tools
 install-tools:
 	$(GO) install github.com/swaggo/swag/cmd/swag@latest
+	$(GO) install github.com/evilmartians/lefthook@latest
+
+# Install lefthook binary and register git hooks (one-shot dev environment setup)
+install-hooks: install-tools
+	$(GOBIN)/lefthook install
 
 # Generate OpenAPI spec from Go annotations
 openapi: install-tools

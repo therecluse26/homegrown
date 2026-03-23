@@ -1,0 +1,1101 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "description": "API for the Homegrown Academy homeschooling platform",
+        "title": "Homegrown Academy API",
+        "contact": {},
+        "version": "0.1.0"
+    },
+    "paths": {
+        "/auth/me": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get current user",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/iam.CurrentUserResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/families/consent": {
+            "get": {
+                "tags": [
+                    "families"
+                ],
+                "summary": "Get COPPA consent status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/iam.ConsentStatusResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "families"
+                ],
+                "summary": "Submit COPPA consent",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/iam.CoppaConsentCommand"
+                            }
+                        }
+                    },
+                    "description": "Consent details",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/iam.ConsentStatusResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/families/methodology": {
+            "patch": {
+                "tags": [
+                    "families"
+                ],
+                "summary": "Update family methodology selection",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/method.UpdateMethodologyCommand"
+                            }
+                        }
+                    },
+                    "description": "Methodology selection",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/method.MethodologySelectionResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/families/profile": {
+            "get": {
+                "tags": [
+                    "families"
+                ],
+                "summary": "Get family profile",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/iam.FamilyProfileResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "tags": [
+                    "families"
+                ],
+                "summary": "Update family profile",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/iam.UpdateFamilyCommand"
+                            }
+                        }
+                    },
+                    "description": "Fields to update",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/iam.FamilyProfileResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/families/students": {
+            "get": {
+                "tags": [
+                    "students"
+                ],
+                "summary": "List family students",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/iam.StudentResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "students"
+                ],
+                "summary": "Create student profile",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/iam.CreateStudentCommand"
+                            }
+                        }
+                    },
+                    "description": "Student details",
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/iam.StudentResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/families/students/{id}": {
+            "delete": {
+                "tags": [
+                    "students"
+                ],
+                "summary": "Delete student profile",
+                "parameters": [
+                    {
+                        "description": "Student ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "tags": [
+                    "students"
+                ],
+                "summary": "Update student profile",
+                "parameters": [
+                    {
+                        "description": "Student ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/iam.UpdateStudentCommand"
+                            }
+                        }
+                    },
+                    "description": "Fields to update",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/iam.StudentResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/families/students/{id}/tools": {
+            "get": {
+                "tags": [
+                    "families"
+                ],
+                "summary": "Get student's resolved tool set",
+                "parameters": [
+                    {
+                        "description": "Student ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/method.ActiveToolResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/families/tools": {
+            "get": {
+                "tags": [
+                    "families"
+                ],
+                "summary": "Get family's resolved active tool set",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/method.ActiveToolResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/app.HealthResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/hooks/kratos/post-login": {
+            "post": {
+                "tags": [
+                    "hooks"
+                ],
+                "summary": "Kratos post-login webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/hooks/kratos/post-registration": {
+            "post": {
+                "tags": [
+                    "hooks"
+                ],
+                "summary": "Kratos post-registration webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/methodologies": {
+            "get": {
+                "tags": [
+                    "methodologies"
+                ],
+                "summary": "List active methodologies",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/method.MethodologySummaryResponse"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/methodologies/{slug}": {
+            "get": {
+                "tags": [
+                    "methodologies"
+                ],
+                "summary": "Get methodology detail",
+                "parameters": [
+                    {
+                        "description": "Methodology slug",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/method.MethodologyDetailResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/methodologies/{slug}/tools": {
+            "get": {
+                "tags": [
+                    "methodologies"
+                ],
+                "summary": "List tools for a methodology",
+                "parameters": [
+                    {
+                        "description": "Methodology slug",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/method.ActiveToolResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "servers": [
+        {
+            "url": "//localhost:3500/v1"
+        }
+    ],
+    "components": {
+        "schemas": {
+            "app.HealthResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    },
+                    "version": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.ConsentStatusResponse": {
+                "type": "object",
+                "properties": {
+                    "can_create_students": {
+                        "type": "boolean"
+                    },
+                    "consent_method": {
+                        "type": "string"
+                    },
+                    "consented_at": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.CoppaConsentCommand": {
+                "type": "object",
+                "required": [
+                    "coppa_notice_acknowledged",
+                    "method",
+                    "verification_token"
+                ],
+                "properties": {
+                    "coppa_notice_acknowledged": {
+                        "type": "boolean"
+                    },
+                    "method": {
+                        "type": "string"
+                    },
+                    "verification_token": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.CreateStudentCommand": {
+                "type": "object",
+                "required": [
+                    "display_name"
+                ],
+                "properties": {
+                    "birth_year": {
+                        "type": "integer",
+                        "maximum": 2030,
+                        "minimum": 2000
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 1
+                    },
+                    "grade_level": {
+                        "type": "string",
+                        "maxLength": 20
+                    },
+                    "methodology_override_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.CurrentUserResponse": {
+                "type": "object",
+                "properties": {
+                    "coppa_consent_status": {
+                        "type": "string"
+                    },
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "family_display_name": {
+                        "type": "string"
+                    },
+                    "family_id": {
+                        "type": "string"
+                    },
+                    "is_primary_parent": {
+                        "type": "boolean"
+                    },
+                    "parent_id": {
+                        "type": "string"
+                    },
+                    "subscription_tier": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.FamilyProfileResponse": {
+                "type": "object",
+                "properties": {
+                    "coppa_consent_status": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "location_region": {
+                        "type": "string"
+                    },
+                    "parents": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/iam.ParentSummary"
+                        }
+                    },
+                    "primary_methodology_id": {
+                        "type": "string"
+                    },
+                    "secondary_methodology_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "state_code": {
+                        "type": "string"
+                    },
+                    "student_count": {
+                        "type": "integer"
+                    },
+                    "subscription_tier": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.ParentSummary": {
+                "type": "object",
+                "properties": {
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "is_primary": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "iam.StudentResponse": {
+                "type": "object",
+                "properties": {
+                    "birth_year": {
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "grade_level": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "methodology_override_id": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.UpdateFamilyCommand": {
+                "type": "object",
+                "properties": {
+                    "display_name": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 1
+                    },
+                    "location_region": {
+                        "type": "string",
+                        "maxLength": 200
+                    },
+                    "state_code": {
+                        "type": "string"
+                    }
+                }
+            },
+            "iam.UpdateStudentCommand": {
+                "type": "object",
+                "properties": {
+                    "birth_year": {
+                        "type": "integer",
+                        "maximum": 2030,
+                        "minimum": 2000
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 1
+                    },
+                    "grade_level": {
+                        "type": "string",
+                        "maxLength": 20
+                    },
+                    "methodology_override_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "method.ActiveToolResponse": {
+                "type": "object",
+                "properties": {
+                    "config_overrides": {
+                        "type": "object"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "guidance": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "sort_order": {
+                        "type": "integer"
+                    },
+                    "tier": {
+                        "type": "string"
+                    },
+                    "tool_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "method.MethodologyDetailResponse": {
+                "type": "object",
+                "properties": {
+                    "community_config": {
+                        "type": "object"
+                    },
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "icon_url": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "mastery_paths": {
+                        "type": "object"
+                    },
+                    "onboarding_config": {
+                        "type": "object"
+                    },
+                    "philosophy": {
+                        "type": "object"
+                    },
+                    "short_desc": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "terminology": {
+                        "type": "object"
+                    }
+                }
+            },
+            "method.MethodologySelectionResponse": {
+                "type": "object",
+                "properties": {
+                    "active_tool_count": {
+                        "type": "integer"
+                    },
+                    "primary": {
+                        "$ref": "#/components/schemas/method.MethodologySummaryResponse"
+                    },
+                    "secondary": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/method.MethodologySummaryResponse"
+                        }
+                    }
+                }
+            },
+            "method.MethodologySummaryResponse": {
+                "type": "object",
+                "properties": {
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "icon_url": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "short_desc": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    }
+                }
+            },
+            "method.UpdateMethodologyCommand": {
+                "type": "object",
+                "required": [
+                    "primary_methodology_id"
+                ],
+                "properties": {
+                    "primary_methodology_id": {
+                        "type": "string"
+                    },
+                    "secondary_methodology_ids": {
+                        "type": "array",
+                        "maxItems": 5,
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "shared.ErrorBody": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            },
+            "shared.ErrorResponse": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "$ref": "#/components/schemas/shared.ErrorBody"
+                    }
+                }
+            }
+        }
+    }
+}

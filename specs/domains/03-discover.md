@@ -1291,62 +1291,62 @@ these as acceptance criteria for code review and integration testing.
 ### Phase 1 — Foundation
 
 #### Database
-- [ ] Create migration: `disc_quiz_status_enum`, `disc_guide_status_enum`, `disc_content_status_enum` types
-- [ ] Create migration: `disc_quiz_definitions` table
-- [ ] Create migration: `disc_quiz_results` table
-- [ ] Create migration: `disc_state_guides` table
-- [ ] Create migration: `disc_content_pages` table
-- [ ] Create seed migration: 51 state guide rows (draft status)
-- [ ] Create seed migration: 8 Homeschooling 101 + 2 advocacy content page stubs
+- [x] Create migration: `disc_quiz_status_enum`, `disc_guide_status_enum`, `disc_content_status_enum` types
+- [x] Create migration: `disc_quiz_definitions` table
+- [x] Create migration: `disc_quiz_results` table
+- [x] Create migration: `disc_state_guides` table
+- [x] Create migration: `disc_content_pages` table
+- [x] Create seed migration: 51 state guide rows (draft status)
+- [x] Create seed migration: 8 Homeschooling 101 + 2 advocacy content page stubs
 
 #### Interfaces
-- [ ] Define `DiscoveryService` interface in `internal/discover/ports.go`
-- [ ] Define `QuizDefinitionRepository` interface in `internal/discover/ports.go`
-- [ ] Define `QuizResultRepository` interface in `internal/discover/ports.go`
-- [ ] Define `StateGuideRepository` interface in `internal/discover/ports.go`
+- [x] Define `DiscoveryService` interface in `internal/discover/ports.go`
+- [x] Define `QuizDefinitionRepository` interface in `internal/discover/ports.go`
+- [x] Define `QuizResultRepository` interface in `internal/discover/ports.go`
+- [x] Define `StateGuideRepository` interface in `internal/discover/ports.go`
 
 #### Error Types
-- [ ] Define `DiscoverError` sentinel errors and wrapper type
-- [ ] Implement `toAppError` conversion function
+- [x] Define `DiscoverError` sentinel errors and wrapper type
+- [x] Implement `toAppError` conversion function
 
 #### Repository Implementations
-- [ ] Implement `PgQuizDefinitionRepository`
-- [ ] Implement `PgQuizResultRepository`
-- [ ] Implement `PgStateGuideRepository`
+- [x] Implement `PgQuizDefinitionRepository`
+- [x] Implement `PgQuizResultRepository`
+- [x] Implement `PgStateGuideRepository`
 
 #### Service Implementation
-- [ ] Implement `DiscoveryServiceImpl` with Phase 1 methods
-- [ ] Implement quiz scoring engine (weighted-sum, normalization, ranking)
-- [ ] Implement weight stripping for `QuizDefinition` → `QuizResponse` conversion
-- [ ] Implement nanoid share_id generation (using `gonanoid`)
-- [ ] Wire `DiscoveryServiceImpl` in `main.go` with `DiscoveryService` interface
+- [x] Implement `DiscoveryServiceImpl` with Phase 1 methods
+- [x] Implement quiz scoring engine (weighted-sum, normalization, ranking)
+- [x] Implement weight stripping for `QuizDefinition` → `QuizResponse` conversion
+- [x] Implement nanoid share_id generation (using `gonanoid`)
+- [x] Wire `DiscoveryServiceImpl` in `main.go` with `DiscoveryService` interface
 
 #### API Endpoints
-- [ ] `GET  /v1/discovery/quiz` — return active quiz (weights stripped)
-- [ ] `POST /v1/discovery/quiz/results` — score and store quiz submission
-- [ ] `GET  /v1/discovery/quiz/results/:share_id` — retrieve quiz result
-- [ ] `GET  /v1/discovery/state-guides` — list all state guides
-- [ ] `GET  /v1/discovery/state-guides/:state_code` — get full state guide
-- [ ] Register all endpoints in `publicRoutes()` (no auth middleware)
+- [x] `GET  /v1/discovery/quiz` — return active quiz (weights stripped)
+- [x] `POST /v1/discovery/quiz/results` — score and store quiz submission
+- [x] `GET  /v1/discovery/quiz/results/:share_id` — retrieve quiz result
+- [x] `GET  /v1/discovery/state-guides` — list all state guides
+- [x] `GET  /v1/discovery/state-guides/:state_code` — get full state guide
+- [x] Register all endpoints in `publicRoutes()` (no auth middleware)
 
 #### Models
-- [ ] Define `SubmitQuizCommand` request type with validator tags
-- [ ] Define all response types (`QuizResponse`, `QuizResultResponse`, `StateGuideResponse`, etc.)
-- [ ] Define all internal types (`QuizDefinition`, `QuizResult`, `StateGuide`, etc.) as GORM models
-- [ ] Add `gonanoid` package to `go.mod` dependencies
+- [x] Define `SubmitQuizCommand` request type with validator tags
+- [x] Define all response types (`QuizResponse`, `QuizResultResponse`, `StateGuideResponse`, etc.)
+- [x] Define all internal types (`QuizDefinition`, `QuizResult`, `StateGuide`, etc.) as GORM models
+- [x] Add `gonanoid` package to `go.mod` dependencies
 
 #### Code Generation
 - [ ] Generate OpenAPI spec with swaggo (`swag init`)
 - [ ] Generate TypeScript types from OpenAPI spec (`cd frontend && npm run generate-types`)
 
 #### Testing
-- [ ] Unit tests for quiz scoring engine (deterministic scoring, normalization, edge cases)
-- [ ] Unit tests for weight stripping (no weights leak to response)
-- [ ] Unit tests for share_id generation (length, alphabet)
-- [ ] Integration test: quiz happy path (get quiz → submit → retrieve result)
-- [ ] Integration test: state guide retrieval (published returns 200, draft returns 404)
-- [ ] Integration test: invalid quiz answers return 422
-- [ ] Integration test: nonexistent share_id returns 404
+- [x] Unit tests for quiz scoring engine (deterministic scoring, normalization, edge cases)
+- [x] Unit tests for weight stripping (no weights leak to response)
+- [x] Unit tests for share_id generation (length, alphabet)
+- [x] Integration test: quiz happy path (get quiz → submit → retrieve result)
+- [x] Integration test: state guide retrieval (published returns 200, draft returns 404)
+- [x] Integration test: invalid quiz answers return 422
+- [x] Integration test: nonexistent share_id returns 404
 
 ### Phase 2
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
@@ -31,8 +32,9 @@ type AppState struct {
 	Version  string // Set via -ldflags at build time
 
 	// ─── Domain Services (added incrementally as domains are built) ─
-	IAM    iam.IamService
-	Method method.MethodologyService
+	IAM      iam.IamService
+	Method   method.MethodologyService
+	Discover discover.DiscoveryService
 	// Social social.SocialService
 	// ... etc.
 }
@@ -122,6 +124,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Method != nil {
 		method.NewHandler(state.Method).Register(pub, auth)
+	}
+	if state.Discover != nil {
+		discover.NewHandler(state.Discover).Register(pub)
 	}
 	// etc.
 

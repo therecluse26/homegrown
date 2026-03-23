@@ -124,16 +124,13 @@ CREATE INDEX idx_method_tools_slug ON method_tools(slug);
 -- Per-methodology tool activation [S§4.2]
 -- Many-to-many: which tools are active for which methodology, with config overrides.
 CREATE TABLE method_tool_activations (
-    methodology_id    UUID NOT NULL REFERENCES method_definitions(id) ON DELETE CASCADE,
-    tool_id           UUID NOT NULL REFERENCES method_tools(id) ON DELETE CASCADE,
-    config_overrides  JSONB NOT NULL DEFAULT '{}',       -- methodology-specific labels, guidance
-                      -- { "label": "Nature Journal", "guidance": "...",
-                      --   "entry_types": ["observation", "sketch", "specimen"] }
-    sort_order        SMALLINT NOT NULL DEFAULT 0,       -- tool display order within methodology
-    PRIMARY KEY (methodology_id, tool_id)
+    methodology_slug TEXT NOT NULL REFERENCES method_definitions(slug),
+    tool_slug        TEXT NOT NULL REFERENCES method_tools(slug),
+    is_default       BOOLEAN NOT NULL DEFAULT false,
+    PRIMARY KEY (methodology_slug, tool_slug)
 );
 
-CREATE INDEX idx_method_activations_tool ON method_tool_activations(tool_id);
+CREATE INDEX idx_method_activations_tool ON method_tool_activations(tool_slug);
 ```
 
 ### §3.2 No Row-Level Security
@@ -192,11 +189,11 @@ VALUES
 
 ALTER TABLE iam_families
     ADD CONSTRAINT fk_iam_families_primary_methodology
-    FOREIGN KEY (primary_methodology_id) REFERENCES method_definitions(id);
+    FOREIGN KEY (primary_methodology_slug) REFERENCES method_definitions(slug);
 
 ALTER TABLE iam_students
     ADD CONSTRAINT fk_iam_students_methodology_override
-    FOREIGN KEY (methodology_override_id) REFERENCES method_definitions(id);
+    FOREIGN KEY (methodology_override_slug) REFERENCES method_definitions(slug);
 
 -- =============================================================================
 -- Master tool catalog [S§8.1]
@@ -960,6 +957,32 @@ type ToolActivationWithTool struct {
     SortOrder       int16           `json:"sort_order"`
 }
 ```
+
+### §8.4 Domain Type Aliases
+
+The method package defines typed string aliases to prevent accidental mixing of slug types
+at compile time:
+
+```go
+type MethodologyID string  // identifies a methodology (e.g. "charlotte-mason")
+type ToolSlug      string  // identifies a tool (e.g. "nature-journal")
+```
+
+The six platform-defined methodology slugs are declared as package-level constants:
+
+```go
+const (
+    MethodologyCharlotteMason MethodologyID = "charlotte-mason"
+    MethodologyTraditional    MethodologyID = "traditional"
+    MethodologyClassical      MethodologyID = "classical"
+    MethodologyWaldorf        MethodologyID = "waldorf"
+    MethodologyMontessori     MethodologyID = "montessori"
+    MethodologyUnschooling    MethodologyID = "unschooling"
+)
+```
+
+These constants are the canonical source of truth for methodology identity across the
+system. New methodologies can only be added via a migration + a new constant here.
 
 ---
 
