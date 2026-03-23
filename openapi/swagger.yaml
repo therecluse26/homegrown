@@ -7,6 +7,144 @@ definitions:
       version:
         type: string
     type: object
+  discover.MethodologyRecommendation:
+    properties:
+      explanation:
+        type: string
+      methodology_name:
+        type: string
+      methodology_slug:
+        type: string
+      rank:
+        type: integer
+      score_percentage:
+        type: integer
+    type: object
+  discover.QuizAnswerResponse:
+    properties:
+      id:
+        type: string
+      text:
+        type: string
+    type: object
+  discover.QuizQuestionResponse:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/discover.QuizAnswerResponse'
+        type: array
+      category:
+        type: string
+      help_text:
+        type: string
+      id:
+        type: string
+      text:
+        type: string
+    type: object
+  discover.QuizResponse:
+    properties:
+      description:
+        type: string
+      questions:
+        items:
+          $ref: '#/definitions/discover.QuizQuestionResponse'
+        type: array
+      quiz_id:
+        type: string
+      title:
+        type: string
+      version:
+        type: integer
+    type: object
+  discover.QuizResultResponse:
+    properties:
+      created_at:
+        type: string
+      is_claimed:
+        type: boolean
+      quiz_version:
+        type: integer
+      recommendations:
+        items:
+          $ref: '#/definitions/discover.MethodologyRecommendation'
+        type: array
+      share_id:
+        type: string
+    type: object
+  discover.StateGuideRequirements:
+    properties:
+      assessment_details:
+        type: string
+      assessment_required:
+        type: boolean
+      attendance_days:
+        type: integer
+      attendance_details:
+        type: string
+      attendance_required:
+        type: boolean
+      notification_details:
+        type: string
+      notification_required:
+        type: boolean
+      record_keeping_details:
+        type: string
+      record_keeping_required:
+        type: boolean
+      regulation_level:
+        description: '"low"|"moderate"|"high"'
+        type: string
+      required_subjects:
+        items:
+          type: string
+        type: array
+      umbrella_school_available:
+        type: boolean
+      umbrella_school_details:
+        type: string
+    type: object
+  discover.StateGuideResponse:
+    properties:
+      guide_content:
+        type: string
+      last_reviewed_at:
+        type: string
+      legal_disclaimer:
+        type: string
+      requirements:
+        $ref: '#/definitions/discover.StateGuideRequirements'
+      state_code:
+        type: string
+      state_name:
+        type: string
+    type: object
+  discover.StateGuideSummaryResponse:
+    properties:
+      is_available:
+        type: boolean
+      last_reviewed_at:
+        type: string
+      state_code:
+        type: string
+      state_name:
+        type: string
+    type: object
+  discover.SubmitQuizCommand:
+    properties:
+      answers:
+        additionalProperties:
+          type: string
+        description: |-
+          Answers maps question_id → answer_id.
+          Missing questions contribute zero weight (partial submissions are valid).
+        type: object
+      session_token:
+        maxLength: 128
+        type: string
+    required:
+    - answers
+    type: object
   iam.ConsentStatusResponse:
     properties:
       can_create_students:
@@ -44,7 +182,7 @@ definitions:
       grade_level:
         maxLength: 20
         type: string
-      methodology_override_id:
+      methodology_override_slug:
         type: string
     required:
     - display_name
@@ -84,9 +222,9 @@ definitions:
         items:
           $ref: '#/definitions/iam.ParentSummary'
         type: array
-      primary_methodology_id:
+      primary_methodology_slug:
         type: string
-      secondary_methodology_ids:
+      secondary_methodology_slugs:
         items:
           type: string
         type: array
@@ -118,7 +256,7 @@ definitions:
         type: string
       id:
         type: string
-      methodology_override_id:
+      methodology_override_slug:
         type: string
       updated_at:
         type: string
@@ -148,7 +286,7 @@ definitions:
       grade_level:
         maxLength: 20
         type: string
-      methodology_override_id:
+      methodology_override_slug:
         type: string
     type: object
   method.ActiveToolResponse:
@@ -169,8 +307,6 @@ definitions:
         type: integer
       tier:
         type: string
-      tool_id:
-        type: string
     type: object
   method.MethodologyDetailResponse:
     properties:
@@ -179,8 +315,6 @@ definitions:
       display_name:
         type: string
       icon_url:
-        type: string
-      id:
         type: string
       mastery_paths:
         type: object
@@ -191,10 +325,26 @@ definitions:
       short_desc:
         type: string
       slug:
-        type: string
+        $ref: '#/definitions/method.MethodologyID'
       terminology:
         type: object
     type: object
+  method.MethodologyID:
+    enum:
+    - charlotte-mason
+    - traditional
+    - classical
+    - waldorf
+    - montessori
+    - unschooling
+    type: string
+    x-enum-varnames:
+    - MethodologyCharlotteMason
+    - MethodologyTraditional
+    - MethodologyClassical
+    - MethodologyWaldorf
+    - MethodologyMontessori
+    - MethodologyUnschooling
   method.MethodologySelectionResponse:
     properties:
       active_tool_count:
@@ -212,24 +362,22 @@ definitions:
         type: string
       icon_url:
         type: string
-      id:
-        type: string
       short_desc:
         type: string
       slug:
-        type: string
+        $ref: '#/definitions/method.MethodologyID'
     type: object
   method.UpdateMethodologyCommand:
     properties:
-      primary_methodology_id:
-        type: string
-      secondary_methodology_ids:
+      primary_methodology_slug:
+        $ref: '#/definitions/method.MethodologyID'
+      secondary_methodology_slugs:
         items:
-          type: string
+          $ref: '#/definitions/method.MethodologyID'
         maxItems: 5
         type: array
     required:
-    - primary_methodology_id
+    - primary_methodology_slug
     type: object
   shared.ErrorBody:
     properties:
@@ -266,6 +414,109 @@ paths:
       summary: Get current user
       tags:
       - auth
+  /discovery/quiz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/discover.QuizResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get active quiz
+      tags:
+      - discovery
+  /discovery/quiz/results:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Quiz answers
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/discover.SubmitQuizCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/discover.QuizResultResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Submit quiz answers and get methodology recommendations
+      tags:
+      - discovery
+  /discovery/quiz/results/{share_id}:
+    get:
+      parameters:
+      - description: Share ID
+        in: path
+        name: share_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/discover.QuizResultResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get quiz result by share ID
+      tags:
+      - discovery
+  /discovery/state-guides:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/discover.StateGuideSummaryResponse'
+            type: array
+      summary: List all state guides
+      tags:
+      - discovery
+  /discovery/state-guides/{state_code}:
+    get:
+      parameters:
+      - description: Two-letter state code (e.g. CA, NY)
+        in: path
+        name: state_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/discover.StateGuideResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get state guide by state code
+      tags:
+      - discovery
   /families/consent:
     get:
       produces:

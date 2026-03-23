@@ -40,6 +40,166 @@ const docTemplate = `{
                 }
             }
         },
+        "/discovery/quiz": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "discovery"
+                ],
+                "summary": "Get active quiz",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/discover.QuizResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/discovery/quiz/results": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "discovery"
+                ],
+                "summary": "Submit quiz answers and get methodology recommendations",
+                "parameters": [
+                    {
+                        "description": "Quiz answers",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/discover.SubmitQuizCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/discover.QuizResultResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/discovery/quiz/results/{share_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "discovery"
+                ],
+                "summary": "Get quiz result by share ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Share ID",
+                        "name": "share_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/discover.QuizResultResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/discovery/state-guides": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "discovery"
+                ],
+                "summary": "List all state guides",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/discover.StateGuideSummaryResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/discovery/state-guides/{state_code}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "discovery"
+                ],
+                "summary": "Get state guide by state code",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Two-letter state code (e.g. CA, NY)",
+                        "name": "state_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/discover.StateGuideResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/families/consent": {
             "get": {
                 "produces": [
@@ -640,6 +800,213 @@ const docTemplate = `{
                 }
             }
         },
+        "discover.MethodologyRecommendation": {
+            "type": "object",
+            "properties": {
+                "explanation": {
+                    "type": "string"
+                },
+                "methodology_name": {
+                    "type": "string"
+                },
+                "methodology_slug": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "score_percentage": {
+                    "type": "integer"
+                }
+            }
+        },
+        "discover.QuizAnswerResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "discover.QuizQuestionResponse": {
+            "type": "object",
+            "properties": {
+                "answers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/discover.QuizAnswerResponse"
+                    }
+                },
+                "category": {
+                    "type": "string"
+                },
+                "help_text": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "discover.QuizResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/discover.QuizQuestionResponse"
+                    }
+                },
+                "quiz_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "discover.QuizResultResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "is_claimed": {
+                    "type": "boolean"
+                },
+                "quiz_version": {
+                    "type": "integer"
+                },
+                "recommendations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/discover.MethodologyRecommendation"
+                    }
+                },
+                "share_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "discover.StateGuideRequirements": {
+            "type": "object",
+            "properties": {
+                "assessment_details": {
+                    "type": "string"
+                },
+                "assessment_required": {
+                    "type": "boolean"
+                },
+                "attendance_days": {
+                    "type": "integer"
+                },
+                "attendance_details": {
+                    "type": "string"
+                },
+                "attendance_required": {
+                    "type": "boolean"
+                },
+                "notification_details": {
+                    "type": "string"
+                },
+                "notification_required": {
+                    "type": "boolean"
+                },
+                "record_keeping_details": {
+                    "type": "string"
+                },
+                "record_keeping_required": {
+                    "type": "boolean"
+                },
+                "regulation_level": {
+                    "description": "\"low\"|\"moderate\"|\"high\"",
+                    "type": "string"
+                },
+                "required_subjects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "umbrella_school_available": {
+                    "type": "boolean"
+                },
+                "umbrella_school_details": {
+                    "type": "string"
+                }
+            }
+        },
+        "discover.StateGuideResponse": {
+            "type": "object",
+            "properties": {
+                "guide_content": {
+                    "type": "string"
+                },
+                "last_reviewed_at": {
+                    "type": "string"
+                },
+                "legal_disclaimer": {
+                    "type": "string"
+                },
+                "requirements": {
+                    "$ref": "#/definitions/discover.StateGuideRequirements"
+                },
+                "state_code": {
+                    "type": "string"
+                },
+                "state_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "discover.StateGuideSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "is_available": {
+                    "type": "boolean"
+                },
+                "last_reviewed_at": {
+                    "type": "string"
+                },
+                "state_code": {
+                    "type": "string"
+                },
+                "state_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "discover.SubmitQuizCommand": {
+            "type": "object",
+            "required": [
+                "answers"
+            ],
+            "properties": {
+                "answers": {
+                    "description": "Answers maps question_id → answer_id.\nMissing questions contribute zero weight (partial submissions are valid).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "session_token": {
+                    "type": "string",
+                    "maxLength": 128
+                }
+            }
+        },
         "iam.ConsentStatusResponse": {
             "type": "object",
             "properties": {
@@ -696,7 +1063,7 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 20
                 },
-                "methodology_override_id": {
+                "methodology_override_slug": {
                     "type": "string"
                 }
             }
@@ -754,10 +1121,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/iam.ParentSummary"
                     }
                 },
-                "primary_methodology_id": {
+                "primary_methodology_slug": {
                     "type": "string"
                 },
-                "secondary_methodology_ids": {
+                "secondary_methodology_slugs": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -806,7 +1173,7 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
-                "methodology_override_id": {
+                "methodology_override_slug": {
                     "type": "string"
                 },
                 "updated_at": {
@@ -848,7 +1215,7 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 20
                 },
-                "methodology_override_id": {
+                "methodology_override_slug": {
                     "type": "string"
                 }
             }
@@ -879,9 +1246,6 @@ const docTemplate = `{
                 },
                 "tier": {
                     "type": "string"
-                },
-                "tool_id": {
-                    "type": "string"
                 }
             }
         },
@@ -897,9 +1261,6 @@ const docTemplate = `{
                 "icon_url": {
                     "type": "string"
                 },
-                "id": {
-                    "type": "string"
-                },
                 "mastery_paths": {
                     "type": "object"
                 },
@@ -913,12 +1274,31 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "slug": {
-                    "type": "string"
+                    "$ref": "#/definitions/method.MethodologyID"
                 },
                 "terminology": {
                     "type": "object"
                 }
             }
+        },
+        "method.MethodologyID": {
+            "type": "string",
+            "enum": [
+                "charlotte-mason",
+                "traditional",
+                "classical",
+                "waldorf",
+                "montessori",
+                "unschooling"
+            ],
+            "x-enum-varnames": [
+                "MethodologyCharlotteMason",
+                "MethodologyTraditional",
+                "MethodologyClassical",
+                "MethodologyWaldorf",
+                "MethodologyMontessori",
+                "MethodologyUnschooling"
+            ]
         },
         "method.MethodologySelectionResponse": {
             "type": "object",
@@ -946,31 +1326,28 @@ const docTemplate = `{
                 "icon_url": {
                     "type": "string"
                 },
-                "id": {
-                    "type": "string"
-                },
                 "short_desc": {
                     "type": "string"
                 },
                 "slug": {
-                    "type": "string"
+                    "$ref": "#/definitions/method.MethodologyID"
                 }
             }
         },
         "method.UpdateMethodologyCommand": {
             "type": "object",
             "required": [
-                "primary_methodology_id"
+                "primary_methodology_slug"
             ],
             "properties": {
-                "primary_methodology_id": {
-                    "type": "string"
+                "primary_methodology_slug": {
+                    "$ref": "#/definitions/method.MethodologyID"
                 },
-                "secondary_methodology_ids": {
+                "secondary_methodology_slugs": {
                     "type": "array",
                     "maxItems": 5,
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/method.MethodologyID"
                     }
                 }
             }

@@ -49,6 +49,242 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discovery/quiz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get active quiz */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["discover.QuizResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discovery/quiz/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit quiz answers and get methodology recommendations */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Quiz answers */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["discover.SubmitQuizCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["discover.QuizResultResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discovery/quiz/results/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get quiz result by share ID */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Share ID */
+                    share_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["discover.QuizResultResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discovery/state-guides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all state guides */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["discover.StateGuideSummaryResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discovery/state-guides/{state_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get state guide by state code */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Two-letter state code (e.g. CA, NY) */
+                    state_code: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["discover.StateGuideResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/families/consent": {
         parameters: {
             query?: never;
@@ -864,6 +1100,78 @@ export interface components {
             status?: string;
             version?: string;
         };
+        "discover.MethodologyRecommendation": {
+            explanation?: string;
+            methodology_name?: string;
+            methodology_slug?: string;
+            rank?: number;
+            score_percentage?: number;
+        };
+        "discover.QuizAnswerResponse": {
+            id?: string;
+            text?: string;
+        };
+        "discover.QuizQuestionResponse": {
+            answers?: components["schemas"]["discover.QuizAnswerResponse"][];
+            category?: string;
+            help_text?: string;
+            id?: string;
+            text?: string;
+        };
+        "discover.QuizResponse": {
+            description?: string;
+            questions?: components["schemas"]["discover.QuizQuestionResponse"][];
+            quiz_id?: string;
+            title?: string;
+            version?: number;
+        };
+        "discover.QuizResultResponse": {
+            created_at?: string;
+            is_claimed?: boolean;
+            quiz_version?: number;
+            recommendations?: components["schemas"]["discover.MethodologyRecommendation"][];
+            share_id?: string;
+        };
+        "discover.StateGuideRequirements": {
+            assessment_details?: string;
+            assessment_required?: boolean;
+            attendance_days?: number;
+            attendance_details?: string;
+            attendance_required?: boolean;
+            notification_details?: string;
+            notification_required?: boolean;
+            record_keeping_details?: string;
+            record_keeping_required?: boolean;
+            /** @description "low"|"moderate"|"high" */
+            regulation_level?: string;
+            required_subjects?: string[];
+            umbrella_school_available?: boolean;
+            umbrella_school_details?: string;
+        };
+        "discover.StateGuideResponse": {
+            guide_content?: string;
+            last_reviewed_at?: string;
+            legal_disclaimer?: string;
+            requirements?: components["schemas"]["discover.StateGuideRequirements"];
+            state_code?: string;
+            state_name?: string;
+        };
+        "discover.StateGuideSummaryResponse": {
+            is_available?: boolean;
+            last_reviewed_at?: string;
+            state_code?: string;
+            state_name?: string;
+        };
+        "discover.SubmitQuizCommand": {
+            /**
+             * @description Answers maps question_id → answer_id.
+             *     Missing questions contribute zero weight (partial submissions are valid).
+             */
+            answers: {
+                [key: string]: string;
+            };
+            session_token?: string;
+        };
         "iam.ConsentStatusResponse": {
             can_create_students?: boolean;
             consent_method?: string;
@@ -879,7 +1187,7 @@ export interface components {
             birth_year?: number;
             display_name: string;
             grade_level?: string;
-            methodology_override_id?: string;
+            methodology_override_slug?: string;
         };
         "iam.CurrentUserResponse": {
             coppa_consent_status?: string;
@@ -898,8 +1206,8 @@ export interface components {
             id?: string;
             location_region?: string;
             parents?: components["schemas"]["iam.ParentSummary"][];
-            primary_methodology_id?: string;
-            secondary_methodology_ids?: string[];
+            primary_methodology_slug?: string;
+            secondary_methodology_slugs?: string[];
             state_code?: string;
             student_count?: number;
             subscription_tier?: string;
@@ -915,7 +1223,7 @@ export interface components {
             display_name?: string;
             grade_level?: string;
             id?: string;
-            methodology_override_id?: string;
+            methodology_override_slug?: string;
             updated_at?: string;
         };
         "iam.UpdateFamilyCommand": {
@@ -927,7 +1235,7 @@ export interface components {
             birth_year?: number;
             display_name?: string;
             grade_level?: string;
-            methodology_override_id?: string;
+            methodology_override_slug?: string;
         };
         "method.ActiveToolResponse": {
             config_overrides?: Record<string, never>;
@@ -938,20 +1246,20 @@ export interface components {
             slug?: string;
             sort_order?: number;
             tier?: string;
-            tool_id?: string;
         };
         "method.MethodologyDetailResponse": {
             community_config?: Record<string, never>;
             display_name?: string;
             icon_url?: string;
-            id?: string;
             mastery_paths?: Record<string, never>;
             onboarding_config?: Record<string, never>;
             philosophy?: Record<string, never>;
             short_desc?: string;
-            slug?: string;
+            slug?: components["schemas"]["method.MethodologyID"];
             terminology?: Record<string, never>;
         };
+        /** @enum {string} */
+        "method.MethodologyID": "charlotte-mason" | "traditional" | "classical" | "waldorf" | "montessori" | "unschooling";
         "method.MethodologySelectionResponse": {
             active_tool_count?: number;
             primary?: components["schemas"]["method.MethodologySummaryResponse"];
@@ -960,13 +1268,12 @@ export interface components {
         "method.MethodologySummaryResponse": {
             display_name?: string;
             icon_url?: string;
-            id?: string;
             short_desc?: string;
-            slug?: string;
+            slug?: components["schemas"]["method.MethodologyID"];
         };
         "method.UpdateMethodologyCommand": {
-            primary_methodology_id: string;
-            secondary_methodology_ids?: string[];
+            primary_methodology_slug: components["schemas"]["method.MethodologyID"];
+            secondary_methodology_slugs?: components["schemas"]["method.MethodologyID"][];
         };
         "shared.ErrorBody": {
             code?: string;

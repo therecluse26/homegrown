@@ -1336,8 +1336,8 @@ these as acceptance criteria for code review and integration testing.
 - [x] Add `gonanoid` package to `go.mod` dependencies
 
 #### Code Generation
-- [ ] Generate OpenAPI spec with swaggo (`swag init`)
-- [ ] Generate TypeScript types from OpenAPI spec (`cd frontend && npm run generate-types`)
+- [x] Generate OpenAPI spec with swaggo (`swag init`)
+- [x] Generate TypeScript types from OpenAPI spec (`cd frontend && npm run generate-types`)
 
 #### Testing
 - [x] Unit tests for quiz scoring engine (deterministic scoring, normalization, edge cases)
