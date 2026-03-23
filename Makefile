@@ -4,7 +4,9 @@
 # Detect Go binary — supports Nix environments where go isn't in system PATH.
 # Override with: make openapi GO=/path/to/go
 GO ?= $(shell command -v go 2>/dev/null || ls /nix/store/*-go-1.*/bin/go 2>/dev/null | tail -1)
-GOBIN := $(shell $(GO) env GOPATH)/bin
+# Honor $GOBIN if set (e.g. Nix home-manager sets it to /scratch/cache/go/bin);
+# fall back to $GOPATH/bin (the Go toolchain default).
+GOBIN := $(or $(shell $(GO) env GOBIN),$(shell $(GO) env GOPATH)/bin)
 SWAG := $(GOBIN)/swag
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check lint test type-check \
