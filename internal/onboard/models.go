@@ -299,7 +299,7 @@ type communityGroupConfig struct {
 
 // UpdateFamilyProfileCommand is the request body for PATCH /v1/onboarding/family-profile. [04-onboard §4]
 type UpdateFamilyProfileCommand struct {
-	DisplayName    *string `json:"display_name,omitempty"     validate:"omitempty,min=1,max=100"`
+	DisplayName    string  `json:"display_name"               validate:"required,min=1,max=200"`
 	StateCode      *string `json:"state_code,omitempty"       validate:"omitempty,len=2"`
 	LocationRegion *string `json:"location_region,omitempty"  validate:"omitempty,max=200"`
 }
@@ -341,7 +341,13 @@ type WizardProgressResponse struct {
 
 // RoadmapResponse is the response for GET /v1/onboarding/roadmap. [04-onboard §4]
 type RoadmapResponse struct {
-	Items []RoadmapItemResponse `json:"items"`
+	Groups []RoadmapAgeGroup `json:"groups"`
+}
+
+// RoadmapAgeGroup groups roadmap items by age bracket. nil age_group = "all ages".
+type RoadmapAgeGroup struct {
+	AgeGroup *string              `json:"age_group"`
+	Items    []RoadmapItemResponse `json:"items"`
 }
 
 // RoadmapItemResponse is a single roadmap item.
@@ -359,7 +365,13 @@ type RoadmapItemResponse struct {
 
 // RecommendationsResponse is the response for GET /v1/onboarding/recommendations. [04-onboard §4]
 type RecommendationsResponse struct {
-	Items []RecommendationItemResponse `json:"items"`
+	Groups []RecommendationAgeGroup `json:"groups"`
+}
+
+// RecommendationAgeGroup groups recommendation items by age bracket. nil age_group = "all ages".
+type RecommendationAgeGroup struct {
+	AgeGroup *string                      `json:"age_group"`
+	Items    []RecommendationItemResponse `json:"items"`
 }
 
 // RecommendationItemResponse is a single recommendation item.
@@ -392,8 +404,9 @@ type CommunitySuggestionResponse struct {
 
 // QuizImportResponse is the response for POST /v1/onboarding/methodology/import-quiz. [04-onboard §4]
 type QuizImportResponse struct {
-	ShareID         string                     `json:"share_id"`
-	Recommendations []OnboardQuizRecommendation `json:"recommendations"`
+	ShareID                     string                     `json:"share_id"`
+	SuggestedPrimarySlug        string                     `json:"suggested_primary_slug"`
+	MethodologyRecommendations  []OnboardQuizRecommendation `json:"methodology_recommendations"`
 }
 
 // ─── Cross-Domain Response Types ─────────────────────────────────────────────
@@ -424,4 +437,5 @@ type OnboardQuizRecommendation struct {
 	MethodologySlug string `json:"methodology_slug"`
 	MethodologyName string `json:"methodology_name"`
 	ScorePercentage uint8  `json:"score_percentage"`
+	Explanation     string `json:"explanation"`
 }

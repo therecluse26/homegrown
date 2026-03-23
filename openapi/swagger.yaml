@@ -379,6 +379,237 @@ definitions:
     required:
     - primary_methodology_slug
     type: object
+  onboard.AddChildCommand:
+    properties:
+      birth_year:
+        maximum: 2030
+        minimum: 2000
+        type: integer
+      display_name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      grade_level:
+        maxLength: 20
+        type: string
+    required:
+    - display_name
+    type: object
+  onboard.CommunityResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/onboard.CommunitySuggestionResponse'
+        type: array
+    type: object
+  onboard.CommunitySuggestionResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      methodology_slug:
+        type: string
+      reference_id:
+        type: string
+      sort_order:
+        type: integer
+      suggestion_type:
+        type: string
+      title:
+        type: string
+    type: object
+  onboard.ImportQuizCommand:
+    properties:
+      share_id:
+        type: string
+    required:
+    - share_id
+    type: object
+  onboard.OnboardQuizRecommendation:
+    properties:
+      explanation:
+        type: string
+      methodology_name:
+        type: string
+      methodology_slug:
+        type: string
+      score_percentage:
+        type: integer
+    type: object
+  onboard.QuizImportResponse:
+    properties:
+      methodology_recommendations:
+        items:
+          $ref: '#/definitions/onboard.OnboardQuizRecommendation'
+        type: array
+      share_id:
+        type: string
+      suggested_primary_slug:
+        type: string
+    type: object
+  onboard.RecommendationAgeGroup:
+    properties:
+      age_group:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/onboard.RecommendationItemResponse'
+        type: array
+    type: object
+  onboard.RecommendationItemResponse:
+    properties:
+      age_group:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      link_url:
+        type: string
+      methodology_slug:
+        type: string
+      price_type:
+        type: string
+      sort_order:
+        type: integer
+      title:
+        type: string
+    type: object
+  onboard.RecommendationsResponse:
+    properties:
+      groups:
+        items:
+          $ref: '#/definitions/onboard.RecommendationAgeGroup'
+        type: array
+    type: object
+  onboard.RoadmapAgeGroup:
+    properties:
+      age_group:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/onboard.RoadmapItemResponse'
+        type: array
+    type: object
+  onboard.RoadmapItemResponse:
+    properties:
+      age_group:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_completed:
+        type: boolean
+      item_type:
+        $ref: '#/definitions/onboard.RoadmapItemType'
+      link_url:
+        type: string
+      methodology_slug:
+        type: string
+      sort_order:
+        type: integer
+      title:
+        type: string
+    type: object
+  onboard.RoadmapItemType:
+    enum:
+    - task
+    - resource
+    - feature_tour
+    type: string
+    x-enum-varnames:
+    - ItemTypeTask
+    - ItemTypeResource
+    - ItemTypeFeatureTour
+  onboard.RoadmapResponse:
+    properties:
+      groups:
+        items:
+          $ref: '#/definitions/onboard.RoadmapAgeGroup'
+        type: array
+    type: object
+  onboard.SelectMethodologyCommand:
+    properties:
+      explanation_acknowledged:
+        type: boolean
+      methodology_path:
+        enum:
+        - quiz_informed
+        - exploration
+        - skip
+        type: string
+      primary_methodology_slug:
+        type: string
+      secondary_methodology_slugs:
+        items:
+          type: string
+        maxItems: 5
+        type: array
+    required:
+    - methodology_path
+    - primary_methodology_slug
+    type: object
+  onboard.UpdateFamilyProfileCommand:
+    properties:
+      display_name:
+        maxLength: 200
+        minLength: 1
+        type: string
+      location_region:
+        maxLength: 200
+        type: string
+      state_code:
+        type: string
+    required:
+    - display_name
+    type: object
+  onboard.WizardProgressResponse:
+    properties:
+      completed_at:
+        type: string
+      completed_steps:
+        items:
+          $ref: '#/definitions/onboard.WizardStep'
+        type: array
+      created_at:
+        type: string
+      current_step:
+        $ref: '#/definitions/onboard.WizardStep'
+      family_id:
+        type: string
+      id:
+        type: string
+      methodology_path:
+        type: string
+      quiz_share_id:
+        type: string
+      status:
+        $ref: '#/definitions/onboard.WizardStatus'
+    type: object
+  onboard.WizardStatus:
+    enum:
+    - in_progress
+    - completed
+    - skipped
+    type: string
+    x-enum-varnames:
+    - StatusInProgress
+    - StatusCompleted
+    - StatusSkipped
+  onboard.WizardStep:
+    enum:
+    - family_profile
+    - children
+    - methodology
+    - roadmap_review
+    type: string
+    x-enum-varnames:
+    - StepFamilyProfile
+    - StepChildren
+    - StepMethodology
+    - StepRoadmapReview
   shared.ErrorBody:
     properties:
       code:
@@ -897,4 +1128,274 @@ paths:
       summary: List tools for a methodology
       tags:
       - methodologies
+  /onboarding/children:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Child details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/onboard.AddChildCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/onboard.WizardProgressResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Add child during onboarding
+      tags:
+      - onboarding
+  /onboarding/children/{id}:
+    delete:
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Remove child during onboarding
+      tags:
+      - onboarding
+  /onboarding/community:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.CommunityResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get onboarding community suggestions
+      tags:
+      - onboarding
+  /onboarding/complete:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.WizardProgressResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Complete the onboarding wizard
+      tags:
+      - onboarding
+  /onboarding/family-profile:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Profile fields
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/onboard.UpdateFamilyProfileCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.WizardProgressResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Update family profile during onboarding
+      tags:
+      - onboarding
+  /onboarding/methodology:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Methodology selection
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/onboard.SelectMethodologyCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.WizardProgressResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Select methodology during onboarding
+      tags:
+      - onboarding
+  /onboarding/methodology/import-quiz:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Quiz share ID
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/onboard.ImportQuizCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.QuizImportResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Import quiz result into onboarding
+      tags:
+      - onboarding
+  /onboarding/progress:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.WizardProgressResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get onboarding wizard progress
+      tags:
+      - onboarding
+  /onboarding/recommendations:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.RecommendationsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get onboarding starter recommendations
+      tags:
+      - onboarding
+  /onboarding/roadmap:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.RoadmapResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get onboarding roadmap
+      tags:
+      - onboarding
+  /onboarding/skip:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.WizardProgressResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Skip the onboarding wizard
+      tags:
+      - onboarding
 swagger: "2.0"

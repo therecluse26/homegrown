@@ -84,9 +84,10 @@ func (s *onboardingServiceImpl) GetRoadmap(ctx context.Context, scope *shared.Fa
 	if len(items) == 0 {
 		return nil, &OnboardError{Err: ErrNoRoadmapItems}
 	}
-	resp := &RoadmapResponse{Items: make([]RoadmapItemResponse, len(items))}
+	// Build flat response items
+	flat := make([]RoadmapItemResponse, len(items))
 	for i, item := range items {
-		resp.Items[i] = RoadmapItemResponse{
+		flat[i] = RoadmapItemResponse{
 			ID:              item.ID,
 			MethodologySlug: item.MethodologySlug,
 			ItemType:        item.ItemType,
@@ -98,7 +99,12 @@ func (s *onboardingServiceImpl) GetRoadmap(ctx context.Context, scope *shared.Fa
 			IsCompleted:     item.IsCompleted,
 		}
 	}
-	return resp, nil
+	buckets := groupByAge(flat, func(r RoadmapItemResponse) *string { return r.AgeGroup })
+	groups := make([]RoadmapAgeGroup, len(buckets))
+	for i, b := range buckets {
+		groups[i] = RoadmapAgeGroup(b)
+	}
+	return &RoadmapResponse{Groups: groups}, nil
 }
 
 // ─── GetRecommendations ──────────────────────────────────────────────────────
@@ -117,9 +123,10 @@ func (s *onboardingServiceImpl) GetRecommendations(ctx context.Context, scope *s
 	if len(items) == 0 {
 		return nil, &OnboardError{Err: ErrNoRecommendations}
 	}
-	resp := &RecommendationsResponse{Items: make([]RecommendationItemResponse, len(items))}
+	// Build flat response items
+	flat := make([]RecommendationItemResponse, len(items))
 	for i, item := range items {
-		resp.Items[i] = RecommendationItemResponse{
+		flat[i] = RecommendationItemResponse{
 			ID:              item.ID,
 			MethodologySlug: item.MethodologySlug,
 			Title:           item.Title,
@@ -130,7 +137,12 @@ func (s *onboardingServiceImpl) GetRecommendations(ctx context.Context, scope *s
 			SortOrder:       item.SortOrder,
 		}
 	}
-	return resp, nil
+	buckets := groupByAge(flat, func(r RecommendationItemResponse) *string { return r.AgeGroup })
+	groups := make([]RecommendationAgeGroup, len(buckets))
+	for i, b := range buckets {
+		groups[i] = RecommendationAgeGroup(b)
+	}
+	return &RecommendationsResponse{Groups: groups}, nil
 }
 
 // ─── GetCommunity ────────────────────────────────────────────────────────────
@@ -182,7 +194,7 @@ func (s *onboardingServiceImpl) UpdateFamilyProfile(ctx context.Context, scope *
 			return findErr
 		}
 		if progress.Status != StatusInProgress {
-			return nil // wizard already done, no-op
+			return &OnboardError{Err: ErrWizardNotInProgress}
 		}
 		advanceStep(progress, StepFamilyProfile)
 		return repo.Update(ctx, progress)
@@ -211,7 +223,7 @@ func (s *onboardingServiceImpl) AddChild(ctx context.Context, scope *shared.Fami
 			return findErr
 		}
 		if progress.Status != StatusInProgress {
-			return nil
+			return &OnboardError{Err: ErrWizardNotInProgress}
 		}
 		advanceStep(progress, StepChildren)
 		return repo.Update(ctx, progress)
@@ -231,6 +243,16 @@ func (s *onboardingServiceImpl) RemoveChild(ctx context.Context, scope *shared.F
 // ─── SelectMethodology ───────────────────────────────────────────────────────
 
 func (s *onboardingServiceImpl) SelectMethodology(ctx context.Context, scope *shared.FamilyScope, cmd SelectMethodologyCommand) (*WizardProgressResponse, error) {
+	// Skip path: auto-assign default methodology, clear secondaries. [04-onboard §9.3]
+	if cmd.MethodologyPath == string(PathSkip) {
+		defaultSlug, defaultErr := s.methodology.GetDefaultMethodologySlug(ctx)
+		if defaultErr != nil {
+			return nil, defaultErr
+		}
+		cmd.PrimaryMethodologySlug = defaultSlug
+		cmd.SecondaryMethodologySlugs = nil
+	}
+
 	// Validate: secondary methodologies require acknowledgment
 	if len(cmd.SecondaryMethodologySlugs) > 0 && !cmd.ExplanationAcknowledged {
 		return nil, &OnboardError{Err: ErrSecondaryWithoutAck}
@@ -312,9 +334,14 @@ func (s *onboardingServiceImpl) ImportQuiz(ctx context.Context, scope *shared.Fa
 		return nil, err
 	}
 
+	suggested := ""
+	if len(quizResult.Recommendations) > 0 {
+		suggested = quizResult.Recommendations[0].MethodologySlug
+	}
 	return &QuizImportResponse{
-		ShareID:         quizResult.ShareID,
-		Recommendations: quizResult.Recommendations,
+		ShareID:                    quizResult.ShareID,
+		SuggestedPrimarySlug:       suggested,
+		MethodologyRecommendations: quizResult.Recommendations,
 	}, nil
 }
 
@@ -444,17 +471,25 @@ func (s *onboardingServiceImpl) InitializeWizard(ctx context.Context, familyID u
 func (s *onboardingServiceImpl) HandleMethodologyChanged(ctx context.Context, familyID uuid.UUID, primarySlug string, secondarySlugs []string) error {
 	// RLS bypass: called from event handler — no auth context available.
 	var wizardID uuid.UUID
+	var skipMaterialization bool
 	err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		repo := &PgWizardProgressRepository{db: tx}
 		progress, findErr := repo.FindByFamilyID(ctx, familyID)
 		if findErr != nil {
 			return findErr
 		}
+		if progress.Status != StatusInProgress {
+			skipMaterialization = true
+			return nil
+		}
 		wizardID = progress.ID
 		return nil
 	})
 	if err != nil {
 		return err
+	}
+	if skipMaterialization {
+		return nil // wizard complete/skipped — don't re-materialize
 	}
 
 	return s.materializeGuidanceUnscoped(ctx, familyID, wizardID, primarySlug, secondarySlugs)
@@ -689,6 +724,54 @@ func advanceStep(progress *WizardProgress, completedStep WizardStep) {
 	}
 	// All steps completed — stay on last step
 	progress.CurrentStep = wizardStepOrder[len(wizardStepOrder)-1]
+}
+
+// ─── Grouping ────────────────────────────────────────────────────────────────
+
+// groupByAge groups items by age bracket. nil age_group ("all ages") is listed first.
+// Preserves original item order within each group. [04-onboard §10.3]
+func groupByAge[T any](items []T, getAgeGroup func(T) *string) []ageGroupBucket[T] {
+	order := make([]string, 0)   // track insertion order; "" = nil/all-ages
+	buckets := make(map[string][]T)
+	for _, item := range items {
+		ag := getAgeGroup(item)
+		key := ""
+		if ag != nil {
+			key = *ag
+		}
+		if _, seen := buckets[key]; !seen {
+			order = append(order, key)
+		}
+		buckets[key] = append(buckets[key], item)
+	}
+
+	// Move "all ages" (key="") to front if present
+	allIdx := -1
+	for i, k := range order {
+		if k == "" {
+			allIdx = i
+			break
+		}
+	}
+	if allIdx > 0 {
+		order = append([]string{""}, append(order[:allIdx], order[allIdx+1:]...)...)
+	}
+
+	result := make([]ageGroupBucket[T], len(order))
+	for i, key := range order {
+		var ag *string
+		if key != "" {
+			k := key
+			ag = &k
+		}
+		result[i] = ageGroupBucket[T]{AgeGroup: ag, Items: buckets[key]}
+	}
+	return result
+}
+
+type ageGroupBucket[T any] struct {
+	AgeGroup *string
+	Items    []T
 }
 
 // ─── Response Builders ───────────────────────────────────────────────────────

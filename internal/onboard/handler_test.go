@@ -160,6 +160,42 @@ func TestUpdateFamilyProfile_200(t *testing.T) {
 	}
 }
 
+func TestUpdateFamilyProfile_409_WizardCompleted(t *testing.T) {
+	e := newTestEcho()
+	svc := &mockOnboardingService{
+		updateFamilyProfileFn: func(_ context.Context, _ *shared.FamilyScope, _ UpdateFamilyProfileCommand) (*WizardProgressResponse, error) {
+			return nil, &OnboardError{Err: ErrWizardNotInProgress}
+		},
+	}
+	setupOnboardRoutes(e, svc)
+
+	body := `{"display_name":"Smith Family"}`
+	req := httptest.NewRequest(http.MethodPatch, "/v1/onboarding/family-profile", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("want 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateFamilyProfile_422_MissingDisplayName(t *testing.T) {
+	e := newTestEcho()
+	svc := &mockOnboardingService{}
+	setupOnboardRoutes(e, svc)
+
+	body := `{"state_code":"CA"}`
+	req := httptest.NewRequest(http.MethodPatch, "/v1/onboarding/family-profile", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("want 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // ─── POST /v1/onboarding/children ────────────────────────────────────────────
 
 func TestAddChild_201(t *testing.T) {
@@ -179,6 +215,26 @@ func TestAddChild_201(t *testing.T) {
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAddChild_409_WizardCompleted(t *testing.T) {
+	e := newTestEcho()
+	svc := &mockOnboardingService{
+		addChildFn: func(_ context.Context, _ *shared.FamilyScope, _ AddChildCommand) (*WizardProgressResponse, error) {
+			return nil, &OnboardError{Err: ErrWizardNotInProgress}
+		},
+	}
+	setupOnboardRoutes(e, svc)
+
+	body := `{"display_name":"Alice"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/onboarding/children", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("want 409, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -285,7 +341,7 @@ func TestImportQuiz_200(t *testing.T) {
 	e := newTestEcho()
 	svc := &mockOnboardingService{
 		importQuizFn: func(_ context.Context, _ *shared.FamilyScope, _ ImportQuizCommand) (*QuizImportResponse, error) {
-			return &QuizImportResponse{ShareID: "abc123", Recommendations: []OnboardQuizRecommendation{}}, nil
+			return &QuizImportResponse{ShareID: "abc123", MethodologyRecommendations: []OnboardQuizRecommendation{}}, nil
 		},
 	}
 	setupOnboardRoutes(e, svc)

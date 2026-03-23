@@ -786,6 +786,424 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/onboarding/children": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Add child during onboarding",
+                "parameters": [
+                    {
+                        "description": "Child details",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/onboard.AddChildCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.WizardProgressResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/children/{id}": {
+            "delete": {
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Remove child during onboarding",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/community": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Get onboarding community suggestions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.CommunityResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/complete": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Complete the onboarding wizard",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.WizardProgressResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/family-profile": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Update family profile during onboarding",
+                "parameters": [
+                    {
+                        "description": "Profile fields",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/onboard.UpdateFamilyProfileCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.WizardProgressResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/methodology": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Select methodology during onboarding",
+                "parameters": [
+                    {
+                        "description": "Methodology selection",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/onboard.SelectMethodologyCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.WizardProgressResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/methodology/import-quiz": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Import quiz result into onboarding",
+                "parameters": [
+                    {
+                        "description": "Quiz share ID",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/onboard.ImportQuizCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.QuizImportResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/progress": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Get onboarding wizard progress",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.WizardProgressResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/recommendations": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Get onboarding starter recommendations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.RecommendationsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/roadmap": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Get onboarding roadmap",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.RoadmapResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/skip": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Skip the onboarding wizard",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.WizardProgressResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1351,6 +1769,347 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "onboard.AddChildCommand": {
+            "type": "object",
+            "required": [
+                "display_name"
+            ],
+            "properties": {
+                "birth_year": {
+                    "type": "integer",
+                    "maximum": 2030,
+                    "minimum": 2000
+                },
+                "display_name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "grade_level": {
+                    "type": "string",
+                    "maxLength": 20
+                }
+            }
+        },
+        "onboard.CommunityResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/onboard.CommunitySuggestionResponse"
+                    }
+                }
+            }
+        },
+        "onboard.CommunitySuggestionResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "methodology_slug": {
+                    "type": "string"
+                },
+                "reference_id": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "suggestion_type": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "onboard.ImportQuizCommand": {
+            "type": "object",
+            "required": [
+                "share_id"
+            ],
+            "properties": {
+                "share_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "onboard.OnboardQuizRecommendation": {
+            "type": "object",
+            "properties": {
+                "explanation": {
+                    "type": "string"
+                },
+                "methodology_name": {
+                    "type": "string"
+                },
+                "methodology_slug": {
+                    "type": "string"
+                },
+                "score_percentage": {
+                    "type": "integer"
+                }
+            }
+        },
+        "onboard.QuizImportResponse": {
+            "type": "object",
+            "properties": {
+                "methodology_recommendations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/onboard.OnboardQuizRecommendation"
+                    }
+                },
+                "share_id": {
+                    "type": "string"
+                },
+                "suggested_primary_slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "onboard.RecommendationAgeGroup": {
+            "type": "object",
+            "properties": {
+                "age_group": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/onboard.RecommendationItemResponse"
+                    }
+                }
+            }
+        },
+        "onboard.RecommendationItemResponse": {
+            "type": "object",
+            "properties": {
+                "age_group": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "link_url": {
+                    "type": "string"
+                },
+                "methodology_slug": {
+                    "type": "string"
+                },
+                "price_type": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "onboard.RecommendationsResponse": {
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/onboard.RecommendationAgeGroup"
+                    }
+                }
+            }
+        },
+        "onboard.RoadmapAgeGroup": {
+            "type": "object",
+            "properties": {
+                "age_group": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/onboard.RoadmapItemResponse"
+                    }
+                }
+            }
+        },
+        "onboard.RoadmapItemResponse": {
+            "type": "object",
+            "properties": {
+                "age_group": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_completed": {
+                    "type": "boolean"
+                },
+                "item_type": {
+                    "$ref": "#/definitions/onboard.RoadmapItemType"
+                },
+                "link_url": {
+                    "type": "string"
+                },
+                "methodology_slug": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "onboard.RoadmapItemType": {
+            "type": "string",
+            "enum": [
+                "task",
+                "resource",
+                "feature_tour"
+            ],
+            "x-enum-varnames": [
+                "ItemTypeTask",
+                "ItemTypeResource",
+                "ItemTypeFeatureTour"
+            ]
+        },
+        "onboard.RoadmapResponse": {
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/onboard.RoadmapAgeGroup"
+                    }
+                }
+            }
+        },
+        "onboard.SelectMethodologyCommand": {
+            "type": "object",
+            "required": [
+                "methodology_path",
+                "primary_methodology_slug"
+            ],
+            "properties": {
+                "explanation_acknowledged": {
+                    "type": "boolean"
+                },
+                "methodology_path": {
+                    "type": "string",
+                    "enum": [
+                        "quiz_informed",
+                        "exploration",
+                        "skip"
+                    ]
+                },
+                "primary_methodology_slug": {
+                    "type": "string"
+                },
+                "secondary_methodology_slugs": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "onboard.UpdateFamilyProfileCommand": {
+            "type": "object",
+            "required": [
+                "display_name"
+            ],
+            "properties": {
+                "display_name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                },
+                "location_region": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "state_code": {
+                    "type": "string"
+                }
+            }
+        },
+        "onboard.WizardProgressResponse": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string"
+                },
+                "completed_steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/onboard.WizardStep"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "current_step": {
+                    "$ref": "#/definitions/onboard.WizardStep"
+                },
+                "family_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "methodology_path": {
+                    "type": "string"
+                },
+                "quiz_share_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/onboard.WizardStatus"
+                }
+            }
+        },
+        "onboard.WizardStatus": {
+            "type": "string",
+            "enum": [
+                "in_progress",
+                "completed",
+                "skipped"
+            ],
+            "x-enum-varnames": [
+                "StatusInProgress",
+                "StatusCompleted",
+                "StatusSkipped"
+            ]
+        },
+        "onboard.WizardStep": {
+            "type": "string",
+            "enum": [
+                "family_profile",
+                "children",
+                "methodology",
+                "roadmap_review"
+            ],
+            "x-enum-varnames": [
+                "StepFamilyProfile",
+                "StepChildren",
+                "StepMethodology",
+                "StepRoadmapReview"
+            ]
         },
         "shared.ErrorBody": {
             "type": "object",

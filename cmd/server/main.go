@@ -213,7 +213,7 @@ func main() {
 	iamForOnboard := onboard.NewIamAdapter(
 		func(ctx context.Context, scope *shared.FamilyScope, cmd onboard.UpdateFamilyProfileCommand) error {
 			_, err := iamSvc.UpdateFamilyProfile(ctx, scope, iam.UpdateFamilyCommand{
-				DisplayName:    cmd.DisplayName,
+				DisplayName:    &cmd.DisplayName,
 				StateCode:      cmd.StateCode,
 				LocationRegion: cmd.LocationRegion,
 			})
@@ -306,6 +306,7 @@ func main() {
 					MethodologySlug: r.MethodologySlug,
 					MethodologyName: r.MethodologyName,
 					ScorePercentage: r.ScorePercentage,
+					Explanation:     r.Explanation,
 				}
 			}
 			return &onboard.OnboardQuizResult{

@@ -1380,3 +1380,91 @@ between `string` and `method.MethodologyID` is done at the composition root.
 `validateCompleteWizard()`, `applyCompleteWizard()`, `validateSkipWizard()`, `applySkipWizard()`
 are extracted as package-level pure functions in `service.go` to support unit testing without a
 real database (service methods use `ScopedTransaction` which requires `*gorm.DB`).
+
+---
+
+## §18 Implementation Adaptation — Gap Analysis Fixes (2026-03-23)
+
+The following spec-vs-implementation deviations were identified and resolved. Items marked
+**"spec updated"** reflect intentional deviations; items marked **"code fixed"** were bugs.
+
+### §18.1 Age brackets (spec updated)
+
+Implementation uses slightly different age brackets than originally specified:
+
+| Spec bracket | Implementation bracket |
+|---|---|
+| `9-11` | `9-12` |
+| `12-14` | `13-15` |
+| `15-18` | `16-18` |
+
+Age groups are approximate developmental ranges for content filtering, not grade-level
+assignments. A future iteration will allow parents to disable or customize age-group filtering.
+
+### §18.2 AddChild return type (spec updated)
+
+`POST /v1/onboarding/children` returns `WizardProgressResponse (201 Created)` rather than
+`StudentResponse (201 Created)`. This is intentional: the onboarding wizard UI needs the
+updated progress state after adding a child, not the student record (which can be fetched
+separately via `iam::` if needed).
+
+`AddChild` service method signature: `AddChild(ctx, scope, AddChildCommand) (*WizardProgressResponse, error)`.
+
+### §18.3 Step ordering — soft enforcement (spec updated)
+
+Wizard steps may be completed in any order during the onboarding flow. Enforcement occurs
+only at `CompleteWizard` time, which validates that all required steps (`family_profile`,
+`methodology`) are done. There is no `ErrInvalidStepTransition`. The `advanceStep()` helper
+tracks completion and advances `current_step` to the next incomplete step in the canonical
+order, but this is advisory (UI hint), not enforced.
+
+### §18.4 Naming alignment (spec updated)
+
+| Spec name | Implementation name |
+|---|---|
+| `GetCommunitySuggestions` | `GetCommunity` |
+| `CommunitySuggestionsResponse` | `CommunityResponse` (with `Items []CommunitySuggestionResponse`) |
+| `ErrExplanationNotAcknowledged` | `ErrSecondaryWithoutAck` |
+| `Recommendations` (JSON field) | `methodology_recommendations` (on `QuizImportResponse`) |
+
+### §18.5 Skip methodology path (code fixed — GAP-20/27)
+
+When `SelectMethodology` receives `methodology_path = "skip"`, the service now auto-assigns
+the default methodology slug (from `MethodologyServiceForOnboard.GetDefaultMethodologySlug`)
+and clears any secondary methodology slugs. This ensures the skip path always produces a
+valid methodology configuration without requiring the client to know the default.
+
+### §18.6 409 on completed/skipped wizard (code fixed — GAP-21)
+
+`UpdateFamilyProfile` and `AddChild` now return `ErrWizardNotInProgress` (HTTP 409 Conflict)
+when the wizard status is `completed` or `skipped`, instead of silently succeeding. This
+matches the behavior already present in `SelectMethodology` and `CompleteWizard`.
+
+### §18.7 HandleMethodologyChanged status check (code fixed — GAP-22)
+
+`HandleMethodologyChanged` (event handler) now checks wizard status before re-materializing
+guidance. If the wizard is completed or skipped, materialization is skipped. This prevents
+unnecessary work and avoids overwriting finalized guidance data.
+
+### §18.8 DisplayName required (code fixed — GAP-4)
+
+`UpdateFamilyProfileCommand.DisplayName` changed from `*string` (optional, max=100) to
+`string` (required, max=200). During onboarding, a family display name is always required.
+The IAM adapter in `main.go` takes the address (`&cmd.DisplayName`) since `iam.UpdateFamilyCommand`
+retains `*string` for its own PATCH partial-update semantics.
+
+### §18.9 Response grouping by age (code fixed — GAP-6/7)
+
+`RoadmapResponse` and `RecommendationsResponse` now use `Groups []XxxAgeGroup` instead of
+flat `Items` arrays. Each group has `age_group *string` (nil = "all ages", listed first) and
+`items []XxxItemResponse`. The `groupByAge` generic helper preserves insertion order and
+moves the "all ages" group to the front.
+
+### §18.10 QuizImportResponse enrichment (code fixed — GAP-11)
+
+`QuizImportResponse` now includes:
+- `suggested_primary_slug string` — the methodology slug of the highest-scoring recommendation
+- `methodology_recommendations` (renamed from `recommendations`) — includes `explanation string`
+  per recommendation, mapped from `discover::MethodologyRecommendation.Explanation`
+
+`OnboardQuizRecommendation` gained an `Explanation string` field.

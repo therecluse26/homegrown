@@ -316,6 +316,68 @@ func TestSelectMethodology_SecondaryWithoutAck(t *testing.T) {
 	}
 }
 
+func TestSelectMethodology_SkipPathUsesDefault(t *testing.T) {
+	// Track what slug was passed to UpdateFamilyMethodology to verify skip logic.
+	var capturedPrimary string
+	var capturedSecondary []string
+	sentinel := errors.New("stop after update") // stops execution before ScopedTransaction
+
+	svc := &onboardingServiceImpl{
+		methodology: &mockMethodForOnboard{
+			defaultSlug:   "charlotte-mason",
+			validateValid: true,
+			updateErr:     sentinel, // intentional: stops after UpdateFamilyMethodology
+		},
+	}
+	// Capture the slugs passed through the mock.
+	svc.methodology = &capturingMethodMock{
+		inner:     svc.methodology.(*mockMethodForOnboard),
+		onUpdate:  func(primary string, secondary []string) { capturedPrimary = primary; capturedSecondary = secondary },
+		updateErr: sentinel,
+	}
+
+	scope := testScope(testFamilyID())
+	_, err := svc.SelectMethodology(context.Background(), scope, SelectMethodologyCommand{
+		PrimaryMethodologySlug:    "", // intentionally empty — skip path overrides
+		SecondaryMethodologySlugs: []string{"classical"},
+		MethodologyPath:           "skip",
+		ExplanationAcknowledged:   false, // should not matter for skip path
+	})
+	// Expected: sentinel error from UpdateFamilyMethodology proves we got past validation.
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("expected sentinel error, got: %v", err)
+	}
+	if capturedPrimary != "charlotte-mason" {
+		t.Errorf("skip path should set primary to default slug, got %q", capturedPrimary)
+	}
+	if len(capturedSecondary) != 0 {
+		t.Errorf("skip path should clear secondaries, got %v", capturedSecondary)
+	}
+}
+
+// capturingMethodMock wraps mockMethodForOnboard to capture UpdateFamilyMethodology args.
+type capturingMethodMock struct {
+	inner     *mockMethodForOnboard
+	onUpdate  func(string, []string)
+	updateErr error
+}
+
+func (m *capturingMethodMock) GetMethodology(ctx context.Context, slug string) (*OnboardMethodologyConfig, error) {
+	return m.inner.GetMethodology(ctx, slug)
+}
+func (m *capturingMethodMock) GetDefaultMethodologySlug(ctx context.Context) (string, error) {
+	return m.inner.GetDefaultMethodologySlug(ctx)
+}
+func (m *capturingMethodMock) ValidateMethodologySlugs(ctx context.Context, slugs []string) (bool, error) {
+	return m.inner.ValidateMethodologySlugs(ctx, slugs)
+}
+func (m *capturingMethodMock) UpdateFamilyMethodology(_ context.Context, _ *shared.FamilyScope, primary string, secondary []string) error {
+	if m.onUpdate != nil {
+		m.onUpdate(primary, secondary)
+	}
+	return m.updateErr
+}
+
 func TestSelectMethodology_InvalidSlugs(t *testing.T) {
 	svc := &onboardingServiceImpl{
 		methodology: &mockMethodForOnboard{validateValid: false},
