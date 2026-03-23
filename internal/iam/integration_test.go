@@ -154,7 +154,7 @@ func newTestService(t *testing.T) *IamServiceImpl {
 // created parent (looked up via bypass transaction).
 func registerFamily(ctx context.Context, t *testing.T, svc *IamServiceImpl, name, email string) *ParentModel {
 	t.Helper()
-	identityID := uuid.New()
+	identityID := uuid.Must(uuid.NewV7())
 	if err := svc.HandlePostRegistration(ctx, KratosWebhookPayload{
 		IdentityID: identityID,
 		Traits:     KratosTraits{Email: email, Name: name},
@@ -180,7 +180,7 @@ func TestRegistrationAtomic(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t)
 
-	parent := registerFamily(ctx, t, svc, "Alice", fmt.Sprintf("alice-%s@test.com", uuid.New()))
+	parent := registerFamily(ctx, t, svc, "Alice", fmt.Sprintf("alice-%s@test.com", uuid.Must(uuid.NewV7())))
 
 	// Verify the parent has is_primary = true.
 	if !parent.IsPrimary {
@@ -214,10 +214,10 @@ func TestRegistrationAtomic_DuplicateIdentity(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t)
 
-	identityID := uuid.New()
+	identityID := uuid.Must(uuid.NewV7())
 	payload := KratosWebhookPayload{
 		IdentityID: identityID,
-		Traits:     KratosTraits{Email: fmt.Sprintf("dup-%s@test.com", uuid.New()), Name: "Dup Parent"},
+		Traits:     KratosTraits{Email: fmt.Sprintf("dup-%s@test.com", uuid.Must(uuid.NewV7())), Name: "Dup Parent"},
 	}
 
 	// First registration succeeds.
@@ -243,8 +243,8 @@ func TestStudentCRUD_FamilyScoped(t *testing.T) {
 
 	// ── Set up two independent families ──────────────────────────────────────
 
-	parentA := registerFamily(ctx, t, svc, "Alice A", fmt.Sprintf("a-%s@test.com", uuid.New()))
-	parentB := registerFamily(ctx, t, svc, "Bob B", fmt.Sprintf("b-%s@test.com", uuid.New()))
+	parentA := registerFamily(ctx, t, svc, "Alice A", fmt.Sprintf("a-%s@test.com", uuid.Must(uuid.NewV7())))
+	parentB := registerFamily(ctx, t, svc, "Bob B", fmt.Sprintf("b-%s@test.com", uuid.Must(uuid.NewV7())))
 
 	// ── Grant COPPA consent for family A (needed to create students) ──────────
 	// Directly update via bypass to avoid needing a full Stripe stub. [§9.3]

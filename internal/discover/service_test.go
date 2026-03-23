@@ -77,7 +77,7 @@ func testQuizDef() *QuizDefinition {
 	explanationsJSON, _ := json.Marshal(explanations)
 
 	return &QuizDefinition{
-		ID:           uuid.New(),
+		ID:           uuid.Must(uuid.NewV7()),
 		Version:      1,
 		Title:        "Find Your Methodology",
 		Description:  "Discover your homeschooling style",
@@ -594,7 +594,7 @@ func (r *stubQuizResRepo) Create(_ context.Context, input CreateQuizResult) (*Qu
 		return nil, r.err
 	}
 	return &QuizResult{
-		ID:               uuid.New(),
+		ID:               uuid.Must(uuid.NewV7()),
 		QuizDefinitionID: input.QuizDefinitionID,
 		ShareID:          input.ShareID,
 		SessionToken:     input.SessionToken,

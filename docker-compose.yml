@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgis/postgis:16-3.4
+    image: postgis/postgis:18-3.6
     environment:
       POSTGRES_USER: homegrown
       POSTGRES_PASSWORD: homegrown
@@ -8,7 +8,7 @@ services:
     ports:
       - "5932:5432"
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U homegrown"]
       interval: 5s

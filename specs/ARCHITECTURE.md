@@ -4227,6 +4227,46 @@ IAM tables reference `method_definitions(slug)` directly as TEXT FKs (not UUID).
 migration will be required since slug is the PK. This is acceptable given that slugs are
 platform-managed constants declared in code.
 
+### ADR-016: UUIDv7 for All User-Data Primary Keys
+
+**Status**: Accepted
+**Date**: 2026-03-23
+
+**Context**: All user-data tables (families, parents, students, COPPA audit log, quiz
+results, state guides, content pages) previously used UUIDv4 (`gen_random_uuid()` in SQL,
+`uuid.New()` in Go). UUIDv4 is fully random, causing B-tree index fragmentation as new
+rows are inserted into random positions rather than appending to the rightmost leaf page.
+This causes page splits and write amplification under sustained insert load.
+
+**Decision**: Use UUIDv7 for all UUID primary keys on user-data tables.
+
+- **Go layer**: `uuid.NewV7()` inside GORM `BeforeCreate` hooks is the canonical
+  generation path. `google/uuid` v1.6.0 (already in go.mod) supports `NewV7()` natively.
+  The hook pattern ensures every application-generated record uses v7 regardless of whether
+  the SQL default is also set.
+- **SQL layer**: `DEFAULT uuidv7()` in migration DDL, available natively in PostgreSQL 18.
+  This covers direct-insert paths (admin SQL, data migrations, seed fixtures that INSERT
+  without explicit IDs).
+- **PostgreSQL version**: Upgraded from `postgis/postgis:16-3.4` to `postgis/postgis:18-3.6`
+  to gain native `uuidv7()`. The Docker volume path also changed from
+  `/var/lib/postgresql/data` to `/var/lib/postgresql` (PG18 default).
+- **Tests**: `uuid.Must(uuid.NewV7())` is used instead of `uuid.New()`. `uuid.Must` is
+  appropriate in tests because a random source failure is catastrophic, not a test concern.
+- **Method domain**: Unaffected — uses `slug TEXT PRIMARY KEY` (ADR-015).
+
+**Consequences**:
+- New UUIDs sort chronologically; B-tree inserts always append to the rightmost leaf,
+  eliminating page splits under normal write patterns.
+- The UUID version nibble (position 14 in the canonical string form) is `7` instead of `4`;
+  spot-checking is easy: `id[14] == '7'`.
+- `uuid.Parse()` and all FK references are version-agnostic — no other code changes needed.
+- Existing data (if any) retains v4 UUIDs; v4 and v7 UUIDs are compatible within the same
+  column and index.
+
+**Revision trigger**: No revision expected. UUIDv7 is a strict improvement with no
+downside. If a use case requires purely random IDs (e.g., to avoid timing leaks on share
+IDs), use `gonanoid` as already done for `disc_quiz_results.share_id`.
+
 ---
 
 *This architecture document translates the Homegrown Academy specification (`specs/SPEC.md`) into concrete, opinionated technology decisions. Every choice traces back to spec requirements via `[S§n]` references. The document is designed to be practical enough that development can start directly from it — the Go code examples, SQL schemas, and React patterns are intended as starting templates, not pseudocode.*

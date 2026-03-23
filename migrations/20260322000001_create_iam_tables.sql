@@ -33,7 +33,7 @@ END $$;
 
 -- Top-level family entity [S§3.1.1]
 CREATE TABLE iam_families (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                          UUID PRIMARY KEY DEFAULT uuidv7(),
     display_name                TEXT NOT NULL,                              -- [S§6.2]
     state_code                  CHAR(2),                                   -- for compliance [S§6.2]
     location_region             TEXT,                                      -- coarse location [S§7.8]
@@ -62,7 +62,7 @@ CREATE INDEX idx_iam_families_deletion ON iam_families(deletion_requested_at)
 
 -- Parent users [S§3.1.2]
 CREATE TABLE iam_parents (
-    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                 UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id          UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     kratos_identity_id UUID NOT NULL UNIQUE,                  -- links to Ory Kratos identity
     display_name       TEXT NOT NULL,                          -- [S§6.2]
@@ -79,7 +79,7 @@ CREATE INDEX idx_iam_parents_kratos ON iam_parents(kratos_identity_id);
 -- Student profiles [S§3.1.3]
 -- Students do NOT have credentials — they are parent-mediated [S§3.3]
 CREATE TABLE iam_students (
-    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                       UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id                UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     display_name             TEXT NOT NULL,                    -- [S§3.1.3]
     birth_year               SMALLINT,                        -- [S§3.1.3]
@@ -93,7 +93,7 @@ CREATE INDEX idx_iam_students_family ON iam_students(family_id);
 
 -- Co-parent invitations [S§3.4] — Phase 2, schema included for stability
 CREATE TABLE iam_co_parent_invites (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id         UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id  UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     invited_by UUID NOT NULL REFERENCES iam_parents(id),   -- always the primary parent
     email      TEXT NOT NULL,                               -- invitee's email
@@ -111,7 +111,7 @@ CREATE INDEX idx_iam_invites_email ON iam_co_parent_invites(email);
 -- COPPA consent audit log [S§17.2]
 -- Separate from iam_families to maintain immutable audit trail.
 CREATE TABLE iam_coppa_audit_log (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     action          TEXT NOT NULL,                             -- 'consent_granted', 'consent_noticed', etc.
     method          TEXT,                                      -- 'credit_card_verification', etc.
@@ -128,7 +128,7 @@ CREATE INDEX idx_iam_coppa_audit_family ON iam_coppa_audit_log(family_id);
 -- Parent-initiated sessions that grant students limited platform access.
 -- Students do NOT have independent credentials — sessions are created by parents.
 CREATE TABLE iam_student_sessions (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id   UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     student_id  UUID NOT NULL REFERENCES iam_students(id) ON DELETE CASCADE,
     created_by  UUID NOT NULL REFERENCES iam_parents(id),

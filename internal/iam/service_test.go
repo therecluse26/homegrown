@@ -110,8 +110,8 @@ func TestResolveConsentTransition(t *testing.T) {
 // and received by subscribers.
 func TestFamilyCreatedEvent(t *testing.T) {
 	ctx := context.Background()
-	familyID := uuid.New()
-	parentID := uuid.New()
+	familyID := uuid.Must(uuid.NewV7())
+	parentID := uuid.Must(uuid.NewV7())
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
@@ -135,8 +135,8 @@ func TestFamilyCreatedEvent(t *testing.T) {
 
 func TestStudentCreatedEvent(t *testing.T) {
 	ctx := context.Background()
-	familyID := uuid.New()
-	studentID := uuid.New()
+	familyID := uuid.Must(uuid.NewV7())
+	studentID := uuid.Must(uuid.NewV7())
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
@@ -157,8 +157,8 @@ func TestStudentCreatedEvent(t *testing.T) {
 
 func TestStudentDeletedEvent(t *testing.T) {
 	ctx := context.Background()
-	familyID := uuid.New()
-	studentID := uuid.New()
+	familyID := uuid.Must(uuid.NewV7())
+	studentID := uuid.Must(uuid.NewV7())
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
@@ -179,7 +179,7 @@ func TestStudentDeletedEvent(t *testing.T) {
 
 func TestCoppaConsentGrantedEvent(t *testing.T) {
 	ctx := context.Background()
-	familyID := uuid.New()
+	familyID := uuid.Must(uuid.NewV7())
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent

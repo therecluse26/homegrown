@@ -102,7 +102,7 @@ func TestUpdateMethodology_InvalidSlugs_Returns422(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.New()})
+	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	err := h.updateFamilyMethodology(c)
 	if err == nil {
@@ -135,7 +135,7 @@ func TestUpdateMethodology_PrimaryInSecondary_Returns422(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.New()})
+	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	err := h.updateFamilyMethodology(c)
 	if err == nil {
@@ -164,7 +164,7 @@ func TestGetStudentTools_InvalidUUID_Returns400(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("not-a-uuid")
 
-	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.New()})
+	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	err := h.getStudentTools(c)
 	if err == nil {
@@ -232,7 +232,7 @@ func TestGetFamilyTools_Returns200(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/families/tools", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.New()})
+	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	err := h.getFamilyTools(c)
 	if err != nil {
@@ -274,7 +274,7 @@ func TestUpdateFamilyMethodology_Success_Returns200(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.New()})
+	shared.SetAuthContext(c, &shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	err := h.updateFamilyMethodology(c)
 	if err != nil {

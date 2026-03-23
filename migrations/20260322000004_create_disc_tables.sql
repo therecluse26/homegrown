@@ -17,7 +17,7 @@ CREATE TYPE disc_content_status_enum AS ENUM ('draft', 'published');
 -- Quiz definitions: questions + scoring weights (internal), explanations per methodology.
 -- Only one quiz may be active at a time (enforced by partial unique index below).
 CREATE TABLE disc_quiz_definitions (
-    id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    id           UUID         PRIMARY KEY DEFAULT uuidv7(),
     version      INTEGER      NOT NULL DEFAULT 1,
     title        TEXT         NOT NULL,
     description  TEXT         NOT NULL DEFAULT '',
@@ -39,7 +39,7 @@ CREATE UNIQUE INDEX idx_disc_quiz_definitions_active
 -- Quiz results: stores anonymous quiz submissions with a URL-safe share_id.
 -- family_id is nullable — set when a logged-in family claims a result. [03-discover §3.1]
 CREATE TABLE disc_quiz_results (
-    id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                 UUID        PRIMARY KEY DEFAULT uuidv7(),
     quiz_definition_id UUID        NOT NULL REFERENCES disc_quiz_definitions(id),
     share_id           TEXT        NOT NULL UNIQUE,                -- 12-char base62 nanoid
     session_token      TEXT,                                       -- anonymous session tracking
@@ -57,7 +57,7 @@ CREATE INDEX idx_disc_quiz_results_family   ON disc_quiz_results(family_id) WHER
 -- State legal guides: one row per US state + DC. [03-discover §3.2]
 -- status='draft' until content is reviewed and approved by an admin.
 CREATE TABLE disc_state_guides (
-    id               UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
+    id               UUID                  PRIMARY KEY DEFAULT uuidv7(),
     state_code       CHAR(2)               NOT NULL UNIQUE, -- e.g., 'CA', 'NY', 'DC'
     state_name       TEXT                  NOT NULL,
     status           disc_guide_status_enum NOT NULL DEFAULT 'draft',
@@ -72,7 +72,7 @@ CREATE INDEX idx_disc_state_guides_status ON disc_state_guides(status);
 
 -- Content pages: Homeschooling 101 and advocacy content metadata. [03-discover §3.3]
 CREATE TABLE disc_content_pages (
-    id         UUID                    PRIMARY KEY DEFAULT gen_random_uuid(),
+    id         UUID                    PRIMARY KEY DEFAULT uuidv7(),
     slug       TEXT                    NOT NULL UNIQUE,
     category   TEXT                    NOT NULL, -- '101', 'advocacy'
     title      TEXT                    NOT NULL,

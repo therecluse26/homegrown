@@ -26,7 +26,7 @@ func newTestService(defRepo MethodologyDefinitionRepository, activationRepo Tool
 
 func TestUpdateFamilyMethodology_PrimaryInSecondary(t *testing.T) {
 	svc := newTestService(&stubDefRepo{allActive: true}, nil, &stubIamSvc{})
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	_, err := svc.UpdateFamilyMethodology(context.Background(), &scope, UpdateMethodologyCommand{
 		PrimaryMethodologySlug:    cmSlug,
@@ -47,7 +47,7 @@ func TestUpdateFamilyMethodology_PrimaryInSecondary(t *testing.T) {
 
 func TestUpdateFamilyMethodology_DuplicateSecondary(t *testing.T) {
 	svc := newTestService(&stubDefRepo{allActive: true}, nil, &stubIamSvc{})
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	_, err := svc.UpdateFamilyMethodology(context.Background(), &scope, UpdateMethodologyCommand{
 		PrimaryMethodologySlug:    cmSlug,
@@ -68,7 +68,7 @@ func TestUpdateFamilyMethodology_DuplicateSecondary(t *testing.T) {
 
 func TestUpdateFamilyMethodology_InvalidSlugs(t *testing.T) {
 	svc := newTestService(&stubDefRepo{allActive: false}, nil, &stubIamSvc{})
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 
 	_, err := svc.UpdateFamilyMethodology(context.Background(), &scope, UpdateMethodologyCommand{
 		PrimaryMethodologySlug:    "nonexistent-method", // doesn't exist
@@ -174,7 +174,7 @@ func TestResolveFamilyTools_SingleMethodology(t *testing.T) {
 		},
 	}, &stubIamSvc{primarySlug: cmSlug})
 
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	tools, err := svc.ResolveFamilyTools(context.Background(), &scope)
 	if err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ func TestResolveFamilyTools_SingleMethodology(t *testing.T) {
 // ─── Test: ResolveStudentTools with override ─────────────────────────────────
 
 func TestResolveStudentTools_WithOverride(t *testing.T) {
-	studentID := uuid.New()
+	studentID := uuid.Must(uuid.NewV7())
 
 	svc := newTestService(nil, &stubActivationRepo{
 		activations: []domain.ToolActivationWithTool{
@@ -212,7 +212,7 @@ func TestResolveStudentTools_WithOverride(t *testing.T) {
 		student:     &StudentInfo{ID: studentID, MethodologyOverrideSlug: &tradSlug},
 	})
 
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	tools, err := svc.ResolveStudentTools(context.Background(), &scope, studentID)
 	if err != nil {
 		t.Fatal(err)
@@ -228,7 +228,7 @@ func TestResolveStudentTools_WithOverride(t *testing.T) {
 // ─── Test: ResolveStudentTools without override (falls through to family) ────
 
 func TestResolveStudentTools_WithoutOverride(t *testing.T) {
-	studentID := uuid.New()
+	studentID := uuid.Must(uuid.NewV7())
 
 	svc := newTestService(nil, &stubActivationRepo{
 		activations: []domain.ToolActivationWithTool{
@@ -247,7 +247,7 @@ func TestResolveStudentTools_WithoutOverride(t *testing.T) {
 		student:     &StudentInfo{ID: studentID, MethodologyOverrideSlug: nil}, // no override
 	})
 
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	tools, err := svc.ResolveStudentTools(context.Background(), &scope, studentID)
 	if err != nil {
 		t.Fatal(err)

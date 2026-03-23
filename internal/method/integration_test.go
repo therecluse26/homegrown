@@ -378,7 +378,7 @@ func TestUpdateFamilyMethodology_ValidIDs_PublishesEvent(t *testing.T) {
 	capture := &captureHandler{}
 	s.eventBus.Subscribe(reflect.TypeOf(FamilyMethodologyChanged{}), capture)
 
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	resp, err := s.svc.UpdateFamilyMethodology(ctx, &scope, UpdateMethodologyCommand{
 		PrimaryMethodologyID:    cmDef.ID,
 		SecondaryMethodologyIDs: []uuid.UUID{},
@@ -424,9 +424,9 @@ func TestUpdateFamilyMethodology_InvalidID_ReturnsError(t *testing.T) {
 	s := newIntegrationSetup(t)
 	ctx := context.Background()
 
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	_, err := s.svc.UpdateFamilyMethodology(ctx, &scope, UpdateMethodologyCommand{
-		PrimaryMethodologyID:    uuid.New(), // random UUID — not in DB
+		PrimaryMethodologyID:    uuid.Must(uuid.NewV7()), // random UUID — not in DB
 		SecondaryMethodologyIDs: []uuid.UUID{},
 	})
 	if err == nil {
@@ -457,14 +457,14 @@ func TestStudentTools_WithOverride(t *testing.T) {
 	cmDef := defs[0]     // charlotte-mason
 	tradDef := defs[1]   // traditional
 
-	studentID := uuid.New()
+	studentID := uuid.Must(uuid.NewV7())
 	s.iamStub.primaryID = cmDef.ID
 	s.iamStub.student = &StudentInfo{
 		ID:                    studentID,
 		MethodologyOverrideID: &tradDef.ID,
 	}
 
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	tools, err := s.svc.ResolveStudentTools(ctx, &scope, studentID)
 	if err != nil {
 		t.Fatalf("ResolveStudentTools: %v", err)
@@ -499,14 +499,14 @@ func TestStudentTools_NoOverrideFallsBackToFamily(t *testing.T) {
 	}
 	cmDef := defs[0] // charlotte-mason
 
-	studentID := uuid.New()
+	studentID := uuid.Must(uuid.NewV7())
 	s.iamStub.primaryID = cmDef.ID
 	s.iamStub.student = &StudentInfo{
 		ID:                    studentID,
 		MethodologyOverrideID: nil, // no override — falls back to family
 	}
 
-	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	tools, err := s.svc.ResolveStudentTools(ctx, &scope, studentID)
 	if err != nil {
 		t.Fatalf("ResolveStudentTools: %v", err)

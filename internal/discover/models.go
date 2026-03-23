@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"gorm.io/gorm"
 )
 
 // ─── Internal JSON Types (unexported — scoring engine only) ──────────────────
@@ -45,7 +46,7 @@ type quizExplanationsInternal map[string]struct {
 
 // QuizDefinition is the GORM model for disc_quiz_definitions. [03-discover §6.1]
 type QuizDefinition struct {
-	ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	Version      int             `gorm:"not null;default:1"`
 	Title        string          `gorm:"not null"`
 	Description  string          `gorm:"not null;default:''"`
@@ -58,9 +59,20 @@ type QuizDefinition struct {
 
 func (QuizDefinition) TableName() string { return "disc_quiz_definitions" }
 
+func (m *QuizDefinition) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
 // QuizResult is the GORM model for disc_quiz_results. [03-discover §6.2]
 type QuizResult struct {
-	ID                uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ID                uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	QuizDefinitionID  uuid.UUID       `gorm:"type:uuid;not null"`
 	ShareID           string          `gorm:"not null;uniqueIndex"`
 	SessionToken      *string         `gorm:""`
@@ -74,9 +86,20 @@ type QuizResult struct {
 
 func (QuizResult) TableName() string { return "disc_quiz_results" }
 
+func (m *QuizResult) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
 // StateGuide is the GORM model for disc_state_guides. [03-discover §6.3]
 type StateGuide struct {
-	ID             uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ID             uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	StateCode      string          `gorm:"type:char(2);not null;uniqueIndex"`
 	StateName      string          `gorm:"not null"`
 	Status         string          `gorm:"not null;default:'draft'"`
@@ -92,6 +115,17 @@ type StateGuide struct {
 
 func (StateGuide) TableName() string { return "disc_state_guides" }
 
+func (m *StateGuide) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
 // StateGuideSummary is the result struct for list queries (select subset of columns).
 type StateGuideSummary struct {
 	StateCode      string
@@ -103,7 +137,7 @@ type StateGuideSummary struct {
 // ContentPage is the GORM model for disc_content_pages. [03-discover §6.4]
 // Phase 2 — defined here for completeness; repository deferred.
 type ContentPage struct {
-	ID             uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ID             uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	Slug           string     `gorm:"not null;uniqueIndex"`
 	Category       string     `gorm:"not null"`
 	Title          string     `gorm:"not null"`
@@ -117,6 +151,17 @@ type ContentPage struct {
 }
 
 func (ContentPage) TableName() string { return "disc_content_pages" }
+
+func (m *ContentPage) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
 
 // ContentPageSummary is the result struct for list queries.
 type ContentPageSummary struct {

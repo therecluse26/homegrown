@@ -96,7 +96,11 @@ func (FamilyModel) TableName() string { return "iam_families" }
 
 func (m *FamilyModel) BeforeCreate(_ *gorm.DB) error {
 	if m.ID == uuid.Nil {
-		m.ID = uuid.New()
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
 	}
 	return nil
 }
@@ -141,7 +145,11 @@ func (ParentModel) TableName() string { return "iam_parents" }
 
 func (m *ParentModel) BeforeCreate(_ *gorm.DB) error {
 	if m.ID == uuid.Nil {
-		m.ID = uuid.New()
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
 	}
 	return nil
 }
@@ -176,7 +184,11 @@ func (StudentModel) TableName() string { return "iam_students" }
 
 func (m *StudentModel) BeforeCreate(_ *gorm.DB) error {
 	if m.ID == uuid.Nil {
-		m.ID = uuid.New()
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
 	}
 	return nil
 }
@@ -211,7 +223,11 @@ func (CoppaAuditLogModel) TableName() string { return "iam_coppa_audit_log" }
 
 func (m *CoppaAuditLogModel) BeforeCreate(_ *gorm.DB) error {
 	if m.ID == uuid.Nil {
-		m.ID = uuid.New()
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
 	}
 	return nil
 }
