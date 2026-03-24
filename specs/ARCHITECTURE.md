@@ -659,7 +659,7 @@ interaction. No raw SDK calls exist outside these adapters:
 | Hyperswitch (payments) | `mkt` | `PaymentProcessor` | `internal/mkt/adapters/payment.go` |
 | Hyperswitch (billing) | `billing` | `PaymentProcessor` | `internal/billing/adapters/payment.go` |
 | Ory Kratos (auth) | `iam` | `shared.SessionValidator` | `internal/iam/adapters/kratos.go` |
-| Cloudflare R2 | `media` | `ObjectStorage` | `internal/media/adapters/r2.go` |
+| S3-compatible storage (R2/S3/MinIO) | `media` | `ObjectStorageAdapter` | `internal/media/adapters/s3.go` |
 | Thorn Safer (CSAM) | `safety` | `CsamDetector` | `internal/safety/adapters/thorn.go` |
 | AWS Rekognition | `safety` | `ContentModerator` | `internal/safety/adapters/rekognition.go` |
 | AWS Comprehend (Phase 2) | `safety` | `TextScanner` | `internal/safety/adapters/comprehend.go` |

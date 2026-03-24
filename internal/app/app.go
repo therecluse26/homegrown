@@ -10,6 +10,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
+	"github.com/homegrown-academy/homegrown-academy/internal/media"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
@@ -44,6 +45,7 @@ type AppState struct {
 	Social      social.SocialService
 	Learn       learn.LearningService
 	Marketplace mkt.MarketplaceService
+	Media       media.MediaService
 	Notify      notify.NotificationService
 	PubSub      shared.PubSub // needed by social handler for WebSocket
 }
@@ -145,6 +147,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Learn != nil {
 		learn.NewHandler(state.Learn).Register(auth)
+	}
+	if state.Media != nil {
+		media.NewHandler(state.Media).Register(auth)
 	}
 	if state.Marketplace != nil {
 		mkt.NewHandler(state.Marketplace, state.Cache).Register(auth, hooks, pub)

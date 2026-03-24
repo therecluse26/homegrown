@@ -84,6 +84,26 @@ type AppConfig struct {
 	// HMAC secret for generating one-click email unsubscribe tokens. [08-notify §13]
 	UnsubscribeSecret string
 
+	// ─── Object Storage (S3-compatible) ──────────────────────────────
+	// S3-compatible object storage endpoint URL (e.g., R2, MinIO).
+	// Optional — omit to use NoopStorageAdapter (dev mode). [ARCH §2.10]
+	ObjectStorageEndpoint string
+
+	// S3 region or "auto" for R2.
+	ObjectStorageRegion string
+
+	// S3 bucket name.
+	ObjectStorageBucket string
+
+	// S3 access key ID.
+	ObjectStorageAccessKeyID string
+
+	// S3 secret access key.
+	ObjectStorageSecretAccessKey string
+
+	// Public base URL for CDN-served media (e.g., "https://media.homegrown.academy").
+	ObjectStoragePublicURL string
+
 	// ─── Environment ────────────────────────────────────────────────
 	// Runtime environment. Controls log format, debug features, etc.
 	Environment Environment
@@ -168,6 +188,14 @@ func LoadConfig() (*AppConfig, error) {
 	hyperswitchAPIKey := envOrDefault("HYPERSWITCH_API_KEY", "")
 	hyperswitchWebhookKey := envOrDefault("HYPERSWITCH_WEBHOOK_KEY", "")
 
+	// Optional object storage config (omit to use noop adapter)
+	objectStorageEndpoint := envOrDefault("OBJECT_STORAGE_ENDPOINT", "")
+	objectStorageRegion := envOrDefault("OBJECT_STORAGE_REGION", "auto")
+	objectStorageBucket := envOrDefault("OBJECT_STORAGE_BUCKET", "")
+	objectStorageAccessKeyID := envOrDefault("OBJECT_STORAGE_ACCESS_KEY_ID", "")
+	objectStorageSecretAccessKey := envOrDefault("OBJECT_STORAGE_SECRET_ACCESS_KEY", "")
+	objectStoragePublicURL := envOrDefault("OBJECT_STORAGE_PUBLIC_URL", "https://media.localhost")
+
 	// Optional Postmark config (omit to disable email)
 	postmarkServerToken := envOrDefault("POSTMARK_SERVER_TOKEN", "")
 	unsubscribeSecret := envOrDefault("UNSUBSCRIBE_SECRET", "notify-dev-secret")
@@ -192,6 +220,12 @@ func LoadConfig() (*AppConfig, error) {
 		HyperswitchBaseURL:    hyperswitchBaseURL,
 		HyperswitchAPIKey:     hyperswitchAPIKey,
 		HyperswitchWebhookKey: hyperswitchWebhookKey,
+		ObjectStorageEndpoint:       objectStorageEndpoint,
+		ObjectStorageRegion:         objectStorageRegion,
+		ObjectStorageBucket:         objectStorageBucket,
+		ObjectStorageAccessKeyID:    objectStorageAccessKeyID,
+		ObjectStorageSecretAccessKey: objectStorageSecretAccessKey,
+		ObjectStoragePublicURL:      objectStoragePublicURL,
 		PostmarkServerToken:   postmarkServerToken,
 		UnsubscribeSecret:     unsubscribeSecret,
 		Environment:            env,

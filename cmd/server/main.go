@@ -28,6 +28,8 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	iamadapters "github.com/homegrown-academy/homegrown-academy/internal/iam/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
+	"github.com/homegrown-academy/homegrown-academy/internal/media"
+	mediaadapters "github.com/homegrown-academy/homegrown-academy/internal/media/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/homegrown-academy/homegrown-academy/internal/notify"
@@ -460,6 +462,44 @@ func main() {
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
 
+	// ── Step 7e½: Wire media:: domain ──────────────────────────────────────────
+	// media:: is the shared file upload infrastructure — all domains that handle
+	// user files delegate to media:: for presigned URLs, processing, and storage. [09-media §1]
+	mediaUploadRepo := media.NewPgUploadRepository(db)
+	mediaProcJobRepo := media.NewPgProcessingJobRepository(db)
+
+	// Storage adapter: use S3 when configured, noop in dev/test.
+	var mediaStorage media.ObjectStorageAdapter = media.NoopStorageAdapter{}
+	if cfg.ObjectStorageBucket != "" {
+		s3Adapter, s3Err := mediaadapters.NewS3StorageAdapter(ctx, mediaadapters.S3Config{
+			Endpoint:        cfg.ObjectStorageEndpoint,
+			Region:          cfg.ObjectStorageRegion,
+			Bucket:          cfg.ObjectStorageBucket,
+			AccessKeyID:     cfg.ObjectStorageAccessKeyID,
+			SecretAccessKey: cfg.ObjectStorageSecretAccessKey,
+		})
+		if s3Err != nil {
+			slog.Error("failed to create S3 storage adapter", "error", s3Err)
+			os.Exit(1)
+		}
+		mediaStorage = s3Adapter
+	}
+
+	// Safety scan adapter: noop until safety:: domain is implemented.
+	var mediaSafety media.SafetyScanAdapter = media.NoopSafetyScanAdapter{}
+
+	mediaCfg := &media.MediaConfig{
+		PublicURLBase:           cfg.ObjectStoragePublicURL,
+		PresignedUploadExpiry:   3600,
+		PresignedDownloadExpiry: 3600,
+	}
+
+	mediaSvc := media.NewMediaService(
+		mediaUploadRepo, mediaProcJobRepo,
+		mediaStorage, mediaSafety,
+		eventBus, jobs, mediaCfg,
+	)
+
 	// ── Step 7f: Wire mkt:: domain ──────────────────────────────────────────────
 	// mkt:: is the marketplace domain — creator onboarding, publisher management,
 	// listing lifecycle, cart/checkout, reviews, and payouts. [07-mkt §7]
@@ -705,6 +745,7 @@ func main() {
 		Social:      socialSvc,
 		Learn:       learnSvc,
 		Marketplace: mktSvc,
+		Media:       mediaSvc,
 		Notify:      notifySvc,
 		PubSub:      pubsub,
 	}
@@ -719,6 +760,7 @@ func main() {
 		os.Exit(1)
 	}
 	social.RegisterFeedWorkers(worker, feedStore, socFriendshipRepo, socPostRepo)
+	media.RegisterMediaWorkers(worker, mediaUploadRepo, mediaProcJobRepo, mediaStorage, mediaSafety, eventBus)
 	notify.RegisterTaskHandlers(worker, emailAdapter)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
