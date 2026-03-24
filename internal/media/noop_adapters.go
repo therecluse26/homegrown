@@ -46,6 +46,16 @@ func (NoopStorageAdapter) DeleteObject(_ context.Context, key string) error {
 	return nil
 }
 
+func (NoopStorageAdapter) DownloadToFile(_ context.Context, key string, _ string) error {
+	slog.Warn("storage not configured — DownloadToFile is a no-op", "key", key)
+	return nil
+}
+
+func (NoopStorageAdapter) UploadFromFile(_ context.Context, key string, _ string, _ string) error {
+	slog.Warn("storage not configured — UploadFromFile is a no-op", "key", key)
+	return nil
+}
+
 // ─── NoopSafetyScanAdapter ───────────────────────────────────────────────────
 
 // NoopSafetyScanAdapter returns clean/clear results for all safety operations.

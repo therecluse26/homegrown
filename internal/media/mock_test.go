@@ -69,14 +69,15 @@ func (m *mockMediaService) ValidateAttachment(ctx context.Context, uploadCtx Upl
 // ─── Mock UploadRepository ────────────────────────────────────────────────────
 
 type mockUploadRepository struct {
-	createFn             func(ctx context.Context, scope shared.FamilyScope, input *CreateUploadRow) (*Upload, error)
-	findByIDFn           func(ctx context.Context, scope shared.FamilyScope, uploadID uuid.UUID) (*Upload, error)
-	findByIDUnscopedFn   func(ctx context.Context, uploadID uuid.UUID) (*Upload, error)
-	updateStatusFn       func(ctx context.Context, uploadID uuid.UUID, status UploadStatus, updates *UploadStatusUpdate) (*Upload, error)
+	createFn              func(ctx context.Context, scope shared.FamilyScope, input *CreateUploadRow) (*Upload, error)
+	findByIDFn            func(ctx context.Context, scope shared.FamilyScope, uploadID uuid.UUID) (*Upload, error)
+	findByIDUnscopedFn    func(ctx context.Context, uploadID uuid.UUID) (*Upload, error)
+	updateStatusFn        func(ctx context.Context, uploadID uuid.UUID, status UploadStatus, updates *UploadStatusUpdate) (*Upload, error)
 	updateProbeMetadataFn func(ctx context.Context, uploadID uuid.UUID, probe json.RawMessage, wasCompressed bool, originalSizeBytes *int64) error
-	setVariantFlagsFn    func(ctx context.Context, uploadID uuid.UUID, hasThumb bool, hasMedium bool) error
+	setVariantFlagsFn     func(ctx context.Context, uploadID uuid.UUID, hasThumb bool, hasMedium bool) error
 	setModerationLabelsFn func(ctx context.Context, uploadID uuid.UUID, labels json.RawMessage) error
-	findExpiredPendingFn func(ctx context.Context, before time.Time, limit uint32) ([]Upload, error)
+	setCSAMScannedAtFn    func(ctx context.Context, uploadID uuid.UUID) error
+	findExpiredPendingFn  func(ctx context.Context, before time.Time, limit uint32) ([]Upload, error)
 }
 
 func newMockUploadRepository() *mockUploadRepository {
@@ -115,7 +116,7 @@ func (m *mockUploadRepository) UpdateProbeMetadata(ctx context.Context, uploadID
 	if m.updateProbeMetadataFn != nil {
 		return m.updateProbeMetadataFn(ctx, uploadID, probe, wasCompressed, originalSizeBytes)
 	}
-	panic("UpdateProbeMetadata not mocked")
+	return nil // non-critical in tests
 }
 
 func (m *mockUploadRepository) SetVariantFlags(ctx context.Context, uploadID uuid.UUID, hasThumb bool, hasMedium bool) error {
@@ -130,6 +131,13 @@ func (m *mockUploadRepository) SetModerationLabels(ctx context.Context, uploadID
 		return m.setModerationLabelsFn(ctx, uploadID, labels)
 	}
 	panic("SetModerationLabels not mocked")
+}
+
+func (m *mockUploadRepository) SetCSAMScannedAt(ctx context.Context, uploadID uuid.UUID) error {
+	if m.setCSAMScannedAtFn != nil {
+		return m.setCSAMScannedAtFn(ctx, uploadID)
+	}
+	return nil // non-critical in tests
 }
 
 func (m *mockUploadRepository) FindExpiredPending(ctx context.Context, before time.Time, limit uint32) ([]Upload, error) {
@@ -188,15 +196,58 @@ func (m *mockProcessingJobRepository) FindRetryable(ctx context.Context, limit u
 	panic("FindRetryable not mocked")
 }
 
+// ─── Mock TranscodeJobRepository ──────────────────────────────────────────────
+
+type mockTranscodeJobRepository struct {
+	createFn        func(ctx context.Context, uploadID uuid.UUID, inputKey string) (*TranscodeJob, error)
+	markRunningFn   func(ctx context.Context, jobID uuid.UUID) error
+	markCompletedFn func(ctx context.Context, jobID uuid.UUID, outputKeys json.RawMessage, durationSeconds int) error
+	markFailedFn    func(ctx context.Context, jobID uuid.UUID, errorMessage string) error
+}
+
+func newMockTranscodeJobRepository() *mockTranscodeJobRepository {
+	return &mockTranscodeJobRepository{}
+}
+
+func (m *mockTranscodeJobRepository) Create(ctx context.Context, uploadID uuid.UUID, inputKey string) (*TranscodeJob, error) {
+	if m.createFn != nil {
+		return m.createFn(ctx, uploadID, inputKey)
+	}
+	return &TranscodeJob{ID: uuid.Must(uuid.NewV7()), UploadID: uploadID, InputKey: inputKey}, nil
+}
+
+func (m *mockTranscodeJobRepository) MarkRunning(ctx context.Context, jobID uuid.UUID) error {
+	if m.markRunningFn != nil {
+		return m.markRunningFn(ctx, jobID)
+	}
+	return nil
+}
+
+func (m *mockTranscodeJobRepository) MarkCompleted(ctx context.Context, jobID uuid.UUID, outputKeys json.RawMessage, durationSeconds int) error {
+	if m.markCompletedFn != nil {
+		return m.markCompletedFn(ctx, jobID, outputKeys, durationSeconds)
+	}
+	return nil
+}
+
+func (m *mockTranscodeJobRepository) MarkFailed(ctx context.Context, jobID uuid.UUID, errorMessage string) error {
+	if m.markFailedFn != nil {
+		return m.markFailedFn(ctx, jobID, errorMessage)
+	}
+	return nil
+}
+
 // ─── Mock ObjectStorageAdapter ────────────────────────────────────────────────
 
 type mockObjectStorageAdapter struct {
-	presignedPutFn   func(ctx context.Context, key string, maxSizeBytes uint64, contentType string, expiresSeconds uint32) (string, error)
-	presignedGetFn   func(ctx context.Context, key string, expiresSeconds uint32) (string, error)
-	putObjectFn      func(ctx context.Context, key string, data []byte, contentType string) error
-	getObjectHeadFn  func(ctx context.Context, key string) (*ObjectMetadata, error)
-	getObjectBytesFn func(ctx context.Context, key string, start uint64, end uint64) ([]byte, error)
-	deleteObjectFn   func(ctx context.Context, key string) error
+	presignedPutFn    func(ctx context.Context, key string, maxSizeBytes uint64, contentType string, expiresSeconds uint32) (string, error)
+	presignedGetFn    func(ctx context.Context, key string, expiresSeconds uint32) (string, error)
+	putObjectFn       func(ctx context.Context, key string, data []byte, contentType string) error
+	getObjectHeadFn   func(ctx context.Context, key string) (*ObjectMetadata, error)
+	getObjectBytesFn  func(ctx context.Context, key string, start uint64, end uint64) ([]byte, error)
+	deleteObjectFn    func(ctx context.Context, key string) error
+	downloadToFileFn  func(ctx context.Context, key string, filepath string) error
+	uploadFromFileFn  func(ctx context.Context, key string, filepath string, contentType string) error
 }
 
 func newMockObjectStorageAdapter() *mockObjectStorageAdapter {
@@ -243,6 +294,20 @@ func (m *mockObjectStorageAdapter) DeleteObject(ctx context.Context, key string)
 		return m.deleteObjectFn(ctx, key)
 	}
 	panic("DeleteObject not mocked")
+}
+
+func (m *mockObjectStorageAdapter) DownloadToFile(ctx context.Context, key string, filepath string) error {
+	if m.downloadToFileFn != nil {
+		return m.downloadToFileFn(ctx, key, filepath)
+	}
+	return nil // non-critical default for tests
+}
+
+func (m *mockObjectStorageAdapter) UploadFromFile(ctx context.Context, key string, filepath string, contentType string) error {
+	if m.uploadFromFileFn != nil {
+		return m.uploadFromFileFn(ctx, key, filepath, contentType)
+	}
+	return nil // non-critical default for tests
 }
 
 // ─── Mock SafetyScanAdapter ───────────────────────────────────────────────────
@@ -292,3 +357,4 @@ func (m *mockEventBus) Publish(_ context.Context, event shared.DomainEvent) erro
 	m.published = append(m.published, event)
 	return nil
 }
+

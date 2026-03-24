@@ -467,6 +467,7 @@ func main() {
 	// user files delegate to media:: for presigned URLs, processing, and storage. [09-media §1]
 	mediaUploadRepo := media.NewPgUploadRepository(db)
 	mediaProcJobRepo := media.NewPgProcessingJobRepository(db)
+	mediaTranscodeRepo := media.NewPgTranscodeJobRepository(db)
 
 	// Storage adapter: use S3 when configured, noop in dev/test.
 	var mediaStorage media.ObjectStorageAdapter = media.NoopStorageAdapter{}
@@ -760,7 +761,7 @@ func main() {
 		os.Exit(1)
 	}
 	social.RegisterFeedWorkers(worker, feedStore, socFriendshipRepo, socPostRepo)
-	media.RegisterMediaWorkers(worker, mediaUploadRepo, mediaProcJobRepo, mediaStorage, mediaSafety, eventBus)
+	media.RegisterMediaWorkers(worker, mediaUploadRepo, mediaProcJobRepo, mediaTranscodeRepo, mediaStorage, mediaSafety, eventBus, jobs)
 	notify.RegisterTaskHandlers(worker, emailAdapter)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {

@@ -120,8 +120,8 @@ func TestRequestUpload_storage_error(t *testing.T) {
 		SizeBytes:   1 * mb,
 	})
 
-	if !errors.Is(err, ErrStorageOperation) {
-		t.Errorf("expected ErrStorageOperation, got %v", err)
+	if !errors.Is(err, ErrObjectStorageError) {
+		t.Errorf("expected ErrObjectStorageError, got %v", err)
 	}
 }
 
@@ -191,12 +191,16 @@ func TestConfirmUpload_success(t *testing.T) {
 		return &ObjectMetadata{ContentLength: 2048576}, nil
 	}
 	uploadRepo.updateStatusFn = func(_ context.Context, id uuid.UUID, status UploadStatus, updates *UploadStatusUpdate) (*Upload, error) {
+		var sizeBytes *int64
+		if updates != nil {
+			sizeBytes = updates.SizeBytes
+		}
 		return &Upload{
 			ID:          id,
 			FamilyID:    familyID,
 			Status:      status,
 			StorageKey:  "uploads/test/key",
-			SizeBytes:   updates.SizeBytes,
+			SizeBytes:   sizeBytes,
 			ContentType: "image/jpeg",
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
@@ -238,8 +242,8 @@ func TestConfirmUpload_not_pending(t *testing.T) {
 	}
 
 	_, err := svc.ConfirmUpload(context.Background(), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
-	if !errors.Is(err, ErrUploadNotPending) {
-		t.Errorf("expected ErrUploadNotPending, got %v", err)
+	if !errors.Is(err, ErrUploadNotConfirmed) {
+		t.Errorf("expected ErrUploadNotConfirmed, got %v", err)
 	}
 }
 
@@ -268,12 +272,12 @@ func TestConfirmUpload_object_not_in_storage(t *testing.T) {
 		return &Upload{ID: id, Status: UploadStatusPending, StorageKey: "key", ExpiresAt: &expiresAt, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 	}
 	storageAdapter.getObjectHeadFn = func(_ context.Context, _ string) (*ObjectMetadata, error) {
-		return nil, ErrObjectNotFoundInS3
+		return nil, ErrObjectNotFound
 	}
 
 	_, err := svc.ConfirmUpload(context.Background(), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
-	if !errors.Is(err, ErrObjectNotInStorage) {
-		t.Errorf("expected ErrObjectNotInStorage, got %v", err)
+	if !errors.Is(err, ErrObjectStorageError) {
+		t.Errorf("expected ErrObjectStorageError, got %v", err)
 	}
 }
 
@@ -312,10 +316,16 @@ func TestGetUpload_published_with_cdn_urls(t *testing.T) {
 		t.Errorf("Original URL = %q, unexpected", info.URLs.Original)
 	}
 	if info.URLs.Thumb == nil {
-		t.Error("expected thumb URL")
+		t.Fatal("expected thumb URL")
+	}
+	if *info.URLs.Thumb != "https://media.example.com/uploads/fam/upload/photo__thumb.jpg" {
+		t.Errorf("Thumb URL = %q, want photo__thumb.jpg pattern", *info.URLs.Thumb)
 	}
 	if info.URLs.Medium == nil {
-		t.Error("expected medium URL")
+		t.Fatal("expected medium URL")
+	}
+	if *info.URLs.Medium != "https://media.example.com/uploads/fam/upload/photo__medium.jpg" {
+		t.Errorf("Medium URL = %q, want photo__medium.jpg pattern", *info.URLs.Medium)
 	}
 }
 
@@ -466,7 +476,7 @@ func TestPresignedGet_storage_error(t *testing.T) {
 	}
 
 	_, err := svc.PresignedGet(context.Background(), "uploads/test/key", 3600)
-	if !errors.Is(err, ErrStorageOperation) {
-		t.Errorf("expected ErrStorageOperation, got %v", err)
+	if !errors.Is(err, ErrObjectStorageError) {
+		t.Errorf("expected ErrObjectStorageError, got %v", err)
 	}
 }

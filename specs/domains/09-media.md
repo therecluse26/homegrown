@@ -114,13 +114,18 @@ rejected  ──► published  (admin override via appeal, Phase 2)
 
 ### §3.2 Tables
 
+> **Note**: The spec uses `uuidv7()` for PK defaults, but the actual migration uses
+> `gen_random_uuid()` because `uuidv7()` requires a PostgreSQL extension (`pg_uuidv7`)
+> that may not be available in all environments. Application code generates UUIDs via
+> `uuid.NewV7()` (Go), so the DB default is only a fallback for direct SQL inserts.
+
 ```sql
 -- ─── media_uploads ──────────────────────────────────────────────────────
 -- Core upload tracking table. Every file that enters the system gets a row
 -- here regardless of which domain initiated the upload. Family-scoped.
 -- [S§2.1, ARCH §8.1]
 CREATE TABLE media_uploads (
-    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     family_id             UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
     uploaded_by           UUID NOT NULL REFERENCES iam_parents(id) ON DELETE CASCADE,
 
@@ -201,7 +206,7 @@ CREATE INDEX idx_media_uploads_csam_rescan
 -- Tracks background processing jobs for each upload. Supports retry logic
 -- and failure diagnosis. Internal only — never exposed via API.
 CREATE TABLE media_processing_jobs (
-    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     upload_id             UUID NOT NULL REFERENCES media_uploads(id),
     job_type              TEXT NOT NULL
                           CHECK (job_type IN (
@@ -230,7 +235,7 @@ CREATE INDEX idx_media_processing_jobs_queued
 -- Creator uploads video → raw stored in R2 → transcode job generates
 -- HLS playlist + segments at multiple quality levels. [S§8.1.11]
 CREATE TABLE media_transcode_jobs (
-    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     upload_id             UUID NOT NULL REFERENCES media_uploads(id) ON DELETE CASCADE,
     status                TEXT NOT NULL DEFAULT 'pending'
                           CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -526,13 +531,21 @@ type MediaConfig struct {
 ```go
 // UploadRepository defines persistence operations for media_uploads.
 // All user-data queries are family-scoped via FamilyScope parameter. [CODING §2.4]
+//
+// Note: FamilyScope is passed by value (not pointer) to match the shared.FamilyScope
+// convention used across all domains. Background-job methods omit it entirely.
 type UploadRepository interface {
 
     // Create creates a new upload record in pending status.
-    Create(ctx context.Context, scope *FamilyScope, input *CreateUploadRow) (*Upload, error)
+    Create(ctx context.Context, scope FamilyScope, input *CreateUploadRow) (*Upload, error)
 
     // FindByID finds an upload by ID, scoped to family.
-    FindByID(ctx context.Context, scope *FamilyScope, uploadID uuid.UUID) (*Upload, error)
+    FindByID(ctx context.Context, scope FamilyScope, uploadID uuid.UUID) (*Upload, error)
+
+    // FindByIDUnscoped finds an upload by ID without family scope.
+    // Used by background jobs (ProcessUploadJob, TranscodeVideoJob) that operate
+    // outside of any user's auth context.
+    FindByIDUnscoped(ctx context.Context, uploadID uuid.UUID) (*Upload, error)
 
     // UpdateStatus updates upload status and optional fields.
     UpdateStatus(ctx context.Context, uploadID uuid.UUID, status UploadStatus, updates *UploadStatusUpdate) (*Upload, error)
@@ -546,8 +559,12 @@ type UploadRepository interface {
     // SetModerationLabels sets moderation labels (from Rekognition results).
     SetModerationLabels(ctx context.Context, uploadID uuid.UUID, labels json.RawMessage) error
 
+    // SetCSAMScannedAt records the timestamp of the last successful CSAM scan.
+    // Called after ScanCSAM returns (whether clean or not) to maintain audit trail.
+    SetCSAMScannedAt(ctx context.Context, uploadID uuid.UUID) error
+
     // List lists uploads for a family, filtered by context and/or status. (Phase 2)
-    List(ctx context.Context, scope *FamilyScope, filter *UploadListFilter, pagination *Pagination) (*PaginatedResult[Upload], error)
+    List(ctx context.Context, scope FamilyScope, filter *UploadListFilter, pagination *Pagination) (*PaginatedResult[Upload], error)
 
     // FindExpiredPending finds expired pending uploads for orphan cleanup.
     // System-internal — not family-scoped (runs as background job).
@@ -576,6 +593,27 @@ type ProcessingJobRepository interface {
 
     // FindRetryable finds jobs eligible for retry (failed, attempts < max_attempts).
     FindRetryable(ctx context.Context, limit uint32) ([]ProcessingJob, error)
+}
+```
+
+### §6.3 TranscodeJobRepository
+
+```go
+// TranscodeJobRepository defines persistence operations for media_transcode_jobs.
+// System-internal — accessed only by the TranscodeVideoJob background worker.
+type TranscodeJobRepository interface {
+
+    // Create creates a new transcode job record.
+    Create(ctx context.Context, uploadID uuid.UUID, inputKey string) (*TranscodeJob, error)
+
+    // MarkRunning marks a transcode job as running.
+    MarkRunning(ctx context.Context, jobID uuid.UUID) error
+
+    // MarkCompleted marks a transcode job as completed with output keys and duration.
+    MarkCompleted(ctx context.Context, jobID uuid.UUID, outputKeys json.RawMessage, durationSeconds int) error
+
+    // MarkFailed marks a transcode job as failed with an error message.
+    MarkFailed(ctx context.Context, jobID uuid.UUID, errorMessage string) error
 }
 ```
 
@@ -637,6 +675,14 @@ type ObjectStorageAdapter interface {
 
     // DeleteObject deletes an object from storage.
     DeleteObject(ctx context.Context, key string) error
+
+    // DownloadToFile downloads an S3 object to a local file path.
+    // Used by ffprobe/ffmpeg which operate on local files, not byte streams.
+    DownloadToFile(ctx context.Context, key string, filepath string) error
+
+    // UploadFromFile uploads a local file to S3.
+    // Used after ffmpeg compression/transcoding writes output to a temp file.
+    UploadFromFile(ctx context.Context, key string, filepath string, contentType string) error
 }
 ```
 
@@ -848,6 +894,7 @@ const (
     UploadStatusUploaded    UploadStatus = "uploaded"
     UploadStatusProcessing  UploadStatus = "processing"
     UploadStatusPublished   UploadStatus = "published"
+    UploadStatusRejected    UploadStatus = "rejected"
     UploadStatusQuarantined UploadStatus = "quarantined"
     UploadStatusFlagged     UploadStatus = "flagged"
     UploadStatusExpired     UploadStatus = "expired"
@@ -1393,7 +1440,8 @@ if strings.HasPrefix(upload.ContentType, "image/") {
         if err != nil {
             return fmt.Errorf("generating %s variant: %w", v.suffix, err)
         }
-        variantKey := fmt.Sprintf("%s__%s.%s", upload.StorageKey, v.suffix, upload.Extension())
+        baseKey := strings.TrimSuffix(upload.StorageKey, filepath.Ext(upload.StorageKey))
+        variantKey := fmt.Sprintf("%s__%s.%s", baseKey, v.suffix, variantExtension(upload.ContentType))
         if err := s.storage.PutObject(ctx, variantKey, resized, upload.ContentType); err != nil {
             return fmt.Errorf("uploading %s variant: %w", v.suffix, err)
         }
@@ -1599,10 +1647,10 @@ func detectFileType(header []byte) string {
 ### §11.3 Mismatch Handling
 
 If magic bytes don't match the declared content type:
-1. Update upload status to `flagged` with reason `invalid_magic_bytes`
+1. Update upload status to `rejected` with reason `invalid_magic_bytes`
 2. Log the mismatch internally (declared type vs. detected type) — `[CODING §2.2, §5.2]` never expose in API
-3. Return `ErrInvalidFileType` to the processing pipeline
-4. The upload is NOT published — it remains in `flagged` status for admin review
+3. Return `ErrMagicByteMismatch` to the processing pipeline (internal error, not exposed via HTTP)
+4. The upload is NOT published — it remains in `rejected` status and is not recoverable
 
 ---
 
@@ -1637,13 +1685,19 @@ func RunCleanup(ctx context.Context, uploads UploadRepository, storage ObjectSto
 
         if _, err := uploads.UpdateStatus(ctx, orphan.ID, UploadStatusExpired,
             &UploadStatusUpdate{}); err != nil {
-            return cleaned, fmt.Errorf("expiring orphan %s: %w", orphan.ID, err)
+            // Continue on error — don't let one failed update block the entire batch.
+            // The orphan will be retried on the next scheduled run.
+            slog.Error("failed to expire orphan upload", "upload_id", orphan.ID, "error", err)
+            continue
         }
 
         cleaned++
     }
 
-    slog.Info("Orphan upload cleanup completed", "count", cleaned)
+    if cleaned > 0 {
+        slog.Info("cleaned up orphan uploads", "count", cleaned)
+    }
+
     return cleaned, nil
 }
 ```
@@ -1803,6 +1857,9 @@ type UploadPublished struct {
     Context     UploadContext
     StorageKey  string
     ContentType string
+    SizeBytes   int64  // actual file size from S3 HEAD
+    HasThumb    bool   // true if a thumbnail variant was generated
+    HasMedium   bool   // true if a medium variant was generated
 }
 
 // UploadQuarantined is published when CSAM is detected in an upload.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -142,6 +143,47 @@ func (a *S3StorageAdapter) DeleteObject(ctx context.Context, key string) error {
 	})
 	if err != nil {
 		return &media.StorageError{Code: "operation_failed", Message: fmt.Sprintf("DELETE object failed: %v", err)}
+	}
+	return nil
+}
+
+func (a *S3StorageAdapter) DownloadToFile(ctx context.Context, key string, filepath string) error {
+	resp, err := a.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: &a.bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return &media.StorageError{Code: "operation_failed", Message: fmt.Sprintf("GET object for download failed: %v", err)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	f, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("creating local file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return &media.StorageError{Code: "operation_failed", Message: fmt.Sprintf("downloading object to file: %v", err)}
+	}
+	return nil
+}
+
+func (a *S3StorageAdapter) UploadFromFile(ctx context.Context, key string, filepath string, contentType string) error {
+	f, err := os.Open(filepath)
+	if err != nil {
+		return fmt.Errorf("opening local file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	_, err = a.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      &a.bucket,
+		Key:         &key,
+		Body:        f,
+		ContentType: &contentType,
+	})
+	if err != nil {
+		return &media.StorageError{Code: "operation_failed", Message: fmt.Sprintf("PUT object from file failed: %v", err)}
 	}
 	return nil
 }

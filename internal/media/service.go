@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -71,7 +72,7 @@ func (s *mediaServiceImpl) RequestUpload(ctx context.Context, input *RequestUplo
 		s.config.PresignedUploadExpiry,
 	)
 	if err != nil {
-		return nil, &MediaError{Err: ErrStorageOperation}
+		return nil, &MediaError{Err: ErrObjectStorageError}
 	}
 
 	// 4. Create upload record
@@ -111,7 +112,7 @@ func (s *mediaServiceImpl) ConfirmUpload(ctx context.Context, uploadID uuid.UUID
 
 	// 2. Check status
 	if upload.Status != UploadStatusPending {
-		return nil, &MediaError{Err: ErrUploadNotPending}
+		return nil, &MediaError{Err: ErrUploadNotConfirmed}
 	}
 
 	// 3. Check expiry
@@ -122,29 +123,33 @@ func (s *mediaServiceImpl) ConfirmUpload(ctx context.Context, uploadID uuid.UUID
 	// 4. HEAD check on S3 to verify object exists and get actual size
 	meta, err := s.storage.GetObjectHead(ctx, upload.StorageKey)
 	if err != nil {
-		return nil, &MediaError{Err: ErrObjectNotInStorage}
+		return nil, &MediaError{Err: ErrObjectStorageError}
 	}
 
 	// 5. Update size from actual object
 	actualSize := int64(meta.ContentLength)
 
-	// 6. Transition: pending → processing (skip uploaded for simplicity — single step)
-	now := time.Now()
-	upload, err = s.uploads.UpdateStatus(ctx, uploadID, UploadStatusProcessing, &UploadStatusUpdate{
+	// 6. Transition: pending → uploaded (with actual size)
+	_, err = s.uploads.UpdateStatus(ctx, uploadID, UploadStatusUploaded, &UploadStatusUpdate{
 		SizeBytes: &actualSize,
 	})
 	if err != nil {
 		return nil, err
 	}
-	_ = now
 
-	// 7. Create processing job record
+	// 7. Transition: uploaded → processing
+	upload, err = s.uploads.UpdateStatus(ctx, uploadID, UploadStatusProcessing, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// 8. Create processing job record
 	_, err = s.procJobs.Create(ctx, uploadID, "process_upload")
 	if err != nil {
 		return nil, err
 	}
 
-	// 8. Enqueue ProcessUploadJob
+	// 9. Enqueue ProcessUploadJob
 	if err := s.jobs.Enqueue(ctx, &ProcessUploadPayload{UploadID: uploadID}); err != nil {
 		return nil, err
 	}
@@ -169,7 +174,7 @@ func (s *mediaServiceImpl) GetUpload(ctx context.Context, uploadID uuid.UUID, fa
 			// Marketplace files: presigned GET URL (never public)
 			url, err := s.storage.PresignedGet(ctx, upload.StorageKey, s.config.PresignedDownloadExpiry)
 			if err != nil {
-				return nil, &MediaError{Err: ErrStorageOperation}
+				return nil, &MediaError{Err: ErrObjectStorageError}
 			}
 			info.URLs = &UploadURLs{Original: url}
 		} else {
@@ -205,7 +210,7 @@ func (s *mediaServiceImpl) DeleteUpload(_ context.Context, _ uuid.UUID, _ uuid.U
 func (s *mediaServiceImpl) PresignedGet(ctx context.Context, storageKey string, expiresSeconds uint32) (string, error) {
 	url, err := s.storage.PresignedGet(ctx, storageKey, expiresSeconds)
 	if err != nil {
-		return "", &MediaError{Err: ErrStorageOperation}
+		return "", &MediaError{Err: ErrObjectStorageError}
 	}
 	return url, nil
 }
@@ -237,23 +242,9 @@ func uploadToInfo(u *Upload, _ *MediaConfig) *UploadInfo {
 // variantURL generates the public CDN URL for an image variant.
 func variantURL(publicBase, storageKey, suffix, contentType string) string {
 	ext := extensionForContentType(contentType)
-	// Strip extension from storageKey and add variant suffix
 	base := strings.TrimRight(publicBase, "/")
-	return fmt.Sprintf("%s/%s__%s%s", base, storageKey, suffix, ext)
+	// Strip extension from storageKey to match upload-side variant naming
+	baseKey := strings.TrimSuffix(storageKey, filepath.Ext(storageKey))
+	return fmt.Sprintf("%s/%s__%s%s", base, baseKey, suffix, ext)
 }
 
-// extensionForContentType returns the file extension for a content type.
-func extensionForContentType(ct string) string {
-	switch ct {
-	case "image/jpeg":
-		return ".jpg"
-	case "image/png":
-		return ".png"
-	case "image/webp":
-		return ".webp"
-	case "image/gif":
-		return ".gif"
-	default:
-		return ""
-	}
-}

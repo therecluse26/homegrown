@@ -197,7 +197,7 @@ func TestHandler_ConfirmUpload_409(t *testing.T) {
 	h := NewHandler(mockSvc)
 
 	mockSvc.confirmUploadFn = func(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*UploadInfo, error) {
-		return nil, &MediaError{Err: ErrUploadNotPending}
+		return nil, &MediaError{Err: ErrUploadNotConfirmed}
 	}
 
 	uploadID := uuid.Must(uuid.NewV7())
@@ -245,7 +245,7 @@ func TestHandler_ConfirmUpload_502_storage_error(t *testing.T) {
 	h := NewHandler(mockSvc)
 
 	mockSvc.confirmUploadFn = func(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*UploadInfo, error) {
-		return nil, &MediaError{Err: ErrObjectNotInStorage}
+		return nil, &MediaError{Err: ErrObjectStorageError}
 	}
 
 	uploadID := uuid.Must(uuid.NewV7())

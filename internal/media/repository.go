@@ -134,6 +134,17 @@ func (r *PgUploadRepository) SetModerationLabels(_ context.Context, uploadID uui
 	return nil
 }
 
+func (r *PgUploadRepository) SetCSAMScannedAt(_ context.Context, uploadID uuid.UUID) error {
+	result := r.db.Model(&Upload{}).Where("id = ?", uploadID).Updates(map[string]any{
+		"last_csam_scanned_at": time.Now(),
+		"updated_at":           time.Now(),
+	})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	return nil
+}
+
 func (r *PgUploadRepository) FindExpiredPending(_ context.Context, before time.Time, limit uint32) ([]Upload, error) {
 	var uploads []Upload
 	if err := r.db.Where("status = ? AND expires_at < ?", UploadStatusPending, before).
@@ -212,4 +223,69 @@ func (r *PgProcessingJobRepository) FindRetryable(_ context.Context, limit uint3
 		return nil, shared.ErrDatabase(err)
 	}
 	return jobs, nil
+}
+
+// ─── PgTranscodeJobRepository ─────────────────────────────────────────────────
+
+// PgTranscodeJobRepository implements TranscodeJobRepository using PostgreSQL/GORM. [09-media §6.3]
+type PgTranscodeJobRepository struct {
+	db *gorm.DB
+}
+
+// NewPgTranscodeJobRepository constructs a TranscodeJobRepository.
+func NewPgTranscodeJobRepository(db *gorm.DB) TranscodeJobRepository {
+	return &PgTranscodeJobRepository{db: db}
+}
+
+func (r *PgTranscodeJobRepository) Create(_ context.Context, uploadID uuid.UUID, inputKey string) (*TranscodeJob, error) {
+	job := &TranscodeJob{
+		UploadID: uploadID,
+		InputKey: inputKey,
+		Status:   "pending",
+	}
+	if err := r.db.Create(job).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return job, nil
+}
+
+func (r *PgTranscodeJobRepository) MarkRunning(_ context.Context, jobID uuid.UUID) error {
+	now := time.Now()
+	result := r.db.Model(&TranscodeJob{}).Where("id = ?", jobID).Updates(map[string]any{
+		"status":     "processing",
+		"started_at": now,
+		"updated_at": now,
+	})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	return nil
+}
+
+func (r *PgTranscodeJobRepository) MarkCompleted(_ context.Context, jobID uuid.UUID, outputKeys json.RawMessage, durationSeconds int) error {
+	now := time.Now()
+	result := r.db.Model(&TranscodeJob{}).Where("id = ?", jobID).Updates(map[string]any{
+		"status":           "completed",
+		"output_keys":      outputKeys,
+		"duration_seconds": durationSeconds,
+		"completed_at":     now,
+		"updated_at":       now,
+	})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	return nil
+}
+
+func (r *PgTranscodeJobRepository) MarkFailed(_ context.Context, jobID uuid.UUID, errorMessage string) error {
+	now := time.Now()
+	result := r.db.Model(&TranscodeJob{}).Where("id = ?", jobID).Updates(map[string]any{
+		"status":        "failed",
+		"error_message": errorMessage,
+		"updated_at":    now,
+	})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	return nil
 }

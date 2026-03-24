@@ -64,6 +64,9 @@ type UploadRepository interface {
 	// SetModerationLabels sets moderation labels (from Rekognition results).
 	SetModerationLabels(ctx context.Context, uploadID uuid.UUID, labels json.RawMessage) error
 
+	// SetCSAMScannedAt updates last_csam_scanned_at timestamp after a successful CSAM scan.
+	SetCSAMScannedAt(ctx context.Context, uploadID uuid.UUID) error
+
 	// FindExpiredPending finds expired pending uploads for orphan cleanup.
 	FindExpiredPending(ctx context.Context, before time.Time, limit uint32) ([]Upload, error)
 }
@@ -85,6 +88,22 @@ type ProcessingJobRepository interface {
 
 	// FindRetryable finds jobs eligible for retry (failed, attempts < max_attempts).
 	FindRetryable(ctx context.Context, limit uint32) ([]ProcessingJob, error)
+}
+
+// TranscodeJobRepository defines persistence operations for media_transcode_jobs.
+// System-internal — no family-scoping needed. [09-media §6.3]
+type TranscodeJobRepository interface {
+	// Create creates a new transcode job record.
+	Create(ctx context.Context, uploadID uuid.UUID, inputKey string) (*TranscodeJob, error)
+
+	// MarkRunning marks a transcode job as processing.
+	MarkRunning(ctx context.Context, jobID uuid.UUID) error
+
+	// MarkCompleted marks a transcode job as completed with output keys and duration.
+	MarkCompleted(ctx context.Context, jobID uuid.UUID, outputKeys json.RawMessage, durationSeconds int) error
+
+	// MarkFailed marks a transcode job as failed with an error message.
+	MarkFailed(ctx context.Context, jobID uuid.UUID, errorMessage string) error
 }
 
 // ─── Adapter Interfaces ───────────────────────────────────────────────────────
@@ -109,6 +128,14 @@ type ObjectStorageAdapter interface {
 
 	// DeleteObject deletes an object from storage.
 	DeleteObject(ctx context.Context, key string) error
+
+	// DownloadToFile downloads an S3 object to a local file path.
+	// Used by ffprobe/ffmpeg which operate on local files.
+	DownloadToFile(ctx context.Context, key string, filepath string) error
+
+	// UploadFromFile uploads a local file to S3.
+	// Used after ffmpeg compression/transcoding writes output to a temp file.
+	UploadFromFile(ctx context.Context, key string, filepath string, contentType string) error
 }
 
 // SafetyScanAdapter defines the safety scanning interface — delegates to safety:: domain. [09-media §7.2]

@@ -257,9 +257,9 @@ type StorageError struct {
 func (e *StorageError) Error() string { return e.Message }
 
 var (
-	ErrObjectNotFoundInS3 = &StorageError{Code: "not_found", Message: "object not found"}
-	ErrS3OperationFailed  = &StorageError{Code: "operation_failed", Message: "S3 operation failed"}
-	ErrPresignFailed      = &StorageError{Code: "presign_failed", Message: "presigned URL generation failed"}
+	ErrObjectNotFound  = &StorageError{Code: "not_found", Message: "object not found"}
+	ErrOperationFailed = &StorageError{Code: "operation_failed", Message: "S3 operation failed"}
+	ErrPresignFailed   = &StorageError{Code: "presign_failed", Message: "presigned URL generation failed"}
 )
 
 // ScanError represents safety scan error types. [09-media §8.3]

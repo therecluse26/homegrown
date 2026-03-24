@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"os"
 	"testing"
 	"time"
 
@@ -27,6 +31,25 @@ func makeTestUpload() *Upload {
 	}
 }
 
+// writeTestJPEG creates a minimal JPEG file at the given path for testing.
+func writeTestJPEG(t *testing.T, path string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	for y := range 100 {
+		for x := range 100 {
+			img.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+		}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if err := jpeg.Encode(f, img, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newRunner() (*processUploadRunner, *mockUploadRepository, *mockProcessingJobRepository, *mockObjectStorageAdapter, *mockSafetyScanAdapter, *mockEventBus) {
 	ur := newMockUploadRepository()
 	pj := newMockProcessingJobRepository()
@@ -34,13 +57,48 @@ func newRunner() (*processUploadRunner, *mockUploadRepository, *mockProcessingJo
 	ss := newMockSafetyScanAdapter()
 	eb := newMockEventBus()
 	return &processUploadRunner{
-		uploads:  ur,
-		procJobs: pj,
-		storage:  sa,
-		safety:   ss,
-		events:   eb,
+		uploads:    ur,
+		procJobs:   pj,
+		transcodes: newMockTranscodeJobRepository(),
+		storage:    sa,
+		safety:     ss,
+		events:     eb,
 	}, ur, pj, sa, ss, eb
 }
+
+// setupFFProbeMock sets up mock behavior to handle ffprobe step:
+// - DownloadToFile writes a test JPEG
+// - Uses a mock ffprobe via newCommand override
+func setupFFProbeMock(t *testing.T, sa *mockObjectStorageAdapter) {
+	t.Helper()
+
+	// Mock DownloadToFile to write a valid JPEG file
+	sa.downloadToFileFn = func(_ context.Context, _ string, filepath string) error {
+		writeTestJPEG(t, filepath)
+		return nil
+	}
+
+	// Override newCommand to return mock ffprobe output
+	originalNewCommand := newCommand
+	t.Cleanup(func() { newCommand = originalNewCommand })
+
+	newCommand = func(_ context.Context, name string, _ ...string) command {
+		if name == "ffprobe" {
+			return &mockCommand{output: []byte(`{
+				"format": {"format_name": "jpeg_pipe", "bit_rate": "0"},
+				"streams": [{"codec_type": "video", "codec_name": "mjpeg", "width": 100, "height": 100}]
+			}`)}
+		}
+		return &mockCommand{output: []byte{}, err: errors.New("unexpected command: " + name)}
+	}
+}
+
+type mockCommand struct {
+	output []byte
+	err    error
+}
+
+func (m *mockCommand) CombinedOutput() ([]byte, error) { return m.output, m.err }
 
 // ─── Pipeline: Full Success ───────────────────────────────────────────────────
 
@@ -55,6 +113,10 @@ func TestProcessUpload_full_success_image(t *testing.T) {
 	sa.getObjectBytesFn = func(_ context.Context, _ string, _ uint64, _ uint64) ([]byte, error) {
 		return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01}, nil
 	}
+
+	// Set up ffprobe mock
+	setupFFProbeMock(t, sa)
+
 	// CSAM scan: clean
 	ss.scanCSAMFn = func(_ context.Context, _ string) (*CSAMScanResult, error) {
 		return &CSAMScanResult{IsCSAM: false}, nil
@@ -63,16 +125,7 @@ func TestProcessUpload_full_success_image(t *testing.T) {
 	ss.scanModerationFn = func(_ context.Context, _ string) (*ModerationResult, error) {
 		return &ModerationResult{HasViolations: false}, nil
 	}
-	// Variant generation: download image
-	downloadCalled := false
-	sa.getObjectBytesFn = func(_ context.Context, _ string, start uint64, _ uint64) ([]byte, error) {
-		if start == 0 && !downloadCalled {
-			// First call is magic bytes
-			return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01}, nil
-		}
-		downloadCalled = true
-		return []byte{0xFF, 0xD8, 0xFF}, nil // simplified image bytes
-	}
+
 	putCount := 0
 	sa.putObjectFn = func(_ context.Context, _ string, _ []byte, _ string) error {
 		putCount++
@@ -139,6 +192,9 @@ func TestProcessUpload_csam_quarantine(t *testing.T) {
 	sa.getObjectBytesFn = func(_ context.Context, _ string, _ uint64, _ uint64) ([]byte, error) {
 		return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01}, nil
 	}
+
+	setupFFProbeMock(t, sa)
+
 	ss.scanCSAMFn = func(_ context.Context, _ string) (*CSAMScanResult, error) {
 		return &CSAMScanResult{IsCSAM: true}, nil
 	}
@@ -174,6 +230,9 @@ func TestProcessUpload_moderation_auto_reject(t *testing.T) {
 	sa.getObjectBytesFn = func(_ context.Context, _ string, _ uint64, _ uint64) ([]byte, error) {
 		return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01}, nil
 	}
+
+	setupFFProbeMock(t, sa)
+
 	ss.scanCSAMFn = func(_ context.Context, _ string) (*CSAMScanResult, error) {
 		return &CSAMScanResult{IsCSAM: false}, nil
 	}
@@ -216,6 +275,9 @@ func TestProcessUpload_moderation_flag(t *testing.T) {
 	sa.getObjectBytesFn = func(_ context.Context, _ string, _ uint64, _ uint64) ([]byte, error) {
 		return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01}, nil
 	}
+
+	setupFFProbeMock(t, sa)
+
 	ss.scanCSAMFn = func(_ context.Context, _ string) (*CSAMScanResult, error) {
 		return &CSAMScanResult{IsCSAM: false}, nil
 	}
@@ -260,6 +322,9 @@ func TestProcessUpload_csam_scan_unavailable_continues(t *testing.T) {
 	sa.getObjectBytesFn = func(_ context.Context, _ string, _ uint64, _ uint64) ([]byte, error) {
 		return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01}, nil
 	}
+
+	setupFFProbeMock(t, sa)
+
 	ss.scanCSAMFn = func(_ context.Context, _ string) (*CSAMScanResult, error) {
 		return nil, ErrScanUnavailable
 	}
@@ -293,6 +358,9 @@ func TestProcessUpload_moderation_unavailable_continues(t *testing.T) {
 	sa.getObjectBytesFn = func(_ context.Context, _ string, _ uint64, _ uint64) ([]byte, error) {
 		return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01}, nil
 	}
+
+	setupFFProbeMock(t, sa)
+
 	ss.scanCSAMFn = func(_ context.Context, _ string) (*CSAMScanResult, error) {
 		return &CSAMScanResult{IsCSAM: false}, nil
 	}
@@ -327,6 +395,9 @@ func TestProcessUpload_non_image_skips_variants(t *testing.T) {
 	sa.getObjectBytesFn = func(_ context.Context, _ string, _ uint64, _ uint64) ([]byte, error) {
 		return []byte{0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A, 0x25, 0xC4, 0xE5, 0xF2, 0xE5, 0xEB, 0xA7}, nil
 	}
+
+	setupFFProbeMock(t, sa)
+
 	ss.scanCSAMFn = func(_ context.Context, _ string) (*CSAMScanResult, error) {
 		return &CSAMScanResult{IsCSAM: false}, nil
 	}
@@ -430,9 +501,23 @@ func TestProcessUploadPayload_TaskType(t *testing.T) {
 	}
 }
 
+func TestTranscodeVideoPayload_TaskType(t *testing.T) {
+	p := TranscodeVideoPayload{}
+	if p.TaskType() != "media:transcode_video" {
+		t.Errorf("TaskType() = %q, want %q", p.TaskType(), "media:transcode_video")
+	}
+}
+
 func TestCleanupOrphansPayload_TaskType(t *testing.T) {
 	p := CleanupOrphansPayload{}
 	if p.TaskType() != "media:cleanup_orphans" {
 		t.Errorf("TaskType() = %q, want %q", p.TaskType(), "media:cleanup_orphans")
+	}
+}
+
+func TestCompressAssetPayload_TaskType(t *testing.T) {
+	p := CompressAssetPayload{}
+	if p.TaskType() != "media:compress_asset" {
+		t.Errorf("TaskType() = %q, want %q", p.TaskType(), "media:compress_asset")
 	}
 }
