@@ -29,6 +29,8 @@ import (
 	iamadapters "github.com/homegrown-academy/homegrown-academy/internal/iam/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
+	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
+	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
@@ -456,9 +458,40 @@ func main() {
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
 
-	// ── Step 7f: Wire learn:: domain ───────────────────────────────────────────
-	// learn:: consumes iam:: (student verification) and method:: (tool resolution).
-	// mkt:: is stubbed until marketplace is implemented. [06-learn §7]
+	// ── Step 7f: Wire mkt:: domain ──────────────────────────────────────────────
+	// mkt:: is the marketplace domain — creator onboarding, publisher management,
+	// listing lifecycle, cart/checkout, reviews, and payouts. [07-mkt §7]
+	// Wired before learn:: because learn:: depends on mkt:: for publisher verification.
+	mktCreatorRepo := mkt.NewPgCreatorRepository(db)
+	mktPublisherRepo := mkt.NewPgPublisherRepository(db)
+	mktListingRepo := mkt.NewPgListingRepository(db)
+	mktListingFileRepo := mkt.NewPgListingFileRepository(db)
+	mktCartRepo := mkt.NewPgCartRepository(db)
+	mktPurchaseRepo := mkt.NewPgPurchaseRepository(db)
+	mktReviewRepo := mkt.NewPgReviewRepository(db)
+	mktCuratedSectionRepo := mkt.NewPgCuratedSectionRepository(db)
+
+	paymentAdapter := mktadapters.NewHyperswitchPaymentAdapter(
+		cfg.HyperswitchBaseURL, cfg.HyperswitchAPIKey, cfg.HyperswitchWebhookKey,
+	)
+	mediaAdapter := mktadapters.NewNoopMediaAdapter()
+
+	mktSvc := mkt.NewMarketplaceService(
+		mktCreatorRepo, mktPublisherRepo, mktListingRepo, mktListingFileRepo,
+		mktCartRepo, mktPurchaseRepo, mktReviewRepo, mktCuratedSectionRepo,
+		paymentAdapter, mediaAdapter,
+		eventBus, db,
+	)
+
+	// Register mkt:: event subscriptions
+	eventBus.Subscribe(reflect.TypeOf(method.MethodologyConfigUpdated{}), mkt.NewMethodologyConfigUpdatedHandler(cache))
+	// Handler structs exist; subscriptions deferred until source event types are defined:
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), mkt.NewContentFlaggedHandler(mktSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), mkt.NewFamilyDeletionScheduledHandler(mktSvc))
+
+	// ── Step 7g: Wire learn:: domain ───────────────────────────────────────────
+	// learn:: consumes iam:: (student verification), method:: (tool resolution),
+	// and mkt:: (publisher membership verification). [06-learn §7]
 	learnActivityDefRepo := learn.NewPgActivityDefRepository(db)
 	learnActivityLogRepo := learn.NewPgActivityLogRepository(db)
 	learnReadingItemRepo := learn.NewPgReadingItemRepository(db)
@@ -565,7 +598,11 @@ func main() {
 		learnSequenceProgressRepo, learnAssignmentRepo,
 		learnVideoDefRepo, learnVideoProgressRepo,
 		iamForLearn, methodForLearn,
-		learn.NewMktStubAdapter(),
+		learn.NewMktAdapter(
+			func(ctx context.Context, callerID, publisherID uuid.UUID) (bool, error) {
+				return mktSvc.VerifyPublisherMembership(ctx, publisherID, callerID)
+			},
+		),
 		eventBus, db,
 	)
 
@@ -589,9 +626,10 @@ func main() {
 		Method:   methodSvc,
 		Discover: discoverSvc,
 		Onboard:  onboardSvc,
-		Social:   socialSvc,
-		Learn:    learnSvc,
-		PubSub:   pubsub,
+		Social:      socialSvc,
+		Learn:       learnSvc,
+		Marketplace: mktSvc,
+		PubSub:      pubsub,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────

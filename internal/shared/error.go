@@ -77,6 +77,10 @@ func ErrAccountBanned() *AppError {
 	return &AppError{Code: "account_banned", Message: "Your account has been permanently restricted", StatusCode: http.StatusForbidden}
 }
 
+func ErrBadGateway(msg string) *AppError {
+	return &AppError{Code: "bad_gateway", Message: msg, StatusCode: http.StatusBadGateway}
+}
+
 func ErrInternal(err error) *AppError {
 	return &AppError{Code: "internal_error", Message: "An internal error occurred", StatusCode: http.StatusInternalServerError, Err: err}
 }

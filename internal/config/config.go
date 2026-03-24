@@ -66,6 +66,17 @@ type AppConfig struct {
 	// Error reporting DSN. Optional — omit to disable error reporting (e.g. Sentry). [ARCH §2.14]
 	ErrorReportingDSN *string
 
+	// ─── Payments (Hyperswitch) ─────────────────────────────────────
+	// Hyperswitch base URL. Optional — omit to disable payment processing.
+	// Example: "http://hyperswitch:8080"
+	HyperswitchBaseURL string
+
+	// Hyperswitch API key. Required when HyperswitchBaseURL is set.
+	HyperswitchAPIKey string
+
+	// Hyperswitch webhook signing key. Required when HyperswitchBaseURL is set.
+	HyperswitchWebhookKey string
+
 	// ─── Environment ────────────────────────────────────────────────
 	// Runtime environment. Controls log format, debug features, etc.
 	Environment Environment
@@ -145,6 +156,11 @@ func LoadConfig() (*AppConfig, error) {
 		env = EnvironmentDevelopment
 	}
 
+	// Optional Hyperswitch config (omit to disable payments)
+	hyperswitchBaseURL := envOrDefault("HYPERSWITCH_BASE_URL", "")
+	hyperswitchAPIKey := envOrDefault("HYPERSWITCH_API_KEY", "")
+	hyperswitchWebhookKey := envOrDefault("HYPERSWITCH_WEBHOOK_KEY", "")
+
 	origins := strings.Split(corsOrigins, ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
@@ -162,6 +178,9 @@ func LoadConfig() (*AppConfig, error) {
 		ServerPort:             serverPort,
 		LogLevel:               logLevel,
 		ErrorReportingDSN:      errorReportingDSN,
+		HyperswitchBaseURL:    hyperswitchBaseURL,
+		HyperswitchAPIKey:     hyperswitchAPIKey,
+		HyperswitchWebhookKey: hyperswitchWebhookKey,
 		Environment:            env,
 	}, nil
 }

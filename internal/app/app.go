@@ -12,6 +12,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
+	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
@@ -39,9 +40,10 @@ type AppState struct {
 	Method   method.MethodologyService
 	Discover discover.DiscoveryService
 	Onboard  onboard.OnboardingService
-	Social   social.SocialService
-	Learn    learn.LearningService
-	PubSub   shared.PubSub // needed by social handler for WebSocket
+	Social      social.SocialService
+	Learn       learn.LearningService
+	Marketplace mkt.MarketplaceService
+	PubSub      shared.PubSub // needed by social handler for WebSocket
 }
 
 // ─── authDeps and rateLimitDeps interface satisfaction ──────────────────────
@@ -141,6 +143,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Learn != nil {
 		learn.NewHandler(state.Learn).Register(auth)
+	}
+	if state.Marketplace != nil {
+		mkt.NewHandler(state.Marketplace, state.Cache).Register(auth, hooks, pub)
 	}
 
 	return e

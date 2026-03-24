@@ -456,14 +456,18 @@ ALTER TABLE mkt_purchases ENABLE ROW LEVEL SECURITY;
 CREATE POLICY purchases_family_read ON mkt_purchases
     FOR SELECT USING (family_id = current_setting('app.current_family_id')::uuid);
 
--- Reviews: read-all (public), write-family (own reviews only)
--- All authenticated users can read reviews. Only the owning family can
--- create or update their reviews.
+-- Reviews: read-all (public), granular write policies (own reviews only)
+-- All authenticated users can read reviews. The owning family can
+-- insert, update, or delete their reviews via separate granular policies.
 ALTER TABLE mkt_reviews ENABLE ROW LEVEL SECURITY;
 CREATE POLICY reviews_read_all ON mkt_reviews
     FOR SELECT USING (true);
 CREATE POLICY reviews_write_family ON mkt_reviews
-    FOR ALL USING (family_id = current_setting('app.current_family_id')::uuid);
+    FOR INSERT WITH CHECK (family_id = current_setting('app.current_family_id')::uuid);
+CREATE POLICY reviews_update_family ON mkt_reviews
+    FOR UPDATE USING (family_id = current_setting('app.current_family_id')::uuid);
+CREATE POLICY reviews_delete_family ON mkt_reviews
+    FOR DELETE USING (family_id = current_setting('app.current_family_id')::uuid);
 ```
 
 ---
@@ -573,7 +577,7 @@ Create a new listing in draft status.
 Update a listing (allowed in draft or published status).
 
 - **Auth**: `RequireCreator` + listing owner check
-- **Body**: `UpdateListingCommand { title?, description?, price_cents?, methodology_tags?, subject_tags?, grade_min?, grade_max?, worldview_tags?, preview_url?, thumbnail_url? }`
+- **Body**: `UpdateListingCommand { title?, description?, price_cents?, methodology_tags?, subject_tags?, grade_min?, grade_max?, worldview_tags?, preview_url?, thumbnail_url?, change_summary? }`
 - **Validation**: Same rules as create for provided fields
 - **Response**: `200 OK` → `ListingDetailResponse`
 - **Side effects**: If listing is published, creates a `mkt_listing_versions` snapshot before applying changes. Increments `version`. `[S§9.2.3]`
@@ -857,7 +861,7 @@ type MarketplaceService interface {
     // Publisher management
     CreatePublisher(ctx context.Context, cmd CreatePublisherCommand, creatorID uuid.UUID) (uuid.UUID, error)
     UpdatePublisher(ctx context.Context, cmd UpdatePublisherCommand, publisherID, creatorID uuid.UUID) error
-    AddPublisherMember(ctx context.Context, publisherID, creatorID uuid.UUID, role string, actingCreatorID uuid.UUID) error
+    AddPublisherMember(ctx context.Context, publisherID uuid.UUID, cmd AddPublisherMemberCommand, actingCreatorID uuid.UUID) error
     RemovePublisherMember(ctx context.Context, publisherID, memberID, actingCreatorID uuid.UUID) error
 
     // Listing lifecycle
@@ -1299,6 +1303,7 @@ type UpdateListingCommand struct {
     WorldviewTags  []string     `json:"worldview_tags,omitempty"`
     PreviewURL     *string      `json:"preview_url,omitempty"`
     ThumbnailURL   *string      `json:"thumbnail_url,omitempty"`
+    ChangeSummary  *string      `json:"change_summary,omitempty" validate:"omitempty,max=500"` // annotates version snapshot when updating published listings [§3.2]
 }
 
 type UploadListingFileCommand struct {
@@ -3081,7 +3086,6 @@ internal/mkt/
 │                             # via net/http, returns domain types only [supersedes ADR-007]
 └── domain/
     ├── listing.go            # MarketplaceListing aggregate root — state machine
-    ├── value_objects.go      # Price, ListingTitle, etc.
     └── errors.go             # MktDomainError type
 ```
 
