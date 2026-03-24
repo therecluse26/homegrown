@@ -72,6 +72,7 @@ type mockSocialService struct {
 
 	// Posts
 	createPostFn func(ctx context.Context, auth *shared.AuthContext, cmd CreatePostCommand) (*PostResponse, error)
+	updatePostFn func(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID, cmd UpdatePostCommand) (*PostResponse, error)
 	deletePostFn func(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID) error
 	likePostFn   func(ctx context.Context, scope *shared.FamilyScope, postID uuid.UUID) error
 	unlikePostFn func(ctx context.Context, scope *shared.FamilyScope, postID uuid.UUID) error
@@ -239,6 +240,13 @@ func (m *mockSocialService) CreatePost(ctx context.Context, auth *shared.AuthCon
 		return m.createPostFn(ctx, auth, cmd)
 	}
 	panic("unexpected call to CreatePost")
+}
+
+func (m *mockSocialService) UpdatePost(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID, cmd UpdatePostCommand) (*PostResponse, error) {
+	if m.updatePostFn != nil {
+		return m.updatePostFn(ctx, auth, postID, cmd)
+	}
+	panic("unexpected call to UpdatePost")
 }
 
 func (m *mockSocialService) DeletePost(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID) error {
@@ -420,6 +428,13 @@ func (m *mockSocialService) PromoteMember(ctx context.Context, auth *shared.Auth
 		return m.promoteMemberFn(ctx, auth, groupID, familyID)
 	}
 	panic("unexpected call to PromoteMember")
+}
+
+func (m *mockSocialService) PinPost(_ context.Context, _ *shared.AuthContext, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+func (m *mockSocialService) UnpinPost(_ context.Context, _ *shared.AuthContext, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
 }
 
 func (m *mockSocialService) GetGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) (*GroupResponse, error) {
@@ -1421,5 +1436,122 @@ func TestRSVPEvent_409_AlreadyRSVPd(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Errorf("want 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ─── PATCH /v1/social/posts/:id ─────────────────────────────────────────────
+
+func TestUpdatePost_200OnSuccess(t *testing.T) {
+	e := newTestEcho()
+	postID := uuid.Must(uuid.NewV7())
+	content := "updated content"
+	svc := &mockSocialService{
+		updatePostFn: func(_ context.Context, _ *shared.AuthContext, id uuid.UUID, cmd UpdatePostCommand) (*PostResponse, error) {
+			if id != postID {
+				t.Errorf("want postID %s, got %s", postID, id)
+			}
+			return &PostResponse{
+				ID:       id,
+				FamilyID: testFamilyID,
+				PostType: "text",
+				Content:  cmd.Content,
+				IsEdited: true,
+			}, nil
+		},
+	}
+	setupSocialRoutes(e, svc)
+
+	body := `{"content":"` + content + `"}`
+	req := httptest.NewRequest(http.MethodPatch, "/v1/social/posts/"+postID.String(), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp PostResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.IsEdited {
+		t.Error("want is_edited=true after update")
+	}
+}
+
+func TestUpdatePost_403WhenNotAuthor(t *testing.T) {
+	e := newTestEcho()
+	postID := uuid.Must(uuid.NewV7())
+	svc := &mockSocialService{
+		updatePostFn: func(_ context.Context, _ *shared.AuthContext, _ uuid.UUID, _ UpdatePostCommand) (*PostResponse, error) {
+			return nil, &SocialError{Err: domain.ErrCannotEditPost}
+		},
+	}
+	setupSocialRoutes(e, svc)
+
+	body := `{"content":"hacked"}`
+	req := httptest.NewRequest(http.MethodPatch, "/v1/social/posts/"+postID.String(), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("want 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdatePost_422WhenEmptyUpdate(t *testing.T) {
+	e := newTestEcho()
+	postID := uuid.Must(uuid.NewV7())
+	svc := &mockSocialService{
+		updatePostFn: func(_ context.Context, _ *shared.AuthContext, _ uuid.UUID, _ UpdatePostCommand) (*PostResponse, error) {
+			return nil, &SocialError{Err: domain.ErrPostEditEmpty}
+		},
+	}
+	setupSocialRoutes(e, svc)
+
+	body := `{}`
+	req := httptest.NewRequest(http.MethodPatch, "/v1/social/posts/"+postID.String(), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("want 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ─── POST /v1/social/groups/:id/posts/:postId/pin ───────────────────────────
+
+func TestPinPost_200OnSuccess(t *testing.T) {
+	e := newTestEcho()
+	groupID := uuid.Must(uuid.NewV7())
+	postID := uuid.Must(uuid.NewV7())
+	svc := &mockSocialService{}
+	setupSocialRoutes(e, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/social/groups/"+groupID.String()+"/posts/"+postID.String()+"/pin", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUnpinPost_204OnSuccess(t *testing.T) {
+	e := newTestEcho()
+	groupID := uuid.Must(uuid.NewV7())
+	postID := uuid.Must(uuid.NewV7())
+	svc := &mockSocialService{}
+	setupSocialRoutes(e, svc)
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/social/groups/"+groupID.String()+"/posts/"+postID.String()+"/pin", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("want 204, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

@@ -18,15 +18,21 @@ func NewHandler(svc DiscoveryService) *DiscoverHandler {
 	return &DiscoverHandler{svc: svc}
 }
 
-// Register registers all discovery routes on the public route group.
-// All discovery endpoints are unauthenticated. [03-discover §1, §4.1]
-func (h *DiscoverHandler) Register(publicGroup *echo.Group) {
+// Register registers all discovery routes on the provided route groups.
+//   - publicGroup: unauthenticated routes (quiz, state guides are public data)
+//   - authGroup: authenticated routes under /v1 (claim quiz result)
+func (h *DiscoverHandler) Register(publicGroup, authGroup *echo.Group) {
+	// Public routes — no auth required. [03-discover §1, §4.1]
 	disc := publicGroup.Group("/discovery")
 	disc.GET("/quiz", h.getQuiz)
 	disc.POST("/quiz/results", h.submitQuiz)
 	disc.GET("/quiz/results/:share_id", h.getQuizResult)
 	disc.GET("/state-guides", h.listStateGuides)
 	disc.GET("/state-guides/:state_code", h.getStateGuide)
+
+	// Authenticated routes — require FamilyScope. [03-discover §4.2]
+	authDisc := authGroup.Group("/discovery")
+	authDisc.POST("/quiz/results/:share_id/claim", h.claimQuizResult)
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -122,6 +128,29 @@ func (h *DiscoverHandler) getStateGuide(c echo.Context) error {
 		return mapDiscoverError(err)
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+// claimQuizResult handles POST /v1/discovery/quiz/results/:share_id/claim.
+// Links an anonymous quiz result to the authenticated family. [03-discover §4.2]
+//
+// @Summary     Claim a quiz result for the authenticated family
+// @Tags        discovery
+// @Produce     json
+// @Param       share_id path string true "Share ID"
+// @Success     204
+// @Failure     404  {object} shared.ErrorResponse "Quiz result not found"
+// @Failure     409  {object} shared.ErrorResponse "Already claimed by another family"
+// @Router      /discovery/quiz/results/{share_id}/claim [post]
+func (h *DiscoverHandler) claimQuizResult(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	shareID := c.Param("share_id")
+	if err := h.svc.ClaimQuizResult(c.Request().Context(), shareID, auth.FamilyID); err != nil {
+		return mapDiscoverError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // ─── Error Mapping ────────────────────────────────────────────────────────────

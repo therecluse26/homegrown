@@ -129,7 +129,7 @@ func NewApp(state *AppState) *echo.Echo {
 		method.NewHandler(state.Method).Register(pub, auth)
 	}
 	if state.Discover != nil {
-		discover.NewHandler(state.Discover).Register(pub)
+		discover.NewHandler(state.Discover).Register(pub, auth)
 	}
 	if state.Onboard != nil {
 		onboard.NewHandler(state.Onboard).Register(auth)

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
 )
@@ -29,10 +30,23 @@ func newTestEcho() *echo.Echo {
 	return e
 }
 
+var testFamilyID = uuid.Must(uuid.NewV7())
+
 // setupDiscoveryRoutes registers the discover routes against an Echo instance.
 func setupDiscoveryRoutes(e *echo.Echo, svc DiscoveryService) {
 	pub := e.Group("/v1")
-	NewHandler(svc).Register(pub)
+	auth := e.Group("/v1")
+	auth.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			shared.SetAuthContext(c, &shared.AuthContext{
+				FamilyID:           testFamilyID,
+				ParentID:           uuid.Must(uuid.NewV7()),
+				CoppaConsentStatus: "consented",
+			})
+			return next(c)
+		}
+	})
+	NewHandler(svc).Register(pub, auth)
 }
 
 // ─── Mock Service ─────────────────────────────────────────────────────────────
@@ -45,6 +59,7 @@ type mockDiscoveryService struct {
 	listStateGuidesFn     func(ctx context.Context) ([]StateGuideSummaryResponse, error)
 	getStateGuideFn       func(ctx context.Context, stateCode string) (*StateGuideResponse, error)
 	getStateRequirementsFn func(ctx context.Context, stateCode string) (*StateGuideRequirements, error)
+	claimQuizResultFn     func(ctx context.Context, shareID string, familyID any) error
 }
 
 func (m *mockDiscoveryService) GetActiveQuiz(ctx context.Context) (*QuizResponse, error) {
@@ -68,7 +83,10 @@ func (m *mockDiscoveryService) GetStateRequirements(ctx context.Context, stateCo
 	}
 	return nil, &DiscoverError{Err: ErrStateGuideNotFound, StateCode: stateCode}
 }
-func (m *mockDiscoveryService) ClaimQuizResult(_ context.Context, _ string, _ any) error {
+func (m *mockDiscoveryService) ClaimQuizResult(ctx context.Context, shareID string, familyID any) error {
+	if m.claimQuizResultFn != nil {
+		return m.claimQuizResultFn(ctx, shareID, familyID)
+	}
 	return nil
 }
 
@@ -369,5 +387,67 @@ func TestGetStateGuide_404ForInvalidCode(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("want 404 for invalid code, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ─── POST /v1/discovery/quiz/results/:share_id/claim ───────────────────────
+
+func TestClaimQuizResult_204OnSuccess(t *testing.T) {
+	e := newTestEcho()
+	svc := &mockDiscoveryService{
+		claimQuizResultFn: func(_ context.Context, shareID string, familyID any) error {
+			if shareID != "abc12345def6" {
+				t.Errorf("want shareID abc12345def6, got %q", shareID)
+			}
+			if familyID != testFamilyID {
+				t.Errorf("want familyID %s, got %v", testFamilyID, familyID)
+			}
+			return nil
+		},
+	}
+	setupDiscoveryRoutes(e, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/quiz/results/abc12345def6/claim", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("want 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestClaimQuizResult_404WhenNotFound(t *testing.T) {
+	e := newTestEcho()
+	svc := &mockDiscoveryService{
+		claimQuizResultFn: func(_ context.Context, _ string, _ any) error {
+			return &DiscoverError{Err: ErrQuizResultNotFound}
+		},
+	}
+	setupDiscoveryRoutes(e, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/quiz/results/notexist/claim", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("want 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestClaimQuizResult_409WhenAlreadyClaimed(t *testing.T) {
+	e := newTestEcho()
+	svc := &mockDiscoveryService{
+		claimQuizResultFn: func(_ context.Context, _ string, _ any) error {
+			return &DiscoverError{Err: ErrQuizResultAlreadyClaimed}
+		},
+	}
+	setupDiscoveryRoutes(e, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/quiz/results/claimed1234/claim", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("want 409, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

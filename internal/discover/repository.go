@@ -115,6 +115,47 @@ func (r *PgQuizResultRepository) ClaimForFamily(ctx context.Context, shareID str
 	return nil
 }
 
+// ─── Content Page Repository ──────────────────────────────────────────────────
+
+// PgContentPageRepository implements ContentPageRepository using PostgreSQL via GORM.
+// NOT family-scoped — disc_content_pages is global platform content. [03-discover §6.4]
+type PgContentPageRepository struct {
+	db *gorm.DB
+}
+
+// NewPgContentPageRepository creates a new PgContentPageRepository.
+func NewPgContentPageRepository(db *gorm.DB) ContentPageRepository {
+	return &PgContentPageRepository{db: db}
+}
+
+func (r *PgContentPageRepository) FindBySlug(ctx context.Context, slug string) (*ContentPage, error) {
+	var page ContentPage
+	err := r.db.WithContext(ctx).
+		Where("slug = ? AND status = ?", slug, "published").
+		First(&page).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &DiscoverError{Err: ErrContentPageNotFound, Slug: slug}
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return &page, nil
+}
+
+func (r *PgContentPageRepository) ListPublished(ctx context.Context) ([]ContentPageSummary, error) {
+	var summaries []ContentPageSummary
+	err := r.db.WithContext(ctx).
+		Model(&ContentPage{}).
+		Select("slug, category, title").
+		Where("status = ?", "published").
+		Order("category ASC, display_order ASC").
+		Scan(&summaries).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return summaries, nil
+}
+
 // ─── State Guide Repository ───────────────────────────────────────────────────
 
 // PgStateGuideRepository implements StateGuideRepository using PostgreSQL via GORM.

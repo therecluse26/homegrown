@@ -152,6 +152,28 @@ func (m *Post) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
+// PinnedPost is the GORM model for soc_pinned_posts. [05-social §4.2]
+type PinnedPost struct {
+	ID       uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	GroupID  uuid.UUID `gorm:"type:uuid;not null"`
+	PostID   uuid.UUID `gorm:"type:uuid;not null"`
+	PinnedBy uuid.UUID `gorm:"type:uuid;not null"`
+	PinnedAt time.Time `gorm:"not null;default:now()"`
+}
+
+func (PinnedPost) TableName() string { return "soc_pinned_posts" }
+
+func (m *PinnedPost) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
 // Comment is the GORM model for soc_comments. [05-social §3.2]
 type Comment struct {
 	ID              uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
@@ -328,6 +350,13 @@ type CreatePostCommand struct {
 	Content     *string         `json:"content"`
 	Attachments json.RawMessage `json:"attachments"`
 	GroupID     *uuid.UUID      `json:"group_id"`
+}
+
+// UpdatePostCommand is the request body for PATCH /v1/social/posts/:id. [05-social §4.2]
+// Author only. Sets is_edited = true. Pointer fields allow partial updates.
+type UpdatePostCommand struct {
+	Content     *string          `json:"content"`
+	Attachments *json.RawMessage `json:"attachments"`
 }
 
 // CreateCommentCommand is the request body for POST /v1/social/posts/:id/comments. [05-social §8.1]

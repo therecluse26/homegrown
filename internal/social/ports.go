@@ -37,6 +37,7 @@ type SocialService interface {
 
 	// ─── Post Commands ──────────────────────────────────────────────────
 	CreatePost(ctx context.Context, auth *shared.AuthContext, cmd CreatePostCommand) (*PostResponse, error)
+	UpdatePost(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID, cmd UpdatePostCommand) (*PostResponse, error)
 	DeletePost(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID) error
 	LikePost(ctx context.Context, scope *shared.FamilyScope, postID uuid.UUID) error
 	UnlikePost(ctx context.Context, scope *shared.FamilyScope, postID uuid.UUID) error
@@ -81,6 +82,10 @@ type SocialService interface {
 	ListPlatformGroups(ctx context.Context) ([]GroupResponse, error)
 	ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error)
 	ListGroupPosts(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
+
+	// ─── Pinned Post Commands ───────────────────────────────────────────
+	PinPost(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, postID uuid.UUID) error
+	UnpinPost(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, postID uuid.UUID) error
 
 	// ─── Event Commands ─────────────────────────────────────────────────
 	CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error)
@@ -181,6 +186,7 @@ type BlockRepository interface {
 type PostRepository interface {
 	Create(ctx context.Context, post *Post) error
 	FindByID(ctx context.Context, id uuid.UUID) (*Post, error)
+	Update(ctx context.Context, post *Post) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	// CROSS-FAMILY: lists posts by multiple family IDs for feed.
 	ListByFamilyIDs(ctx context.Context, familyIDs []uuid.UUID, offset, limit int) ([]Post, error)
@@ -300,6 +306,14 @@ type EventRSVPRepository interface {
 	ListByEvent(ctx context.Context, eventID uuid.UUID) ([]EventRSVP, error)
 	// ListGoingFamilyIDs returns family IDs with "going" status. Used by EventCancelled event.
 	ListGoingFamilyIDs(ctx context.Context, eventID uuid.UUID) ([]uuid.UUID, error)
+}
+
+// PinnedPostRepository provides persistence for soc_pinned_posts. [05-social §4.2]
+type PinnedPostRepository interface {
+	Create(ctx context.Context, pin *PinnedPost) error
+	Delete(ctx context.Context, groupID, postID uuid.UUID) error
+	FindByGroupAndPost(ctx context.Context, groupID, postID uuid.UUID) (*PinnedPost, error)
+	ListByGroup(ctx context.Context, groupID uuid.UUID) ([]PinnedPost, error)
 }
 
 // ─── Consumer-Defined Cross-Domain Interfaces ────────────────────────────────

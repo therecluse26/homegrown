@@ -51,6 +51,8 @@ var (
 	ErrAlreadyLiked       = errors.New("already liked this post")
 	ErrNotLiked           = errors.New("not liked this post")
 	ErrCannotDeletePost   = errors.New("can only delete your own posts")
+	ErrCannotEditPost     = errors.New("can only edit your own posts")
+	ErrPostEditEmpty      = errors.New("update must include content or attachments")
 )
 
 // ─── Comment Errors ─────────────────────────────────────────────────────────
@@ -77,6 +79,9 @@ var (
 	ErrCannotPromoteOwner       = errors.New("cannot promote the group owner")
 	ErrMemberNotActive          = errors.New("can only promote active members")
 	ErrCannotDeletePlatformGroup = errors.New("cannot delete a platform-managed group")
+	ErrPostAlreadyPinned         = errors.New("post is already pinned in this group")
+	ErrPinnedPostNotFound        = errors.New("pinned post not found")
+	ErrPostNotInGroup            = errors.New("post does not belong to this group")
 )
 
 // ─── Messaging Errors ───────────────────────────────────────────────────────

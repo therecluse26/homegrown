@@ -369,6 +369,19 @@ CREATE TABLE soc_event_rsvps (
 );
 
 CREATE INDEX idx_soc_event_rsvps_event ON soc_event_rsvps(event_id, status);
+
+-- Pinned posts in groups [S§7.6]
+-- Moderator/owner can pin posts to the top of the group feed.
+CREATE TABLE soc_pinned_posts (
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
+    group_id              UUID NOT NULL REFERENCES soc_groups(id) ON DELETE CASCADE,
+    post_id               UUID NOT NULL REFERENCES soc_posts(id) ON DELETE CASCADE,
+    pinned_by             UUID NOT NULL REFERENCES iam_parents(id),
+    pinned_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_pinned_post UNIQUE (group_id, post_id)
+);
+
+CREATE INDEX idx_soc_pinned_posts_group ON soc_pinned_posts(group_id);
 ```
 
 ### §3.3 RLS Policies
@@ -1238,6 +1251,7 @@ type SocialService interface {
 - `GroupMemberRepository (interface)`
 - `EventRepository (interface)`
 - `EventRsvpRepository (interface)`
+- `PinnedPostRepository (interface)`
 - `IamService (interface)` (for family/parent data lookup)
 - `RedisPool` (for feed fan-out, caching, WebSocket pub/sub)
 - `EventBus (interface)`
@@ -1529,6 +1543,20 @@ type EventRsvpRepository interface {
     // Lists family_ids with "going" RSVPs (for cancellation notification).
     ListGoingFamilyIDs(ctx context.Context, eventID uuid.UUID) ([]uuid.UUID, error)
 }
+
+type PinnedPostRepository interface {
+    // Create pins a post in a group. Returns the created pinned post record.
+    Create(ctx context.Context, groupID uuid.UUID, postID uuid.UUID, pinnedBy uuid.UUID) (*PinnedPost, error)
+
+    // Delete unpins a post from a group.
+    Delete(ctx context.Context, groupID uuid.UUID, postID uuid.UUID) error
+
+    // FindByGroupAndPost checks if a specific post is pinned in a group.
+    FindByGroupAndPost(ctx context.Context, groupID uuid.UUID, postID uuid.UUID) (*PinnedPost, error)
+
+    // ListByGroup returns all pinned posts for a group, ordered by pinned_at DESC.
+    ListByGroup(ctx context.Context, groupID uuid.UUID) ([]PinnedPost, error)
+}
 ```
 
 ---
@@ -1584,10 +1612,11 @@ type CreatePostCommand struct {
 }
 
 // Update a post (Phase 2). [S§7.2]
+// Pointer fields enable partial updates: nil = no change, non-nil = update to new value.
 
 type UpdatePostCommand struct {
-    Content *string `json:"content"`
-    Attachments *[]AttachmentInput `json:"attachments"`
+    Content *string `json:"content"`                  // pointer: nil = no change
+    Attachments *json.RawMessage `json:"attachments"` // pointer: nil = no change
 }
 
 // Attachment input for posts and messages.
@@ -2615,6 +2644,13 @@ var (
     ErrInvalidPostType  = errors.New("social: invalid post type")
     ErrContentRequired  = errors.New("social: content required for text posts")
     ErrAttachmentsRequired = errors.New("social: attachments required for photo posts")
+    ErrCannotEditPost   = errors.New("social: cannot edit this post")
+    ErrPostEditEmpty    = errors.New("social: post edit must include content or attachments")
+    ErrPostNotInGroup   = errors.New("social: post does not belong to this group")
+
+    // --- Pinned Posts ------------------------------------------------────
+    ErrPostAlreadyPinned = errors.New("social: post is already pinned in this group")
+    ErrPinnedPostNotFound = errors.New("social: pinned post not found")
 
     // --- Comment ------------------------------------------------─────────
     ErrCommentNotFound  = errors.New("social: comment not found")
@@ -2673,6 +2709,11 @@ var (
 | `ErrInvalidPostType` | 422 | `invalid_post_type` | |
 | `ErrContentRequired` | 422 | `content_required` | |
 | `ErrAttachmentsRequired` | 422 | `attachments_required` | |
+| `ErrCannotEditPost` | 403 | `cannot_edit_post` | |
+| `ErrPostEditEmpty` | 422 | `post_edit_empty` | |
+| `ErrPostNotInGroup` | 422 | `post_not_in_group` | |
+| `ErrPostAlreadyPinned` | 409 | `post_already_pinned` | |
+| `ErrPinnedPostNotFound` | 404 | `pinned_post_not_found` | |
 | `ErrCommentNotFound` | 404 | `comment_not_found` | |
 | `ErrNotCommentAuthorOrPostAuthor` | 403 | `not_comment_author_or_post_author` | |
 | `ErrCannotReplyToReply` | 422 | `cannot_reply_to_reply` | |
@@ -2869,16 +2910,19 @@ func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *Fami
 
 ### Phase 2 — Depth
 
-**In scope**:
+**Implemented**:
+- Post editing (`PATCH /v1/social/posts/:post_id`) — author only, sets `is_edited = true`, returns `PostResponse`
+- Pin post (`POST /v1/social/groups/:id/posts/:post_id/pin`) — moderator/owner only, returns 200
+- Unpin post (`DELETE /v1/social/groups/:id/posts/:post_id/pin`) — moderator/owner only, returns 204
+
+**In scope** (remaining):
 - User-created groups (create, update, delete)
 - Group member management (approve, reject, ban, promote, invite)
 - Location-based discovery (families, events, groups via PostGIS)
 - Friend suggestions (methodology-based, mutual friends)
-- Post editing (`PATCH /v1/social/posts/:post_id`, `is_edited` flag)
-- Pinned posts in groups
 - Recurring events
 - Milestone posts (auto-generated from `MilestoneAchieved` events)
-- ~13 Phase 2 endpoints
+- ~10 remaining Phase 2 endpoints
 
 ### Phase 3+ — Expansion
 

@@ -14,26 +14,27 @@ import (
 // ─── Service Implementation ──────────────────────────────────────────────────
 
 type socialServiceImpl struct {
-	profileRepo    ProfileRepository
-	friendshipRepo FriendshipRepository
-	blockRepo      BlockRepository
-	postRepo       PostRepository
-	commentRepo    CommentRepository
-	likeRepo       PostLikeRepository
-	convRepo       ConversationRepository
-	convPartRepo   ConversationParticipantRepository
-	msgRepo        MessageRepository
-	groupRepo      GroupRepository
+	profileRepo     ProfileRepository
+	friendshipRepo  FriendshipRepository
+	blockRepo       BlockRepository
+	postRepo        PostRepository
+	commentRepo     CommentRepository
+	likeRepo        PostLikeRepository
+	convRepo        ConversationRepository
+	convPartRepo    ConversationParticipantRepository
+	msgRepo         MessageRepository
+	groupRepo       GroupRepository
 	groupMemberRepo GroupMemberRepository
-	eventRepo      EventRepository
-	rsvpRepo       EventRSVPRepository
-	iam            IamServiceForSocial
-	method         MethodServiceForSocial
-	feedStore      shared.FeedStore
-	pubsub         shared.PubSub
-	jobs           shared.JobEnqueuer
-	eventBus       *shared.EventBus
-	db             *gorm.DB
+	pinnedPostRepo  PinnedPostRepository
+	eventRepo       EventRepository
+	rsvpRepo        EventRSVPRepository
+	iam             IamServiceForSocial
+	method          MethodServiceForSocial
+	feedStore       shared.FeedStore
+	pubsub          shared.PubSub
+	jobs            shared.JobEnqueuer
+	eventBus        *shared.EventBus
+	db              *gorm.DB
 }
 
 // NewSocialService creates a new SocialService.
@@ -49,6 +50,7 @@ func NewSocialService(
 	msgRepo MessageRepository,
 	groupRepo GroupRepository,
 	groupMemberRepo GroupMemberRepository,
+	pinnedPostRepo PinnedPostRepository,
 	eventRepo EventRepository,
 	rsvpRepo EventRSVPRepository,
 	iam IamServiceForSocial,
@@ -71,12 +73,13 @@ func NewSocialService(
 		msgRepo:         msgRepo,
 		groupRepo:       groupRepo,
 		groupMemberRepo: groupMemberRepo,
+		pinnedPostRepo:  pinnedPostRepo,
 		eventRepo:       eventRepo,
 		rsvpRepo:        rsvpRepo,
 		iam:             iam,
 		method:          method,
 		feedStore:       feedStore,
-		pubsub:         pubsub,
+		pubsub:          pubsub,
 		jobs:            jobs,
 		eventBus:        eventBus,
 		db:              db,
@@ -561,6 +564,57 @@ func (s *socialServiceImpl) CreatePost(ctx context.Context, auth *shared.AuthCon
 		CommentsCount: 0,
 		IsLikedByMe:   false,
 		CreatedAt:     post.CreatedAt,
+	}, nil
+}
+
+func (s *socialServiceImpl) UpdatePost(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID, cmd UpdatePostCommand) (*PostResponse, error) {
+	if cmd.Content == nil && cmd.Attachments == nil {
+		return nil, &SocialError{Err: domain.ErrPostEditEmpty}
+	}
+
+	var updated Post
+	scope := shared.NewFamilyScopeFromAuth(auth)
+	err := shared.ScopedTransaction(ctx, s.db, scope, func(tx *gorm.DB) error {
+		repo := &PgPostRepository{db: tx}
+		post, findErr := repo.FindByID(ctx, postID)
+		if findErr != nil {
+			return findErr
+		}
+		if post.FamilyID != auth.FamilyID {
+			return &SocialError{Err: domain.ErrCannotEditPost}
+		}
+		if cmd.Content != nil {
+			post.Content = cmd.Content
+		}
+		if cmd.Attachments != nil {
+			post.Attachments = *cmd.Attachments
+		}
+		post.IsEdited = true
+		if updateErr := repo.Update(ctx, post); updateErr != nil {
+			return updateErr
+		}
+		updated = *post
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	authorName, _ := s.iam.GetParentDisplayName(ctx, auth.ParentID)
+	return &PostResponse{
+		ID:            updated.ID,
+		FamilyID:      updated.FamilyID,
+		AuthorName:    authorName,
+		PostType:      updated.PostType,
+		Content:       updated.Content,
+		Attachments:   updated.Attachments,
+		GroupID:       updated.GroupID,
+		Visibility:    updated.Visibility,
+		LikesCount:    updated.LikesCount,
+		CommentsCount: updated.CommentsCount,
+		IsEdited:      true,
+		IsLikedByMe:   false,
+		CreatedAt:     updated.CreatedAt,
 	}, nil
 }
 
@@ -1349,6 +1403,44 @@ func (s *socialServiceImpl) PromoteMember(ctx context.Context, auth *shared.Auth
 		member.Role = domain.GroupRoleModerator
 		return s.groupMemberRepo.Update(ctx, member)
 	})
+}
+
+// ─── Pinned Posts ────────────────────────────────────────────────────────────
+
+func (s *socialServiceImpl) PinPost(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, postID uuid.UUID) error {
+	// Verify caller is moderator/owner of the group. [05-social §4.2]
+	member, err := s.groupMemberRepo.FindByGroupAndFamily(ctx, groupID, auth.FamilyID)
+	if err != nil {
+		return err
+	}
+	if !domain.CanModerate(member.Role) {
+		return &SocialError{Err: domain.ErrInsufficientGroupRole}
+	}
+	// Verify post belongs to the group.
+	post, err := s.postRepo.FindByID(ctx, postID)
+	if err != nil {
+		return err
+	}
+	if post.GroupID == nil || *post.GroupID != groupID {
+		return &SocialError{Err: domain.ErrPostNotInGroup}
+	}
+	return s.pinnedPostRepo.Create(ctx, &PinnedPost{
+		GroupID:  groupID,
+		PostID:   postID,
+		PinnedBy: auth.FamilyID,
+	})
+}
+
+func (s *socialServiceImpl) UnpinPost(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, postID uuid.UUID) error {
+	// Verify caller is moderator/owner of the group. [05-social §4.2]
+	member, err := s.groupMemberRepo.FindByGroupAndFamily(ctx, groupID, auth.FamilyID)
+	if err != nil {
+		return err
+	}
+	if !domain.CanModerate(member.Role) {
+		return &SocialError{Err: domain.ErrInsufficientGroupRole}
+	}
+	return s.pinnedPostRepo.Delete(ctx, groupID, postID)
 }
 
 func (s *socialServiceImpl) GetGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) (*GroupResponse, error) {

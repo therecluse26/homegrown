@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -309,6 +310,13 @@ func (r *PgPostRepository) FindByID(ctx context.Context, id uuid.UUID) (*Post, e
 	return &post, nil
 }
 
+func (r *PgPostRepository) Update(ctx context.Context, post *Post) error {
+	if err := r.db.WithContext(ctx).Save(post).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
 func (r *PgPostRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if err := r.db.WithContext(ctx).Delete(&Post{}, "id = ?", id).Error; err != nil {
 		return shared.ErrDatabase(err)
@@ -411,6 +419,65 @@ func (r *PgPostRepository) DecrementComments(ctx context.Context, id uuid.UUID) 
 		return shared.ErrDatabase(err)
 	}
 	return nil
+}
+
+// ─── Pinned Post Repository ──────────────────────────────────────────────────
+
+type PgPinnedPostRepository struct {
+	db *gorm.DB
+}
+
+func NewPgPinnedPostRepository(db *gorm.DB) PinnedPostRepository {
+	return &PgPinnedPostRepository{db: db}
+}
+
+func (r *PgPinnedPostRepository) Create(ctx context.Context, pin *PinnedPost) error {
+	if err := r.db.WithContext(ctx).Create(pin).Error; err != nil {
+		if strings.Contains(err.Error(), "uq_soc_pinned_posts_group_post") {
+			return &SocialError{Err: domain.ErrPostAlreadyPinned}
+		}
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgPinnedPostRepository) Delete(ctx context.Context, groupID, postID uuid.UUID) error {
+	result := r.db.WithContext(ctx).
+		Where("group_id = ? AND post_id = ?", groupID, postID).
+		Delete(&PinnedPost{})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return &SocialError{Err: domain.ErrPinnedPostNotFound}
+	}
+	return nil
+}
+
+func (r *PgPinnedPostRepository) FindByGroupAndPost(ctx context.Context, groupID, postID uuid.UUID) (*PinnedPost, error) {
+	var pin PinnedPost
+	err := r.db.WithContext(ctx).
+		Where("group_id = ? AND post_id = ?", groupID, postID).
+		First(&pin).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &SocialError{Err: domain.ErrPinnedPostNotFound}
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return &pin, nil
+}
+
+func (r *PgPinnedPostRepository) ListByGroup(ctx context.Context, groupID uuid.UUID) ([]PinnedPost, error) {
+	var pins []PinnedPost
+	err := r.db.WithContext(ctx).
+		Where("group_id = ?", groupID).
+		Order("pinned_at DESC").
+		Find(&pins).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return pins, nil
 }
 
 // ─── Comment Repository ─────────────────────────────────────────────────────

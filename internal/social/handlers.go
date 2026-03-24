@@ -48,6 +48,7 @@ func (h *Handler) Register(authGroup *echo.Group) {
 
 	// Posts / Feed
 	soc.POST("/posts", h.createPost)
+	soc.PATCH("/posts/:id", h.updatePost)
 	soc.GET("/posts/:id", h.getPost)
 	soc.DELETE("/posts/:id", h.deletePost)
 	soc.POST("/posts/:id/like", h.likePost)
@@ -84,6 +85,8 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	soc.POST("/groups/:id/members/:familyId/ban", h.banMember)
 	soc.POST("/groups/:id/members/:familyId/invite", h.inviteToGroup)
 	soc.POST("/groups/:id/members/:familyId/promote", h.promoteMember)
+	soc.POST("/groups/:id/posts/:postId/pin", h.pinPost)
+	soc.DELETE("/groups/:id/posts/:postId/pin", h.unpinPost)
 
 	// Events
 	soc.POST("/events", h.createEvent)
@@ -330,6 +333,26 @@ func (h *Handler) createPost(c echo.Context) error {
 		return mapSocialError(err)
 	}
 	return c.JSON(http.StatusCreated, resp)
+}
+
+func (h *Handler) updatePost(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	postID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid post ID")
+	}
+	var cmd UpdatePostCommand
+	if err := c.Bind(&cmd); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	resp, err := h.svc.UpdatePost(c.Request().Context(), auth, postID, cmd)
+	if err != nil {
+		return mapSocialError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) getPost(c echo.Context) error {
@@ -845,6 +868,46 @@ func (h *Handler) promoteMember(c echo.Context) error {
 		return shared.ErrBadRequest("invalid family ID")
 	}
 	if err := h.svc.PromoteMember(c.Request().Context(), auth, groupID, familyID); err != nil {
+		return mapSocialError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── Pinned Post Handlers ────────────────────────────────────────────────────
+
+func (h *Handler) pinPost(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid group ID")
+	}
+	postID, err := uuid.Parse(c.Param("postId"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid post ID")
+	}
+	if err := h.svc.PinPost(c.Request().Context(), auth, groupID, postID); err != nil {
+		return mapSocialError(err)
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+func (h *Handler) unpinPost(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid group ID")
+	}
+	postID, err := uuid.Parse(c.Param("postId"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid post ID")
+	}
+	if err := h.svc.UnpinPost(c.Request().Context(), auth, groupID, postID); err != nil {
 		return mapSocialError(err)
 	}
 	return c.NoContent(http.StatusNoContent)

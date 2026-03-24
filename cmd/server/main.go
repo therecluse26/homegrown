@@ -356,6 +356,7 @@ func main() {
 	socMsgRepo := social.NewPgMessageRepository(db)
 	socGroupRepo := social.NewPgGroupRepository(db)
 	socGroupMemberRepo := social.NewPgGroupMemberRepository(db)
+	socPinnedPostRepo := social.NewPgPinnedPostRepository(db)
 	socEventRepo := social.NewPgEventRepository(db)
 	socRSVPRepo := social.NewPgEventRSVPRepository(db)
 
@@ -441,7 +442,7 @@ func main() {
 		socProfileRepo, socFriendshipRepo, socBlockRepo,
 		socPostRepo, socCommentRepo, socLikeRepo,
 		socConvRepo, socConvPartRepo, socMsgRepo,
-		socGroupRepo, socGroupMemberRepo,
+		socGroupRepo, socGroupMemberRepo, socPinnedPostRepo,
 		socEventRepo, socRSVPRepo,
 		iamForSocial, methodForSocial,
 		feedStore, pubsub, jobs, eventBus, db,

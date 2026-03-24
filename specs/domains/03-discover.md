@@ -333,7 +333,9 @@ no `FamilyScope`. Rate limiting still applies. `[S§5.1.1, ARCH §2.3]`
 
 **Note on `ClaimQuizResult`**: This is the only authenticated endpoint in discover::.
 It is called during onboarding to transfer an anonymous quiz result to the newly created
-family account. `[S§5.1.3]`
+family account. `[S§5.1.3]` The HTTP route `POST /v1/discovery/quiz/results/:share_id/claim`
+is wired as an authenticated endpoint in `authGroup`. Returns **204 No Content** on success,
+**404** if `share_id` not found, **409** if already claimed by a different family.
 
 ### §4.3 Phase 3+ (Admin)
 
@@ -429,23 +431,28 @@ func (h *DiscoverHandler) ClaimQuizResult(c echo.Context) error {
 
 ### §4.5 Route Registration
 
+The `Register` method accepts both `publicGroup` and `authGroup` parameters (same pattern
+as `method::Handler.Register`). Public quiz/guide/content endpoints go on `publicGroup`;
+the authenticated claim endpoint goes on `authGroup`.
+
 ```go
-// In main.go — public routes (no auth middleware)
+// internal/discover/handler.go
 
-func publicRoutes(e *echo.Echo, h *DiscoverHandler) {
-    // Discovery — quiz
-    e.GET("/v1/discovery/quiz", h.GetQuiz)
-    e.POST("/v1/discovery/quiz/results", h.SubmitQuiz)
-    e.GET("/v1/discovery/quiz/results/:share_id", h.GetQuizResult)
-    // Discovery — state guides
-    e.GET("/v1/discovery/state-guides", h.ListStateGuides)
-    e.GET("/v1/discovery/state-guides/:state_code", h.GetStateGuide)
-}
+// Register registers all discovery routes on the provided route groups.
+//   - publicGroup: unauthenticated routes (quiz, state guides are public data)
+//   - authGroup: authenticated routes under /v1 (claim quiz result)
+func (h *DiscoverHandler) Register(publicGroup, authGroup *echo.Group) {
+    // Public routes — no auth required. [03-discover §1, §4.1]
+    disc := publicGroup.Group("/discovery")
+    disc.GET("/quiz", h.getQuiz)
+    disc.POST("/quiz/results", h.submitQuiz)
+    disc.GET("/quiz/results/:share_id", h.getQuizResult)
+    disc.GET("/state-guides", h.listStateGuides)
+    disc.GET("/state-guides/:state_code", h.getStateGuide)
 
-// In main.go — authenticated routes (Phase 2, claim endpoint)
-func authenticatedRoutes(g *echo.Group, h *DiscoverHandler) {
-    g.POST("/v1/discovery/quiz/results/:share_id/claim", h.ClaimQuizResult)
-    // ... other authenticated routes
+    // Authenticated routes — require FamilyScope. [03-discover §4.2]
+    authDisc := authGroup.Group("/discovery")
+    authDisc.POST("/quiz/results/:share_id/claim", h.claimQuizResult)
 }
 ```
 
@@ -509,7 +516,7 @@ type DiscoveryService interface {
 - `QuizDefinitionRepository`
 - `QuizResultRepository`
 - `StateGuideRepository`
-- `ContentPageRepository` (Phase 2)
+- `ContentPageRepository`
 - `MethodologyService` (for methodology slug-to-name mapping in quiz results)
 
 ---
@@ -570,20 +577,23 @@ type StateGuideRepository interface {
 
 **Implementation**: `PgStateGuideRepository` in `internal/discover/repository.go`.
 
-### §6.4 ContentPageRepository (Phase 2)
+### §6.4 ContentPageRepository
 
 ```go
 // ContentPageRepository provides access to content pages.
 type ContentPageRepository interface {
     // FindBySlug returns a published content page by slug.
+    // Filters to status = 'published' only; returns nil if not found or not published.
     FindBySlug(ctx context.Context, slug string) (*ContentPage, error)
 
-    // ListPublished returns all published content pages ordered by category and display_order.
+    // ListPublished returns all published content pages ordered by category ASC, display_order ASC.
     ListPublished(ctx context.Context) ([]ContentPageSummary, error)
 }
 ```
 
 **Implementation**: `PgContentPageRepository` in `internal/discover/repository.go`.
+`FindBySlug` filters to `status = 'published'` only. `ListPublished` orders results by
+`category ASC, display_order ASC`.
 
 ---
 
@@ -1350,10 +1360,10 @@ these as acceptance criteria for code review and integration testing.
 
 ### Phase 2
 
-- [ ] Define `ContentPageRepository` interface
-- [ ] Implement `PgContentPageRepository`
-- [ ] Implement `ClaimQuizResult` in service
-- [ ] Add `ClaimQuizResult` endpoint to authenticated routes
+- [x] Define `ContentPageRepository` interface
+- [x] Implement `PgContentPageRepository` (`FindBySlug` filters published only; `ListPublished` ordered by category ASC, display_order ASC)
+- [x] Implement `ClaimQuizResult` in service
+- [x] Add `ClaimQuizResult` endpoint to authenticated routes (204 success, 404 not found, 409 already claimed)
 - [ ] Implement `GetContentPage` and `ListContentPages`
 - [ ] Add content page endpoints
 - [ ] Create quiz content migration (actual questions and scoring weights)

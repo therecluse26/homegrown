@@ -76,6 +76,10 @@ func (e *SocialError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "not_liked", Message: "Not liked this post", StatusCode: http.StatusNotFound}
 	case errors.Is(e.Err, domain.ErrCannotDeletePost):
 		return &shared.AppError{Code: "cannot_delete_post", Message: "Can only delete your own posts", StatusCode: http.StatusForbidden}
+	case errors.Is(e.Err, domain.ErrCannotEditPost):
+		return &shared.AppError{Code: "cannot_edit_post", Message: "Can only edit your own posts", StatusCode: http.StatusForbidden}
+	case errors.Is(e.Err, domain.ErrPostEditEmpty):
+		return &shared.AppError{Code: "post_edit_empty", Message: "Update must include content or attachments", StatusCode: http.StatusUnprocessableEntity}
 
 	// ─── Comment ────────────────────────────────────────────────
 	case errors.Is(e.Err, domain.ErrCommentNotFound):
@@ -108,6 +112,12 @@ func (e *SocialError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "member_pending", Message: "Membership request is pending", StatusCode: http.StatusConflict}
 	case errors.Is(e.Err, domain.ErrCannotDeletePlatformGroup):
 		return &shared.AppError{Code: "cannot_delete_platform_group", Message: "Platform groups cannot be deleted", StatusCode: http.StatusForbidden}
+	case errors.Is(e.Err, domain.ErrPostAlreadyPinned):
+		return &shared.AppError{Code: "post_already_pinned", Message: "Post is already pinned in this group", StatusCode: http.StatusConflict}
+	case errors.Is(e.Err, domain.ErrPinnedPostNotFound):
+		return &shared.AppError{Code: "pinned_post_not_found", Message: "Pinned post not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, domain.ErrPostNotInGroup):
+		return &shared.AppError{Code: "post_not_in_group", Message: "Post does not belong to this group", StatusCode: http.StatusUnprocessableEntity}
 
 	// ─── Messaging ──────────────────────────────────────────────
 	case errors.Is(e.Err, domain.ErrConversationNotFound):
