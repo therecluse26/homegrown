@@ -1,0 +1,296 @@
+package notify
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/homegrown-academy/homegrown-academy/internal/learn"
+	"github.com/homegrown-academy/homegrown-academy/internal/method"
+	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
+	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"github.com/homegrown-academy/homegrown-academy/internal/social"
+)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Social Event Handlers [08-notify §17.1]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// FriendRequestSentHandler handles social.FriendRequestSent events.
+type FriendRequestSentHandler struct{ svc NotificationService }
+
+func NewFriendRequestSentHandler(svc NotificationService) *FriendRequestSentHandler {
+	return &FriendRequestSentHandler{svc: svc}
+}
+
+func (h *FriendRequestSentHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(social.FriendRequestSent)
+	if !ok {
+		return fmt.Errorf("notify.FriendRequestSentHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFriendRequestSent(ctx, FriendRequestSentEvent{
+		FriendshipID:      e.FriendshipID,
+		RequesterFamilyID: e.RequesterFamilyID,
+		AccepterFamilyID:  e.AccepterFamilyID,
+	})
+}
+
+// FriendRequestAcceptedHandler handles social.FriendRequestAccepted events.
+type FriendRequestAcceptedHandler struct{ svc NotificationService }
+
+func NewFriendRequestAcceptedHandler(svc NotificationService) *FriendRequestAcceptedHandler {
+	return &FriendRequestAcceptedHandler{svc: svc}
+}
+
+func (h *FriendRequestAcceptedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(social.FriendRequestAccepted)
+	if !ok {
+		return fmt.Errorf("notify.FriendRequestAcceptedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFriendRequestAccepted(ctx, FriendRequestAcceptedEvent{
+		FriendshipID:      e.FriendshipID,
+		RequesterFamilyID: e.RequesterFamilyID,
+		AccepterFamilyID:  e.AccepterFamilyID,
+	})
+}
+
+// MessageSentHandler handles social.MessageSent events.
+type MessageSentHandler struct{ svc NotificationService }
+
+func NewMessageSentHandler(svc NotificationService) *MessageSentHandler {
+	return &MessageSentHandler{svc: svc}
+}
+
+func (h *MessageSentHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(social.MessageSent)
+	if !ok {
+		return fmt.Errorf("notify.MessageSentHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleMessageSent(ctx, MessageSentEvent{
+		MessageID:         e.MessageID,
+		ConversationID:    e.ConversationID,
+		SenderParentID:    e.SenderParentID,
+		SenderFamilyID:    e.SenderFamilyID,
+		RecipientParentID: e.RecipientParentID,
+		RecipientFamilyID: e.RecipientFamilyID,
+	})
+}
+
+// EventCancelledHandler handles social.EventCancelled events.
+type EventCancelledHandler struct{ svc NotificationService }
+
+func NewEventCancelledHandler(svc NotificationService) *EventCancelledHandler {
+	return &EventCancelledHandler{svc: svc}
+}
+
+func (h *EventCancelledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(social.EventCancelled)
+	if !ok {
+		return fmt.Errorf("notify.EventCancelledHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleEventCancelled(ctx, EventCancelledEvent{
+		EventID:         e.EventID,
+		CreatorFamilyID: e.CreatorFamilyID,
+		Title:           e.Title,
+		GoingFamilyIDs:  e.GoingFamilyIDs,
+	})
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Method Event Handler
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// FamilyMethodologyChangedHandler handles method.FamilyMethodologyChanged events.
+type FamilyMethodologyChangedHandler struct{ svc NotificationService }
+
+func NewFamilyMethodologyChangedHandler(svc NotificationService) *FamilyMethodologyChangedHandler {
+	return &FamilyMethodologyChangedHandler{svc: svc}
+}
+
+func (h *FamilyMethodologyChangedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(method.FamilyMethodologyChanged)
+	if !ok {
+		return fmt.Errorf("notify.FamilyMethodologyChangedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFamilyMethodologyChanged(ctx, FamilyMethodologyChangedEvent{
+		FamilyID: e.FamilyID,
+	})
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Onboard Event Handler
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// OnboardingCompletedHandler handles onboard.OnboardingCompleted events.
+type OnboardingCompletedHandler struct{ svc NotificationService }
+
+func NewOnboardingCompletedHandler(svc NotificationService) *OnboardingCompletedHandler {
+	return &OnboardingCompletedHandler{svc: svc}
+}
+
+func (h *OnboardingCompletedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(onboard.OnboardingCompleted)
+	if !ok {
+		return fmt.Errorf("notify.OnboardingCompletedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleOnboardingCompleted(ctx, OnboardingCompletedEvent{
+		FamilyID: e.FamilyID,
+		Skipped:  e.Skipped,
+	})
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Learn Event Handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ActivityLoggedHandler handles learn.ActivityLogged events.
+type ActivityLoggedHandler struct{ svc NotificationService }
+
+func NewActivityLoggedHandler(svc NotificationService) *ActivityLoggedHandler {
+	return &ActivityLoggedHandler{svc: svc}
+}
+
+func (h *ActivityLoggedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(learn.ActivityLogged)
+	if !ok {
+		return fmt.Errorf("notify.ActivityLoggedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleActivityLogged(ctx, ActivityLoggedEvent{
+		FamilyID:     e.FamilyID,
+		StudentID:    e.StudentID,
+		ActivityDate: e.ActivityDate.Format("2006-01-02"),
+	})
+}
+
+// MilestoneAchievedHandler handles learn.MilestoneAchieved events.
+type MilestoneAchievedHandler struct{ svc NotificationService }
+
+func NewMilestoneAchievedHandler(svc NotificationService) *MilestoneAchievedHandler {
+	return &MilestoneAchievedHandler{svc: svc}
+}
+
+func (h *MilestoneAchievedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(learn.MilestoneAchieved)
+	if !ok {
+		return fmt.Errorf("notify.MilestoneAchievedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleMilestoneAchieved(ctx, MilestoneAchievedEvent{
+		FamilyID:    e.FamilyID,
+		StudentID:   e.StudentID,
+		StudentName: e.StudentName,
+		Description: e.Description,
+	})
+}
+
+// BookCompletedHandler handles learn.BookCompleted events.
+type BookCompletedHandler struct{ svc NotificationService }
+
+func NewBookCompletedHandler(svc NotificationService) *BookCompletedHandler {
+	return &BookCompletedHandler{svc: svc}
+}
+
+func (h *BookCompletedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(learn.BookCompleted)
+	if !ok {
+		return fmt.Errorf("notify.BookCompletedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleBookCompleted(ctx, BookCompletedEvent{
+		FamilyID:        e.FamilyID,
+		StudentID:       e.StudentID,
+		ReadingItemTitle: e.ReadingItemTitle,
+	})
+}
+
+// DataExportReadyHandler handles learn.DataExportReady events.
+type DataExportReadyHandler struct{ svc NotificationService }
+
+func NewDataExportReadyHandler(svc NotificationService) *DataExportReadyHandler {
+	return &DataExportReadyHandler{svc: svc}
+}
+
+func (h *DataExportReadyHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(learn.DataExportReady)
+	if !ok {
+		return fmt.Errorf("notify.DataExportReadyHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleDataExportReady(ctx, DataExportReadyEvent{
+		FamilyID: e.FamilyID,
+		FileURL:  e.FileURL,
+	})
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Marketplace Event Handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// PurchaseCompletedHandler handles mkt.PurchaseCompleted events.
+type PurchaseCompletedHandler struct{ svc NotificationService }
+
+func NewPurchaseCompletedHandler(svc NotificationService) *PurchaseCompletedHandler {
+	return &PurchaseCompletedHandler{svc: svc}
+}
+
+func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(mkt.PurchaseCompleted)
+	if !ok {
+		return fmt.Errorf("notify.PurchaseCompletedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandlePurchaseCompleted(ctx, PurchaseCompletedEvent{
+		FamilyID:   e.FamilyID,
+		PurchaseID: e.PurchaseID,
+	})
+}
+
+// PurchaseRefundedHandler handles mkt.PurchaseRefunded events.
+type PurchaseRefundedHandler struct{ svc NotificationService }
+
+func NewPurchaseRefundedHandler(svc NotificationService) *PurchaseRefundedHandler {
+	return &PurchaseRefundedHandler{svc: svc}
+}
+
+func (h *PurchaseRefundedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(mkt.PurchaseRefunded)
+	if !ok {
+		return fmt.Errorf("notify.PurchaseRefundedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandlePurchaseRefunded(ctx, PurchaseRefundedEvent{
+		FamilyID:   e.FamilyID,
+		PurchaseID: e.PurchaseID,
+	})
+}
+
+// CreatorOnboardedHandler handles mkt.CreatorOnboarded events.
+type CreatorOnboardedHandler struct{ svc NotificationService }
+
+func NewCreatorOnboardedHandler(svc NotificationService) *CreatorOnboardedHandler {
+	return &CreatorOnboardedHandler{svc: svc}
+}
+
+func (h *CreatorOnboardedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(mkt.CreatorOnboarded)
+	if !ok {
+		return fmt.Errorf("notify.CreatorOnboardedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleCreatorOnboarded(ctx, CreatorOnboardedEvent{
+		CreatorID: e.CreatorID,
+		ParentID:  e.ParentID,
+		StoreName: e.StoreName,
+	})
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Deferred Handlers (Phase 2 / Missing Domains)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ContentFlaggedHandler handles safety.ContentFlagged events.
+// DEFERRED: safety:: domain not implemented. When activated, register in main.go:
+//   eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), notify.NewContentFlaggedHandler(notifySvc))
+
+// CoParentAddedHandler handles iam.CoParentAdded events.
+// DEFERRED: iam.CoParentAdded event does not exist yet. [08-notify §17.1]
+
+// FamilyDeletionScheduledHandler handles iam.FamilyDeletionScheduled events.
+// DEFERRED: iam.FamilyDeletionScheduled event does not exist yet. [08-notify §17.1]
+
+// Billing event handlers (SubscriptionCreated, SubscriptionChanged, SubscriptionCancelled, PayoutCompleted)
+// DEFERRED: billing:: domain not implemented. [08-notify §17.1]

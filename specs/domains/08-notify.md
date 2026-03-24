@@ -249,42 +249,42 @@ CREATE UNIQUE INDEX idx_notify_digests_family_period
 
 ```sql
 -- Families can read and update their own notifications (mark read).
--- System role (service account) can INSERT notifications on behalf of any family.
+-- INSERT uses WITH CHECK (true) — service layer enforces family scope. [CODING §6.2]
 ALTER TABLE notify_notifications ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY notify_notifications_family_select
     ON notify_notifications FOR SELECT
-    USING (family_id = current_setting('app.family_id')::UUID);
+    USING (family_id = current_setting('app.current_family_id')::UUID);
 
 CREATE POLICY notify_notifications_family_update
     ON notify_notifications FOR UPDATE
-    USING (family_id = current_setting('app.family_id')::UUID);
+    USING (family_id = current_setting('app.current_family_id')::UUID);
 
-CREATE POLICY notify_notifications_system_insert
+CREATE POLICY notify_notifications_insert
     ON notify_notifications FOR INSERT
-    WITH CHECK (current_setting('app.role') = 'system');
+    WITH CHECK (true);
 
 -- Families can read and update their own preferences.
 ALTER TABLE notify_preferences ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY notify_preferences_family_select
     ON notify_preferences FOR SELECT
-    USING (family_id = current_setting('app.family_id')::UUID);
+    USING (family_id = current_setting('app.current_family_id')::UUID);
 
 CREATE POLICY notify_preferences_family_update
     ON notify_preferences FOR UPDATE
-    USING (family_id = current_setting('app.family_id')::UUID);
+    USING (family_id = current_setting('app.current_family_id')::UUID);
 
-CREATE POLICY notify_preferences_system_insert
+CREATE POLICY notify_preferences_insert
     ON notify_preferences FOR INSERT
-    WITH CHECK (current_setting('app.role') = 'system');
+    WITH CHECK (true);
 
 -- Digests: system role only (background task creates and marks sent).
 ALTER TABLE notify_digests ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY notify_digests_system_all
     ON notify_digests FOR ALL
-    WITH CHECK (current_setting('app.role') = 'system');
+    WITH CHECK (true);
 ```
 
 ---
@@ -391,7 +391,7 @@ import (
     "context"
 
     "github.com/google/uuid"
-    "github.com/homegrown-academy/homegrown-academy/internal/shared/types"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // NotificationService defines all use cases exposed to handlers and event handlers.
@@ -403,13 +403,15 @@ type NotificationService interface {
     CreateNotification(ctx context.Context, cmd CreateNotificationCommand) error
 
     // MarkRead marks a single notification as read. Idempotent.
-    MarkRead(ctx context.Context, notificationID uuid.UUID, scope types.FamilyScope) error
+    // Returns the updated notification for the handler to return to the client.
+    MarkRead(ctx context.Context, notificationID uuid.UUID, scope *shared.FamilyScope) (NotificationResponse, error)
 
     // MarkAllRead bulk marks all (optionally category-filtered) notifications as read.
-    MarkAllRead(ctx context.Context, scope types.FamilyScope, category *string) (int64, error)
+    MarkAllRead(ctx context.Context, scope *shared.FamilyScope, category *string) (int64, error)
 
     // UpdatePreferences batch upserts notification preferences. Validates system-critical constraints.
-    UpdatePreferences(ctx context.Context, cmd UpdatePreferencesCommand, scope types.FamilyScope) error
+    // Returns the full preference matrix after upsert.
+    UpdatePreferences(ctx context.Context, cmd UpdatePreferencesCommand, scope *shared.FamilyScope) ([]PreferenceResponse, error)
 
     // SendEmail enqueues a transactional email via Postmark.
     SendEmail(ctx context.Context, cmd SendEmailCommand) error
@@ -422,49 +424,54 @@ type NotificationService interface {
     // in event_handlers.go. Failures are logged but do not propagate to
     // the source domain. [ARCH §4.6]
 
+    // ─── Event handlers (one per subscribed event type) ─────────────────
+    // Each method accepts a local event DTO (defined in ports.go), not the
+    // source domain event directly. The event_handlers.go structs convert
+    // source events to these local types. [ARCH §4.2, ARCH §4.6]
+
     // social:: events
-    HandleFriendRequestSent(ctx context.Context, event *FriendRequestSent) error
-    HandleFriendRequestAccepted(ctx context.Context, event *FriendRequestAccepted) error
-    HandleMessageSent(ctx context.Context, event *MessageSent) error
-    HandleEventCancelled(ctx context.Context, event *EventCancelled) error
+    HandleFriendRequestSent(ctx context.Context, event FriendRequestSentEvent) error
+    HandleFriendRequestAccepted(ctx context.Context, event FriendRequestAcceptedEvent) error
+    HandleMessageSent(ctx context.Context, event MessageSentEvent) error
+    HandleEventCancelled(ctx context.Context, event EventCancelledEvent) error
 
     // method:: events
-    HandleFamilyMethodologyChanged(ctx context.Context, event *FamilyMethodologyChanged) error
+    HandleFamilyMethodologyChanged(ctx context.Context, event FamilyMethodologyChangedEvent) error
 
     // onboard:: events
-    HandleOnboardingCompleted(ctx context.Context, event *OnboardingCompleted) error
+    HandleOnboardingCompleted(ctx context.Context, event OnboardingCompletedEvent) error
 
     // learn:: events
-    HandleActivityLogged(ctx context.Context, event *ActivityLogged) error
-    HandleMilestoneAchieved(ctx context.Context, event *MilestoneAchieved) error
-    HandleBookCompleted(ctx context.Context, event *BookCompleted) error
-    HandleDataExportReady(ctx context.Context, event *DataExportReady) error
+    HandleActivityLogged(ctx context.Context, event ActivityLoggedEvent) error
+    HandleMilestoneAchieved(ctx context.Context, event MilestoneAchievedEvent) error
+    HandleBookCompleted(ctx context.Context, event BookCompletedEvent) error
+    HandleDataExportReady(ctx context.Context, event DataExportReadyEvent) error
 
     // mkt:: events
-    HandlePurchaseCompleted(ctx context.Context, event *PurchaseCompleted) error
-    HandlePurchaseRefunded(ctx context.Context, event *PurchaseRefunded) error
-    HandleCreatorOnboarded(ctx context.Context, event *CreatorOnboarded) error
+    HandlePurchaseCompleted(ctx context.Context, event PurchaseCompletedEvent) error
+    HandlePurchaseRefunded(ctx context.Context, event PurchaseRefundedEvent) error
+    HandleCreatorOnboarded(ctx context.Context, event CreatorOnboardedEvent) error
 
-    // safety:: events
-    HandleContentFlagged(ctx context.Context, event *ContentFlagged) error
+    // safety:: events (stub — safety:: not implemented)
+    HandleContentFlagged(ctx context.Context, event ContentFlaggedEvent) error
 
-    // iam:: events (Phase 2)
-    HandleCoParentAdded(ctx context.Context, event *CoParentAdded) error
-    HandleFamilyDeletionScheduled(ctx context.Context, event *FamilyDeletionScheduled) error
+    // iam:: events (Phase 2 stubs)
+    HandleCoParentAdded(ctx context.Context, event CoParentAddedEvent) error
+    HandleFamilyDeletionScheduled(ctx context.Context, event FamilyDeletionScheduledEvent) error
 
-    // billing:: events (Phase 2)
-    HandleSubscriptionCreated(ctx context.Context, event *SubscriptionCreated) error
-    HandleSubscriptionChanged(ctx context.Context, event *SubscriptionChanged) error
-    HandleSubscriptionCancelled(ctx context.Context, event *SubscriptionCancelled) error
-    HandlePayoutCompleted(ctx context.Context, event *PayoutCompleted) error
+    // billing:: events (Phase 2 stubs)
+    HandleSubscriptionCreated(ctx context.Context, event SubscriptionCreatedEvent) error
+    HandleSubscriptionChanged(ctx context.Context, event SubscriptionChangedEvent) error
+    HandleSubscriptionCancelled(ctx context.Context, event SubscriptionCancelledEvent) error
+    HandlePayoutCompleted(ctx context.Context, event PayoutCompletedEvent) error
 
     // ─── Queries (read, no side effects) ────────────────────────────────
 
     // ListNotifications returns a paginated notification list with unread count.
-    ListNotifications(ctx context.Context, params NotificationListParams, scope types.FamilyScope) (*NotificationListResponse, error)
+    ListNotifications(ctx context.Context, params NotificationListParams, scope *shared.FamilyScope) (*NotificationListResponse, error)
 
     // GetPreferences returns the full type x channel preference matrix with defaults applied.
-    GetPreferences(ctx context.Context, scope types.FamilyScope) ([]PreferenceResponse, error)
+    GetPreferences(ctx context.Context, scope *shared.FamilyScope) ([]PreferenceResponse, error)
 }
 ```
 
@@ -477,13 +484,15 @@ package notify
 
 // NotificationServiceImpl implements NotificationService.
 type NotificationServiceImpl struct {
-    notificationRepo NotificationRepository
-    preferenceRepo   PreferenceRepository
-    digestRepo       DigestRepository        // Phase 2
-    emailAdapter     EmailAdapter
-    iamService       IamService              // Email lookup
-    cache            shared.Cache            // WebSocket pub/sub + streak counters
-    jobEnqueuer      shared.JobEnqueuer      // Background job enqueuing [CODING §8.1b]
+    notificationRepo  NotificationRepository
+    preferenceRepo    PreferenceRepository
+    digestRepo        DigestRepository        // Phase 2
+    emailAdapter      EmailAdapter
+    iamService        IamServiceForNotify     // Email & family lookup [ARCH §4.2]
+    cache             shared.Cache            // Streak counters
+    pubsub            shared.PubSub           // WebSocket push via Redis pub/sub [ARCH §2.16]
+    jobEnqueuer       shared.JobEnqueuer      // Background job enqueuing [CODING §8.1b]
+    unsubscribeSecret string                  // HMAC key for CAN-SPAM unsubscribe tokens [§13]
 }
 ```
 
@@ -502,38 +511,38 @@ Digest repository is system-scoped (background task access). `[CODING §8.2]`
 type NotificationRepository interface {
     Create(ctx context.Context, cmd CreateNotification) (*NotifyNotification, error)
 
-    GetByID(ctx context.Context, notificationID uuid.UUID, scope types.FamilyScope) (*NotifyNotification, error)
+    GetByID(ctx context.Context, notificationID uuid.UUID, scope *shared.FamilyScope) (*NotifyNotification, error)
 
-    List(ctx context.Context, params *NotificationListParams, scope types.FamilyScope) ([]NotifyNotification, error)
+    List(ctx context.Context, params *NotificationListParams, scope *shared.FamilyScope) ([]NotifyNotification, error)
 
-    CountUnread(ctx context.Context, scope types.FamilyScope) (int64, error)
+    CountUnread(ctx context.Context, scope *shared.FamilyScope) (int64, error)
 
-    MarkRead(ctx context.Context, notificationID uuid.UUID, scope types.FamilyScope) (bool, error)
+    MarkRead(ctx context.Context, notificationID uuid.UUID, scope *shared.FamilyScope) (bool, error)
 
-    MarkAllRead(ctx context.Context, scope types.FamilyScope, category *string) (int64, error)
+    MarkAllRead(ctx context.Context, scope *shared.FamilyScope, category *string) (int64, error)
 
     // ExistsBySourceEvent checks idempotency: does a notification with this source_event_id already exist?
-    ExistsBySourceEvent(ctx context.Context, familyID types.FamilyID, notificationType string, sourceEventID string) (bool, error)
+    ExistsBySourceEvent(ctx context.Context, familyID uuid.UUID, notificationType string, sourceEventID string) (bool, error)
 
     // DeleteByFamily performs cascade delete for family deletion.
-    DeleteByFamily(ctx context.Context, familyID types.FamilyID) error
+    DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── PreferenceRepository ──────────────────────────────────────────────
 // Family-scoped. Default-enabled semantics: missing row = enabled.
 type PreferenceRepository interface {
     // GetAll returns all explicit preference overrides for a family.
-    GetAll(ctx context.Context, scope types.FamilyScope) ([]NotifyPreference, error)
+    GetAll(ctx context.Context, scope *shared.FamilyScope) ([]NotifyPreference, error)
 
     // UpsertBatch batch upserts preferences (INSERT ON CONFLICT UPDATE).
-    UpsertBatch(ctx context.Context, scope types.FamilyScope, updates []PreferenceUpsert) error
+    UpsertBatch(ctx context.Context, scope *shared.FamilyScope, updates []PreferenceUpsert) error
 
     // IsEnabled checks if a specific type+channel is enabled for a family.
     // Returns true if no row exists (default-enabled).
-    IsEnabled(ctx context.Context, familyID types.FamilyID, notificationType string, channel string) (bool, error)
+    IsEnabled(ctx context.Context, familyID uuid.UUID, notificationType string, channel string) (bool, error)
 
     // DeleteByFamily performs cascade delete for family deletion.
-    DeleteByFamily(ctx context.Context, familyID types.FamilyID) error
+    DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── DigestRepository (Phase 2) ────────────────────────────────────────
@@ -659,10 +668,11 @@ type PreferenceResponse struct {
 ```go
 // CreateNotificationCommand is an internal command to create a notification (used by event handlers).
 // Not exposed via API — event handlers construct this.
+// Category is derived automatically from NotificationType via TypeToCategory lookup —
+// callers do not need to specify it.
 type CreateNotificationCommand struct {
-    FamilyID         types.FamilyID
+    FamilyID         uuid.UUID
     NotificationType string
-    Category         string
     Title            string
     Body             string
     ActionURL        *string
@@ -990,13 +1000,14 @@ iamService.GetFamilyPrimaryEmail(ctx, familyID) -> (email string, displayName st
 This is the only cross-domain service call notify:: makes. All other interactions are via
 domain events.
 
-### SendEmailTask Structure
+### SendEmailTaskPayload Structure
 
 ```go
 // internal/notify/tasks.go
 
-// SendEmailTask is a background task payload for transactional email delivery. [ARCH §12]
-type SendEmailTask struct {
+// SendEmailTaskPayload is a background task payload for transactional email delivery.
+// Implements shared.JobPayload. [CODING §8.1b, ARCH §12]
+type SendEmailTaskPayload struct {
     To             string         `json:"to"`
     TemplateAlias  string         `json:"template_alias"`
     TemplateModel  map[string]any `json:"template_model"`
@@ -1004,6 +1015,8 @@ type SendEmailTask struct {
     // + Tag within a short window. We also use this for logging correlation.
     IdempotencyKey string         `json:"idempotency_key"`
 }
+
+func (SendEmailTaskPayload) TaskType() string { return "notify:send_email" }
 ```
 
 **Queue**: Default (process within 5 minutes) `[ARCH §12]`
@@ -1146,6 +1159,11 @@ The `GET /v1/notifications/unsubscribe` endpoint:
 | **Dead letter** | After 3 failures, task moves to dead letter queue |
 | **Idempotency** | Postmark deduplicates by `MessageStream` + `Tag` within a window; `IdempotencyKey` is set as the Postmark `Tag` header |
 
+Task payloads implement `shared.JobPayload` and are enqueued via `shared.JobEnqueuer`.
+Task handlers implement `shared.JobHandler` and are registered via `shared.JobWorker`.
+This abstracts the underlying task queue (asynq) behind codebase-standard interfaces.
+`[CODING §8.1b]`
+
 ```go
 // internal/notify/tasks.go
 
@@ -1157,40 +1175,46 @@ import (
     "fmt"
     "log/slog"
 
-    "github.com/hibiken/asynq"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 const (
-    TypeSendEmail    = "notify:send_email"
-    TypeCompileDigest = "notify:compile_digest"
+    TaskTypeSendEmail    = "notify:send_email"
+    TaskTypeCompileDigest = "notify:compile_digest"
 )
 
-// NewSendEmailTask creates a new asynq task for email delivery.
-func NewSendEmailTask(payload SendEmailTask) (*asynq.Task, error) {
-    data, err := json.Marshal(payload)
-    if err != nil {
-        return nil, fmt.Errorf("marshalling send email task: %w", err)
-    }
-    return asynq.NewTask(TypeSendEmail, data,
-        asynq.MaxRetry(3),
-        asynq.Queue("default"),
-    ), nil
+// SendEmailTaskPayload implements shared.JobPayload.
+type SendEmailTaskPayload struct {
+    To             string         `json:"to"`
+    TemplateAlias  string         `json:"template_alias"`
+    TemplateModel  map[string]any `json:"template_model"`
+    IdempotencyKey string         `json:"idempotency_key"`
 }
 
-// HandleSendEmailTask processes a send email task.
-func HandleSendEmailTask(adapter EmailAdapter) asynq.HandlerFunc {
-    return func(ctx context.Context, t *asynq.Task) error {
-        var payload SendEmailTask
-        if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+func (SendEmailTaskPayload) TaskType() string { return TaskTypeSendEmail }
+
+// Ensure task payloads implement JobPayload at compile time.
+var _ shared.JobPayload = SendEmailTaskPayload{}
+
+// RegisterTaskHandlers registers notify:: background task handlers with the job worker.
+func RegisterTaskHandlers(worker shared.JobWorker, adapter EmailAdapter) {
+    worker.Handle(TaskTypeSendEmail, handleSendEmailTask(adapter))
+}
+
+// handleSendEmailTask returns a JobHandler for email delivery tasks.
+func handleSendEmailTask(adapter EmailAdapter) shared.JobHandler {
+    return func(ctx context.Context, payload []byte) error {
+        var task SendEmailTaskPayload
+        if err := json.Unmarshal(payload, &task); err != nil {
             return fmt.Errorf("unmarshalling send email task: %w", err)
         }
-        if err := adapter.SendTransactional(ctx, payload.To, payload.TemplateAlias, payload.TemplateModel); err != nil {
-            slog.Error("Email delivery failed",
-                "idempotency_key", payload.IdempotencyKey,
-                "template", payload.TemplateAlias,
+        if err := adapter.SendTransactional(ctx, task.To, task.TemplateAlias, task.TemplateModel); err != nil {
+            slog.Error("email delivery failed",
+                "idempotency_key", task.IdempotencyKey,
+                "template", task.TemplateAlias,
                 "error", err,
             )
-            return err // asynq retries automatically
+            return err // JobWorker retries automatically
         }
         return nil
     }
@@ -1218,31 +1242,17 @@ added, this becomes a proper background task.
 | **Payload** | `CompileDigestTask { DigestType: "daily" | "weekly" }` |
 
 ```go
-// CompileDigestPayload is the payload for the compile digest task.
+// CompileDigestPayload implements shared.JobPayload (Phase 2).
 type CompileDigestPayload struct {
     DigestType string `json:"digest_type"` // "daily" | "weekly"
 }
 
-// NewCompileDigestTask creates a new asynq task for digest compilation.
-func NewCompileDigestTask(payload CompileDigestPayload) (*asynq.Task, error) {
-    data, err := json.Marshal(payload)
-    if err != nil {
-        return nil, fmt.Errorf("marshalling compile digest task: %w", err)
-    }
-    return asynq.NewTask(TypeCompileDigest, data,
-        asynq.MaxRetry(2),
-        asynq.Queue("low"),
-    ), nil
-}
+func (CompileDigestPayload) TaskType() string { return TaskTypeCompileDigest }
 
-// HandleCompileDigestTask processes a compile digest task.
-func HandleCompileDigestTask( /* deps */ ) asynq.HandlerFunc {
-    return func(ctx context.Context, t *asynq.Task) error {
-        // See §15 for compilation algorithm
-        // Phase 2 implementation
-        return nil
-    }
-}
+var _ shared.JobPayload = CompileDigestPayload{}
+
+// Phase 2: RegisterTaskHandlers will also register:
+//   worker.Handle(TaskTypeCompileDigest, handleCompileDigestTask(deps))
 ```
 
 ---
@@ -1380,203 +1390,67 @@ No domain should import anything from `notify::`. The dependency graph is strict
 
 ### §17.3 Events notify:: Subscribes To
 
-`notify::` subscribes to 20 domain events from 8 source domains. Each event maps to a
-handler struct in `internal/notify/event_handlers.go`. `[ARCH §4.6]`
+`notify::` subscribes to 13 domain events in Phase 1 from 5 source domains (`social::`,
+`method::`, `onboard::`, `learn::`, `mkt::`). Each event maps to a handler struct in
+`internal/notify/event_handlers.go` that implements `shared.DomainEventHandler`. `[ARCH §4.6]`
+
+7 additional handlers are deferred: `ContentFlagged` (safety:: not implemented),
+`CoParentAdded` and `FamilyDeletionScheduled` (Phase 2 iam:: events), and 4 billing::
+events (Phase 2). Service stubs exist for all 20 event types.
+
+Each handler struct implements `shared.DomainEventHandler` with a `Handle(ctx, shared.DomainEvent)`
+method. Handlers type-assert the incoming event to the source domain's concrete event type,
+convert it to a local event DTO (defined in `ports.go`), and delegate to the service method.
+This avoids importing source domain types in the service layer. `[ARCH §4.2]`
 
 ```go
-// internal/notify/event_handlers.go
+// internal/notify/event_handlers.go (representative pattern — one handler shown)
 
 package notify
 
 import (
     "context"
-    "log/slog"
+    "fmt"
 
-    socialevents "github.com/homegrown-academy/homegrown-academy/internal/social/events"
-    methodevents "github.com/homegrown-academy/homegrown-academy/internal/method/events"
-    onboardevents "github.com/homegrown-academy/homegrown-academy/internal/onboard/events"
-    learnevents "github.com/homegrown-academy/homegrown-academy/internal/learn/events"
-    mktevents "github.com/homegrown-academy/homegrown-academy/internal/mkt/events"
-    safetyevents "github.com/homegrown-academy/homegrown-academy/internal/safety/events"
-    iamevents "github.com/homegrown-academy/homegrown-academy/internal/iam/events"
-    billingevents "github.com/homegrown-academy/homegrown-academy/internal/billing/events"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared"
+    "github.com/homegrown-academy/homegrown-academy/internal/social"
 )
 
-// ─── social:: events ─────────────────────────────────────────────────────
+// FriendRequestSentHandler handles social.FriendRequestSent events.
+type FriendRequestSentHandler struct{ svc NotificationService }
 
-type FriendRequestSentHandler struct {
-    NotificationService NotificationService
+func NewFriendRequestSentHandler(svc NotificationService) *FriendRequestSentHandler {
+    return &FriendRequestSentHandler{svc: svc}
 }
 
-func (h *FriendRequestSentHandler) Handle(ctx context.Context, event *socialevents.FriendRequestSent) error {
-    return h.NotificationService.HandleFriendRequestSent(ctx, event)
+func (h *FriendRequestSentHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+    e, ok := event.(social.FriendRequestSent)
+    if !ok {
+        return fmt.Errorf("notify.FriendRequestSentHandler: unexpected event type %T", event)
+    }
+    return h.svc.HandleFriendRequestSent(ctx, FriendRequestSentEvent{
+        FriendshipID:      e.FriendshipID,
+        RequesterFamilyID: e.RequesterFamilyID,
+        AccepterFamilyID:  e.AccepterFamilyID,
+    })
 }
 
-type FriendRequestAcceptedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *FriendRequestAcceptedHandler) Handle(ctx context.Context, event *socialevents.FriendRequestAccepted) error {
-    return h.NotificationService.HandleFriendRequestAccepted(ctx, event)
-}
-
-type MessageSentHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *MessageSentHandler) Handle(ctx context.Context, event *socialevents.MessageSent) error {
-    return h.NotificationService.HandleMessageSent(ctx, event)
-}
-
-type EventCancelledHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *EventCancelledHandler) Handle(ctx context.Context, event *socialevents.EventCancelled) error {
-    return h.NotificationService.HandleEventCancelled(ctx, event)
-}
-
-// ─── method:: events ─────────────────────────────────────────────────────
-
-type FamilyMethodologyChangedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *FamilyMethodologyChangedHandler) Handle(ctx context.Context, event *methodevents.FamilyMethodologyChanged) error {
-    return h.NotificationService.HandleFamilyMethodologyChanged(ctx, event)
-}
-
-// ─── onboard:: events ────────────────────────────────────────────────────
-
-type OnboardingCompletedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *OnboardingCompletedHandler) Handle(ctx context.Context, event *onboardevents.OnboardingCompleted) error {
-    return h.NotificationService.HandleOnboardingCompleted(ctx, event)
-}
-
-// ─── learn:: events ──────────────────────────────────────────────────────
-
-type ActivityLoggedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *ActivityLoggedHandler) Handle(ctx context.Context, event *learnevents.ActivityLogged) error {
-    return h.NotificationService.HandleActivityLogged(ctx, event)
-}
-
-type MilestoneAchievedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *MilestoneAchievedHandler) Handle(ctx context.Context, event *learnevents.MilestoneAchieved) error {
-    return h.NotificationService.HandleMilestoneAchieved(ctx, event)
-}
-
-type BookCompletedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *BookCompletedHandler) Handle(ctx context.Context, event *learnevents.BookCompleted) error {
-    return h.NotificationService.HandleBookCompleted(ctx, event)
-}
-
-type DataExportReadyHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *DataExportReadyHandler) Handle(ctx context.Context, event *learnevents.DataExportReady) error {
-    return h.NotificationService.HandleDataExportReady(ctx, event)
-}
-
-// ─── mkt:: events ────────────────────────────────────────────────────────
-
-type PurchaseCompletedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event *mktevents.PurchaseCompleted) error {
-    return h.NotificationService.HandlePurchaseCompleted(ctx, event)
-}
-
-type PurchaseRefundedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *PurchaseRefundedHandler) Handle(ctx context.Context, event *mktevents.PurchaseRefunded) error {
-    return h.NotificationService.HandlePurchaseRefunded(ctx, event)
-}
-
-type CreatorOnboardedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *CreatorOnboardedHandler) Handle(ctx context.Context, event *mktevents.CreatorOnboarded) error {
-    return h.NotificationService.HandleCreatorOnboarded(ctx, event)
-}
-
-// ─── safety:: events ─────────────────────────────────────────────────────
-
-type ContentFlaggedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *ContentFlaggedHandler) Handle(ctx context.Context, event *safetyevents.ContentFlagged) error {
-    return h.NotificationService.HandleContentFlagged(ctx, event)
-}
-
-// ─── iam:: events (Phase 2) ──────────────────────────────────────────────
-
-type CoParentAddedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *CoParentAddedHandler) Handle(ctx context.Context, event *iamevents.CoParentAdded) error {
-    return h.NotificationService.HandleCoParentAdded(ctx, event)
-}
-
-type FamilyDeletionScheduledHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *iamevents.FamilyDeletionScheduled) error {
-    return h.NotificationService.HandleFamilyDeletionScheduled(ctx, event)
-}
-
-// ─── billing:: events (Phase 2) ─────────────────────────────────────────
-
-type SubscriptionCreatedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *SubscriptionCreatedHandler) Handle(ctx context.Context, event *billingevents.SubscriptionCreated) error {
-    return h.NotificationService.HandleSubscriptionCreated(ctx, event)
-}
-
-type SubscriptionChangedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *SubscriptionChangedHandler) Handle(ctx context.Context, event *billingevents.SubscriptionChanged) error {
-    return h.NotificationService.HandleSubscriptionChanged(ctx, event)
-}
-
-type SubscriptionCancelledHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *SubscriptionCancelledHandler) Handle(ctx context.Context, event *billingevents.SubscriptionCancelled) error {
-    return h.NotificationService.HandleSubscriptionCancelled(ctx, event)
-}
-
-type PayoutCompletedHandler struct {
-    NotificationService NotificationService
-}
-
-func (h *PayoutCompletedHandler) Handle(ctx context.Context, event *billingevents.PayoutCompleted) error {
-    return h.NotificationService.HandlePayoutCompleted(ctx, event)
-}
+// All other handlers follow the same pattern:
+//   struct{ svc NotificationService } + NewXxxHandler() constructor
+//   Handle(ctx, shared.DomainEvent) → type-assert → convert → delegate
+//
+// 13 Phase 1 handlers are wired in main.go:
+//   social::  FriendRequestSent, FriendRequestAccepted, MessageSent, EventCancelled
+//   method::  FamilyMethodologyChanged
+//   onboard:: OnboardingCompleted
+//   learn::   ActivityLogged, MilestoneAchieved, BookCompleted, DataExportReady
+//   mkt::     PurchaseCompleted, PurchaseRefunded, CreatorOnboarded
+//
+// Deferred handlers (service methods exist as stubs, event_handlers.go has comments):
+//   safety::  ContentFlagged — deferred until safety:: domain implemented
+//   iam::     CoParentAdded, FamilyDeletionScheduled — Phase 2
+//   billing:: SubscriptionCreated, SubscriptionChanged, SubscriptionCancelled,
+//             PayoutCompleted — Phase 2
 ```
 
 ### §17.4 Event Handler Detail
@@ -1588,13 +1462,13 @@ event payload, then call `CreateNotification()`. Special cases are noted below.
 |-------|--------------|------------------|
 | `FriendRequestSent` | `target_family_id` | — |
 | `FriendRequestAccepted` | `requester_family_id` | — |
-| `MessageSent` | `recipient_family_id` | Only if recipient has no active WebSocket (offline check via Redis) |
+| `MessageSent` | `recipient_family_id` | Always creates notification (no offline check — WebSocket presence detection is fragile) |
 | `EventCancelled` | Each `going_family_ids[i]` | Batch: one notification per RSVP'd family; batch email via `SendBatch()` |
 | `FamilyMethodologyChanged` | `family_id` | — |
 | `OnboardingCompleted` | `family_id` | Skip if `skipped == true` (no welcome email for skipped onboarding) |
 | `ActivityLogged` | `family_id` | No in-app notification created directly; only triggers streak check (§9) |
 | `MilestoneAchieved` | `family_id` | — |
-| `BookCompleted` | `family_id` | Also triggers streak check for reading-specific milestones |
+| `BookCompleted` | `family_id` | — |
 | `DataExportReady` | `family_id` | Email includes signed download URL with expiration |
 | `PurchaseCompleted` | `family_id` | Email includes purchase receipt details from `content_metadata` |
 | `PurchaseRefunded` | `family_id` | — |
@@ -1617,7 +1491,7 @@ event payload, then call `CreateNotification()`. Special cases are noted below.
 - 3 database tables (`notify_notifications`, `notify_preferences`, `notify_digests`)
 - 5 authenticated API endpoints (notification list, mark read, mark all read, get preferences, update preferences)
 - 1 unauthenticated endpoint (email unsubscribe)
-- 14 event handlers (all except `CoParentAdded`, `FamilyDeletionScheduled`)
+- 13 wired event handlers (see §17.3); `ContentFlagged` handler is deferred until `safety::` domain is implemented
 - In-app notification creation with WebSocket push via Redis pub/sub
 - Postmark transactional email stream with template-based delivery
 - `SendEmailTask` background task with retry policy
@@ -1625,11 +1499,11 @@ event payload, then call `CreateNotification()`. Special cases are noted below.
 - User preference enforcement with default-enabled semantics
 - System-critical notification override (cannot disable `content_flagged`)
 - CAN-SPAM compliance (one-click unsubscribe, `List-Unsubscribe` headers)
-- **5+1 endpoints, 3 tables, 14 event handlers**
+- **5+1 endpoints, 3 tables, 13 wired event handlers**
 
-**Out of scope for Phase 1**: Digest compilation, broadcast email stream, `CoParentAdded`
-handler, `FamilyDeletionScheduled` handler, notification retention purge, mobile push
-notifications.
+**Out of scope for Phase 1**: Digest compilation, broadcast email stream, `ContentFlagged`
+handler wiring (depends on `safety::` domain), `CoParentAdded` handler,
+`FamilyDeletionScheduled` handler, notification retention purge, mobile push notifications.
 
 ### Phase 2 — Digests & Depth `[S§19]`
 
@@ -1862,20 +1736,24 @@ func (a *PostmarkEmailAdapter) HandlePostmarkBounce(ctx context.Context, bounce 
 
 ### §21.6 Schema Addition
 
+> **Implementation note**: The initial spec proposed an aggregate-state model (single row per
+> email with counters). The implementation uses an event-log model instead — each bounce/complaint
+> is an immutable row. Suppression logic (counting hard bounces, auto-suppressing) will be
+> implemented when the real Postmark adapter ships, using aggregate queries on this table.
+
 ```sql
--- Track email delivery status for bounce management
+-- Track email delivery events for bounce management (event-log model)
 CREATE TABLE notify_email_status (
-    email           VARCHAR(255) PRIMARY KEY,
-    is_suppressed   BOOLEAN NOT NULL DEFAULT false,
-    hard_bounce_count INT NOT NULL DEFAULT 0,
-    last_bounce_at  TIMESTAMPTZ,
-    suppressed_at   TIMESTAMPTZ,
-    suppression_reason VARCHAR(30)
-                    CHECK (suppression_reason IN ('hard_bounce', 'spam_complaint', 'manual')),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
+    family_id       UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
+    email           TEXT NOT NULL,
+    bounce_type     TEXT NOT NULL CHECK (bounce_type IN ('hard', 'soft', 'spam_complaint')),
+    bounced_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    raw_payload     JSONB
 );
 ```
 
 Before sending any email, the `SendEmailTask` checks `notify_email_status` — if the
-email is suppressed, the task completes without sending (logged but not delivered).
+email has accumulated enough hard bounces or a spam complaint, the task completes without
+sending (logged but not delivered). Suppression thresholds will be defined when the
+Postmark webhook adapter is implemented.

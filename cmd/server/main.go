@@ -30,6 +30,8 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
+	"github.com/homegrown-academy/homegrown-academy/internal/notify"
+	notifyadapters "github.com/homegrown-academy/homegrown-academy/internal/notify/adapters"
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
@@ -612,6 +614,80 @@ func main() {
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), learn.NewFamilyDeletionScheduledHandler(learnSvc))
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), learn.NewPurchaseCompletedHandler(learnSvc))
 
+	// ── Step 7h: Wire notify:: domain ───────────────────────────────────────────
+	// notify:: is the cross-cutting event-driven dispatch system. It receives domain
+	// events from every other module and delivers in-app notifications, transactional
+	// email, and streak detection. [08-notify §1]
+	notifRepo := notify.NewPgNotificationRepository(db)
+	notifPrefRepo := notify.NewPgPreferenceRepository(db)
+	notifDigestRepo := notify.NewPgDigestRepository(db)
+
+	// Email adapter: use Postmark in production, noop in dev/test.
+	var emailAdapter notify.EmailAdapter = notifyadapters.NoopEmailAdapter{}
+	// TODO: Wire PostmarkEmailAdapter when cfg.PostmarkServerToken != ""
+
+	// IAM adapter for notify: bridges iam.IamService → notify.IamServiceForNotify.
+	iamForNotify := notify.NewIamAdapter(
+		// GetFamilyPrimaryEmail — fetch family's primary parent email and family display name.
+		// Uses RLS bypass since event handlers don't have auth context. [08-notify §7]
+		func(ctx context.Context, familyID uuid.UUID) (string, string, error) {
+			type emailRow struct {
+				Email       string
+				DisplayName string
+			}
+			var row emailRow
+			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_parents").
+					Select("iam_parents.email, iam_families.display_name").
+					Joins("JOIN iam_families ON iam_families.id = iam_parents.family_id").
+					Where("iam_parents.family_id = ? AND iam_parents.is_primary = true", familyID).
+					Limit(1).Scan(&row).Error
+			})
+			if err != nil {
+				return "", "", err
+			}
+			return row.Email, row.DisplayName, nil
+		},
+		// GetFamilyIDForParent — reverse lookup from parent ID to family ID
+		func(ctx context.Context, parentID uuid.UUID) (uuid.UUID, error) {
+			var familyID uuid.UUID
+			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_parents").Select("family_id").Where("id = ?", parentID).Scan(&familyID).Error
+			})
+			return familyID, err
+		},
+	)
+
+	notifySvc := notify.NewNotificationService(
+		notifRepo, notifPrefRepo, notifDigestRepo,
+		emailAdapter, iamForNotify,
+		cache, pubsub, jobs,
+		cfg.UnsubscribeSecret,
+	)
+
+	// Register notify:: event subscriptions (Phase 1 — 14 handlers)
+	// social:: events
+	eventBus.Subscribe(reflect.TypeOf(social.FriendRequestSent{}), notify.NewFriendRequestSentHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(social.FriendRequestAccepted{}), notify.NewFriendRequestAcceptedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(social.MessageSent{}), notify.NewMessageSentHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(social.EventCancelled{}), notify.NewEventCancelledHandler(notifySvc))
+	// method:: events
+	eventBus.Subscribe(reflect.TypeOf(method.FamilyMethodologyChanged{}), notify.NewFamilyMethodologyChangedHandler(notifySvc))
+	// onboard:: events
+	eventBus.Subscribe(reflect.TypeOf(onboard.OnboardingCompleted{}), notify.NewOnboardingCompletedHandler(notifySvc))
+	// learn:: events
+	eventBus.Subscribe(reflect.TypeOf(learn.ActivityLogged{}), notify.NewActivityLoggedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), notify.NewMilestoneAchievedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(learn.BookCompleted{}), notify.NewBookCompletedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(learn.DataExportReady{}), notify.NewDataExportReadyHandler(notifySvc))
+	// mkt:: events
+	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), notify.NewPurchaseCompletedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseRefunded{}), notify.NewPurchaseRefundedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.CreatorOnboarded{}), notify.NewCreatorOnboardedHandler(notifySvc))
+	// DEFERRED: safety::ContentFlagged — safety:: domain not implemented
+	// DEFERRED: iam::CoParentAdded, iam::FamilyDeletionScheduled — events not defined yet
+	// DEFERRED: billing:: events — billing:: domain not implemented
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -629,6 +705,7 @@ func main() {
 		Social:      socialSvc,
 		Learn:       learnSvc,
 		Marketplace: mktSvc,
+		Notify:      notifySvc,
 		PubSub:      pubsub,
 	}
 
@@ -642,6 +719,7 @@ func main() {
 		os.Exit(1)
 	}
 	social.RegisterFeedWorkers(worker, feedStore, socFriendshipRepo, socPostRepo)
+	notify.RegisterTaskHandlers(worker, emailAdapter)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
 			slog.Error("job worker error", "error", startErr)

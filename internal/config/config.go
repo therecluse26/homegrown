@@ -77,6 +77,13 @@ type AppConfig struct {
 	// Hyperswitch webhook signing key. Required when HyperswitchBaseURL is set.
 	HyperswitchWebhookKey string
 
+	// ─── Notifications (Postmark) ──────────────────────────────────
+	// Postmark server API token. Optional — omit to use NoopEmailAdapter.
+	PostmarkServerToken string
+
+	// HMAC secret for generating one-click email unsubscribe tokens. [08-notify §13]
+	UnsubscribeSecret string
+
 	// ─── Environment ────────────────────────────────────────────────
 	// Runtime environment. Controls log format, debug features, etc.
 	Environment Environment
@@ -161,6 +168,10 @@ func LoadConfig() (*AppConfig, error) {
 	hyperswitchAPIKey := envOrDefault("HYPERSWITCH_API_KEY", "")
 	hyperswitchWebhookKey := envOrDefault("HYPERSWITCH_WEBHOOK_KEY", "")
 
+	// Optional Postmark config (omit to disable email)
+	postmarkServerToken := envOrDefault("POSTMARK_SERVER_TOKEN", "")
+	unsubscribeSecret := envOrDefault("UNSUBSCRIBE_SECRET", "notify-dev-secret")
+
 	origins := strings.Split(corsOrigins, ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
@@ -181,6 +192,8 @@ func LoadConfig() (*AppConfig, error) {
 		HyperswitchBaseURL:    hyperswitchBaseURL,
 		HyperswitchAPIKey:     hyperswitchAPIKey,
 		HyperswitchWebhookKey: hyperswitchWebhookKey,
+		PostmarkServerToken:   postmarkServerToken,
+		UnsubscribeSecret:     unsubscribeSecret,
 		Environment:            env,
 	}, nil
 }
