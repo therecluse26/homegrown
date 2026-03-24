@@ -28,6 +28,7 @@ type socialServiceImpl struct {
 	eventRepo      EventRepository
 	rsvpRepo       EventRSVPRepository
 	iam            IamServiceForSocial
+	method         MethodServiceForSocial
 	feedStore      shared.FeedStore
 	pubsub         shared.PubSub
 	jobs           shared.JobEnqueuer
@@ -51,6 +52,7 @@ func NewSocialService(
 	eventRepo EventRepository,
 	rsvpRepo EventRSVPRepository,
 	iam IamServiceForSocial,
+	method MethodServiceForSocial,
 	feedStore shared.FeedStore,
 	pubsub shared.PubSub,
 	jobs shared.JobEnqueuer,
@@ -72,12 +74,26 @@ func NewSocialService(
 		eventRepo:       eventRepo,
 		rsvpRepo:        rsvpRepo,
 		iam:             iam,
-		feedStore:        feedStore,
-		pubsub:          pubsub,
+		method:          method,
+		feedStore:       feedStore,
+		pubsub:         pubsub,
 		jobs:            jobs,
 		eventBus:        eventBus,
 		db:              db,
 	}
+}
+
+// methodologyDisplayName resolves a methodology slug to a display name.
+// Falls back to slug on error (graceful degradation). [05-social §8.2]
+func (s *socialServiceImpl) methodologyDisplayName(ctx context.Context, slug *string) *string {
+	if slug == nil || *slug == "" {
+		return nil
+	}
+	name, err := s.method.GetMethodologyDisplayName(ctx, *slug)
+	if err != nil {
+		return slug // graceful fallback to slug
+	}
+	return &name
 }
 
 // ─── Profile ────────────────────────────────────────────────────────────────
@@ -139,6 +155,17 @@ func (s *socialServiceImpl) GetFamilyProfile(ctx context.Context, auth *shared.A
 }
 
 func (s *socialServiceImpl) UpdateProfile(ctx context.Context, scope *shared.FamilyScope, cmd UpdateProfileCommand) (*ProfileResponse, error) {
+	// Validate privacy settings before persisting. [05-social §4.1] (M1)
+	if cmd.PrivacySettings != nil {
+		var ps domain.PrivacySettings
+		if err := json.Unmarshal(*cmd.PrivacySettings, &ps); err != nil {
+			return nil, &SocialError{Err: domain.ErrInvalidPrivacySettings}
+		}
+		if err := domain.ValidatePrivacySettings(ps); err != nil {
+			return nil, &SocialError{Err: err}
+		}
+	}
+
 	var profile *Profile
 	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
 		repo := &PgProfileRepository{db: tx}
@@ -253,6 +280,17 @@ func (s *socialServiceImpl) AcceptFriendRequest(ctx context.Context, auth *share
 	if err != nil {
 		return nil, err
 	}
+
+	// C4: Rebuild feeds for both families so existing posts appear. [05-social §10]
+	_ = s.jobs.Enqueue(ctx, FeedRebuildPayload{
+		FamilyID:       friendship.RequesterFamilyID,
+		FriendFamilyID: friendship.AccepterFamilyID,
+	})
+	_ = s.jobs.Enqueue(ctx, FeedRebuildPayload{
+		FamilyID:       friendship.AccepterFamilyID,
+		FriendFamilyID: friendship.RequesterFamilyID,
+	})
+
 	return &FriendshipResponse{
 		ID:                friendship.ID,
 		RequesterFamilyID: friendship.RequesterFamilyID,
@@ -293,7 +331,7 @@ func (s *socialServiceImpl) Unfriend(ctx context.Context, auth *shared.AuthConte
 }
 
 func (s *socialServiceImpl) BlockFamily(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error {
-	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+	err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		blockRepo := &PgBlockRepository{db: tx}
 		friendRepo := &PgFriendshipRepository{db: tx}
 
@@ -318,6 +356,21 @@ func (s *socialServiceImpl) BlockFamily(ctx context.Context, auth *shared.AuthCo
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Purge blocked family's posts from user's Redis feed. [05-social §16] (C2)
+	// Best-effort: query recent posts by blocked family, then remove from feed.
+	blockedPosts, _ := s.postRepo.ListByFamilyIDs(ctx, []uuid.UUID{targetFamilyID}, 0, 1000)
+	if len(blockedPosts) > 0 {
+		postIDs := make([]string, len(blockedPosts))
+		for i, p := range blockedPosts {
+			postIDs[i] = p.ID.String()
+		}
+		_ = s.feedStore.RemoveFromFeedByFamily(ctx, auth.FamilyID.String(), postIDs)
+	}
+	return nil
 }
 
 func (s *socialServiceImpl) UnblockFamily(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error {
@@ -335,25 +388,31 @@ func (s *socialServiceImpl) UnblockFamily(ctx context.Context, auth *shared.Auth
 	})
 }
 
-func (s *socialServiceImpl) ListFriends(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]ProfileResponse, error) {
-	// CROSS-FAMILY: friend list involves reading other families' profiles.
-	friendIDs, err := s.friendshipRepo.ListFriends(ctx, scope.FamilyID(), offset, limit)
+func (s *socialServiceImpl) ListFriends(ctx context.Context, scope *shared.FamilyScope, cursor *uuid.UUID, limit int) ([]FriendResponse, error) {
+	// CROSS-FAMILY: friend list involves reading other families' profiles. Uses cursor pagination. (H6)
+	friendships, err := s.friendshipRepo.ListFriendsCursor(ctx, scope.FamilyID(), cursor, limit)
 	if err != nil {
 		return nil, err
 	}
-	profiles := make([]ProfileResponse, 0, len(friendIDs))
-	for _, fid := range friendIDs {
-		info, infoErr := s.iam.GetFamilyInfo(ctx, fid)
-		if infoErr != nil {
-			continue
+	results := make([]FriendResponse, 0, len(friendships))
+	for _, f := range friendships {
+		friendFamilyID := f.AccepterFamilyID
+		if f.AccepterFamilyID == scope.FamilyID() {
+			friendFamilyID = f.RequesterFamilyID
 		}
-		profiles = append(profiles, ProfileResponse{
-			FamilyID:    fid,
-			DisplayName: &info.DisplayName,
-			IsFriend:    true,
+		name, _ := s.iam.GetFamilyDisplayName(ctx, friendFamilyID)
+		var photoURL *string
+		if profile, pErr := s.profileRepo.FindByFamilyID(ctx, friendFamilyID); pErr == nil && profile != nil {
+			photoURL = profile.ProfilePhotoURL
+		}
+		results = append(results, FriendResponse{
+			FamilyID:        friendFamilyID,
+			DisplayName:     name,
+			ProfilePhotoURL: photoURL,
+			FriendsSince:    f.UpdatedAt,
 		})
 	}
-	return profiles, nil
+	return results, nil
 }
 
 func (s *socialServiceImpl) ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error) {
@@ -364,11 +423,16 @@ func (s *socialServiceImpl) ListIncomingRequests(ctx context.Context, scope *sha
 	results := make([]FriendRequestResponse, 0, len(friendships))
 	for _, f := range friendships {
 		name, _ := s.iam.GetFamilyDisplayName(ctx, f.RequesterFamilyID)
+		var photoURL *string
+		if profile, pErr := s.profileRepo.FindByFamilyID(ctx, f.RequesterFamilyID); pErr == nil && profile != nil {
+			photoURL = profile.ProfilePhotoURL
+		}
 		results = append(results, FriendRequestResponse{
-			FriendshipID: f.ID,
-			FamilyID:     f.RequesterFamilyID,
-			DisplayName:  name,
-			CreatedAt:    f.CreatedAt.Format(time.RFC3339),
+			FriendshipID:    f.ID,
+			FamilyID:        f.RequesterFamilyID,
+			DisplayName:     name,
+			ProfilePhotoURL: photoURL,
+			CreatedAt:       f.CreatedAt,
 		})
 	}
 	return results, nil
@@ -382,17 +446,22 @@ func (s *socialServiceImpl) ListOutgoingRequests(ctx context.Context, scope *sha
 	results := make([]FriendRequestResponse, 0, len(friendships))
 	for _, f := range friendships {
 		name, _ := s.iam.GetFamilyDisplayName(ctx, f.AccepterFamilyID)
+		var photoURL *string
+		if profile, pErr := s.profileRepo.FindByFamilyID(ctx, f.AccepterFamilyID); pErr == nil && profile != nil {
+			photoURL = profile.ProfilePhotoURL
+		}
 		results = append(results, FriendRequestResponse{
-			FriendshipID: f.ID,
-			FamilyID:     f.AccepterFamilyID,
-			DisplayName:  name,
-			CreatedAt:    f.CreatedAt.Format(time.RFC3339),
+			FriendshipID:    f.ID,
+			FamilyID:        f.AccepterFamilyID,
+			DisplayName:     name,
+			ProfilePhotoURL: photoURL,
+			CreatedAt:       f.CreatedAt,
 		})
 	}
 	return results, nil
 }
 
-func (s *socialServiceImpl) ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockResponse, error) {
+func (s *socialServiceImpl) ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockedFamilyResponse, error) {
 	var blocks []Block
 	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
 		repo := &PgBlockRepository{db: tx}
@@ -403,14 +472,13 @@ func (s *socialServiceImpl) ListBlocks(ctx context.Context, scope *shared.Family
 	if err != nil {
 		return nil, err
 	}
-	results := make([]BlockResponse, 0, len(blocks))
+	results := make([]BlockedFamilyResponse, 0, len(blocks))
 	for _, b := range blocks {
 		name, _ := s.iam.GetFamilyDisplayName(ctx, b.BlockedFamilyID)
-		results = append(results, BlockResponse{
-			BlockID:     b.ID,
+		results = append(results, BlockedFamilyResponse{
 			FamilyID:    b.BlockedFamilyID,
 			DisplayName: name,
-			CreatedAt:   b.CreatedAt.Format(time.RFC3339),
+			BlockedAt:   b.CreatedAt,
 		})
 	}
 	return results, nil
@@ -595,7 +663,7 @@ func (s *socialServiceImpl) GetPost(ctx context.Context, auth *shared.AuthContex
 	}
 
 	return &PostDetailResponse{
-		PostResponse: PostResponse{
+		Post: PostResponse{
 			ID:            post.ID,
 			FamilyID:      post.FamilyID,
 			AuthorName:    authorName,
@@ -615,8 +683,8 @@ func (s *socialServiceImpl) GetPost(ctx context.Context, auth *shared.AuthContex
 }
 
 func (s *socialServiceImpl) GetFeed(ctx context.Context, auth *shared.AuthContext, offset, limit int) (*FeedResponse, error) {
-	// Get all friend IDs for feed query (unbounded — need all friends for fan-out).
-	friendIDs, err := s.friendshipRepo.ListFriends(ctx, auth.FamilyID, 0, 10000)
+	// Get all friend IDs for feed query (unbounded — need all friends for fan-out). (H13)
+	friendIDs, err := s.friendshipRepo.ListFriendFamilyIDs(ctx, auth.FamilyID)
 	if err != nil {
 		return nil, err
 	}
@@ -692,14 +760,17 @@ func (s *socialServiceImpl) GetFeed(ctx context.Context, auth *shared.AuthContex
 // ─── Comments ───────────────────────────────────────────────────────────────
 
 func (s *socialServiceImpl) CreateComment(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID, cmd CreateCommentCommand) (*CommentResponse, error) {
-	// Validate threading — parent comment must be top-level.
+	// Validate threading — parent comment must be top-level AND belong to the same post. (C5)
 	if cmd.ParentCommentID != nil {
 		parent, findErr := s.commentRepo.FindByID(ctx, *cmd.ParentCommentID)
 		if findErr != nil {
 			return nil, findErr
 		}
-		if parent.ParentCommentID != nil {
-			return nil, &SocialError{Err: domain.ErrNestedReplyNotAllowed}
+		if valErr := domain.ValidateCommentThread(parent.ParentCommentID != nil); valErr != nil {
+			return nil, &SocialError{Err: valErr}
+		}
+		if valErr := domain.ValidateCommentSamePost(parent.PostID, postID); valErr != nil {
+			return nil, &SocialError{Err: valErr}
 		}
 	}
 
@@ -825,7 +896,6 @@ func (s *socialServiceImpl) CreateConversation(ctx context.Context, auth *shared
 	err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		convRepo := &PgConversationRepository{db: tx}
 		partRepo := &PgConversationParticipantRepository{db: tx}
-		msgRepo := &PgMessageRepository{db: tx}
 
 		conv = &Conversation{}
 		if createErr := convRepo.Create(ctx, conv); createErr != nil {
@@ -842,23 +912,11 @@ func (s *socialServiceImpl) CreateConversation(ctx context.Context, auth *shared
 		}
 
 		// Add the recipient as participant.
-		if partErr := partRepo.Create(ctx, &ConversationParticipant{
+		return partRepo.Create(ctx, &ConversationParticipant{
 			ConversationID: conv.ID,
 			ParentID:       cmd.RecipientParentID,
 			FamilyID:       recipientInfo.FamilyID,
-		}); partErr != nil {
-			return partErr
-		}
-
-		// Send initial message.
-		msg := &Message{
-			ConversationID: conv.ID,
-			SenderParentID: auth.ParentID,
-			SenderFamilyID: auth.FamilyID,
-			Content:        cmd.InitialMessage,
-			Attachments:    json.RawMessage("[]"),
-		}
-		return msgRepo.Create(ctx, msg)
+		})
 	})
 	if err != nil {
 		return nil, err
@@ -867,6 +925,7 @@ func (s *socialServiceImpl) CreateConversation(ctx context.Context, auth *shared
 	return &ConversationResponse{
 		ID:        conv.ID,
 		UpdatedAt: conv.UpdatedAt,
+		IsNew:     true,
 	}, nil
 }
 
@@ -902,12 +961,14 @@ func (s *socialServiceImpl) SendMessage(ctx context.Context, auth *shared.AuthCo
 		return nil, err
 	}
 
-	// Push via WebSocket to other participants.
+	// Push via WebSocket to other participants + clear deleted_at. [05-social §4.1] (C3)
 	participants, _ := s.convPartRepo.ListByConversation(ctx, conversationID)
 	var recipientParentID uuid.UUID
 	var recipientFamilyID uuid.UUID
 	for _, p := range participants {
 		if p.ParentID != auth.ParentID {
+			// Clear deleted_at: new message restores conversation for recipient.
+			_ = s.convPartRepo.ClearDeletedAt(ctx, conversationID, p.ParentID)
 			publishToParent(s.pubsub, p.ParentID, "new_message", msg)
 			recipientParentID = p.ParentID
 			recipientFamilyID = p.FamilyID
@@ -965,45 +1026,39 @@ func (s *socialServiceImpl) ReportMessage(ctx context.Context, auth *shared.Auth
 	return nil
 }
 
-func (s *socialServiceImpl) ListConversations(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationResponse, error) {
+func (s *socialServiceImpl) ListConversations(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationSummaryResponse, error) {
 	convs, err := s.convRepo.ListByParent(ctx, auth.ParentID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
-	results := make([]ConversationResponse, 0, len(convs))
+	results := make([]ConversationSummaryResponse, 0, len(convs))
 	for _, conv := range convs {
 		participants, _ := s.convPartRepo.ListByConversation(ctx, conv.ID)
-		summaries := make([]ParticipantSummary, 0, len(participants))
 		var myLastRead *time.Time
+		var otherParentName string
 		for _, p := range participants {
 			if p.ParentID == auth.ParentID {
 				myLastRead = p.LastReadAt
+			} else {
+				name, _ := s.iam.GetParentDisplayName(ctx, p.ParentID)
+				otherParentName = name
 			}
-			name, _ := s.iam.GetParentDisplayName(ctx, p.ParentID)
-			summaries = append(summaries, ParticipantSummary{
-				ParentID:    p.ParentID,
-				DisplayName: name,
-			})
 		}
 
 		lastMsg, _ := s.msgRepo.LastByConversation(ctx, conv.ID)
-		var msgSummary *MessageSummary
+		var lastPreview *string
 		if lastMsg != nil {
-			msgSummary = &MessageSummary{
-				Content:   lastMsg.Content,
-				SenderID:  lastMsg.SenderParentID,
-				CreatedAt: lastMsg.CreatedAt,
-			}
+			lastPreview = &lastMsg.Content
 		}
 
 		unread, _ := s.msgRepo.CountUnread(ctx, conv.ID, myLastRead)
 
-		results = append(results, ConversationResponse{
-			ID:           conv.ID,
-			Participants: summaries,
-			LastMessage:  msgSummary,
-			UnreadCount:  unread,
-			UpdatedAt:    conv.UpdatedAt,
+		results = append(results, ConversationSummaryResponse{
+			ID:                 conv.ID,
+			OtherParentName:    otherParentName,
+			LastMessagePreview: lastPreview,
+			UnreadCount:        unread,
+			UpdatedAt:          conv.UpdatedAt,
 		})
 	}
 	return results, nil
@@ -1141,13 +1196,13 @@ func (s *socialServiceImpl) CreateGroup(ctx context.Context, auth *shared.AuthCo
 	ownerRole := domain.GroupRoleOwner
 	activeStatus := domain.GroupMemberStatusActive
 	return &GroupResponse{
-		GroupSummaryResponse: GroupSummaryResponse{
+		Summary: GroupSummaryResponse{
 			ID:              group.ID,
 			GroupType:       group.GroupType,
 			Name:            group.Name,
 			Description:     group.Description,
 			CoverPhotoURL:   group.CoverPhotoURL,
-			MethodologySlug: group.MethodologySlug,
+			MethodologyName: s.methodologyDisplayName(ctx, group.MethodologySlug),
 			JoinPolicy:      group.JoinPolicy,
 			MemberCount:     group.MemberCount,
 			IsMember:        true,
@@ -1188,13 +1243,13 @@ func (s *socialServiceImpl) UpdateGroup(ctx context.Context, auth *shared.AuthCo
 	}
 
 	return &GroupResponse{
-		GroupSummaryResponse: GroupSummaryResponse{
+		Summary: GroupSummaryResponse{
 			ID:              group.ID,
 			GroupType:       group.GroupType,
 			Name:            group.Name,
 			Description:     group.Description,
 			CoverPhotoURL:   group.CoverPhotoURL,
-			MethodologySlug: group.MethodologySlug,
+			MethodologyName: s.methodologyDisplayName(ctx, group.MethodologySlug),
 			JoinPolicy:      group.JoinPolicy,
 			MemberCount:     group.MemberCount,
 			IsMember:        true,
@@ -1206,6 +1261,16 @@ func (s *socialServiceImpl) UpdateGroup(ctx context.Context, auth *shared.AuthCo
 }
 
 func (s *socialServiceImpl) DeleteGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) error {
+	group, err := s.groupRepo.FindByID(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if group == nil {
+		return &SocialError{Err: domain.ErrGroupNotFound}
+	}
+	if group.GroupType == "platform" {
+		return &SocialError{Err: domain.ErrCannotDeletePlatformGroup}
+	}
 	member, err := s.groupMemberRepo.FindByGroupAndFamily(ctx, groupID, auth.FamilyID)
 	if err != nil {
 		return err
@@ -1302,13 +1367,13 @@ func (s *socialServiceImpl) GetGroup(ctx context.Context, auth *shared.AuthConte
 		myStatus = &member.Status
 	}
 	return &GroupResponse{
-		GroupSummaryResponse: GroupSummaryResponse{
+		Summary: GroupSummaryResponse{
 			ID:              group.ID,
 			GroupType:       group.GroupType,
 			Name:            group.Name,
 			Description:     group.Description,
 			CoverPhotoURL:   group.CoverPhotoURL,
-			MethodologySlug: group.MethodologySlug,
+			MethodologyName: s.methodologyDisplayName(ctx, group.MethodologySlug),
 			JoinPolicy:      group.JoinPolicy,
 			MemberCount:     group.MemberCount,
 			IsMember:        isMember,
@@ -1331,12 +1396,12 @@ func (s *socialServiceImpl) ListMyGroups(ctx context.Context, scope *shared.Fami
 			continue
 		}
 		results = append(results, GroupResponse{
-			GroupSummaryResponse: GroupSummaryResponse{
+			Summary: GroupSummaryResponse{
 				ID:              group.ID,
 				GroupType:       group.GroupType,
 				Name:            group.Name,
 				Description:     group.Description,
-				MethodologySlug: group.MethodologySlug,
+				MethodologyName: s.methodologyDisplayName(ctx, group.MethodologySlug),
 				JoinPolicy:      group.JoinPolicy,
 				MemberCount:     group.MemberCount,
 				IsMember:        true,
@@ -1355,12 +1420,12 @@ func (s *socialServiceImpl) ListPlatformGroups(ctx context.Context) ([]GroupResp
 	results := make([]GroupResponse, len(groups))
 	for i, g := range groups {
 		results[i] = GroupResponse{
-			GroupSummaryResponse: GroupSummaryResponse{
+			Summary: GroupSummaryResponse{
 				ID:              g.ID,
 				GroupType:       g.GroupType,
 				Name:            g.Name,
 				Description:     g.Description,
-				MethodologySlug: g.MethodologySlug,
+				MethodologyName: s.methodologyDisplayName(ctx, g.MethodologySlug),
 				JoinPolicy:      g.JoinPolicy,
 				MemberCount:     g.MemberCount,
 			},
@@ -1387,7 +1452,6 @@ func (s *socialServiceImpl) ListGroupMembers(ctx context.Context, auth *shared.A
 	for i, m := range members {
 		name, _ := s.iam.GetFamilyDisplayName(ctx, m.FamilyID)
 		results[i] = GroupMemberResponse{
-			ID:          m.ID,
 			FamilyID:    m.FamilyID,
 			DisplayName: name,
 			Role:        m.Role,
@@ -1436,7 +1500,23 @@ func (s *socialServiceImpl) ListGroupPosts(ctx context.Context, auth *shared.Aut
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
-func (s *socialServiceImpl) CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventResponse, error) {
+func (s *socialServiceImpl) CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error) {
+	// Validate event date is in the future. [05-social §4.1] (C6)
+	if valErr := domain.ValidateEventDate(cmd.EventDate); valErr != nil {
+		return nil, &SocialError{Err: valErr}
+	}
+	// Validate group visibility requires group_id. [05-social §4.1] (C7)
+	if valErr := domain.ValidateEventGroupVisibility(cmd.Visibility, cmd.GroupID); valErr != nil {
+		return nil, &SocialError{Err: valErr}
+	}
+
+	// Convert capacity from *int to *int32. (L1)
+	var capacity *int32
+	if cmd.Capacity != nil {
+		c := int32(*cmd.Capacity)
+		capacity = &c
+	}
+
 	event := &Event{
 		CreatorFamilyID: auth.FamilyID,
 		CreatorParentID: auth.ParentID,
@@ -1449,7 +1529,7 @@ func (s *socialServiceImpl) CreateEvent(ctx context.Context, auth *shared.AuthCo
 		LocationRegion:  cmd.LocationRegion,
 		IsVirtual:       cmd.IsVirtual,
 		VirtualURL:      cmd.VirtualURL,
-		Capacity:        cmd.Capacity,
+		Capacity:        capacity,
 		Visibility:      cmd.Visibility,
 		MethodologySlug: cmd.MethodologySlug,
 	}
@@ -1464,31 +1544,31 @@ func (s *socialServiceImpl) CreateEvent(ctx context.Context, auth *shared.AuthCo
 	}
 
 	creatorName, _ := s.iam.GetFamilyDisplayName(ctx, auth.FamilyID)
-	return &EventResponse{
+	return &EventDetailResponse{
 		EventSummaryResponse: EventSummaryResponse{
-			ID:             event.ID,
-			Title:          event.Title,
-			EventDate:      event.EventDate,
-			EndDate:        event.EndDate,
-			LocationName:   event.LocationName,
-			LocationRegion: event.LocationRegion,
-			IsVirtual:      event.IsVirtual,
-			CreatorName:    creatorName,
-			AttendeeCount:  0,
+			ID:                event.ID,
+			Title:             event.Title,
+			EventDate:         event.EventDate,
+			EndDate:           event.EndDate,
+			LocationName:      event.LocationName,
+			LocationRegion:    event.LocationRegion,
+			IsVirtual:         event.IsVirtual,
+			CreatorFamilyName: creatorName,
+			Capacity:          event.Capacity,
+			Visibility:        event.Visibility,
+			Status:            event.Status,
+			AttendeeCount:     0,
 		},
 		CreatorFamilyID: event.CreatorFamilyID,
 		GroupID:         event.GroupID,
 		Description:     event.Description,
 		VirtualURL:      event.VirtualURL,
-		Capacity:        event.Capacity,
-		Visibility:      event.Visibility,
-		Status:          event.Status,
-		MethodologySlug: event.MethodologySlug,
+		MethodologyName: s.methodologyDisplayName(ctx, event.MethodologySlug),
 		CreatedAt:       event.CreatedAt,
 	}, nil
 }
 
-func (s *socialServiceImpl) UpdateEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error) {
+func (s *socialServiceImpl) UpdateEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventDetailResponse, error) {
 	event, err := s.eventRepo.FindByID(ctx, eventID)
 	if err != nil {
 		return nil, err
@@ -1522,7 +1602,8 @@ func (s *socialServiceImpl) UpdateEvent(ctx context.Context, auth *shared.AuthCo
 		event.VirtualURL = cmd.VirtualURL
 	}
 	if cmd.Capacity != nil {
-		event.Capacity = cmd.Capacity
+		c := int32(*cmd.Capacity)
+		event.Capacity = &c
 	}
 	if cmd.Visibility != nil {
 		event.Visibility = *cmd.Visibility
@@ -1533,26 +1614,26 @@ func (s *socialServiceImpl) UpdateEvent(ctx context.Context, auth *shared.AuthCo
 	}
 
 	creatorName, _ := s.iam.GetFamilyDisplayName(ctx, auth.FamilyID)
-	return &EventResponse{
+	return &EventDetailResponse{
 		EventSummaryResponse: EventSummaryResponse{
-			ID:             event.ID,
-			Title:          event.Title,
-			EventDate:      event.EventDate,
-			EndDate:        event.EndDate,
-			LocationName:   event.LocationName,
-			LocationRegion: event.LocationRegion,
-			IsVirtual:      event.IsVirtual,
-			CreatorName:    creatorName,
-			AttendeeCount:  event.AttendeeCount,
+			ID:                event.ID,
+			Title:             event.Title,
+			EventDate:         event.EventDate,
+			EndDate:           event.EndDate,
+			LocationName:      event.LocationName,
+			LocationRegion:    event.LocationRegion,
+			IsVirtual:         event.IsVirtual,
+			CreatorFamilyName: creatorName,
+			Capacity:          event.Capacity,
+			Visibility:        event.Visibility,
+			Status:            event.Status,
+			AttendeeCount:     event.AttendeeCount,
 		},
 		CreatorFamilyID: event.CreatorFamilyID,
 		GroupID:         event.GroupID,
 		Description:     event.Description,
 		VirtualURL:      event.VirtualURL,
-		Capacity:        event.Capacity,
-		Visibility:      event.Visibility,
-		Status:          event.Status,
-		MethodologySlug: event.MethodologySlug,
+		MethodologyName: s.methodologyDisplayName(ctx, event.MethodologySlug),
 		CreatedAt:       event.CreatedAt,
 	}, nil
 }
@@ -1602,7 +1683,7 @@ func (s *socialServiceImpl) RSVPEvent(ctx context.Context, scope *shared.FamilyS
 		if wasGoing && cmd.Status != "going" {
 			_ = s.eventRepo.DecrementAttendeeCount(ctx, eventID)
 		} else if !wasGoing && cmd.Status == "going" {
-			if event.Capacity != nil && event.AttendeeCount >= *event.Capacity {
+			if event.Capacity != nil && event.AttendeeCount >= int(*event.Capacity) {
 				return &SocialError{Err: domain.ErrEventAtCapacity}
 			}
 			_ = s.eventRepo.IncrementAttendeeCount(ctx, eventID)
@@ -1611,7 +1692,7 @@ func (s *socialServiceImpl) RSVPEvent(ctx context.Context, scope *shared.FamilyS
 	}
 
 	// New RSVP.
-	if cmd.Status == "going" && event.Capacity != nil && event.AttendeeCount >= *event.Capacity {
+	if cmd.Status == "going" && event.Capacity != nil && event.AttendeeCount >= int(*event.Capacity) {
 		return &SocialError{Err: domain.ErrEventAtCapacity}
 	}
 
@@ -1647,7 +1728,7 @@ func (s *socialServiceImpl) RemoveRSVP(ctx context.Context, scope *shared.Family
 	return nil
 }
 
-func (s *socialServiceImpl) GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventResponse, error) {
+func (s *socialServiceImpl) GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventDetailResponse, error) {
 	event, err := s.eventRepo.FindByID(ctx, eventID)
 	if err != nil {
 		return nil, err
@@ -1680,34 +1761,48 @@ func (s *socialServiceImpl) GetEvent(ctx context.Context, auth *shared.AuthConte
 		myRSVP = &rsvp.Status
 	}
 
-	return &EventResponse{
+	// Build RSVPs list for detail response. (H11)
+	rsvps, _ := s.rsvpRepo.ListByEvent(ctx, eventID)
+	rsvpResponses := make([]EventRsvpResponse, 0, len(rsvps))
+	for _, r := range rsvps {
+		name, _ := s.iam.GetFamilyDisplayName(ctx, r.FamilyID)
+		rsvpResponses = append(rsvpResponses, EventRsvpResponse{
+			FamilyID:    r.FamilyID,
+			DisplayName: name,
+			Status:      r.Status,
+			CreatedAt:   r.CreatedAt,
+		})
+	}
+
+	return &EventDetailResponse{
 		EventSummaryResponse: EventSummaryResponse{
-			ID:             event.ID,
-			Title:          event.Title,
-			EventDate:      event.EventDate,
-			EndDate:        event.EndDate,
-			LocationName:   event.LocationName,
-			LocationRegion: event.LocationRegion,
-			IsVirtual:      event.IsVirtual,
-			CreatorName:    creatorName,
-			AttendeeCount:  event.AttendeeCount,
-			MyRSVP:         myRSVP,
+			ID:                event.ID,
+			Title:             event.Title,
+			EventDate:         event.EventDate,
+			EndDate:           event.EndDate,
+			LocationName:      event.LocationName,
+			LocationRegion:    event.LocationRegion,
+			IsVirtual:         event.IsVirtual,
+			CreatorFamilyName: creatorName,
+			Capacity:          event.Capacity,
+			Visibility:        event.Visibility,
+			Status:            event.Status,
+			AttendeeCount:     event.AttendeeCount,
+			MyRSVP:            myRSVP,
 		},
 		CreatorFamilyID: event.CreatorFamilyID,
 		GroupID:         event.GroupID,
 		Description:     event.Description,
 		VirtualURL:      event.VirtualURL,
-		Capacity:        event.Capacity,
-		Visibility:      event.Visibility,
-		Status:          event.Status,
-		MethodologySlug: event.MethodologySlug,
+		MethodologyName: s.methodologyDisplayName(ctx, event.MethodologySlug),
+		Rsvps:           rsvpResponses,
 		CreatedAt:       event.CreatedAt,
 	}, nil
 }
 
-func (s *socialServiceImpl) ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventResponse, error) {
-	// Get all friend IDs for visibility filtering (unbounded).
-	friendIDs, err := s.friendshipRepo.ListFriends(ctx, auth.FamilyID, 0, 10000)
+func (s *socialServiceImpl) ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventDetailResponse, error) {
+	// Get all friend IDs for visibility filtering (unbounded). (H13)
+	friendIDs, err := s.friendshipRepo.ListFriendFamilyIDs(ctx, auth.FamilyID)
 	if err != nil {
 		return nil, err
 	}
@@ -1721,7 +1816,7 @@ func (s *socialServiceImpl) ListEvents(ctx context.Context, auth *shared.AuthCon
 		return nil, err
 	}
 
-	results := make([]EventResponse, 0, len(events))
+	results := make([]EventDetailResponse, 0, len(events))
 	for _, e := range events {
 		// Block filter.
 		if e.CreatorFamilyID != auth.FamilyID {
@@ -1738,28 +1833,102 @@ func (s *socialServiceImpl) ListEvents(ctx context.Context, auth *shared.AuthCon
 			myRSVP = &rsvp.Status
 		}
 
-		results = append(results, EventResponse{
+		results = append(results, EventDetailResponse{
 			EventSummaryResponse: EventSummaryResponse{
-				ID:             e.ID,
-				Title:          e.Title,
-				EventDate:      e.EventDate,
-				EndDate:        e.EndDate,
-				LocationName:   e.LocationName,
-				LocationRegion: e.LocationRegion,
-				IsVirtual:      e.IsVirtual,
-				CreatorName:    creatorName,
-				AttendeeCount:  e.AttendeeCount,
-				MyRSVP:         myRSVP,
+				ID:                e.ID,
+				Title:             e.Title,
+				EventDate:         e.EventDate,
+				EndDate:           e.EndDate,
+				LocationName:      e.LocationName,
+				LocationRegion:    e.LocationRegion,
+				IsVirtual:         e.IsVirtual,
+				CreatorFamilyName: creatorName,
+				Capacity:          e.Capacity,
+				Visibility:        e.Visibility,
+				Status:            e.Status,
+				AttendeeCount:     e.AttendeeCount,
+				MyRSVP:            myRSVP,
 			},
 			CreatorFamilyID: e.CreatorFamilyID,
 			GroupID:         e.GroupID,
 			Description:     e.Description,
 			VirtualURL:      e.VirtualURL,
-			Capacity:        e.Capacity,
-			Visibility:      e.Visibility,
-			Status:          e.Status,
-			MethodologySlug: e.MethodologySlug,
+			MethodologyName: s.methodologyDisplayName(ctx, e.MethodologySlug),
 			CreatedAt:       e.CreatedAt,
+		})
+	}
+	return results, nil
+}
+
+// ─── Discovery (Phase 2) ────────────────────────────────────────────────────
+
+// DiscoverFamilies returns families with location_visible=true. [05-social §15]
+// Phase 2: PostGIS radius queries not yet wired; returns non-blocked location-visible families
+// filtered by methodology if provided.
+func (s *socialServiceImpl) DiscoverFamilies(_ context.Context, _ *shared.FamilyScope, _ DiscoverFamiliesQuery) ([]DiscoverableFamilyResponse, error) {
+	// Phase 2 stub: PostGIS proximity queries require iam:: location_point support.
+	return []DiscoverableFamilyResponse{}, nil
+}
+
+// DiscoverEvents returns discoverable events filtered by methodology/location. [05-social §15]
+func (s *socialServiceImpl) DiscoverEvents(ctx context.Context, scope *shared.FamilyScope, query DiscoverEventsQuery) ([]EventSummaryResponse, error) {
+	events, err := s.eventRepo.ListDiscoverable(ctx, query.MethodologySlug, query.LocationRegion)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]EventSummaryResponse, 0, len(events))
+	for _, e := range events {
+		// Block filter: silently skip events from blocked families. [05-social §9.2]
+		if e.CreatorFamilyID != scope.FamilyID() {
+			if blocked, _ := s.blockRepo.IsEitherBlocked(ctx, scope.FamilyID(), e.CreatorFamilyID); blocked {
+				continue
+			}
+		}
+		creatorName, _ := s.iam.GetFamilyDisplayName(ctx, e.CreatorFamilyID)
+		var myRsvp *string
+		if rsvp, rErr := s.rsvpRepo.FindByEventAndFamily(ctx, e.ID, scope.FamilyID()); rErr == nil && rsvp != nil {
+			myRsvp = &rsvp.Status
+		}
+		results = append(results, EventSummaryResponse{
+			ID:                e.ID,
+			Title:             e.Title,
+			EventDate:         e.EventDate,
+			EndDate:           e.EndDate,
+			LocationName:      e.LocationName,
+			LocationRegion:    e.LocationRegion,
+			IsVirtual:         e.IsVirtual,
+			CreatorFamilyName: creatorName,
+			Capacity:          e.Capacity,
+			Visibility:        e.Visibility,
+			Status:            e.Status,
+			AttendeeCount:     e.AttendeeCount,
+			MyRSVP:            myRsvp,
+		})
+	}
+	return results, nil
+}
+
+// DiscoverGroups returns groups tagged with a methodology slug. [05-social §15]
+func (s *socialServiceImpl) DiscoverGroups(ctx context.Context, scope *shared.FamilyScope, query DiscoverGroupsQuery) ([]GroupSummaryResponse, error) {
+	if query.MethodologySlug == nil || *query.MethodologySlug == "" {
+		return []GroupSummaryResponse{}, nil
+	}
+	groups, err := s.groupRepo.ListByMethodology(ctx, *query.MethodologySlug)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]GroupSummaryResponse, 0, len(groups))
+	for _, g := range groups {
+		isMember, _ := s.groupMemberRepo.IsMember(ctx, g.ID, scope.FamilyID())
+		results = append(results, GroupSummaryResponse{
+			ID:          g.ID,
+			GroupType:   g.GroupType,
+			Name:        g.Name,
+			Description: g.Description,
+			JoinPolicy:  g.JoinPolicy,
+			MemberCount: g.MemberCount,
+			IsMember:    isMember,
+			MethodologyName: s.methodologyDisplayName(ctx, g.MethodologySlug),
 		})
 	}
 	return results, nil
@@ -1769,6 +1938,19 @@ func (s *socialServiceImpl) ListEvents(ctx context.Context, auth *shared.AuthCon
 
 func (s *socialServiceImpl) HandleFamilyCreated(ctx context.Context, familyID uuid.UUID) error {
 	return s.CreateProfile(ctx, familyID)
+}
+
+// Deferred handler stubs — upstream events not yet defined. [05-social §5] (M3)
+func (s *socialServiceImpl) HandleCoParentRemoved(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (s *socialServiceImpl) HandleMilestoneAchieved(_ context.Context, _ uuid.UUID, _ MilestoneData) error {
+	return nil
+}
+
+func (s *socialServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
+	return nil
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1793,24 +1975,35 @@ func (s *socialServiceImpl) moderateGroupAction(ctx context.Context, auth *share
 }
 
 func buildProfileResponse(profile *Profile, info *SocialFamilyInfo, isOwn, isFriend bool) *ProfileResponse {
+	// Unmarshal per-field privacy settings. Fall back to defaults if missing/corrupt.
+	var ps domain.PrivacySettings
+	if err := json.Unmarshal(profile.PrivacySettings, &ps); err != nil {
+		ps = domain.DefaultPrivacySettings()
+	}
+	vis := domain.FilterProfileFields(isOwn, isFriend, ps)
+
 	resp := &ProfileResponse{
 		FamilyID:        profile.FamilyID,
 		Bio:             profile.Bio,
 		ProfilePhotoURL: profile.ProfilePhotoURL,
-		IsOwnProfile:    isOwn,
 		IsFriend:        isFriend,
 	}
 
+	// Own profile sees privacy settings and LocationVisible. (M2)
 	if isOwn {
 		resp.PrivacySettings = &profile.PrivacySettings
+		resp.LocationVisible = &profile.LocationVisible
 	}
 
-	if info != nil {
+	// Gate per-field data through privacy visibility map. [05-social §9.3]
+	if info != nil && vis["display_name"] {
 		resp.DisplayName = &info.DisplayName
-		if isFriend || isOwn {
-			resp.ParentNames = info.ParentNames
-		}
 	}
+	if info != nil && vis["parent_names"] {
+		resp.ParentNames = info.ParentNames
+	}
+	// Phase 2: LocationRegion, MethodologyNames, Children gated by
+	// vis["location"], vis["methodology"], vis["children_names"]/vis["children_ages"].
 
 	return resp
 }

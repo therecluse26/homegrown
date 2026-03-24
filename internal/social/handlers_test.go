@@ -65,10 +65,10 @@ type mockSocialService struct {
 	unfriendFn            func(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
 	blockFamilyFn         func(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
 	unblockFamilyFn       func(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
-	listFriendsFn         func(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]ProfileResponse, error)
+	listFriendsFn         func(ctx context.Context, scope *shared.FamilyScope, cursor *uuid.UUID, limit int) ([]FriendResponse, error)
 	listIncomingFn        func(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
 	listOutgoingFn        func(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
-	listBlocksFn          func(ctx context.Context, scope *shared.FamilyScope) ([]BlockResponse, error)
+	listBlocksFn          func(ctx context.Context, scope *shared.FamilyScope) ([]BlockedFamilyResponse, error)
 
 	// Posts
 	createPostFn func(ctx context.Context, auth *shared.AuthContext, cmd CreatePostCommand) (*PostResponse, error)
@@ -89,7 +89,7 @@ type mockSocialService struct {
 	markConversationReadFn   func(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID) error
 	deleteConversationFn     func(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID) error
 	reportMessageFn          func(ctx context.Context, auth *shared.AuthContext, messageID uuid.UUID, cmd ReportMessageCommand) error
-	listConversationsFn      func(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationResponse, error)
+	listConversationsFn      func(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationSummaryResponse, error)
 	getConversationMessagesFn func(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID, offset, limit int) ([]MessageResponse, error)
 
 	// Groups
@@ -110,16 +110,24 @@ type mockSocialService struct {
 	listGroupPostsFn    func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
 
 	// Events
-	createEventFn func(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventResponse, error)
-	updateEventFn func(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error)
+	createEventFn func(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error)
+	updateEventFn func(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventDetailResponse, error)
 	cancelEventFn func(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) error
 	rsvpEventFn   func(ctx context.Context, scope *shared.FamilyScope, eventID uuid.UUID, cmd RSVPCommand) error
 	removeRSVPFn  func(ctx context.Context, scope *shared.FamilyScope, eventID uuid.UUID) error
-	getEventFn    func(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventResponse, error)
-	listEventsFn  func(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventResponse, error)
+	getEventFn    func(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventDetailResponse, error)
+	listEventsFn  func(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventDetailResponse, error)
+
+	// Discovery
+	discoverFamiliesFn func(ctx context.Context, scope *shared.FamilyScope, query DiscoverFamiliesQuery) ([]DiscoverableFamilyResponse, error)
+	discoverEventsFn   func(ctx context.Context, scope *shared.FamilyScope, query DiscoverEventsQuery) ([]EventSummaryResponse, error)
+	discoverGroupsFn   func(ctx context.Context, scope *shared.FamilyScope, query DiscoverGroupsQuery) ([]GroupSummaryResponse, error)
 
 	// Event Handlers
-	handleFamilyCreatedFn func(ctx context.Context, familyID uuid.UUID) error
+	handleFamilyCreatedFn            func(ctx context.Context, familyID uuid.UUID) error
+	handleCoParentRemovedFn          func(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error
+	handleMilestoneAchievedFn        func(ctx context.Context, familyID uuid.UUID, milestone MilestoneData) error
+	handleFamilyDeletionScheduledFn  func(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
@@ -196,9 +204,9 @@ func (m *mockSocialService) UnblockFamily(ctx context.Context, auth *shared.Auth
 	panic("unexpected call to UnblockFamily")
 }
 
-func (m *mockSocialService) ListFriends(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]ProfileResponse, error) {
+func (m *mockSocialService) ListFriends(ctx context.Context, scope *shared.FamilyScope, cursor *uuid.UUID, limit int) ([]FriendResponse, error) {
 	if m.listFriendsFn != nil {
-		return m.listFriendsFn(ctx, scope, offset, limit)
+		return m.listFriendsFn(ctx, scope, cursor, limit)
 	}
 	panic("unexpected call to ListFriends")
 }
@@ -217,7 +225,7 @@ func (m *mockSocialService) ListOutgoingRequests(ctx context.Context, scope *sha
 	panic("unexpected call to ListOutgoingRequests")
 }
 
-func (m *mockSocialService) ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockResponse, error) {
+func (m *mockSocialService) ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockedFamilyResponse, error) {
 	if m.listBlocksFn != nil {
 		return m.listBlocksFn(ctx, scope)
 	}
@@ -328,7 +336,7 @@ func (m *mockSocialService) ReportMessage(ctx context.Context, auth *shared.Auth
 	panic("unexpected call to ReportMessage")
 }
 
-func (m *mockSocialService) ListConversations(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationResponse, error) {
+func (m *mockSocialService) ListConversations(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationSummaryResponse, error) {
 	if m.listConversationsFn != nil {
 		return m.listConversationsFn(ctx, auth, offset, limit)
 	}
@@ -451,14 +459,14 @@ func (m *mockSocialService) ListGroupPosts(ctx context.Context, auth *shared.Aut
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
-func (m *mockSocialService) CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventResponse, error) {
+func (m *mockSocialService) CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error) {
 	if m.createEventFn != nil {
 		return m.createEventFn(ctx, auth, cmd)
 	}
 	panic("unexpected call to CreateEvent")
 }
 
-func (m *mockSocialService) UpdateEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error) {
+func (m *mockSocialService) UpdateEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventDetailResponse, error) {
 	if m.updateEventFn != nil {
 		return m.updateEventFn(ctx, auth, eventID, cmd)
 	}
@@ -486,18 +494,41 @@ func (m *mockSocialService) RemoveRSVP(ctx context.Context, scope *shared.Family
 	panic("unexpected call to RemoveRSVP")
 }
 
-func (m *mockSocialService) GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventResponse, error) {
+func (m *mockSocialService) GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventDetailResponse, error) {
 	if m.getEventFn != nil {
 		return m.getEventFn(ctx, auth, eventID)
 	}
 	panic("unexpected call to GetEvent")
 }
 
-func (m *mockSocialService) ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventResponse, error) {
+func (m *mockSocialService) ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventDetailResponse, error) {
 	if m.listEventsFn != nil {
 		return m.listEventsFn(ctx, auth, offset, limit)
 	}
 	panic("unexpected call to ListEvents")
+}
+
+// ─── Discovery ───────────────────────────────────────────────────────────────
+
+func (m *mockSocialService) DiscoverFamilies(ctx context.Context, scope *shared.FamilyScope, query DiscoverFamiliesQuery) ([]DiscoverableFamilyResponse, error) {
+	if m.discoverFamiliesFn != nil {
+		return m.discoverFamiliesFn(ctx, scope, query)
+	}
+	panic("unexpected call to DiscoverFamilies")
+}
+
+func (m *mockSocialService) DiscoverEvents(ctx context.Context, scope *shared.FamilyScope, query DiscoverEventsQuery) ([]EventSummaryResponse, error) {
+	if m.discoverEventsFn != nil {
+		return m.discoverEventsFn(ctx, scope, query)
+	}
+	panic("unexpected call to DiscoverEvents")
+}
+
+func (m *mockSocialService) DiscoverGroups(ctx context.Context, scope *shared.FamilyScope, query DiscoverGroupsQuery) ([]GroupSummaryResponse, error) {
+	if m.discoverGroupsFn != nil {
+		return m.discoverGroupsFn(ctx, scope, query)
+	}
+	panic("unexpected call to DiscoverGroups")
 }
 
 // ─── Event Handlers ─────────────────────────────────────────────────────────
@@ -509,6 +540,27 @@ func (m *mockSocialService) HandleFamilyCreated(ctx context.Context, familyID uu
 	panic("unexpected call to HandleFamilyCreated")
 }
 
+func (m *mockSocialService) HandleCoParentRemoved(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error {
+	if m.handleCoParentRemovedFn != nil {
+		return m.handleCoParentRemovedFn(ctx, familyID, parentID)
+	}
+	return nil
+}
+
+func (m *mockSocialService) HandleMilestoneAchieved(ctx context.Context, familyID uuid.UUID, milestone MilestoneData) error {
+	if m.handleMilestoneAchievedFn != nil {
+		return m.handleMilestoneAchievedFn(ctx, familyID, milestone)
+	}
+	return nil
+}
+
+func (m *mockSocialService) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	if m.handleFamilyDeletionScheduledFn != nil {
+		return m.handleFamilyDeletionScheduledFn(ctx, familyID)
+	}
+	return nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROFILE TESTS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -517,11 +569,12 @@ func (m *mockSocialService) HandleFamilyCreated(ctx context.Context, familyID uu
 
 func TestGetOwnProfile_200(t *testing.T) {
 	e := newTestEcho()
+	locVisible := true
 	svc := &mockSocialService{
 		getOwnProfileFn: func(_ context.Context, _ *shared.FamilyScope) (*ProfileResponse, error) {
 			return &ProfileResponse{
-				FamilyID:     testFamilyID,
-				IsOwnProfile: true,
+				FamilyID:        testFamilyID,
+				LocationVisible: &locVisible,
 			}, nil
 		},
 	}
@@ -538,8 +591,8 @@ func TestGetOwnProfile_200(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	if !resp.IsOwnProfile {
-		t.Error("want is_own_profile=true")
+	if resp.LocationVisible == nil || !*resp.LocationVisible {
+		t.Error("want location_visible=true for own profile")
 	}
 }
 
@@ -572,9 +625,8 @@ func TestGetFamilyProfile_200(t *testing.T) {
 				t.Errorf("want targetID=%s, got=%s", targetID, got)
 			}
 			return &ProfileResponse{
-				FamilyID:     targetID,
-				IsOwnProfile: false,
-				IsFriend:     true,
+				FamilyID: targetID,
+				IsFriend: true,
 			}, nil
 		},
 	}
@@ -718,9 +770,9 @@ func TestAcceptFriendRequest_200(t *testing.T) {
 func TestListFriends_200(t *testing.T) {
 	e := newTestEcho()
 	svc := &mockSocialService{
-		listFriendsFn: func(_ context.Context, _ *shared.FamilyScope, _, _ int) ([]ProfileResponse, error) {
-			return []ProfileResponse{
-				{FamilyID: uuid.Must(uuid.NewV7()), IsFriend: true},
+		listFriendsFn: func(_ context.Context, _ *shared.FamilyScope, _ *uuid.UUID, _ int) ([]FriendResponse, error) {
+			return []FriendResponse{
+				{FamilyID: uuid.Must(uuid.NewV7()), DisplayName: "Test Family", FriendsSince: time.Now()},
 			}, nil
 		},
 	}
@@ -733,7 +785,7 @@ func TestListFriends_200(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp []ProfileResponse
+	var resp []FriendResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
@@ -748,7 +800,7 @@ func TestListFriends_200(t *testing.T) {
 
 // ─── POST /v1/social/blocks/:familyId ────────────────────────────────────────
 
-func TestBlockFamily_204(t *testing.T) {
+func TestBlockFamily_201(t *testing.T) {
 	targetID := uuid.Must(uuid.NewV7())
 	e := newTestEcho()
 	svc := &mockSocialService{
@@ -765,8 +817,8 @@ func TestBlockFamily_204(t *testing.T) {
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNoContent {
-		t.Errorf("want 204, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Errorf("want 201, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -775,9 +827,9 @@ func TestBlockFamily_204(t *testing.T) {
 func TestListBlocks_200(t *testing.T) {
 	e := newTestEcho()
 	svc := &mockSocialService{
-		listBlocksFn: func(_ context.Context, _ *shared.FamilyScope) ([]BlockResponse, error) {
-			return []BlockResponse{
-				{BlockID: uuid.Must(uuid.NewV7()), FamilyID: uuid.Must(uuid.NewV7()), DisplayName: "Blocked Family"},
+		listBlocksFn: func(_ context.Context, _ *shared.FamilyScope) ([]BlockedFamilyResponse, error) {
+			return []BlockedFamilyResponse{
+				{FamilyID: uuid.Must(uuid.NewV7()), DisplayName: "Blocked Family", BlockedAt: time.Now()},
 			}, nil
 		},
 	}
@@ -854,7 +906,7 @@ func TestGetPost_200(t *testing.T) {
 				t.Errorf("want postID=%s, got=%s", postID, got)
 			}
 			return &PostDetailResponse{
-				PostResponse: PostResponse{
+				Post: PostResponse{
 					ID:       postID,
 					PostType: "text",
 				},
@@ -1039,9 +1091,9 @@ func TestCreateConversation_201(t *testing.T) {
 				t.Errorf("want recipient=%s, got=%s", recipientID, cmd.RecipientParentID)
 			}
 			return &ConversationResponse{
-				ID:          convID,
-				UnreadCount: 0,
-				UpdatedAt:   time.Now(),
+				ID:        convID,
+				UpdatedAt: time.Now(),
+				IsNew:     true,
 			}, nil
 		},
 	}
@@ -1098,9 +1150,9 @@ func TestSendMessage_201(t *testing.T) {
 func TestListConversations_200(t *testing.T) {
 	e := newTestEcho()
 	svc := &mockSocialService{
-		listConversationsFn: func(_ context.Context, _ *shared.AuthContext, _, _ int) ([]ConversationResponse, error) {
-			return []ConversationResponse{
-				{ID: uuid.Must(uuid.NewV7()), UnreadCount: 3, UpdatedAt: time.Now()},
+		listConversationsFn: func(_ context.Context, _ *shared.AuthContext, _, _ int) ([]ConversationSummaryResponse, error) {
+			return []ConversationSummaryResponse{
+				{ID: uuid.Must(uuid.NewV7()), OtherParentName: "Jane Doe", UnreadCount: 3, UpdatedAt: time.Now()},
 			}, nil
 		},
 	}
@@ -1130,7 +1182,7 @@ func TestCreateGroup_201(t *testing.T) {
 				t.Errorf("want name=Charlotte Mason Parents, got=%s", cmd.Name)
 			}
 			return &GroupResponse{
-				GroupSummaryResponse: GroupSummaryResponse{
+				Summary: GroupSummaryResponse{
 					ID:         groupID,
 					Name:       cmd.Name,
 					JoinPolicy: cmd.JoinPolicy,
@@ -1200,7 +1252,7 @@ func TestListMyGroups_200(t *testing.T) {
 	svc := &mockSocialService{
 		listMyGroupsFn: func(_ context.Context, _ *shared.FamilyScope) ([]GroupResponse, error) {
 			return []GroupResponse{
-				{GroupSummaryResponse: GroupSummaryResponse{ID: uuid.Must(uuid.NewV7()), Name: "Study Group", IsMember: true}, CreatedAt: time.Now()},
+				{Summary: GroupSummaryResponse{ID: uuid.Must(uuid.NewV7()), Name: "Study Group", IsMember: true}, CreatedAt: time.Now()},
 			}, nil
 		},
 	}
@@ -1222,7 +1274,7 @@ func TestListPlatformGroups_200(t *testing.T) {
 	svc := &mockSocialService{
 		listPlatformGroupsFn: func(_ context.Context) ([]GroupResponse, error) {
 			return []GroupResponse{
-				{GroupSummaryResponse: GroupSummaryResponse{ID: uuid.Must(uuid.NewV7()), Name: "Methodology Hub", GroupType: "methodology"}, CreatedAt: time.Now()},
+				{Summary: GroupSummaryResponse{ID: uuid.Must(uuid.NewV7()), Name: "Methodology Hub", GroupType: "methodology"}, CreatedAt: time.Now()},
 			}, nil
 		},
 	}
@@ -1248,17 +1300,17 @@ func TestCreateEvent_201(t *testing.T) {
 	eventDate := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
 	e := newTestEcho()
 	svc := &mockSocialService{
-		createEventFn: func(_ context.Context, _ *shared.AuthContext, cmd CreateEventCommand) (*EventResponse, error) {
+		createEventFn: func(_ context.Context, _ *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error) {
 			if cmd.Title != "Park Day" {
 				t.Errorf("want title=Park Day, got=%s", cmd.Title)
 			}
-			return &EventResponse{
+			return &EventDetailResponse{
 				EventSummaryResponse: EventSummaryResponse{
 					ID:        eventID,
 					Title:     cmd.Title,
 					EventDate: eventDate,
+					Status:    "active",
 				},
-				Status:    "active",
 				CreatedAt: time.Now(),
 			}, nil
 		},
@@ -1297,15 +1349,15 @@ func TestCreateEvent_422_MissingTitle(t *testing.T) {
 func TestListEvents_200(t *testing.T) {
 	e := newTestEcho()
 	svc := &mockSocialService{
-		listEventsFn: func(_ context.Context, _ *shared.AuthContext, _, _ int) ([]EventResponse, error) {
-			return []EventResponse{
+		listEventsFn: func(_ context.Context, _ *shared.AuthContext, _, _ int) ([]EventDetailResponse, error) {
+			return []EventDetailResponse{
 				{
 					EventSummaryResponse: EventSummaryResponse{
 						ID:        uuid.Must(uuid.NewV7()),
 						Title:     "Field Trip",
 						EventDate: time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC),
+						Status:    "active",
 					},
-					Status:    "active",
 					CreatedAt: time.Now(),
 				},
 			}, nil

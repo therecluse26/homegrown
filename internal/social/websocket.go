@@ -6,11 +6,17 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
+)
+
+const (
+	wsPingInterval = 30 * time.Second
+	wsPongTimeout  = 10 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -63,6 +69,12 @@ func handleWebSocket(pubsub shared.PubSub) echo.HandlerFunc {
 			}
 		}
 
+		// Ping/pong keepalive — prevents proxy timeouts. [RFC 6455 §5.5.2]
+		conn.SetPongHandler(func(_ string) error {
+			return conn.SetReadDeadline(time.Now().Add(wsPingInterval + wsPongTimeout))
+		})
+		_ = conn.SetReadDeadline(time.Now().Add(wsPingInterval + wsPongTimeout))
+
 		// Write goroutine: forwards Redis pub/sub messages to WebSocket.
 		done := make(chan struct{})
 		go func() {
@@ -74,6 +86,27 @@ func handleWebSocket(pubsub shared.PubSub) echo.HandlerFunc {
 					continue
 				}
 				writeJSON(msg)
+			}
+		}()
+
+		// Ping goroutine: sends periodic pings to the client.
+		pingDone := make(chan struct{})
+		go func() {
+			defer close(pingDone)
+			ticker := time.NewTicker(wsPingInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					writeMu.Lock()
+					err := conn.WriteMessage(websocket.PingMessage, nil)
+					writeMu.Unlock()
+					if err != nil {
+						return
+					}
+				case <-done:
+					return
+				}
 			}
 		}()
 
@@ -93,6 +126,7 @@ func handleWebSocket(pubsub shared.PubSub) echo.HandlerFunc {
 			slog.Debug("websocket close failed", "error", closeErr)
 		}
 		<-done
+		<-pingDone
 		return nil
 	}
 }

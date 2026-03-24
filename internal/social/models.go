@@ -267,7 +267,7 @@ type Event struct {
 	LocationRegion   *string    `gorm:""`
 	IsVirtual        bool       `gorm:"not null;default:false"`
 	VirtualURL       *string    `gorm:""`
-	Capacity         *int       `gorm:""`
+	Capacity         *int32     `gorm:""`
 	Visibility       string     `gorm:"not null;default:'friends'"`
 	Status           string     `gorm:"not null;default:'active'"`
 	MethodologySlug  *string    `gorm:""`
@@ -340,7 +340,6 @@ type CreateCommentCommand struct {
 // Phase 1: single recipient (1:1 DMs). Multi-participant is Phase 3+.
 type CreateConversationCommand struct {
 	RecipientParentID uuid.UUID `json:"recipient_parent_id" validate:"required"`
-	InitialMessage    string    `json:"initial_message"     validate:"required,min=1"`
 }
 
 // SendMessageCommand is the request body for POST /v1/social/conversations/:id/messages. [05-social §8.1]
@@ -418,10 +417,10 @@ type ProfileResponse struct {
 	Children         []ProfileChildResponse `json:"children,omitempty"`
 	MethodologyNames []string               `json:"methodology_names,omitempty"`
 	LocationRegion   *string                `json:"location_region,omitempty"`
+	LocationVisible  *bool                  `json:"location_visible,omitempty"`
 	PrivacySettings  *json.RawMessage       `json:"privacy_settings,omitempty"`
 	FriendshipStatus *string                `json:"friendship_status,omitempty"`
 	IsFriend         bool                   `json:"is_friend"`
-	IsOwnProfile     bool                   `json:"is_own_profile"`
 }
 
 // ProfileChildResponse is child info in a profile. [05-social §8.2]
@@ -460,8 +459,9 @@ type PostResponse struct {
 }
 
 // PostDetailResponse is the response for GetPost, including embedded comments. [05-social §8.2]
+// Spec nests post under "post" key — not embedded flat.
 type PostDetailResponse struct {
-	PostResponse
+	Post     PostResponse      `json:"post"`
 	Comments []CommentResponse `json:"comments"`
 }
 
@@ -471,25 +471,37 @@ type CommentResponse struct {
 	PostID          uuid.UUID         `json:"post_id"`
 	FamilyID        uuid.UUID         `json:"family_id"`
 	AuthorName      string            `json:"author_name"`
+	AuthorPhotoURL  *string           `json:"author_photo_url,omitempty"`
 	ParentCommentID *uuid.UUID        `json:"parent_comment_id,omitempty"`
 	Content         string            `json:"content"`
 	CreatedAt       time.Time         `json:"created_at"`
 	Replies         []CommentResponse `json:"replies,omitempty"`
 }
 
-// ConversationResponse is the response for conversation list endpoints. [05-social §8.2]
-type ConversationResponse struct {
-	ID           uuid.UUID            `json:"id"`
-	Participants []ParticipantSummary `json:"participants"`
-	LastMessage  *MessageSummary      `json:"last_message,omitempty"`
-	UnreadCount  int                  `json:"unread_count"`
-	UpdatedAt    time.Time            `json:"updated_at"`
+// ConversationSummaryResponse is the response for conversation list endpoints. [05-social §8.2]
+// Shows OtherParentName, LastMessagePreview, UnreadCount for the list view.
+type ConversationSummaryResponse struct {
+	ID                 uuid.UUID `json:"id"`
+	OtherParentName    string    `json:"other_parent_name"`
+	LastMessagePreview *string   `json:"last_message_preview,omitempty"`
+	UnreadCount        int       `json:"unread_count"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
-// ParticipantSummary is a minimal participant in a conversation.
-type ParticipantSummary struct {
-	ParentID    uuid.UUID `json:"parent_id"`
-	DisplayName string    `json:"display_name"`
+// ConversationResponse is the response for conversation detail endpoints. [05-social §8.2]
+type ConversationResponse struct {
+	ID           uuid.UUID                        `json:"id"`
+	Participants []ConversationParticipantResponse `json:"participants"`
+	UpdatedAt    time.Time                         `json:"updated_at"`
+	IsNew        bool                             `json:"-"` // handler-only: 201 if new, 200 if existing
+}
+
+// ConversationParticipantResponse is a participant in a conversation. [05-social §8.2]
+type ConversationParticipantResponse struct {
+	ParentID        uuid.UUID `json:"parent_id"`
+	FamilyID        uuid.UUID `json:"family_id"`
+	DisplayName     string    `json:"display_name"`
+	ProfilePhotoURL *string   `json:"profile_photo_url,omitempty"`
 }
 
 // MessageSummary is a preview of the last message in a conversation.
@@ -512,24 +524,25 @@ type MessageResponse struct {
 
 // GroupSummaryResponse is the summary for group list endpoints. [05-social §8.2]
 type GroupSummaryResponse struct {
-	ID              uuid.UUID `json:"id"`
-	GroupType       string    `json:"group_type"`
-	Name            string    `json:"name"`
-	Description     *string   `json:"description,omitempty"`
-	CoverPhotoURL   *string   `json:"cover_photo_url,omitempty"`
-	MethodologySlug *string   `json:"methodology_slug,omitempty"`
-	JoinPolicy      string    `json:"join_policy"`
-	MemberCount     int       `json:"member_count"`
-	IsMember        bool      `json:"is_member"`
+	ID             uuid.UUID `json:"id"`
+	GroupType      string    `json:"group_type"`
+	Name           string    `json:"name"`
+	Description    *string   `json:"description,omitempty"`
+	CoverPhotoURL  *string   `json:"cover_photo_url,omitempty"`
+	MethodologyName *string  `json:"methodology_name,omitempty"`
+	JoinPolicy     string    `json:"join_policy"`
+	MemberCount    int       `json:"member_count"`
+	IsMember       bool      `json:"is_member"`
 }
 
 // GroupDetailResponse is the detail for GetGroup. [05-social §8.2]
+// Spec nests summary under "summary" key — not embedded flat.
 type GroupDetailResponse struct {
-	GroupSummaryResponse
-	CreatorFamilyID *uuid.UUID `json:"creator_family_id,omitempty"`
-	MyRole          *string    `json:"my_role,omitempty"`
-	MyStatus        *string    `json:"my_status,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
+	Summary         GroupSummaryResponse `json:"summary"`
+	CreatorFamilyID *uuid.UUID           `json:"creator_family_id,omitempty"`
+	MyRole          *string              `json:"my_role,omitempty"`
+	MyStatus        *string              `json:"my_status,omitempty"`
+	CreatedAt       time.Time            `json:"created_at"`
 }
 
 // GroupResponse is an alias used by endpoints that return group detail. [05-social §8.2]
@@ -537,7 +550,6 @@ type GroupResponse = GroupDetailResponse
 
 // GroupMemberResponse is the response for group member endpoints. [05-social §8.2]
 type GroupMemberResponse struct {
-	ID          uuid.UUID  `json:"id"`
 	FamilyID    uuid.UUID  `json:"family_id"`
 	DisplayName string     `json:"display_name"`
 	Role        string     `json:"role"`
@@ -547,35 +559,41 @@ type GroupMemberResponse struct {
 
 // EventSummaryResponse is the summary for event list endpoints. [05-social §8.2]
 type EventSummaryResponse struct {
-	ID             uuid.UUID  `json:"id"`
-	Title          string     `json:"title"`
-	EventDate      time.Time  `json:"event_date"`
-	EndDate        *time.Time `json:"end_date,omitempty"`
-	LocationName   *string    `json:"location_name,omitempty"`
-	LocationRegion *string    `json:"location_region,omitempty"`
-	IsVirtual      bool       `json:"is_virtual"`
-	CreatorName    string     `json:"creator_name"`
-	AttendeeCount  int        `json:"attendee_count"`
-	MyRSVP         *string    `json:"my_rsvp,omitempty"`
+	ID                uuid.UUID  `json:"id"`
+	Title             string     `json:"title"`
+	EventDate         time.Time  `json:"event_date"`
+	EndDate           *time.Time `json:"end_date,omitempty"`
+	LocationName      *string    `json:"location_name,omitempty"`
+	LocationRegion    *string    `json:"location_region,omitempty"`
+	IsVirtual         bool       `json:"is_virtual"`
+	CreatorFamilyName string     `json:"creator_family_name"`
+	Capacity          *int32     `json:"capacity,omitempty"`
+	Visibility        string     `json:"visibility"`
+	Status            string     `json:"status"`
+	AttendeeCount     int        `json:"attendee_count"`
+	MyRSVP            *string    `json:"my_rsvp,omitempty"`
 }
 
 // EventDetailResponse is the detail for GetEvent. [05-social §8.2]
 type EventDetailResponse struct {
 	EventSummaryResponse
-	CreatorFamilyID uuid.UUID  `json:"creator_family_id"`
-	GroupID         *uuid.UUID `json:"group_id,omitempty"`
-	GroupName       *string    `json:"group_name,omitempty"`
-	Description     *string    `json:"description,omitempty"`
-	VirtualURL      *string    `json:"virtual_url,omitempty"`
-	Capacity        *int       `json:"capacity,omitempty"`
-	Visibility      string     `json:"visibility"`
-	Status          string     `json:"status"`
-	MethodologySlug *string    `json:"methodology_slug,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
+	CreatorFamilyID uuid.UUID          `json:"creator_family_id"`
+	GroupID         *uuid.UUID         `json:"group_id,omitempty"`
+	GroupName       *string            `json:"group_name,omitempty"`
+	Description     *string            `json:"description,omitempty"`
+	VirtualURL      *string            `json:"virtual_url,omitempty"`
+	MethodologyName *string            `json:"methodology_name,omitempty"`
+	Rsvps           []EventRsvpResponse `json:"rsvps,omitempty"`
+	CreatedAt       time.Time          `json:"created_at"`
 }
 
-// EventResponse is an alias used by endpoints that return event detail. [05-social §8.2]
-type EventResponse = EventDetailResponse
+// EventRsvpResponse is an RSVP entry in event detail. [05-social §8.2]
+type EventRsvpResponse struct {
+	FamilyID    uuid.UUID `json:"family_id"`
+	DisplayName string    `json:"display_name"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+}
 
 // FriendshipResponse is the response for friend request creation/acceptance. [05-social §8.2]
 type FriendshipResponse struct {
@@ -592,6 +610,22 @@ type FeedResponse struct {
 	NextCursor *string        `json:"next_cursor,omitempty"`
 }
 
+// MilestoneData carries milestone info from learn:: via domain event. [05-social §5]
+type MilestoneData struct {
+	StudentName   string `json:"student_name"`
+	MilestoneType string `json:"milestone_type"`
+	Description   string `json:"description"`
+}
+
+// DiscoverableFamilyResponse is the response for GET /v1/social/discover/families. [05-social §8.2]
+type DiscoverableFamilyResponse struct {
+	FamilyID         uuid.UUID `json:"family_id"`
+	DisplayName      string    `json:"display_name"`
+	ProfilePhotoURL  *string   `json:"profile_photo_url,omitempty"`
+	MethodologyNames []string  `json:"methodology_names,omitempty"`
+	LocationRegion   *string   `json:"location_region,omitempty"`
+}
+
 // ─── Cross-Domain DTOs ──────────────────────────────────────────────────────
 
 // SocialFamilyInfo is the minimal family data needed by social:: from iam::.
@@ -606,4 +640,23 @@ type SocialParentInfo struct {
 	ParentID    uuid.UUID
 	DisplayName string
 	FamilyID    uuid.UUID
+}
+
+// ─── Discovery Query Types (Phase 2) ────────────────────────────────────────
+
+// DiscoverFamiliesQuery is the query params for GET /v1/social/discover/families. [05-social §4.2]
+type DiscoverFamiliesQuery struct {
+	MethodologySlug *string  `query:"methodology_slug"`
+	RadiusKm        *float64 `query:"radius_km"`
+}
+
+// DiscoverEventsQuery is the query params for GET /v1/social/discover/events. [05-social §4.2]
+type DiscoverEventsQuery struct {
+	MethodologySlug *string `query:"methodology_slug"`
+	LocationRegion  *string `query:"location_region"`
+}
+
+// DiscoverGroupsQuery is the query params for GET /v1/social/discover/groups. [05-social §4.2]
+type DiscoverGroupsQuery struct {
+	MethodologySlug *string `query:"methodology_slug"`
 }

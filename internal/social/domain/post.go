@@ -1,6 +1,10 @@
 package domain
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Post type constants. [05-social §7.2.1]
 const (
@@ -44,6 +48,31 @@ func ResolvePostVisibility(groupID *uuid.UUID) string {
 func ValidateCommentThread(parentCommentHasParent bool) error {
 	if parentCommentHasParent {
 		return ErrNestedReplyNotAllowed
+	}
+	return nil
+}
+
+// ValidateCommentSamePost checks that the parent comment belongs to the same post.
+// [05-social §4.1]: "parent_comment_id must reference a top-level comment on the same post"
+func ValidateCommentSamePost(parentPostID, targetPostID uuid.UUID) error {
+	if parentPostID != targetPostID {
+		return ErrCommentCrossPost
+	}
+	return nil
+}
+
+// ValidateEventDate checks that the event date is in the future. [05-social §4.1]
+func ValidateEventDate(eventDate time.Time) error {
+	if !eventDate.After(time.Now()) {
+		return ErrEventDatePast
+	}
+	return nil
+}
+
+// ValidateEventGroupVisibility checks that group visibility events have a group_id. [05-social §4.1]
+func ValidateEventGroupVisibility(visibility string, groupID *uuid.UUID) error {
+	if visibility == VisibilityGroup && groupID == nil {
+		return ErrEventGroupRequired
 	}
 	return nil
 }

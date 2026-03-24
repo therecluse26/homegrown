@@ -738,7 +738,7 @@ Joins a group or submits a join request. `[S§7.6]`
   - `open`: Immediately becomes `active` member
   - `request_to_join`: Creates `pending` membership; moderator approval required
   - `invite_only`: Returns 403
-- **Response**: `GroupMemberResponse` (201 Created)
+- **Response**: `204 No Content`
 - **Error codes**: `already_member` (409), `invite_only` (403), `banned` (403)
 
 ##### `POST /v1/social/groups/:group_id/leave`
@@ -1062,7 +1062,7 @@ type SocialService interface {
     // --- Group Commands ------------------------------------------------──
 
     // JoinGroup joins a group or submits join request based on join_policy. [S§7.6]
-    JoinGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) (*GroupMemberResponse, error)
+    JoinGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) error
 
     // LeaveGroup leaves a group. [S§7.6]
     LeaveGroup(ctx context.Context, scope *FamilyScope, groupID uuid.UUID) error
@@ -1103,10 +1103,10 @@ type SocialService interface {
 
     // CreateEvent creates an event. [S§7.7]
     // CROSS-FAMILY: event visible to friends and group members.
-    CreateEvent(ctx context.Context, auth *AuthContext, cmd CreateEventCommand) (*EventResponse, error)
+    CreateEvent(ctx context.Context, auth *AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error)
 
     // UpdateEvent updates an event. Creator only. [S§7.7]
-    UpdateEvent(ctx context.Context, auth *AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error)
+    UpdateEvent(ctx context.Context, auth *AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventDetailResponse, error)
 
     // CancelEvent cancels an event. Creator only. Notifies attendees. [S§7.7]
     // CROSS-FAMILY: reads attendee list across families for notification.
@@ -1146,7 +1146,7 @@ type SocialService interface {
     // --- Friend Queries ------------------------------------------------──
 
     // ListFriends lists the authenticated family's friends.
-    ListFriends(ctx context.Context, scope *FamilyScope, offset, limit int) ([]ProfileResponse, error)
+    ListFriends(ctx context.Context, scope *FamilyScope, cursor *uuid.UUID, limit int) ([]FriendResponse, error)
 
     // ListIncomingRequests lists incoming friend requests.
     ListIncomingRequests(ctx context.Context, scope *FamilyScope) ([]FriendRequestResponse, error)
@@ -1205,11 +1205,11 @@ type SocialService interface {
 
     // ListEvents lists events visible to the authenticated family. [S§7.7]
     // CROSS-FAMILY: reads friends' and discoverable events.
-    ListEvents(ctx context.Context, auth *AuthContext, offset, limit int) ([]EventResponse, error)
+    ListEvents(ctx context.Context, auth *AuthContext, offset, limit int) ([]EventDetailResponse, error)
 
     // GetEvent returns event details with RSVP info. [S§7.7]
     // CROSS-FAMILY: reads event with RSVPs from multiple families.
-    GetEvent(ctx context.Context, auth *AuthContext, eventID uuid.UUID) (*EventResponse, error)
+    GetEvent(ctx context.Context, auth *AuthContext, eventID uuid.UUID) (*EventDetailResponse, error)
 
     // --- Discovery Queries (Phase 2) -------------------------------------
 

@@ -37,6 +37,57 @@ type JobEnqueuer interface {
 	Close() error
 }
 
+// JobHandler processes a background job payload. Domains define typed handlers
+// that unmarshal the payload and execute business logic. [ARCH §10.8]
+type JobHandler func(ctx context.Context, payload []byte) error
+
+// JobWorker is the background-job consumer. It receives jobs from Redis and
+// dispatches them to registered handlers by task type. [ARCH §10.8]
+type JobWorker interface {
+	// Handle registers a handler for a given task type.
+	Handle(taskType string, handler JobHandler)
+
+	// Start begins processing jobs. Blocks until Stop is called or ctx is cancelled.
+	Start() error
+
+	// Stop gracefully shuts down the worker.
+	Stop()
+}
+
+// CreateJobWorker creates a JobWorker backed by asynq (Redis-based).
+func CreateJobWorker(cfg *config.AppConfig) (JobWorker, error) {
+	redisOpt, err := asynq.ParseRedisURI(cfg.RedisURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid redis URL for job worker: %w", err)
+	}
+	srv := asynq.NewServer(redisOpt, asynq.Config{
+		Concurrency: 10,
+	})
+	return &asynqJobWorker{
+		server: srv,
+		mux:    asynq.NewServeMux(),
+	}, nil
+}
+
+type asynqJobWorker struct {
+	server *asynq.Server
+	mux    *asynq.ServeMux
+}
+
+func (w *asynqJobWorker) Handle(taskType string, handler JobHandler) {
+	w.mux.HandleFunc(taskType, func(_ context.Context, t *asynq.Task) error {
+		return handler(context.Background(), t.Payload())
+	})
+}
+
+func (w *asynqJobWorker) Start() error {
+	return w.server.Start(w.mux)
+}
+
+func (w *asynqJobWorker) Stop() {
+	w.server.Stop()
+}
+
 // ─── NoopJobEnqueuer ─────────────────────────────────────────────────────────
 
 // NoopJobEnqueuer satisfies JobEnqueuer for tests and environments without Redis.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"github.com/homegrown-academy/homegrown-academy/internal/social/domain"
 	"github.com/labstack/echo/v4"
 )
 
@@ -92,6 +93,11 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	soc.POST("/events/:id/cancel", h.cancelEvent)
 	soc.POST("/events/:id/rsvp", h.rsvpEvent)
 	soc.DELETE("/events/:id/rsvp", h.removeRSVP)
+
+	// Discovery
+	soc.GET("/discover/families", h.discoverFamilies)
+	soc.GET("/discover/events",   h.discoverEvents)
+	soc.GET("/discover/groups",   h.discoverGroups)
 
 	// WebSocket
 	soc.GET("/ws", handleWebSocket(h.pubsub))
@@ -215,8 +221,22 @@ func (h *Handler) listFriends(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	offset, limit := parsePagination(c)
-	resp, err := h.svc.ListFriends(c.Request().Context(), &scope, offset, limit)
+	// Cursor-based pagination. [05-social §4.1] (H6)
+	var cursor *uuid.UUID
+	if cursorStr := c.QueryParam("cursor"); cursorStr != "" {
+		parsed, parseErr := uuid.Parse(cursorStr)
+		if parseErr != nil {
+			return shared.ErrBadRequest("invalid cursor")
+		}
+		cursor = &parsed
+	}
+	limit := 20
+	if v := c.QueryParam("limit"); v != "" {
+		if n, parseErr := strconv.Atoi(v); parseErr == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	resp, err := h.svc.ListFriends(c.Request().Context(), &scope, cursor, limit)
 	if err != nil {
 		return mapSocialError(err)
 	}
@@ -261,7 +281,7 @@ func (h *Handler) blockFamily(c echo.Context) error {
 	if err := h.svc.BlockFamily(c.Request().Context(), auth, targetID); err != nil {
 		return mapSocialError(err)
 	}
-	return c.NoContent(http.StatusNoContent)
+	return c.NoContent(http.StatusCreated)
 }
 
 func (h *Handler) unblockFamily(c echo.Context) error {
@@ -353,9 +373,14 @@ func (h *Handler) likePost(c echo.Context) error {
 		return shared.ErrBadRequest("invalid post ID")
 	}
 	if err := h.svc.LikePost(c.Request().Context(), &scope, postID); err != nil {
+		// Idempotent: already liked is not an error — return 200 OK. [05-social §4.1]
+		var socErr *SocialError
+		if errors.As(err, &socErr) && errors.Is(socErr.Err, domain.ErrAlreadyLiked) {
+			return c.NoContent(http.StatusOK)
+		}
 		return mapSocialError(err)
 	}
-	return c.NoContent(http.StatusNoContent)
+	return c.NoContent(http.StatusCreated)
 }
 
 func (h *Handler) unlikePost(c echo.Context) error {
@@ -460,7 +485,11 @@ func (h *Handler) createConversation(c echo.Context) error {
 	if err != nil {
 		return mapSocialError(err)
 	}
-	return c.JSON(http.StatusCreated, resp)
+	status := http.StatusOK
+	if resp.IsNew {
+		status = http.StatusCreated
+	}
+	return c.JSON(status, resp)
 }
 
 func (h *Handler) listConversations(c echo.Context) error {
@@ -849,6 +878,56 @@ func (h *Handler) listEvents(c echo.Context) error {
 	}
 	offset, limit := parsePagination(c)
 	resp, err := h.svc.ListEvents(c.Request().Context(), auth, offset, limit)
+	if err != nil {
+		return mapSocialError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// ─── Discovery Handlers ──────────────────────────────────────────────────────
+
+func (h *Handler) discoverFamilies(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var q DiscoverFamiliesQuery
+	if err := c.Bind(&q); err != nil {
+		return shared.ErrBadRequest("invalid query params")
+	}
+	resp, err := h.svc.DiscoverFamilies(c.Request().Context(), &scope, q)
+	if err != nil {
+		return mapSocialError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) discoverEvents(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var q DiscoverEventsQuery
+	if err := c.Bind(&q); err != nil {
+		return shared.ErrBadRequest("invalid query params")
+	}
+	resp, err := h.svc.DiscoverEvents(c.Request().Context(), &scope, q)
+	if err != nil {
+		return mapSocialError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) discoverGroups(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var q DiscoverGroupsQuery
+	if err := c.Bind(&q); err != nil {
+		return shared.ErrBadRequest("invalid query params")
+	}
+	resp, err := h.svc.DiscoverGroups(c.Request().Context(), &scope, q)
 	if err != nil {
 		return mapSocialError(err)
 	}

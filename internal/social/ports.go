@@ -30,10 +30,10 @@ type SocialService interface {
 	UnblockFamily(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
 
 	// ─── Friend Queries ─────────────────────────────────────────────────
-	ListFriends(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]ProfileResponse, error)
+	ListFriends(ctx context.Context, scope *shared.FamilyScope, cursor *uuid.UUID, limit int) ([]FriendResponse, error)
 	ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
 	ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
-	ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockResponse, error)
+	ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockedFamilyResponse, error)
 
 	// ─── Post Commands ──────────────────────────────────────────────────
 	CreatePost(ctx context.Context, auth *shared.AuthContext, cmd CreatePostCommand) (*PostResponse, error)
@@ -60,7 +60,7 @@ type SocialService interface {
 	ReportMessage(ctx context.Context, auth *shared.AuthContext, messageID uuid.UUID, cmd ReportMessageCommand) error
 
 	// ─── Messaging Queries ──────────────────────────────────────────────
-	ListConversations(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationResponse, error)
+	ListConversations(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]ConversationSummaryResponse, error)
 	GetConversationMessages(ctx context.Context, auth *shared.AuthContext, conversationID uuid.UUID, offset, limit int) ([]MessageResponse, error)
 
 	// ─── Group Commands ─────────────────────────────────────────────────
@@ -83,34 +83,52 @@ type SocialService interface {
 	ListGroupPosts(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
 
 	// ─── Event Commands ─────────────────────────────────────────────────
-	CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventResponse, error)
-	UpdateEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventResponse, error)
+	CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error)
+	UpdateEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID, cmd UpdateEventCommand) (*EventDetailResponse, error)
 	CancelEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) error
 	RSVPEvent(ctx context.Context, scope *shared.FamilyScope, eventID uuid.UUID, cmd RSVPCommand) error
 	RemoveRSVP(ctx context.Context, scope *shared.FamilyScope, eventID uuid.UUID) error
 
 	// ─── Event Queries ──────────────────────────────────────────────────
-	GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventResponse, error)
-	ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventResponse, error)
+	GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventDetailResponse, error)
+	ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventDetailResponse, error)
 
 	// ─── Event Handlers (no auth context) ───────────────────────────────
 	HandleFamilyCreated(ctx context.Context, familyID uuid.UUID) error
+
+	// ─── Deferred Event Handlers (upstream events not yet defined) ──────
+	// Interface signatures present per spec §5; implementations return nil.
+	HandleCoParentRemoved(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error
+	HandleMilestoneAchieved(ctx context.Context, familyID uuid.UUID, milestone MilestoneData) error
+	HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
+
+	// ─── Discovery Queries (Phase 2) ─────────────────────────────────────
+	// [05-social §4.2, §15]
+
+	// DiscoverFamilies discovers nearby families with location sharing enabled. [S§7.8]
+	DiscoverFamilies(ctx context.Context, scope *shared.FamilyScope, query DiscoverFamiliesQuery) ([]DiscoverableFamilyResponse, error)
+
+	// DiscoverEvents discovers discoverable events by location/methodology. [S§7.7]
+	DiscoverEvents(ctx context.Context, scope *shared.FamilyScope, query DiscoverEventsQuery) ([]EventSummaryResponse, error)
+
+	// DiscoverGroups discovers groups by methodology. [S§7.6]
+	DiscoverGroups(ctx context.Context, scope *shared.FamilyScope, query DiscoverGroupsQuery) ([]GroupSummaryResponse, error)
 }
 
-// FriendRequestResponse is the response for friend request list endpoints.
+// FriendRequestResponse is the response for friend request list endpoints. [05-social §8.2]
 type FriendRequestResponse struct {
-	FriendshipID uuid.UUID `json:"friendship_id"`
-	FamilyID     uuid.UUID `json:"family_id"`
-	DisplayName  string    `json:"display_name"`
-	CreatedAt    string    `json:"created_at"`
+	FriendshipID    uuid.UUID `json:"friendship_id"`
+	FamilyID        uuid.UUID `json:"family_id"`
+	DisplayName     string    `json:"display_name"`
+	ProfilePhotoURL *string   `json:"profile_photo_url,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
-// BlockResponse is the response for block list endpoints.
-type BlockResponse struct {
-	BlockID     uuid.UUID `json:"block_id"`
+// BlockedFamilyResponse is the response for block list endpoints. [05-social §8.2]
+type BlockedFamilyResponse struct {
 	FamilyID    uuid.UUID `json:"family_id"`
 	DisplayName string    `json:"display_name"`
-	CreatedAt   string    `json:"created_at"`
+	BlockedAt   time.Time `json:"blocked_at"`
 }
 
 // ─── Repository Interfaces ───────────────────────────────────────────────────
@@ -134,6 +152,10 @@ type FriendshipRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	// CROSS-FAMILY: lists accepted friends for a family (paginated).
 	ListFriends(ctx context.Context, familyID uuid.UUID, offset, limit int) ([]uuid.UUID, error)
+	// CROSS-FAMILY: lists ALL accepted friend family IDs (for feed fan-out). [05-social §6]
+	ListFriendFamilyIDs(ctx context.Context, familyID uuid.UUID) ([]uuid.UUID, error)
+	// CROSS-FAMILY: lists friends using cursor pagination (cursor = last friendship UUID).
+	ListFriendsCursor(ctx context.Context, familyID uuid.UUID, cursor *uuid.UUID, limit int) ([]Friendship, error)
 	// CROSS-FAMILY: lists incoming pending requests for a family.
 	ListIncoming(ctx context.Context, familyID uuid.UUID) ([]Friendship, error)
 	// CROSS-FAMILY: lists outgoing pending requests for a family.
@@ -162,6 +184,8 @@ type PostRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	// CROSS-FAMILY: lists posts by multiple family IDs for feed.
 	ListByFamilyIDs(ctx context.Context, familyIDs []uuid.UUID, offset, limit int) ([]Post, error)
+	// ListFriendsPosts returns recent posts from friends for feed fallback. [05-social §6]
+	ListFriendsPosts(ctx context.Context, familyID uuid.UUID, friendIDs []uuid.UUID, offset, limit int) ([]Post, error)
 	// FindByIDs retrieves posts by a list of IDs (for Redis feed resolution).
 	FindByIDs(ctx context.Context, ids []uuid.UUID) ([]Post, error)
 	// ListByGroup lists posts in a specific group.
@@ -209,6 +233,8 @@ type ConversationParticipantRepository interface {
 	FindBetweenParents(ctx context.Context, parentA, parentB uuid.UUID) (*uuid.UUID, error)
 	UpdateLastRead(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
 	SoftDelete(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
+	// ClearDeletedAt restores a soft-deleted participant (new message restores conversation). [05-social §4.1]
+	ClearDeletedAt(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error
 }
 
 // MessageRepository provides persistence for soc_messages.
@@ -230,6 +256,8 @@ type GroupRepository interface {
 	Update(ctx context.Context, group *Group) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListPlatform(ctx context.Context) ([]Group, error)
+	// ListByMethodology lists groups tagged with a methodology slug. Used for discovery. [05-social §15]
+	ListByMethodology(ctx context.Context, methodologySlug string) ([]Group, error)
 	IncrementMemberCount(ctx context.Context, id uuid.UUID) error
 	DecrementMemberCount(ctx context.Context, id uuid.UUID) error
 }
@@ -254,6 +282,8 @@ type EventRepository interface {
 	Update(ctx context.Context, event *Event) error
 	// CROSS-FAMILY: lists events visible to a family (friends, groups, discoverable), paginated.
 	ListVisible(ctx context.Context, familyID uuid.UUID, friendIDs []uuid.UUID, groupIDs []uuid.UUID, offset, limit int) ([]Event, error)
+	// ListDiscoverable lists events with 'discoverable' visibility, filtered by methodology/location. [05-social §15]
+	ListDiscoverable(ctx context.Context, methodologySlug *string, locationRegion *string) ([]Event, error)
 	IncrementAttendeeCount(ctx context.Context, id uuid.UUID) error
 	DecrementAttendeeCount(ctx context.Context, id uuid.UUID) error
 }

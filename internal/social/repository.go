@@ -168,6 +168,44 @@ func (r *PgFriendshipRepository) AreFriends(ctx context.Context, familyA, family
 	return count > 0, nil
 }
 
+// CROSS-FAMILY: lists ALL accepted friend family IDs (unbounded, for feed fan-out). [05-social §6]
+func (r *PgFriendshipRepository) ListFriendFamilyIDs(ctx context.Context, familyID uuid.UUID) ([]uuid.UUID, error) {
+	var friendships []Friendship
+	err := r.db.WithContext(ctx).
+		Where("(requester_family_id = ? OR accepter_family_id = ?) AND status = 'accepted'",
+			familyID, familyID).
+		Find(&friendships).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	ids := make([]uuid.UUID, 0, len(friendships))
+	for _, f := range friendships {
+		if f.RequesterFamilyID == familyID {
+			ids = append(ids, f.AccepterFamilyID)
+		} else {
+			ids = append(ids, f.RequesterFamilyID)
+		}
+	}
+	return ids, nil
+}
+
+// CROSS-FAMILY: lists friends with cursor-based pagination (cursor = last friendship UUID).
+func (r *PgFriendshipRepository) ListFriendsCursor(ctx context.Context, familyID uuid.UUID, cursor *uuid.UUID, limit int) ([]Friendship, error) {
+	query := r.db.WithContext(ctx).
+		Where("(requester_family_id = ? OR accepter_family_id = ?) AND status = 'accepted'",
+			familyID, familyID).
+		Order("id ASC")
+	if cursor != nil {
+		query = query.Where("id > ?", *cursor)
+	}
+	var friendships []Friendship
+	err := query.Limit(limit).Find(&friendships).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return friendships, nil
+}
+
 func (r *PgFriendshipRepository) DeleteBetween(ctx context.Context, familyA, familyB uuid.UUID) error {
 	err := r.db.WithContext(ctx).
 		Where("(requester_family_id = ? AND accepter_family_id = ?) OR (requester_family_id = ? AND accepter_family_id = ?)",
@@ -301,6 +339,25 @@ func (r *PgPostRepository) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]Po
 	}
 	var posts []Post
 	err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&posts).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return posts, nil
+}
+
+// ListFriendsPosts returns recent posts from friends for feed fallback. [05-social §6]
+// Includes the user's own posts and friends' posts with 'friends' visibility.
+func (r *PgPostRepository) ListFriendsPosts(ctx context.Context, familyID uuid.UUID, friendIDs []uuid.UUID, offset, limit int) ([]Post, error) {
+	allIDs := append([]uuid.UUID{familyID}, friendIDs...)
+	if len(allIDs) == 0 {
+		return nil, nil
+	}
+	var posts []Post
+	err := r.db.WithContext(ctx).
+		Where("family_id IN ? AND visibility = 'friends'", allIDs).
+		Order("created_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&posts).Error
 	if err != nil {
 		return nil, shared.ErrDatabase(err)
 	}
@@ -579,6 +636,17 @@ func (r *PgConversationParticipantRepository) FindBetweenParents(ctx context.Con
 	return &convID, nil
 }
 
+// ClearDeletedAt restores a soft-deleted participant (new message restores conversation). [05-social §4.1]
+func (r *PgConversationParticipantRepository) ClearDeletedAt(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error {
+	err := r.db.WithContext(ctx).Model(&ConversationParticipant{}).
+		Where("conversation_id = ? AND parent_id = ?", conversationID, parentID).
+		Update("deleted_at", nil).Error
+	if err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
 func (r *PgConversationParticipantRepository) SoftDelete(ctx context.Context, conversationID uuid.UUID, parentID uuid.UUID) error {
 	now := time.Now()
 	err := r.db.WithContext(ctx).Model(&ConversationParticipant{}).
@@ -707,6 +775,18 @@ func (r *PgGroupRepository) ListPlatform(ctx context.Context) ([]Group, error) {
 	var groups []Group
 	err := r.db.WithContext(ctx).
 		Where("group_type = 'platform'").
+		Order("name ASC").
+		Find(&groups).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return groups, nil
+}
+
+func (r *PgGroupRepository) ListByMethodology(ctx context.Context, methodologySlug string) ([]Group, error) {
+	var groups []Group
+	err := r.db.WithContext(ctx).
+		Where("methodology_slug = ?", methodologySlug).
 		Order("name ASC").
 		Find(&groups).Error
 	if err != nil {
@@ -881,6 +961,23 @@ func (r *PgEventRepository) ListVisible(ctx context.Context, familyID uuid.UUID,
 		Offset(offset).Limit(limit).
 		Find(&events).Error
 	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return events, nil
+}
+
+func (r *PgEventRepository) ListDiscoverable(ctx context.Context, methodologySlug *string, locationRegion *string) ([]Event, error) {
+	q := r.db.WithContext(ctx).
+		Where("visibility = 'discoverable' AND status = 'active'").
+		Order("event_date ASC")
+	if methodologySlug != nil && *methodologySlug != "" {
+		q = q.Where("methodology_slug = ?", *methodologySlug)
+	}
+	if locationRegion != nil && *locationRegion != "" {
+		q = q.Where("location_region ILIKE ?", "%"+*locationRegion+"%")
+	}
+	var events []Event
+	if err := q.Find(&events).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
 	}
 	return events, nil

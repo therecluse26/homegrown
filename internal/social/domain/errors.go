@@ -56,9 +56,10 @@ var (
 // ─── Comment Errors ─────────────────────────────────────────────────────────
 
 var (
-	ErrCommentNotFound     = errors.New("comment not found")
+	ErrCommentNotFound       = errors.New("comment not found")
 	ErrNestedReplyNotAllowed = errors.New("only one level of reply threading is allowed")
-	ErrCannotDeleteComment = errors.New("can only delete your own comments or comments on your posts")
+	ErrCannotDeleteComment   = errors.New("can only delete your own comments or comments on your posts")
+	ErrCommentCrossPost      = errors.New("parent comment must belong to the same post")
 )
 
 // ─── Group Errors ───────────────────────────────────────────────────────────
@@ -73,8 +74,9 @@ var (
 	ErrCannotBanOwner        = errors.New("cannot ban the group owner")
 	ErrMemberBanned          = errors.New("member is banned from this group")
 	ErrMemberPending         = errors.New("membership request is pending approval")
-	ErrCannotPromoteOwner    = errors.New("cannot promote the group owner")
-	ErrMemberNotActive       = errors.New("can only promote active members")
+	ErrCannotPromoteOwner       = errors.New("cannot promote the group owner")
+	ErrMemberNotActive          = errors.New("can only promote active members")
+	ErrCannotDeletePlatformGroup = errors.New("cannot delete a platform-managed group")
 )
 
 // ─── Messaging Errors ───────────────────────────────────────────────────────
@@ -89,10 +91,18 @@ var (
 // ─── Event Errors ───────────────────────────────────────────────────────────
 
 var (
-	ErrEventNotFound    = errors.New("event not found")
-	ErrEventCancelled   = errors.New("event has been cancelled")
-	ErrEventAtCapacity  = errors.New("event is at capacity")
-	ErrAlreadyRSVPd     = errors.New("already RSVP'd to this event")
-	ErrRSVPNotFound     = errors.New("RSVP not found")
-	ErrCannotModifyEvent = errors.New("can only modify your own events")
+	ErrEventNotFound      = errors.New("event not found")
+	ErrEventCancelled     = errors.New("event has been cancelled")
+	ErrEventAtCapacity    = errors.New("event is at capacity")
+	ErrAlreadyRSVPd       = errors.New("already RSVP'd to this event")
+	ErrRSVPNotFound       = errors.New("RSVP not found")
+	ErrCannotModifyEvent  = errors.New("can only modify your own events")
+	ErrEventDatePast      = errors.New("event date must be in the future")
+	ErrEventGroupRequired = errors.New("group visibility requires group_id")
+)
+
+// ─── Privacy / Validation Errors ───────────────────────────────────────────
+
+var (
+	ErrInvalidPrivacySettings = errors.New("privacy settings values must be 'friends' or 'hidden'")
 )

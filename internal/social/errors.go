@@ -84,6 +84,8 @@ func (e *SocialError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "nested_reply", Message: "Only one level of reply threading is allowed", StatusCode: http.StatusUnprocessableEntity}
 	case errors.Is(e.Err, domain.ErrCannotDeleteComment):
 		return &shared.AppError{Code: "cannot_delete_comment", Message: "Cannot delete this comment", StatusCode: http.StatusForbidden}
+	case errors.Is(e.Err, domain.ErrCommentCrossPost):
+		return &shared.AppError{Code: "comment_cross_post", Message: "Parent comment must belong to the same post", StatusCode: http.StatusUnprocessableEntity}
 
 	// ─── Group ──────────────────────────────────────────────────
 	case errors.Is(e.Err, domain.ErrGroupNotFound):
@@ -104,6 +106,8 @@ func (e *SocialError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "member_banned", Message: "Banned from this group", StatusCode: http.StatusForbidden}
 	case errors.Is(e.Err, domain.ErrMemberPending):
 		return &shared.AppError{Code: "member_pending", Message: "Membership request is pending", StatusCode: http.StatusConflict}
+	case errors.Is(e.Err, domain.ErrCannotDeletePlatformGroup):
+		return &shared.AppError{Code: "cannot_delete_platform_group", Message: "Platform groups cannot be deleted", StatusCode: http.StatusForbidden}
 
 	// ─── Messaging ──────────────────────────────────────────────
 	case errors.Is(e.Err, domain.ErrConversationNotFound):
@@ -121,13 +125,21 @@ func (e *SocialError) toAppError() *shared.AppError {
 	case errors.Is(e.Err, domain.ErrEventCancelled):
 		return &shared.AppError{Code: "event_cancelled", Message: "Event has been cancelled", StatusCode: http.StatusConflict}
 	case errors.Is(e.Err, domain.ErrEventAtCapacity):
-		return &shared.AppError{Code: "event_at_capacity", Message: "Event is at capacity", StatusCode: http.StatusConflict}
+		return &shared.AppError{Code: "event_at_capacity", Message: "Event is at capacity", StatusCode: http.StatusUnprocessableEntity}
 	case errors.Is(e.Err, domain.ErrAlreadyRSVPd):
 		return &shared.AppError{Code: "already_rsvpd", Message: "Already RSVP'd to this event", StatusCode: http.StatusConflict}
 	case errors.Is(e.Err, domain.ErrRSVPNotFound):
 		return &shared.AppError{Code: "rsvp_not_found", Message: "RSVP not found", StatusCode: http.StatusNotFound}
 	case errors.Is(e.Err, domain.ErrCannotModifyEvent):
 		return &shared.AppError{Code: "cannot_modify_event", Message: "Can only modify your own events", StatusCode: http.StatusForbidden}
+	case errors.Is(e.Err, domain.ErrEventDatePast):
+		return &shared.AppError{Code: "event_date_past", Message: "Event date must be in the future", StatusCode: http.StatusUnprocessableEntity}
+	case errors.Is(e.Err, domain.ErrEventGroupRequired):
+		return &shared.AppError{Code: "event_group_required", Message: "Group visibility requires group_id", StatusCode: http.StatusUnprocessableEntity}
+
+	// ─── Privacy / Validation ───────────────────────────────────
+	case errors.Is(e.Err, domain.ErrInvalidPrivacySettings):
+		return &shared.AppError{Code: "invalid_privacy_settings", Message: "Privacy settings values must be 'friends' or 'hidden'", StatusCode: http.StatusUnprocessableEntity}
 
 	default:
 		return shared.ErrInternal(e)

@@ -30,6 +30,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
+	"gorm.io/gorm"
 )
 
 // version is set at build time via -ldflags '-X main.version=x.y.z'.
@@ -368,12 +369,17 @@ func main() {
 			}
 			return profile.DisplayName, nil
 		},
-		// GetParentDisplayName
+		// GetParentDisplayName — cross-family lookup via RLS bypass.
+		// Used by social:: for conversation participant display names. [05-social §8.2]
 		func(ctx context.Context, parentID uuid.UUID) (string, error) {
-			// Parent display name lookup is cross-family; construct minimal scope.
-			// We look up the parent's current user info via GetCurrentUser.
-			// Fallback: return empty string on error (non-critical for display).
-			return parentID.String(), nil
+			var displayName string
+			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_parents").Select("display_name").Where("id = ?", parentID).Scan(&displayName).Error
+			})
+			if err != nil || displayName == "" {
+				return parentID.String(), nil // graceful fallback
+			}
+			return displayName, nil
 		},
 		// GetFamilyInfo
 		func(ctx context.Context, familyID uuid.UUID) (*social.SocialFamilyInfo, error) {
@@ -392,20 +398,44 @@ func main() {
 				ParentNames: parentNames,
 			}, nil
 		},
-		// GetParentInfo
-		func(_ context.Context, parentID uuid.UUID) (*social.SocialParentInfo, error) {
-			// Cross-family parent lookup is not directly supported by IAM's scoped service.
-			// Return minimal info; display name will be filled by GetParentDisplayName.
+		// GetParentInfo — cross-family lookup via RLS bypass. [05-social §8.2]
+		func(ctx context.Context, parentID uuid.UUID) (*social.SocialParentInfo, error) {
+			type parentRow struct {
+				FamilyID    uuid.UUID
+				DisplayName string
+			}
+			var row parentRow
+			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_parents").Select("family_id, display_name").Where("id = ?", parentID).Scan(&row).Error
+			})
+			if err != nil {
+				return &social.SocialParentInfo{
+					ParentID:    parentID,
+					DisplayName: parentID.String(),
+				}, nil // graceful fallback
+			}
 			return &social.SocialParentInfo{
 				ParentID:    parentID,
-				DisplayName: parentID.String(),
+				FamilyID:    row.FamilyID,
+				DisplayName: row.DisplayName,
 			}, nil
 		},
 	)
 
-	// methodForSocial adapter is available when social:: needs methodology display names.
-	// Currently unused — groups/events display methodology slugs directly.
-	// social.NewMethodAdapter(func(ctx context.Context, slug string) (string, error) { ... })
+	methodForSocial := social.NewMethodAdapter(
+		func(ctx context.Context, slug string) (string, error) {
+			all, err := methodSvc.ListMethodologies(ctx)
+			if err != nil {
+				return slug, nil // graceful fallback to slug on error
+			}
+			for _, m := range all {
+				if string(m.Slug) == slug {
+					return m.DisplayName, nil
+				}
+			}
+			return slug, nil
+		},
+	)
 
 	socialSvc := social.NewSocialService(
 		socProfileRepo, socFriendshipRepo, socBlockRepo,
@@ -413,7 +443,7 @@ func main() {
 		socConvRepo, socConvPartRepo, socMsgRepo,
 		socGroupRepo, socGroupMemberRepo,
 		socEventRepo, socRSVPRepo,
-		iamForSocial,
+		iamForSocial, methodForSocial,
 		feedStore, pubsub, jobs, eventBus, db,
 	)
 
@@ -444,6 +474,19 @@ func main() {
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────
 	e := app.NewApp(state)
 
+	// ── Step 8.5: Start background job worker ────────────────────────────────────
+	worker, err := shared.CreateJobWorker(cfg)
+	if err != nil {
+		slog.Error("failed to create job worker", "error", err)
+		os.Exit(1)
+	}
+	social.RegisterFeedWorkers(worker, feedStore, socFriendshipRepo, socPostRepo)
+	go func() {
+		if startErr := worker.Start(); startErr != nil {
+			slog.Error("job worker error", "error", startErr)
+		}
+	}()
+
 	// ── Step 9: Start server (non-blocking) ───────────────────────────────────────
 	addr := fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
 	go func() {
@@ -456,6 +499,7 @@ func main() {
 	// ── Step 10: Graceful shutdown ────────────────────────────────────────────────
 	gracefulShutdown(ctx, e, func() {
 		errReporter.Flush(5 * time.Second)
+		worker.Stop()
 		if closeErr := jobs.Close(); closeErr != nil {
 			slog.Error("job enqueuer close error", "error", closeErr)
 		}

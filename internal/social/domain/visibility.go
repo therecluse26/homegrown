@@ -88,6 +88,23 @@ func CanViewEvent(viewerFamilyID, creatorFamilyID uuid.UUID, visibility string, 
 	}
 }
 
+// ValidatePrivacySettings checks that all privacy setting values are either "friends" or "hidden".
+func ValidatePrivacySettings(settings PrivacySettings) error {
+	for _, v := range []string{
+		settings.DisplayName,
+		settings.ParentNames,
+		settings.ChildrenNames,
+		settings.ChildrenAges,
+		settings.Location,
+		settings.Methodology,
+	} {
+		if v != PrivacyFieldFriends && v != PrivacyFieldHidden {
+			return ErrInvalidPrivacySettings
+		}
+	}
+	return nil
+}
+
 // FilterProfileFields applies per-field privacy settings to determine which fields
 // the viewer can see. Returns a map of field name → visible. The viewer always sees
 // all fields on their own profile. Friends see "friends"-level fields. [05-social §9]
