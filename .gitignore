@@ -41,3 +41,5 @@ docs/
 
 # Reflex search index
 .reflex/
+
+server

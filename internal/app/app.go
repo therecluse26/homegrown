@@ -9,6 +9,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
 	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
+	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
@@ -39,6 +40,7 @@ type AppState struct {
 	Discover discover.DiscoveryService
 	Onboard  onboard.OnboardingService
 	Social   social.SocialService
+	Learn    learn.LearningService
 	PubSub   shared.PubSub // needed by social handler for WebSocket
 }
 
@@ -136,6 +138,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Social != nil {
 		social.NewHandler(state.Social, state.PubSub).Register(auth)
+	}
+	if state.Learn != nil {
+		learn.NewHandler(state.Learn).Register(auth)
 	}
 
 	return e

@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	iamadapters "github.com/homegrown-academy/homegrown-academy/internal/iam/adapters"
+	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
@@ -454,6 +456,125 @@ func main() {
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
 
+	// ── Step 7f: Wire learn:: domain ───────────────────────────────────────────
+	// learn:: consumes iam:: (student verification) and method:: (tool resolution).
+	// mkt:: is stubbed until marketplace is implemented. [06-learn §7]
+	learnActivityDefRepo := learn.NewPgActivityDefRepository(db)
+	learnActivityLogRepo := learn.NewPgActivityLogRepository(db)
+	learnReadingItemRepo := learn.NewPgReadingItemRepository(db)
+	learnReadingProgressRepo := learn.NewPgReadingProgressRepository(db)
+	learnReadingListRepo := learn.NewPgReadingListRepository(db)
+	learnJournalEntryRepo := learn.NewPgJournalEntryRepository(db)
+	learnArtifactLinkRepo := learn.NewPgArtifactLinkRepository(db)
+	learnProgressRepo := learn.NewPgProgressRepository(db)
+	learnTaxonomyRepo := learn.NewPgSubjectTaxonomyRepository(db)
+	learnExportRepo := learn.NewPgExportRepository(db)
+	learnQuestionRepo := learn.NewPgQuestionRepository(db)
+	learnQuizDefRepo := learn.NewPgQuizDefRepository(db)
+	learnQuizSessionRepo := learn.NewPgQuizSessionRepository(db)
+	learnSequenceDefRepo := learn.NewPgSequenceDefRepository(db)
+	learnSequenceProgressRepo := learn.NewPgSequenceProgressRepository(db)
+	learnAssignmentRepo := learn.NewPgAssignmentRepository(db)
+	learnVideoDefRepo := learn.NewPgVideoDefRepository(db)
+	learnVideoProgressRepo := learn.NewPgVideoProgressRepository(db)
+
+	iamForLearn := learn.NewIamAdapter(
+		// StudentBelongsToFamily — construct FamilyScope and try GetStudent
+		func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) (bool, error) {
+			scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID})
+			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
+			if err != nil {
+				return false, nil // student not found or not in family
+			}
+			return student != nil, nil
+		},
+		// GetStudentName — construct FamilyScope via RLS bypass to look up display name
+		func(ctx context.Context, studentID uuid.UUID) (string, error) {
+			var displayName string
+			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_students").Select("display_name").Where("id = ?", studentID).Scan(&displayName).Error
+			})
+			if err != nil || displayName == "" {
+				return studentID.String(), nil // graceful fallback
+			}
+			return displayName, nil
+		},
+	)
+
+	methodForLearn := learn.NewMethodAdapter(
+		// ResolveFamilyTools — bridge method.ActiveToolResponse → learn.ActiveToolResponse
+		func(ctx context.Context, scope *shared.FamilyScope) ([]learn.ActiveToolResponse, error) {
+			tools, err := methodSvc.ResolveFamilyTools(ctx, scope)
+			if err != nil {
+				return nil, err
+			}
+			result := make([]learn.ActiveToolResponse, len(tools))
+			for i, t := range tools {
+				configOverrides := make(map[string]any)
+				if t.ConfigOverrides != nil {
+					_ = json.Unmarshal(t.ConfigOverrides, &configOverrides)
+				}
+				result[i] = learn.ActiveToolResponse{
+					Slug:            string(t.Slug),
+					DisplayName:     t.DisplayName,
+					Label:           t.Label,
+					Description:     t.Description,
+					Tier:            t.Tier,
+					Guidance:        t.Guidance,
+					ConfigOverrides: configOverrides,
+					SortOrder:       t.SortOrder,
+				}
+			}
+			return result, nil
+		},
+		// ResolveStudentTools — bridge method.ActiveToolResponse → learn.ActiveToolResponse
+		func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) ([]learn.ActiveToolResponse, error) {
+			tools, err := methodSvc.ResolveStudentTools(ctx, scope, studentID)
+			if err != nil {
+				return nil, err
+			}
+			result := make([]learn.ActiveToolResponse, len(tools))
+			for i, t := range tools {
+				configOverrides := make(map[string]any)
+				if t.ConfigOverrides != nil {
+					_ = json.Unmarshal(t.ConfigOverrides, &configOverrides)
+				}
+				result[i] = learn.ActiveToolResponse{
+					Slug:            string(t.Slug),
+					DisplayName:     t.DisplayName,
+					Label:           t.Label,
+					Description:     t.Description,
+					Tier:            t.Tier,
+					Guidance:        t.Guidance,
+					ConfigOverrides: configOverrides,
+					SortOrder:       t.SortOrder,
+				}
+			}
+			return result, nil
+		},
+	)
+
+	learnSvc := learn.NewLearningService(
+		learnActivityDefRepo, learnActivityLogRepo,
+		learnReadingItemRepo, learnReadingProgressRepo,
+		learnReadingListRepo, learnJournalEntryRepo,
+		learnArtifactLinkRepo, learnProgressRepo,
+		learnTaxonomyRepo, learnExportRepo,
+		learnQuestionRepo, learnQuizDefRepo,
+		learnQuizSessionRepo, learnSequenceDefRepo,
+		learnSequenceProgressRepo, learnAssignmentRepo,
+		learnVideoDefRepo, learnVideoProgressRepo,
+		iamForLearn, methodForLearn,
+		learn.NewMktStubAdapter(),
+		eventBus, db,
+	)
+
+	// Register learn:: event subscriptions
+	eventBus.Subscribe(reflect.TypeOf(iam.StudentCreated{}), learn.NewStudentCreatedHandler(learnSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.StudentDeleted{}), learn.NewStudentDeletedHandler(learnSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), learn.NewFamilyDeletionScheduledHandler(learnSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), learn.NewPurchaseCompletedHandler(learnSvc))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -469,6 +590,7 @@ func main() {
 		Discover: discoverSvc,
 		Onboard:  onboardSvc,
 		Social:   socialSvc,
+		Learn:    learnSvc,
 		PubSub:   pubsub,
 	}
 

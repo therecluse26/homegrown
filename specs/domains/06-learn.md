@@ -873,7 +873,7 @@ publisher-based access control for writes. `[S§3.2]`
 
 #### Activity Definitions (Layer 1)
 
-##### `POST /v1/learning/activities/defs`
+##### `POST /v1/learning/activity-defs`
 
 Creates an activity definition. Caller must be a member of the specified publisher.
 
@@ -882,7 +882,7 @@ Creates an activity definition. Caller must be a member of the specified publish
 - **Validation**: `title` max 500 chars; `subject_tags` must exist in taxonomy; `publisher_id` caller must be member
 - **Response**: `ActivityDefResponse` (201 Created)
 
-##### `GET /v1/learning/activities/defs`
+##### `GET /v1/learning/activity-defs`
 
 Browse/search activity definitions.
 
@@ -890,7 +890,7 @@ Browse/search activity definitions.
 - **Query**: `?subject=<slug>&methodology_id=<uuid>&publisher_id=<uuid>&q=<search>&cursor=<uuid>&limit=20`
 - **Response**: `PaginatedResponse[ActivityDefSummaryResponse]` (200 OK)
 
-##### `GET /v1/learning/activities/defs/:id`
+##### `GET /v1/learning/activity-defs/:id`
 
 Returns a single activity definition.
 
@@ -898,7 +898,7 @@ Returns a single activity definition.
 - **Response**: `ActivityDefResponse` (200 OK)
 - **404**: Definition not found
 
-##### `PATCH /v1/learning/activities/defs/:id`
+##### `PATCH /v1/learning/activity-defs/:id`
 
 Updates an activity definition. Publisher member only.
 
@@ -907,7 +907,7 @@ Updates an activity definition. Publisher member only.
 - **Response**: `ActivityDefResponse` (200 OK)
 - **Error codes**: `not_publisher_member` (403)
 
-##### `DELETE /v1/learning/activities/defs/:id`
+##### `DELETE /v1/learning/activity-defs/:id`
 
 Soft-deletes an activity definition (sets `is_active = false`). Publisher member only.
 
@@ -951,7 +951,7 @@ Updates a reading item. Publisher member only.
 
 #### Artifact Links (Layer 2)
 
-##### `POST /v1/learning/links`
+##### `POST /v1/learning/artifact-links`
 
 Creates a link between two published content items.
 
@@ -960,15 +960,15 @@ Creates a link between two published content items.
 - **Response**: `ArtifactLinkResponse` (201 Created)
 - **Error codes**: `source_not_found` (404), `target_not_found` (404), `duplicate_link` (409)
 
-##### `GET /v1/learning/links`
+##### `GET /v1/learning/content/:type/:id/links`
 
 Gets all artifacts linked to a specific content item.
 
 - **Auth**: Required
-- **Query**: `?type=<content_type>&id=<uuid>&direction=source|target|both`
+- **Query**: `?direction=source|target|both`
 - **Response**: `[]ArtifactLinkResponse` (200 OK)
 
-##### `DELETE /v1/learning/links/:id`
+##### `DELETE /v1/learning/artifact-links/:id`
 
 Removes an artifact link. Must own the source content.
 
@@ -977,7 +977,7 @@ Removes an artifact link. Must own the source content.
 
 #### Activity Logs (Layer 3 — family-scoped)
 
-##### `POST /v1/learning/students/:student_id/activities`
+##### `POST /v1/learning/students/:studentId/activities`
 
 Logs an activity for a student. May reference an activity definition or be ad-hoc. `[S§8.1.1]`
 
@@ -987,7 +987,7 @@ Logs an activity for a student. May reference an activity definition or be ad-ho
 - **Response**: `ActivityLogResponse` (201 Created)
 - **Events**: `ActivityLogged`
 
-##### `GET /v1/learning/students/:student_id/activities`
+##### `GET /v1/learning/students/:studentId/activities`
 
 Lists activity logs for a student, filterable. `[S§8.1.1]`
 
@@ -995,7 +995,7 @@ Lists activity logs for a student, filterable. `[S§8.1.1]`
 - **Query**: `?subject=<slug>&date_from=<date>&date_to=<date>&cursor=<uuid>&limit=20`
 - **Response**: `PaginatedResponse[ActivityLogResponse]` (200 OK)
 
-##### `GET /v1/learning/students/:student_id/activities/:id`
+##### `GET /v1/learning/students/:studentId/activities/:id`
 
 Returns a single activity log entry.
 
@@ -1003,7 +1003,7 @@ Returns a single activity log entry.
 - **Response**: `ActivityLogResponse` (200 OK)
 - **404**: Activity not found
 
-##### `PATCH /v1/learning/students/:student_id/activities/:id`
+##### `PATCH /v1/learning/students/:studentId/activities/:id`
 
 Updates an activity log entry.
 
@@ -1011,7 +1011,7 @@ Updates an activity log entry.
 - **Body**: `UpdateActivityLogCommand` (partial fields)
 - **Response**: `ActivityLogResponse` (200 OK)
 
-##### `DELETE /v1/learning/students/:student_id/activities/:id`
+##### `DELETE /v1/learning/students/:studentId/activities/:id`
 
 Deletes an activity log entry.
 
@@ -1020,7 +1020,7 @@ Deletes an activity log entry.
 
 #### Journal Entries (Layer 3 — family-scoped)
 
-##### `POST /v1/learning/students/:student_id/journals`
+##### `POST /v1/learning/students/:studentId/journal`
 
 Creates a journal entry. `[S§8.1.4]`
 
@@ -1029,7 +1029,7 @@ Creates a journal entry. `[S§8.1.4]`
 - **Validation**: `entry_type` must be valid; student must belong to family; `entry_date` cannot be in the future
 - **Response**: `JournalEntryResponse` (201 Created)
 
-##### `GET /v1/learning/students/:student_id/journals`
+##### `GET /v1/learning/students/:studentId/journal`
 
 Lists journal entries for a student. `[S§8.1.4]`
 
@@ -1037,14 +1037,14 @@ Lists journal entries for a student. `[S§8.1.4]`
 - **Query**: `?entry_type=<type>&date_from=<date>&date_to=<date>&q=<search>&cursor=<uuid>&limit=20`
 - **Response**: `PaginatedResponse[JournalEntryResponse]` (200 OK)
 
-##### `GET /v1/learning/students/:student_id/journals/:id`
+##### `GET /v1/learning/students/:studentId/journal/:id`
 
 Returns a single journal entry.
 
 - **Auth**: Required (`FamilyScope`)
 - **Response**: `JournalEntryResponse` (200 OK)
 
-##### `PATCH /v1/learning/students/:student_id/journals/:id`
+##### `PATCH /v1/learning/students/:studentId/journal/:id`
 
 Updates a journal entry.
 
@@ -1052,7 +1052,7 @@ Updates a journal entry.
 - **Body**: `UpdateJournalEntryCommand` (partial fields)
 - **Response**: `JournalEntryResponse` (200 OK)
 
-##### `DELETE /v1/learning/students/:student_id/journals/:id`
+##### `DELETE /v1/learning/students/:studentId/journal/:id`
 
 Deletes a journal entry.
 
@@ -1061,7 +1061,7 @@ Deletes a journal entry.
 
 #### Reading Progress (Layer 3 — family-scoped)
 
-##### `POST /v1/learning/students/:student_id/reading`
+##### `POST /v1/learning/students/:studentId/reading`
 
 Starts tracking a reading item for a student. `[S§8.1.3]`
 
@@ -1070,7 +1070,7 @@ Starts tracking a reading item for a student. `[S§8.1.3]`
 - **Validation**: Student must belong to family; reading item must exist; no duplicate tracking
 - **Response**: `ReadingProgressResponse` (201 Created)
 
-##### `PATCH /v1/learning/students/:student_id/reading/:id`
+##### `PATCH /v1/learning/students/:studentId/reading/:id`
 
 Updates reading progress (status, notes). `[S§8.1.3]`
 
@@ -1080,7 +1080,7 @@ Updates reading progress (status, notes). `[S§8.1.3]`
 - **Response**: `ReadingProgressResponse` (200 OK)
 - **Events**: `BookCompleted` (when status → completed)
 
-##### `GET /v1/learning/students/:student_id/reading`
+##### `GET /v1/learning/students/:studentId/reading`
 
 Lists reading progress for a student.
 
@@ -1156,7 +1156,7 @@ Updates a question. Publisher member only.
 
 #### Quiz Definitions (Layer 1 — publisher-scoped) `[S§8.1.9]`
 
-##### `POST /v1/learning/quizzes`
+##### `POST /v1/learning/quiz-defs`
 
 Creates a quiz from existing questions. Publisher member only.
 
@@ -1165,7 +1165,7 @@ Creates a quiz from existing questions. Publisher member only.
 - **Validation**: All question IDs must exist and belong to same publisher; at least 1 question
 - **Response**: `QuizDefResponse` (201 Created)
 
-##### `GET /v1/learning/quizzes/:id`
+##### `GET /v1/learning/quiz-defs/:id`
 
 Returns a quiz definition with questions (without answers if requested by student session).
 
@@ -1173,7 +1173,7 @@ Returns a quiz definition with questions (without answers if requested by studen
 - **Query**: `?include_answers=false` (for student view — omit correct answers)
 - **Response**: `QuizDefDetailResponse` (200 OK)
 
-##### `PATCH /v1/learning/quizzes/:id`
+##### `PATCH /v1/learning/quiz-defs/:id`
 
 Updates a quiz definition. Publisher member only.
 
@@ -1183,7 +1183,7 @@ Updates a quiz definition. Publisher member only.
 
 #### Quiz Sessions (Layer 3 — family-scoped) `[S§8.1.9]`
 
-##### `POST /v1/learning/students/:student_id/quiz-sessions`
+##### `POST /v1/learning/students/:studentId/quiz-sessions`
 
 Starts a quiz session for a student.
 
@@ -1193,7 +1193,7 @@ Starts a quiz session for a student.
 - **Response**: `QuizSessionResponse` (201 Created)
 - **Note**: Returns quiz questions (without correct answers) in the response
 
-##### `PATCH /v1/learning/students/:student_id/quiz-sessions/:id`
+##### `PATCH /v1/learning/students/:studentId/quiz-sessions/:id`
 
 Saves progress or submits a quiz session.
 
@@ -1204,14 +1204,14 @@ Saves progress or submits a quiz session.
 - **Side effects**: On submit: auto-scores objective questions, sets status to `submitted` (if has short_answer) or `scored` (if all auto-scorable), generates `learn_assessment_results` entry
 - **Events**: `QuizCompleted` (when fully scored)
 
-##### `GET /v1/learning/students/:student_id/quiz-sessions/:id`
+##### `GET /v1/learning/students/:studentId/quiz-sessions/:id`
 
 Returns quiz session state (for resume or review).
 
 - **Auth**: Required (`FamilyScope`)
 - **Response**: `QuizSessionResponse` (200 OK) — includes answers and scores if submitted
 
-##### `POST /v1/learning/students/:student_id/quiz-sessions/:id/score`
+##### `POST /v1/learning/students/:studentId/quiz-sessions/:id/score`
 
 Parent scores open-ended (short_answer) questions on a submitted quiz.
 
@@ -1249,7 +1249,7 @@ Updates a sequence definition. Publisher member only.
 
 #### Sequence Progress (Layer 3 — family-scoped) `[S§8.1.12]`
 
-##### `POST /v1/learning/students/:student_id/sequence-progress`
+##### `POST /v1/learning/students/:studentId/sequence-progress`
 
 Starts a sequence for a student.
 
@@ -1258,14 +1258,14 @@ Starts a sequence for a student.
 - **Validation**: Student must belong to family; sequence must be active; lesson-sequences tool must be in student's resolved tools
 - **Response**: `SequenceProgressResponse` (201 Created)
 
-##### `GET /v1/learning/students/:student_id/sequence-progress/:id`
+##### `GET /v1/learning/students/:studentId/sequence-progress/:id`
 
 Returns sequence progress with per-item completion status.
 
 - **Auth**: Required (`FamilyScope`)
 - **Response**: `SequenceProgressResponse` (200 OK)
 
-##### `PATCH /v1/learning/students/:student_id/sequence-progress/:id`
+##### `PATCH /v1/learning/students/:studentId/sequence-progress/:id`
 
 Advances, skips, or unlocks items in a sequence.
 
@@ -1277,7 +1277,7 @@ Advances, skips, or unlocks items in a sequence.
 
 #### Student Assignments (Layer 3 — family-scoped) `[S§8.6.3]`
 
-##### `POST /v1/learning/students/:student_id/assignments`
+##### `POST /v1/learning/students/:studentId/assignments`
 
 Assigns content to a student. Parent auth required.
 
@@ -1286,7 +1286,7 @@ Assigns content to a student. Parent auth required.
 - **Validation**: Student must belong to family; content must exist and be active
 - **Response**: `AssignmentResponse` (201 Created)
 
-##### `GET /v1/learning/students/:student_id/assignments`
+##### `GET /v1/learning/students/:studentId/assignments`
 
 Lists assignments for a student. Accessible by both parent and student sessions.
 
@@ -1294,7 +1294,7 @@ Lists assignments for a student. Accessible by both parent and student sessions.
 - **Query**: `?status=<status>&due_before=<date>&cursor=<uuid>&limit=20`
 - **Response**: `PaginatedResponse[AssignmentResponse]` (200 OK)
 
-##### `PATCH /v1/learning/students/:student_id/assignments/:id`
+##### `PATCH /v1/learning/students/:studentId/assignments/:id`
 
 Updates assignment status (e.g., mark in-progress or completed).
 
@@ -1303,18 +1303,55 @@ Updates assignment status (e.g., mark in-progress or completed).
 - **Response**: `AssignmentResponse` (200 OK)
 - **Events**: `AssignmentCompleted` (when status → completed)
 
-##### `DELETE /v1/learning/students/:student_id/assignments/:id`
+##### `DELETE /v1/learning/students/:studentId/assignments/:id`
 
 Removes an assignment. Parent auth required.
 
 - **Auth**: Required (`FamilyScope` — must be parent, not student session)
 - **Response**: 204 No Content
 
+#### Video Definitions (Layer 1) `[S§8.1.14]`
+
+##### `GET /v1/learning/videos`
+
+Browse/search video definitions.
+
+- **Auth**: Required
+- **Query**: `?publisher_id=<uuid>&subject=<slug>&cursor=<uuid>&limit=20`
+- **Response**: `PaginatedResponse[VideoDefResponse]` (200 OK)
+
+##### `GET /v1/learning/videos/:id`
+
+Returns a single video definition.
+
+- **Auth**: Required
+- **Response**: `VideoDefResponse` (200 OK)
+- **404**: Video definition not found
+
+#### Video Progress (Layer 3 — family-scoped)
+
+##### `PATCH /v1/learning/students/:studentId/video-progress`
+
+Upserts video progress for a student (watched time, last position).
+
+- **Auth**: Required (`FamilyScope`)
+- **Body**: `UpdateVideoProgressCommand` (`video_def_id`, `watched_seconds`, `last_position_seconds`, `completed?`)
+- **Validation**: Student must belong to family; video must exist
+- **Response**: `VideoProgressResponse` (200 OK)
+
+##### `GET /v1/learning/students/:studentId/video-progress/:videoDefId`
+
+Returns video progress for a specific video.
+
+- **Auth**: Required (`FamilyScope`)
+- **Response**: `VideoProgressResponse` (200 OK)
+- **404**: No progress found
+
 ### §4.2 Cross-Cutting Endpoints
 
 #### Progress
 
-##### `GET /v1/learning/progress/:student_id`
+##### `GET /v1/learning/students/:studentId/progress`
 
 Returns progress summary for a student. `[S§8.1.7]`
 
@@ -1322,7 +1359,7 @@ Returns progress summary for a student. `[S§8.1.7]`
 - **Query**: `?date_from=<date>&date_to=<date>`
 - **Response**: `ProgressSummaryResponse` (200 OK) — activity counts, hours by subject, reading completion
 
-##### `GET /v1/learning/progress/:student_id/subjects`
+##### `GET /v1/learning/students/:studentId/progress/subjects`
 
 Returns per-subject breakdown for a student.
 
@@ -1330,7 +1367,7 @@ Returns per-subject breakdown for a student.
 - **Query**: `?date_from=<date>&date_to=<date>`
 - **Response**: `[]SubjectProgressResponse` (200 OK)
 
-##### `GET /v1/learning/progress/:student_id/timeline`
+##### `GET /v1/learning/students/:studentId/progress/timeline`
 
 Returns activity timeline for a student.
 
@@ -1347,7 +1384,7 @@ Returns the family's resolved tool set. Delegates to `method::`. `[S§4.2]`
 - **Auth**: Required (`FamilyScope`)
 - **Response**: `[]ActiveToolResponse` (200 OK)
 
-##### `GET /v1/learning/tools/:student_id`
+##### `GET /v1/learning/students/:studentId/tools`
 
 Returns a student-specific resolved tool set. `[S§4.6, S§8.2]`
 
@@ -1356,7 +1393,7 @@ Returns a student-specific resolved tool set. `[S§4.6, S§8.2]`
 
 #### Subject Taxonomy
 
-##### `GET /v1/learning/subjects`
+##### `GET /v1/learning/taxonomy`
 
 Returns the subject taxonomy tree (platform + family custom subjects). `[S§8.3]`
 
@@ -1364,13 +1401,13 @@ Returns the subject taxonomy tree (platform + family custom subjects). `[S§8.3]
 - **Query**: `?level=<0|1|2>&parent_id=<uuid>`
 - **Response**: `[]SubjectTaxonomyResponse` (200 OK)
 
-##### `POST /v1/learning/subjects/custom`
+##### `POST /v1/learning/taxonomy/custom`
 
 Creates a family-scoped custom subject. `[S§8.3]`
 
 - **Auth**: Required (`FamilyScope`)
 - **Body**: `CreateCustomSubjectCommand` (`name`, `parent_taxonomy_id?`)
-- **Validation**: Name must be unique within family; slug auto-generated
+- **Validation**: Name must be unique within family; slug auto-generated via `domain.Slugify`
 - **Response**: `CustomSubjectResponse` (201 Created)
 - **Error codes**: `duplicate_custom_subject` (409)
 
@@ -1649,6 +1686,20 @@ type LearningService interface {
 
     // ListAssignments lists assignments for a student.
     ListAssignments(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query AssignmentQuery) (PaginatedResponse[AssignmentResponse], error)
+
+    // --- Video Queries --------------------------------- [S§8.1.14]
+
+    // ListVideoDefs lists video definitions with filtering.
+    ListVideoDefs(ctx context.Context, query VideoDefQuery) (PaginatedResponse[VideoDefResponse], error)
+
+    // GetVideoDef returns a single video definition.
+    GetVideoDef(ctx context.Context, defID uuid.UUID) (VideoDefResponse, error)
+
+    // UpdateVideoProgress upserts video progress for a student.
+    UpdateVideoProgress(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, cmd UpdateVideoProgressCommand) (VideoProgressResponse, error)
+
+    // GetVideoProgress returns video progress for a specific video.
+    GetVideoProgress(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, videoDefID uuid.UUID) (VideoProgressResponse, error)
 }
 ```
 
@@ -1669,9 +1720,13 @@ type LearningService interface {
 - `SequenceDefRepository` (interface, sequence engine)
 - `SequenceProgressRepository` (interface, sequence engine)
 - `AssignmentRepository` (interface, student assignments)
-- `MethodologyService` (interface, for tool resolution)
-- `IamService` (interface, for student/family data lookup)
+- `VideoDefRepository` (interface, video definitions)
+- `VideoProgressRepository` (interface, video progress tracking)
+- `IamServiceForLearn` (interface, for student/family data lookup)
+- `MethodServiceForLearn` (interface, for tool resolution)
+- `MktServiceForLearn` (interface, for publisher membership checks)
 - `EventBus`
+- `*gorm.DB` (for bypass-RLS operations)
 
 ---
 
@@ -1875,14 +1930,86 @@ type SubjectTaxonomyRepository interface {
     // CreateCustomSubject creates a family-scoped custom subject.
     CreateCustomSubject(ctx context.Context, scope *FamilyScope, subject *CreateCustomSubjectRecord) (*CustomSubject, error)
 }
+
+// === Assessment Engine Repositories ==========================================
+
+// QuestionRepository manages question persistence. [S§8.1.9]
+type QuestionRepository interface {
+    Create(ctx context.Context, q *QuestionModel) error
+    FindByID(ctx context.Context, questionID uuid.UUID) (*QuestionModel, error)
+    FindByIDs(ctx context.Context, questionIDs []uuid.UUID) ([]QuestionModel, error)
+    Update(ctx context.Context, q *QuestionModel) error
+    List(ctx context.Context, query *QuestionQuery) ([]QuestionModel, int64, error)
+}
+
+// QuizDefRepository manages quiz definition persistence. [S§8.1.9]
+type QuizDefRepository interface {
+    Create(ctx context.Context, def *QuizDefModel) error
+    FindByID(ctx context.Context, quizDefID uuid.UUID) (*QuizDefModel, error)
+    Update(ctx context.Context, def *QuizDefModel) error
+    ListQuestions(ctx context.Context, quizDefID uuid.UUID) ([]QuizQuestionModel, error)
+    ReplaceQuestions(ctx context.Context, quizDefID uuid.UUID, questions []QuizQuestionModel) error
+}
+
+// QuizSessionRepository manages quiz session persistence. [S§8.1.9]
+type QuizSessionRepository interface {
+    Create(ctx context.Context, scope *FamilyScope, session *QuizSessionModel) error
+    FindByID(ctx context.Context, scope *FamilyScope, sessionID uuid.UUID) (*QuizSessionModel, error)
+    Update(ctx context.Context, scope *FamilyScope, session *QuizSessionModel) error
+}
+
+// === Sequence Engine Repositories ============================================
+
+// SequenceDefRepository manages sequence definition persistence. [S§8.1.12]
+type SequenceDefRepository interface {
+    Create(ctx context.Context, def *SequenceDefModel) error
+    FindByID(ctx context.Context, defID uuid.UUID) (*SequenceDefModel, error)
+    Update(ctx context.Context, def *SequenceDefModel) error
+    ListItems(ctx context.Context, defID uuid.UUID) ([]SequenceItemModel, error)
+    ReplaceItems(ctx context.Context, defID uuid.UUID, items []SequenceItemModel) error
+}
+
+// SequenceProgressRepository manages sequence progress persistence. [S§8.1.12]
+type SequenceProgressRepository interface {
+    Create(ctx context.Context, scope *FamilyScope, progress *SequenceProgressModel) error
+    FindByID(ctx context.Context, scope *FamilyScope, progressID uuid.UUID) (*SequenceProgressModel, error)
+    Update(ctx context.Context, scope *FamilyScope, progress *SequenceProgressModel) error
+}
+
+// === Assignment Repository ===================================================
+
+// AssignmentRepository manages student assignment persistence. [S§8.6.3]
+type AssignmentRepository interface {
+    Create(ctx context.Context, scope *FamilyScope, assignment *AssignmentModel) error
+    FindByID(ctx context.Context, scope *FamilyScope, assignmentID uuid.UUID) (*AssignmentModel, error)
+    Update(ctx context.Context, scope *FamilyScope, assignment *AssignmentModel) error
+    Delete(ctx context.Context, scope *FamilyScope, assignmentID uuid.UUID) error
+    List(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, query *AssignmentQuery) ([]AssignmentModel, int64, error)
+}
+
+// === Video Repositories ======================================================
+
+// VideoDefRepository manages video definition persistence. [S§8.1.14]
+type VideoDefRepository interface {
+    Create(ctx context.Context, def *VideoDefModel) error
+    FindByID(ctx context.Context, defID uuid.UUID) (*VideoDefModel, error)
+    Update(ctx context.Context, def *VideoDefModel) error
+    List(ctx context.Context, query *VideoDefQuery) ([]VideoDefModel, int64, error)
+}
+
+// VideoProgressRepository manages video progress persistence. [S§8.1.14]
+type VideoProgressRepository interface {
+    Upsert(ctx context.Context, scope *FamilyScope, progress *VideoProgressModel) error
+    FindByStudentAndVideo(ctx context.Context, scope *FamilyScope, studentID uuid.UUID, videoDefID uuid.UUID) (*VideoProgressModel, error)
+}
 ```
 
 ---
 
 ## §7 Adapter Interfaces
 
-The learning domain has one adapter interface for media operations. No external third-party
-service dependencies. `[CODING §8.1]`
+The learning domain uses consumer-defined adapter interfaces for cross-domain dependencies.
+`[CODING §8.1]`
 
 ```go
 // internal/learn/ports.go (continued)
@@ -1895,6 +2022,22 @@ type MediaAdapter interface {
 
     // GetUploadURL generates a pre-signed upload URL for direct client upload.
     GetUploadURL(ctx context.Context, contentType string, filename string) (*UploadURLResponse, error)
+}
+
+// IamServiceForLearn — consumer-defined interface for IAM lookups. [CODING §8.1]
+type IamServiceForLearn interface {
+    StudentBelongsToFamily(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) (bool, error)
+}
+
+// MethodServiceForLearn — consumer-defined interface for methodology tool resolution. [CODING §8.1]
+type MethodServiceForLearn interface {
+    ResolveFamilyTools(ctx context.Context, scope *FamilyScope) ([]ActiveToolResponse, error)
+    ResolveStudentTools(ctx context.Context, scope *FamilyScope, studentID uuid.UUID) ([]ActiveToolResponse, error)
+}
+
+// MktServiceForLearn — consumer-defined interface for publisher membership checks. [CODING §8.1]
+type MktServiceForLearn interface {
+    IsPublisherMember(ctx context.Context, callerID uuid.UUID, publisherID uuid.UUID) (bool, error)
 }
 ```
 
@@ -2675,7 +2818,7 @@ GET /v1/learning/tools
 ### §10.2 Per-Student Override Flow
 
 ```
-GET /v1/learning/tools/:student_id
+GET /v1/learning/tools/:studentId
     │
     ▼
 1. Handler extracts FamilyScope, validates student belongs to family
@@ -2967,7 +3110,7 @@ All Phase 3 tools share these patterns:
 - `attachments JSONB` for media
 - Family-scoped RLS policy
 - Full-text search vector where applicable
-- CRUD endpoints under `/v1/learning/students/:student_id/{tool-slug}`
+- CRUD endpoints under `/v1/learning/students/:studentId/{tool-slug}`
 
 ---
 
@@ -3476,7 +3619,7 @@ Numbered assertions that MUST be true when the learn:: implementation is correct
 
 ### Activity Logging
 
-1. `POST /v1/learning/students/:student_id/activities` creates an activity log and publishes `ActivityLogged` event
+1. `POST /v1/learning/students/:studentId/activities` creates an activity log and publishes `ActivityLogged` event
 2. Activity with `activity_date` in the future returns 422 (`future_date_not_allowed`)
 3. Activity with negative `duration_minutes` returns 422 (`negative_duration`)
 4. Activity with invalid `subject_tags` returns 422 (`invalid_subject_tag`)
@@ -3486,14 +3629,14 @@ Numbered assertions that MUST be true when the learn:: implementation is correct
 
 ### Journaling
 
-8. `POST /v1/learning/students/:student_id/journals` creates a journal entry with valid `entry_type`
+8. `POST /v1/learning/students/:studentId/journal` creates a journal entry with valid `entry_type`
 9. Journal entry with invalid `entry_type` returns 422 (`invalid_entry_type`)
 10. Journal entries are searchable by keyword via full-text search
 11. Journal entries are filterable by type, date range, and student
 
 ### Reading
 
-12. `POST /v1/learning/students/:student_id/reading` starts tracking a reading item
+12. `POST /v1/learning/students/:studentId/reading` starts tracking a reading item
 13. Duplicate tracking of the same reading item for the same student returns 409
 14. Reading status transitions follow: to_read → in_progress → completed (invalid transitions return 422)
 15. Completing a reading item publishes `BookCompleted` event
@@ -3517,19 +3660,19 @@ Numbered assertions that MUST be true when the learn:: implementation is correct
 
 ### Progress
 
-27. `GET /v1/learning/progress/:student_id` returns activity counts, hours by subject, and reading completion
+27. `GET /v1/learning/students/:studentId/progress` returns activity counts, hours by subject, and reading completion
 28. Progress queries respect date range filters
 29. All progress data is per-student (no cross-student aggregation)
 
 ### Tools
 
 30. `GET /v1/learning/tools` returns the family's resolved tool set from `method::`
-31. `GET /v1/learning/tools/:student_id` respects per-student methodology overrides
+31. `GET /v1/learning/tools/:studentId` respects per-student methodology overrides
 32. Tool guidance from `method::` config_overrides is included in the response
 
 ### Subject Taxonomy
 
-33. `GET /v1/learning/subjects` returns platform taxonomy merged with family custom subjects
+33. `GET /v1/learning/taxonomy` returns platform taxonomy merged with family custom subjects
 34. Custom subjects are family-scoped (visible only to the creating family)
 35. Custom subject slugs are unique within a family
 
@@ -3569,29 +3712,44 @@ Numbered assertions that MUST be true when the learn:: implementation is correct
 ```
 internal/learn/
 ├── handler.go                # Echo route handlers (thin layer only)
+├── handler_test.go           # Handler unit tests (mock service)
 ├── service.go                # LearningServiceImpl — orchestration
-├── repository.go             # GormActivityDefRepository, GormActivityLogRepository,
-│                             # GormReadingItemRepository, GormReadingProgressRepository,
-│                             # GormReadingListRepository, GormJournalEntryRepository,
-│                             # GormArtifactLinkRepository, GormProgressRepository,
-│                             # GormSubjectTaxonomyRepository, GormExportRepository
+├── service_test.go           # Service/domain unit tests
+├── repository.go             # PgActivityDefRepository, PgActivityLogRepository,
+│                             # PgReadingItemRepository, PgReadingProgressRepository,
+│                             # PgReadingListRepository, PgJournalEntryRepository,
+│                             # PgArtifactLinkRepository, PgProgressRepository,
+│                             # PgSubjectTaxonomyRepository, PgExportRepository,
+│                             # PgQuestionRepository, PgQuizDefRepository,
+│                             # PgQuizSessionRepository, PgSequenceDefRepository,
+│                             # PgSequenceProgressRepository, PgAssignmentRepository,
+│                             # PgVideoDefRepository, PgVideoProgressRepository
 ├── models.go                 # Request/response types, internal types, query params,
 │                             # GORM model definitions
 ├── ports.go                  # LearningService interface, all repository interfaces,
-│                             # MediaAdapter interface
-├── events.go                 # ActivityLogged, MilestoneAchieved, BookCompleted, QuizCompleted, SequenceAdvanced, SequenceCompleted, AssignmentCompleted,
-│                             # DataExportReady
+│                             # consumer-defined adapter interfaces
+├── mock_test.go              # mockLearningService for handler tests
+├── events.go                 # ActivityLogged, MilestoneAchieved, BookCompleted,
+│                             # QuizCompleted, SequenceAdvanced, SequenceCompleted,
+│                             # AssignmentCompleted, DataExportReady
 ├── event_handlers.go         # StudentCreatedHandler, StudentDeletedHandler,
 │                             # FamilyDeletionScheduledHandler,
 │                             # PurchaseCompletedHandler,
 │                             # MethodologyConfigUpdatedHandler
 ├── export.go                 # ExportGenerationTask — background worker (asynq) for
 │                             # async data export generation
+├── iam_adapter.go            # Function adapter bridging iam:: to IamServiceForLearn
+├── method_adapter.go         # Function adapter bridging method:: to MethodServiceForLearn
+├── mkt_adapter.go            # Function adapter bridging mkt:: to MktServiceForLearn
 └── domain/
     ├── activity.go           # Activity aggregate root — invariant enforcement
     ├── journal.go            # Journal entry validation — entry type rules
-    ├── reading_list.go       # Reading list aggregate — item management, status transitions
-    ├── progress.go           # Progress computation — metric aggregation logic
-    ├── taxonomy.go           # Taxonomy validation — slug generation, hierarchy checks
-    └── errors.go             # LearningError types
+    ├── reading_list.go       # Reading list aggregate — status FSM transitions
+    ├── sequence.go           # Sequence aggregate — item ordering and locking rules
+    ├── assignment.go         # Assignment aggregate — status FSM transitions
+    ├── quiz_session.go       # Quiz session FSM — status transitions, auto-scoring,
+    │                         # parent scoring computation
+    ├── progress.go           # Progress computation — date range defaulting
+    ├── taxonomy.go           # Taxonomy helpers — Slugify function
+    └── errors.go             # All learning domain error types
 ```
