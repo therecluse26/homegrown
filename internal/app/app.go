@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/homegrown-academy/homegrown-academy/internal/billing"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
 	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
@@ -47,6 +48,7 @@ type AppState struct {
 	Marketplace mkt.MarketplaceService
 	Media       media.MediaService
 	Notify      notify.NotificationService
+	Billing     billing.BillingService
 	PubSub      shared.PubSub // needed by social handler for WebSocket
 }
 
@@ -156,6 +158,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Notify != nil {
 		notify.NewHandler(state.Notify, state.Config.UnsubscribeSecret).Register(auth, pub)
+	}
+	if state.Billing != nil {
+		billing.NewHandler(state.Billing, state.Config.BillingWebhookSecret).Register(auth, hooks)
 	}
 
 	return e

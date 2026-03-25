@@ -77,6 +77,23 @@ type AppConfig struct {
 	// Hyperswitch webhook signing key. Required when HyperswitchBaseURL is set.
 	HyperswitchWebhookKey string
 
+	// ─── Billing (Hyperswitch Subscriptions) ──────────────────────
+	// Hyperswitch business profile ID for the billing/subscription domain.
+	// Separate from the marketplace payment profile. [10-billing §7]
+	HyperswitchBillingProfileID string
+
+	// Hyperswitch price ID for the monthly subscription plan.
+	HyperswitchMonthlyPriceID string
+
+	// Hyperswitch price ID for the annual subscription plan.
+	HyperswitchAnnualPriceID string
+
+	// COPPA micro-charge amount in cents. Default: 50 ($0.50). [10-billing §3]
+	CoppaChargeCents int64
+
+	// Webhook signing secret for billing-specific Hyperswitch webhooks.
+	BillingWebhookSecret string
+
 	// ─── Notifications (Postmark) ──────────────────────────────────
 	// Postmark server API token. Optional — omit to use NoopEmailAdapter.
 	PostmarkServerToken string
@@ -188,6 +205,20 @@ func LoadConfig() (*AppConfig, error) {
 	hyperswitchAPIKey := envOrDefault("HYPERSWITCH_API_KEY", "")
 	hyperswitchWebhookKey := envOrDefault("HYPERSWITCH_WEBHOOK_KEY", "")
 
+	// Billing-specific Hyperswitch config [10-billing §7]
+	hyperswitchBillingProfileID := envOrDefault("HYPERSWITCH_BILLING_PROFILE_ID", "")
+	hyperswitchMonthlyPriceID := envOrDefault("HYPERSWITCH_MONTHLY_PRICE_ID", "")
+	hyperswitchAnnualPriceID := envOrDefault("HYPERSWITCH_ANNUAL_PRICE_ID", "")
+	coppaChargeCents := int64(50) // default $0.50
+	if v, ok := os.LookupEnv("COPPA_CHARGE_CENTS"); ok {
+		parsed, parseErr := strconv.ParseInt(v, 10, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid COPPA_CHARGE_CENTS: %w", parseErr)
+		}
+		coppaChargeCents = parsed
+	}
+	billingWebhookSecret := envOrDefault("BILLING_WEBHOOK_SECRET", "")
+
 	// Optional object storage config (omit to use noop adapter)
 	objectStorageEndpoint := envOrDefault("OBJECT_STORAGE_ENDPOINT", "")
 	objectStorageRegion := envOrDefault("OBJECT_STORAGE_REGION", "auto")
@@ -217,9 +248,14 @@ func LoadConfig() (*AppConfig, error) {
 		ServerPort:             serverPort,
 		LogLevel:               logLevel,
 		ErrorReportingDSN:      errorReportingDSN,
-		HyperswitchBaseURL:    hyperswitchBaseURL,
-		HyperswitchAPIKey:     hyperswitchAPIKey,
-		HyperswitchWebhookKey: hyperswitchWebhookKey,
+		HyperswitchBaseURL:          hyperswitchBaseURL,
+		HyperswitchAPIKey:           hyperswitchAPIKey,
+		HyperswitchWebhookKey:       hyperswitchWebhookKey,
+		HyperswitchBillingProfileID: hyperswitchBillingProfileID,
+		HyperswitchMonthlyPriceID:   hyperswitchMonthlyPriceID,
+		HyperswitchAnnualPriceID:    hyperswitchAnnualPriceID,
+		CoppaChargeCents:            coppaChargeCents,
+		BillingWebhookSecret:        billingWebhookSecret,
 		ObjectStorageEndpoint:       objectStorageEndpoint,
 		ObjectStorageRegion:         objectStorageRegion,
 		ObjectStorageBucket:         objectStorageBucket,

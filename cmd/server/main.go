@@ -23,6 +23,8 @@ import (
 	"github.com/pressly/goose/v3"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/app"
+	"github.com/homegrown-academy/homegrown-academy/internal/billing"
+	billingadapters "github.com/homegrown-academy/homegrown-academy/internal/billing/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
 	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
@@ -727,7 +729,69 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(mkt.CreatorOnboarded{}), notify.NewCreatorOnboardedHandler(notifySvc))
 	// DEFERRED: safety::ContentFlagged — safety:: domain not implemented
 	// DEFERRED: iam::CoParentAdded, iam::FamilyDeletionScheduled — events not defined yet
-	// DEFERRED: billing:: events — billing:: domain not implemented
+
+	// ── Step 7i: Wire billing:: domain ──────────────────────────────────────────
+	// billing:: is the subscription lifecycle and tier-gating engine. Hyperswitch is
+	// authoritative for subscription state; local DB mirrors via webhooks. [10-billing §1]
+	billSubRepo := billing.NewPgSubscriptionRepository(db)
+	billTxRepo := billing.NewPgTransactionRepository(db)
+	billCustRepo := billing.NewPgCustomerRepository(db)
+	billPayoutRepo := billing.NewPgPayoutRepository(db)
+
+	// Hyperswitch billing adapter: uses billing-specific profile, separate from mkt.
+	billAdapter := billingadapters.NewHyperswitchSubscriptionAdapter(
+		cfg.HyperswitchBaseURL, cfg.HyperswitchAPIKey,
+		cfg.HyperswitchBillingProfileID, cfg.BillingWebhookSecret,
+	)
+
+	// IAM adapter for billing: bridges iam:: → billing::IamServiceForBilling
+	iamForBilling := billing.NewIamAdapter(
+		// GetFamilyPrimaryEmail — uses RLS bypass since event handlers lack auth context. [10-billing §12]
+		func(ctx context.Context, familyID uuid.UUID) (string, string, error) {
+			type emailRow struct {
+				Email       string
+				DisplayName string
+			}
+			var row emailRow
+			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_parents").
+					Select("iam_parents.email, iam_families.display_name").
+					Joins("JOIN iam_families ON iam_families.id = iam_parents.family_id").
+					Where("iam_parents.family_id = ? AND iam_parents.is_primary = true", familyID).
+					Limit(1).Scan(&row).Error
+			})
+			if err != nil {
+				return "", "", err
+			}
+			return row.Email, row.DisplayName, nil
+		},
+	)
+
+	billCfg := billing.BillingConfig{
+		HyperswitchAPIKey:    cfg.HyperswitchAPIKey,
+		HyperswitchProfileID: cfg.HyperswitchBillingProfileID,
+		HyperswitchBaseURL:   cfg.HyperswitchBaseURL,
+		MonthlyPriceID:       cfg.HyperswitchMonthlyPriceID,
+		AnnualPriceID:        cfg.HyperswitchAnnualPriceID,
+		CoppaChargeCents:     cfg.CoppaChargeCents,
+		WebhookSigningSecret: cfg.BillingWebhookSecret,
+	}
+
+	billingSvc := billing.NewBillingService(
+		billSubRepo, billTxRepo, billCustRepo, billPayoutRepo,
+		billAdapter, iamForBilling,
+		eventBus, billCfg,
+	)
+
+	// Register billing:: event subscriptions
+	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), billing.NewPurchaseCompletedHandler(billingSvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseRefunded{}), billing.NewPurchaseRefundedHandler(billingSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), billing.NewFamilyDeletionScheduledHandler(billingSvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.PrimaryParentTransferred{}), billing.NewPrimaryParentTransferredHandler(billingSvc))
+
+	// Now that billing:: is wired, register billing event handlers in notify::
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCreated{}), notify.NewSubscriptionCreatedHandler(notifySvc))
+	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), notify.NewSubscriptionCancelledHandler(notifySvc))
 
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
@@ -748,6 +812,7 @@ func main() {
 		Marketplace: mktSvc,
 		Media:       mediaSvc,
 		Notify:      notifySvc,
+		Billing:     billingSvc,
 		PubSub:      pubsub,
 	}
 

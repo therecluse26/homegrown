@@ -550,27 +550,27 @@ import (
     "context"
 
     "github.com/google/uuid"
-    "github.com/homegrown-academy/homegrown-academy/internal/shared/types"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // BillingService defines all use cases for the billing domain.
 type BillingService interface {
     // ─── Queries (read, no side effects) ────────────────────────────────
 
-    // GetSubscription returns the current subscription for a family. Returns nil if free tier.
-    GetSubscription(ctx context.Context, scope types.FamilyScope) (*SubscriptionResponse, error)
+    // GetSubscription returns the current subscription for a family. Returns free-tier default if none.
+    GetSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error)
 
     // ListTransactions returns transaction history for a family.
-    ListTransactions(ctx context.Context, params TransactionListParams, scope types.FamilyScope) (*TransactionListResponse, error)
+    ListTransactions(ctx context.Context, params TransactionListParams, scope shared.FamilyScope) (*TransactionListResponse, error)
 
     // ListInvoices returns Hyperswitch invoices for a family's subscription. (Phase 2)
-    ListInvoices(ctx context.Context, params InvoiceListParams, scope types.FamilyScope) (*InvoiceListResponse, error)
+    ListInvoices(ctx context.Context, params InvoiceListParams, scope shared.FamilyScope) (*InvoiceListResponse, error)
 
     // ListPaymentMethods returns attached payment methods for a family. (Phase 2)
-    ListPaymentMethods(ctx context.Context, scope types.FamilyScope) ([]PaymentMethodResponse, error)
+    ListPaymentMethods(ctx context.Context, scope shared.FamilyScope) ([]PaymentMethodResponse, error)
 
     // EstimateSubscription previews pricing for a subscription or plan change. (Phase 2)
-    EstimateSubscription(ctx context.Context, query EstimateSubscriptionQuery, scope types.FamilyScope) (*EstimateResponse, error)
+    EstimateSubscription(ctx context.Context, query EstimateSubscriptionQuery, scope shared.FamilyScope) (*EstimateResponse, error)
 
     // ListPayouts returns creator payout history. (Phase 2)
     ListPayouts(ctx context.Context, params PayoutListParams, creatorID uuid.UUID) (*PayoutListResponse, error)
@@ -578,47 +578,49 @@ type BillingService interface {
     // ─── Commands (write, has side effects) ─────────────────────────────
 
     // CreateSubscription creates a new premium subscription via Hyperswitch. (Phase 2)
-    CreateSubscription(ctx context.Context, cmd CreateSubscriptionCommand, scope types.FamilyScope) (*SubscriptionResponse, error)
+    CreateSubscription(ctx context.Context, cmd CreateSubscriptionCommand, scope shared.FamilyScope) (*SubscriptionResponse, error)
 
     // UpdateSubscription updates subscription (billing interval change) with proration. (Phase 2)
-    UpdateSubscription(ctx context.Context, cmd UpdateSubscriptionCommand, scope types.FamilyScope) (*SubscriptionResponse, error)
+    UpdateSubscription(ctx context.Context, cmd UpdateSubscriptionCommand, scope shared.FamilyScope) (*SubscriptionResponse, error)
 
     // CancelSubscription cancels subscription at end of current billing period. (Phase 2)
-    CancelSubscription(ctx context.Context, scope types.FamilyScope) (*SubscriptionResponse, error)
+    CancelSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error)
 
     // ReactivateSubscription reverses a pending cancellation. (Phase 2)
-    ReactivateSubscription(ctx context.Context, scope types.FamilyScope) (*SubscriptionResponse, error)
+    ReactivateSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error)
 
     // AttachPaymentMethod attaches a payment method via Hyperswitch SetupIntent. (Phase 2)
-    AttachPaymentMethod(ctx context.Context, cmd AttachPaymentMethodCommand, scope types.FamilyScope) (*PaymentMethodResponse, error)
+    AttachPaymentMethod(ctx context.Context, cmd AttachPaymentMethodCommand, scope shared.FamilyScope) (*PaymentMethodResponse, error)
 
     // DetachPaymentMethod detaches a payment method. (Phase 2)
-    DetachPaymentMethod(ctx context.Context, paymentMethodID string, scope types.FamilyScope) error
+    DetachPaymentMethod(ctx context.Context, paymentMethodID string, scope shared.FamilyScope) error
 
     // ProcessCoppaVerification processes a COPPA micro-charge verification ($0.50 charge + immediate refund).
     // Called by iam:: during COPPA consent flow. [S§1.4]
-    ProcessCoppaVerification(ctx context.Context, cmd CoppaVerificationCommand, scope types.FamilyScope) (*CoppaVerificationResult, error)
+    ProcessCoppaVerification(ctx context.Context, cmd CoppaVerificationCommand, scope shared.FamilyScope) (*CoppaVerificationResult, error)
 
     // ─── Event handlers ─────────────────────────────────────────────────
     // Each method is called by its corresponding DomainEventHandler struct
     // in event_handlers.go. Failures are logged but do not propagate to
     // the source domain. [ARCH §4.6]
+    // Mirror event types are used to avoid circular imports with source
+    // domains. Handlers convert shared.DomainEvent → mirror type.
 
     // HandleFamilyDeletionScheduled cancels subscription in Hyperswitch.
     // Consumed from iam::FamilyDeletionScheduled. [01-iam §13.3]
-    HandleFamilyDeletionScheduled(ctx context.Context, event *FamilyDeletionScheduled) error
+    HandleFamilyDeletionScheduled(ctx context.Context, event FamilyDeletionScheduledEvent) error
 
     // HandlePrimaryParentTransferred updates Hyperswitch customer email.
     // Consumed from iam::PrimaryParentTransferred. [01-iam §13.3]
-    HandlePrimaryParentTransferred(ctx context.Context, event *PrimaryParentTransferred) error
+    HandlePrimaryParentTransferred(ctx context.Context, event PrimaryParentTransferredEvent) error
 
     // HandlePurchaseCompleted records creator earnings. (Phase 2)
     // Consumed from mkt::PurchaseCompleted. [07-mkt §18.3]
-    HandlePurchaseCompleted(ctx context.Context, event *PurchaseCompleted) error
+    HandlePurchaseCompleted(ctx context.Context, event PurchaseCompletedEvent) error
 
     // HandlePurchaseRefunded deducts from creator earnings. (Phase 2)
     // Consumed from mkt::PurchaseRefunded. [07-mkt §18.3]
-    HandlePurchaseRefunded(ctx context.Context, event *PurchaseRefunded) error
+    HandlePurchaseRefunded(ctx context.Context, event PurchaseRefundedEvent) error
 
     // ─── Webhook processing ─────────────────────────────────────────────
 
@@ -641,8 +643,8 @@ type BillingServiceImpl struct {
     customerRepo     CustomerRepository
     payoutRepo       PayoutRepository          // Phase 2
     adapter          SubscriptionPaymentAdapter
-    iamService       IamService                // Email lookup for Hyperswitch customer
-    events           EventBus
+    iamService       IamServiceForBilling      // Consumer-defined interface — email lookup for Hyperswitch customer
+    events           *shared.EventBus
     config           BillingConfig
 }
 ```
@@ -664,7 +666,7 @@ type SubscriptionRepository interface {
     Create(ctx context.Context, input CreateSubscriptionRow) (*BillSubscription, error)
 
     // FindByFamily finds subscription by family ID.
-    FindByFamily(ctx context.Context, scope types.FamilyScope) (*BillSubscription, error)
+    FindByFamily(ctx context.Context, scope shared.FamilyScope) (*BillSubscription, error)
 
     // FindByHyperswitchID finds subscription by Hyperswitch subscription ID (webhook processing).
     FindByHyperswitchID(ctx context.Context, hyperswitchSubscriptionID string) (*BillSubscription, error)
@@ -673,7 +675,7 @@ type SubscriptionRepository interface {
     Update(ctx context.Context, subscriptionID uuid.UUID, updates SubscriptionUpdate) (*BillSubscription, error)
 
     // DeleteByFamily deletes subscription record (family deletion cascade).
-    DeleteByFamily(ctx context.Context, familyID types.FamilyID) error
+    DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── TransactionRepository ────────────────────────────────────────────
@@ -683,7 +685,7 @@ type TransactionRepository interface {
     Create(ctx context.Context, input CreateTransactionRow) (*BillTransaction, error)
 
     // ListByFamily lists transactions for a family, paginated by created_at DESC.
-    ListByFamily(ctx context.Context, scope types.FamilyScope, params *TransactionListParams) ([]BillTransaction, error)
+    ListByFamily(ctx context.Context, scope shared.FamilyScope, params *TransactionListParams) ([]BillTransaction, error)
 
     // ExistsByPaymentID checks if a transaction with this Hyperswitch payment ID and type
     // already exists (idempotency check for webhook processing).
@@ -694,10 +696,10 @@ type TransactionRepository interface {
 // Family-scoped (family_id is PK).
 type CustomerRepository interface {
     // Upsert creates or updates a Hyperswitch customer mapping.
-    Upsert(ctx context.Context, familyID types.FamilyID, input UpsertCustomerRow) (*BillHyperswitchCustomer, error)
+    Upsert(ctx context.Context, familyID uuid.UUID, input UpsertCustomerRow) (*BillHyperswitchCustomer, error)
 
     // FindByFamily finds customer by family ID.
-    FindByFamily(ctx context.Context, familyID types.FamilyID) (*BillHyperswitchCustomer, error)
+    FindByFamily(ctx context.Context, familyID uuid.UUID) (*BillHyperswitchCustomer, error)
 
     // FindByHyperswitchID finds customer by Hyperswitch customer ID (webhook processing).
     FindByHyperswitchID(ctx context.Context, hyperswitchCustomerID string) (*BillHyperswitchCustomer, error)
@@ -945,19 +947,19 @@ type EstimateSubscriptionQuery struct {
 // TransactionListParams holds query parameters for GET /v1/billing/transactions.
 type TransactionListParams struct {
     Cursor *string `query:"cursor"`
-    Limit  *uint8  `query:"limit"` // Default 20, max 100
+    Limit  *int    `query:"limit"` // Default 20, max 100
 }
 
 // InvoiceListParams holds query parameters for GET /v1/billing/invoices (Phase 2).
 type InvoiceListParams struct {
     Cursor *string `query:"cursor"`
-    Limit  *uint8  `query:"limit"`
+    Limit  *int    `query:"limit"`
 }
 
 // PayoutListParams holds query parameters for GET /v1/billing/payouts (Phase 2).
 type PayoutListParams struct {
     Cursor *string `query:"cursor"`
-    Limit  *uint8  `query:"limit"`
+    Limit  *int    `query:"limit"`
 }
 ```
 
@@ -1506,45 +1508,64 @@ package billing
 
 import (
     "context"
+    "fmt"
 
-    iamevents "github.com/homegrown-academy/homegrown-academy/internal/iam/events"
-    mktevents "github.com/homegrown-academy/homegrown-academy/internal/mkt/events"
+    "github.com/homegrown-academy/homegrown-academy/internal/mkt"
+    "github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // ─── iam:: events ─────────────────────────────────────────────────────
+// DEFERRED: FamilyDeletionScheduled and PrimaryParentTransferred events are
+// not yet defined in iam::events.go. Handlers exist with mirror types;
+// wiring in main.go is deferred until iam:: publishes these events.
 
 type FamilyDeletionScheduledHandler struct {
-    BillingService BillingService
+    svc BillingService
 }
 
-func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event *iamevents.FamilyDeletionScheduled) error {
-    return h.BillingService.HandleFamilyDeletionScheduled(ctx, event)
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+    // DEFERRED: When iam:: defines FamilyDeletionScheduled, type-assert directly.
+    return fmt.Errorf("billing.FamilyDeletionScheduledHandler: iam event not yet wired")
 }
 
 type PrimaryParentTransferredHandler struct {
-    BillingService BillingService
+    svc BillingService
 }
 
-func (h *PrimaryParentTransferredHandler) Handle(ctx context.Context, event *iamevents.PrimaryParentTransferred) error {
-    return h.BillingService.HandlePrimaryParentTransferred(ctx, event)
+func (h *PrimaryParentTransferredHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+    // DEFERRED: When iam:: defines PrimaryParentTransferred, type-assert directly.
+    return fmt.Errorf("billing.PrimaryParentTransferredHandler: iam event not yet wired")
 }
 
 // ─── mkt:: events (Phase 2) ──────────────────────────────────────────
 
 type PurchaseCompletedHandler struct {
-    BillingService BillingService
+    svc BillingService
 }
 
-func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event *mktevents.PurchaseCompleted) error {
-    return h.BillingService.HandlePurchaseCompleted(ctx, event)
+func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+    e, ok := event.(mkt.PurchaseCompleted)
+    if !ok {
+        return fmt.Errorf("billing.PurchaseCompletedHandler: unexpected event type %T", event)
+    }
+    return h.svc.HandlePurchaseCompleted(ctx, PurchaseCompletedEvent{
+        FamilyID: e.FamilyID, PurchaseID: e.PurchaseID, ListingID: e.ListingID,
+    })
 }
 
 type PurchaseRefundedHandler struct {
-    BillingService BillingService
+    svc BillingService
 }
 
-func (h *PurchaseRefundedHandler) Handle(ctx context.Context, event *mktevents.PurchaseRefunded) error {
-    return h.BillingService.HandlePurchaseRefunded(ctx, event)
+func (h *PurchaseRefundedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+    e, ok := event.(mkt.PurchaseRefunded)
+    if !ok {
+        return fmt.Errorf("billing.PurchaseRefundedHandler: unexpected event type %T", event)
+    }
+    return h.svc.HandlePurchaseRefunded(ctx, PurchaseRefundedEvent{
+        PurchaseID: e.PurchaseID, ListingID: e.ListingID,
+        FamilyID: e.FamilyID, RefundAmountCents: e.RefundAmountCents,
+    })
 }
 ```
 
@@ -1683,7 +1704,7 @@ Each item is a testable assertion. Implementation is not complete until all asse
 
 ```
 internal/billing/
-+-- handlers.go              # 4 Phase 1 Echo route handlers (thin layer only)
++-- handler.go               # 4 Phase 1 Echo route handlers (thin layer only)
 |                            #   getSubscription, coppaVerify,
 |                            #   hyperswitchWebhook, listTransactions
 +-- service.go               # BillingServiceImpl — subscription lifecycle,
