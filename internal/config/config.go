@@ -121,6 +121,11 @@ type AppConfig struct {
 	// Public base URL for CDN-served media (e.g., "https://media.homegrown.academy").
 	ObjectStoragePublicURL string
 
+	// ─── Recommendations ─────────────────────────────────────────────
+	// HMAC secret for anonymizing family IDs in recs_anonymized_interactions.
+	// Optional — empty value disables the anonymization task (dev mode). [13-recs §14.3]
+	RecsAnonymizationSecret string
+
 	// ─── Environment ────────────────────────────────────────────────
 	// Runtime environment. Controls log format, debug features, etc.
 	Environment Environment
@@ -231,6 +236,9 @@ func LoadConfig() (*AppConfig, error) {
 	postmarkServerToken := envOrDefault("POSTMARK_SERVER_TOKEN", "")
 	unsubscribeSecret := envOrDefault("UNSUBSCRIBE_SECRET", "notify-dev-secret")
 
+	// Optional recs anonymization secret (omit to disable anonymization task)
+	recsAnonymizationSecret := envOrDefault("RECS_ANONYMIZATION_SECRET", "")
+
 	origins := strings.Split(corsOrigins, ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
@@ -262,9 +270,10 @@ func LoadConfig() (*AppConfig, error) {
 		ObjectStorageAccessKeyID:    objectStorageAccessKeyID,
 		ObjectStorageSecretAccessKey: objectStorageSecretAccessKey,
 		ObjectStoragePublicURL:      objectStoragePublicURL,
-		PostmarkServerToken:   postmarkServerToken,
-		UnsubscribeSecret:     unsubscribeSecret,
-		Environment:            env,
+		PostmarkServerToken:     postmarkServerToken,
+		UnsubscribeSecret:       unsubscribeSecret,
+		RecsAnonymizationSecret: recsAnonymizationSecret,
+		Environment:              env,
 	}, nil
 }
 

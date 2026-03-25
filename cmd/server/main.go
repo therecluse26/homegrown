@@ -38,6 +38,7 @@ import (
 	notifyadapters "github.com/homegrown-academy/homegrown-academy/internal/notify/adapters"
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
+	"github.com/homegrown-academy/homegrown-academy/internal/recs"
 	"github.com/homegrown-academy/homegrown-academy/internal/safety"
 	"github.com/homegrown-academy/homegrown-academy/internal/search"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
@@ -845,6 +846,49 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(media.UploadPublished{}), search.NewUploadPublishedHandler(searchSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), search.NewFamilyDeletionScheduledHandler(searchSvc))
 
+	// ── Step 7l: Wire recs:: domain ──────────────────────────────────────────────
+	// recs:: is the recommendations & signals domain. It records learning signals from
+	// domain events and (Phase 2) serves methodology-constrained recommendations to
+	// premium families. No external adapter — rule-based engine only. [13-recs §1]
+	recSignalRepo     := recs.NewPgSignalRepository(db)
+	recRecRepo        := recs.NewPgRecommendationRepository(db)
+	recFeedbackRepo   := recs.NewPgFeedbackRepository(db)
+	recPopularityRepo := recs.NewPgPopularityRepository(db)
+	recPrefRepo       := recs.NewPgPreferenceRepository(db)
+	recAnonRepo       := recs.NewPgAnonymizedInteractionRepository(db)
+
+	// IAM adapter for recs: bridges iam.IamService → recs.IamServiceForRecs.
+	// StudentBelongsToFamily reuses the GetStudent approach from learn::. [13-recs §16.2]
+	iamForRecs := recs.NewIamAdapter(
+		func(ctx context.Context, studentID uuid.UUID, familyID shared.FamilyID) (bool, error) {
+			scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID.UUID})
+			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
+			if err != nil {
+				return false, nil // student not found or not in family
+			}
+			return student != nil, nil
+		},
+		func(ctx context.Context, familyID shared.FamilyID) (string, error) {
+			scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID.UUID})
+			primary, _, err := iamSvc.GetFamilyMethodologyIDs(ctx, &scope)
+			return primary, err
+		},
+	)
+
+	recsSvc := recs.NewRecsService(
+		recSignalRepo, recRecRepo, recFeedbackRepo,
+		recPopularityRepo, recPrefRepo, recAnonRepo,
+		iamForRecs,
+	)
+
+	// Register recs:: event subscriptions (Phase 1 — signal recording + lifecycle)
+	eventBus.Subscribe(reflect.TypeOf(learn.ActivityLogged{}), recs.NewActivityLoggedHandler(recsSvc))
+	eventBus.Subscribe(reflect.TypeOf(learn.BookCompleted{}), recs.NewBookCompletedHandler(recsSvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), recs.NewPurchaseCompletedHandler(recsSvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.ListingPublished{}), recs.NewListingPublishedHandler(recsSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), recs.NewFamilyDeletionScheduledHandler(recsSvc))
+	eventBus.Subscribe(reflect.TypeOf(method.MethodologyConfigUpdated{}), recs.NewMethodologyConfigUpdatedHandler(recsSvc))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -867,6 +911,7 @@ func main() {
 		Billing:     billingSvc,
 		Safety:      safetySvc,
 		Search:      searchSvc,
+		Recs:        recsSvc,
 		PubSub:      pubsub,
 	}
 
@@ -883,6 +928,11 @@ func main() {
 	media.RegisterMediaWorkers(worker, mediaUploadRepo, mediaProcJobRepo, mediaTranscodeRepo, mediaStorage, mediaSafety, eventBus, jobs)
 	notify.RegisterTaskHandlers(worker, emailAdapter)
 	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, safety.NoopThornAdapter{}, jobs)
+	recs.RegisterTaskHandlers(worker, db,
+		recSignalRepo, recRecRepo, recFeedbackRepo,
+		recPopularityRepo, recPrefRepo, recAnonRepo,
+		cfg.RecsAnonymizationSecret,
+	)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
 			slog.Error("job worker error", "error", startErr)

@@ -17,6 +17,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/homegrown-academy/homegrown-academy/internal/notify"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
+	"github.com/homegrown-academy/homegrown-academy/internal/recs"
 	"github.com/homegrown-academy/homegrown-academy/internal/safety"
 	"github.com/homegrown-academy/homegrown-academy/internal/search"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
@@ -53,6 +54,7 @@ type AppState struct {
 	Billing     billing.BillingService
 	Safety      safety.SafetyService
 	Search      search.SearchService
+	Recs        recs.RecsService
 	PubSub      shared.PubSub // needed by social handler for WebSocket
 }
 
@@ -172,6 +174,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Search != nil {
 		search.NewHandler(state.Search, state).Register(auth)
+	}
+	if state.Recs != nil {
+		recs.NewHandler(state.Recs).Register(auth)
 	}
 
 	return e

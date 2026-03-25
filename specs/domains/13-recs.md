@@ -141,8 +141,9 @@ CREATE TABLE recs_signals (
                     )),
     -- Denormalized methodology snapshot at signal time. If the family changes
     -- methodology later, old signals retain the old methodology (correct: the
-    -- signal reflects context at time of activity). [method:: direct DB read]
-    methodology_id  UUID NOT NULL,
+    -- signal reflects context at time of activity). Resolved by service via
+    -- IamServiceForRecs.GetFamilyMethodologySlug (consumer-defined interface).
+    methodology_slug TEXT NOT NULL DEFAULT '',
     -- Signal-specific payload. Schema varies by signal_type:
     --   activity_logged:    { subject_tags: string[], duration_minutes: int }
     --   book_completed:     { title: string, reading_item_id: uuid }
@@ -265,7 +266,7 @@ methodology. Powers the "Popular with [Methodology] families" signal. Computed b
 CREATE TABLE recs_popularity_scores (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
     listing_id      UUID NOT NULL,
-    methodology_id  UUID NOT NULL,
+    methodology_slug TEXT NOT NULL DEFAULT '',
     -- Rolling window start (e.g., 90 days ago from computation time)
     period_start    DATE NOT NULL,
     period_end      DATE NOT NULL,
@@ -278,11 +279,11 @@ CREATE TABLE recs_popularity_scores (
 
 -- Unique: one score per listing per methodology per period
 CREATE UNIQUE INDEX idx_recs_popularity_listing_method_period
-    ON recs_popularity_scores (listing_id, methodology_id, period_start);
+    ON recs_popularity_scores (listing_id, methodology_slug, period_start);
 
 -- Query: "top listings for this methodology"
 CREATE INDEX idx_recs_popularity_method_score
-    ON recs_popularity_scores (methodology_id, popularity_score DESC);
+    ON recs_popularity_scores (methodology_slug, popularity_score DESC);
 
 -- Purge: remove old period windows
 CREATE INDEX idx_recs_popularity_period
@@ -559,8 +560,8 @@ type RecsService interface {
     DismissRecommendation(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) error
 
     // BlockRecommendation blocks a recommendation's source entity (marks as blocked, creates feedback
-    // with blocked_entity_id for future suppression).
-    BlockRecommendation(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) error
+    // with blocked_entity_id for future suppression). Returns the blocked entity's UUID.
+    BlockRecommendation(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) (uuid.UUID, error)
 
     // UndoFeedback undoes a dismiss or block action.
     UndoFeedback(ctx context.Context, scope *types.FamilyScope, recommendationID uuid.UUID) error
@@ -592,8 +593,11 @@ type RecsService interface {
 **Implementation**: `RecsServiceImpl` in `internal/recs/service.go` with:
 - Injected repositories: `SignalRepository`, `RecommendationRepository`, `FeedbackRepository`,
   `PopularityRepository`, `PreferenceRepository`, `AnonymizedInteractionRepository`
-- Direct DB connection (via `*gorm.DB`) for cross-domain reads from `iam_families`,
-  `iam_students`, `method_definitions`, `mkt_listings`, `soc_groups`
+- Consumer-defined interface `IamServiceForRecs` for cross-domain calls (methodology slug
+  resolution, student-family membership checks) — wired via function-based adapter in `main.go`
+- Background tasks receive `*gorm.DB` directly for cross-family batch reads from `iam_families`,
+  `iam_students`, `method_definitions`, `mkt_listings`, `soc_groups` (these are system-level
+  operations that cannot use `FamilyScope`)
 
 ---
 
@@ -625,6 +629,9 @@ type SignalRepository interface {
 type RecommendationRepository interface {
     // CreateBatch creates a batch of recommendations (daily task output).
     CreateBatch(ctx context.Context, recommendations []NewRecommendation) (int64, error)
+
+    // FindByID finds a recommendation by ID within the family scope.
+    FindByID(ctx context.Context, scope *types.FamilyScope, id uuid.UUID) (*Recommendation, error)
 
     // FindActiveByFamily finds active recommendations for a family, with optional type filter.
     FindActiveByFamily(ctx context.Context, scope *types.FamilyScope, recommendationType *string, cursor *string, limit int64) ([]Recommendation, *string, error)
@@ -663,8 +670,8 @@ type PopularityRepository interface {
     // Upsert upserts a popularity score for a listing-methodology-period combination.
     Upsert(ctx context.Context, score NewPopularityScore) error
 
-    // FindByMethodology finds top listings by popularity for a methodology.
-    FindByMethodology(ctx context.Context, methodologyID uuid.UUID, limit int64) ([]PopularityScore, error)
+    // FindByMethodology finds top listings by popularity for a methodology slug.
+    FindByMethodology(ctx context.Context, methodologySlug string, limit int64) ([]PopularityScore, error)
 
     // DeleteStale deletes popularity scores for expired periods.
     DeleteStale(ctx context.Context, before time.Time) (int64, error)
@@ -778,13 +785,14 @@ type RecommendationPreferencesResponse struct {
 
 ```go
 // RecordSignalCommand is a command to record a signal from a domain event.
+// MethodologySlug may be empty — the service resolves it from IAM (non-fatal fallback).
 type RecordSignalCommand struct {
-    FamilyID      types.FamilyID
-    StudentID     *uuid.UUID
-    SignalType    SignalType
-    MethodologyID uuid.UUID
-    Payload       map[string]any
-    SignalDate    time.Time
+    FamilyID        types.FamilyID
+    StudentID       *uuid.UUID
+    SignalType      SignalType
+    MethodologySlug string
+    Payload         map[string]any
+    SignalDate      time.Time
 }
 
 // RegisterListingCommand is a command to register a listing in the popularity catalog.
@@ -897,20 +905,19 @@ the event and construct a `RecordSignalCommand`.
 
 ### §9.3 Methodology Resolution
 
-When recording a signal, the handler resolves the family's `primary_methodology_id` from
-`iam_families` (direct DB read) and denormalizes it onto the signal record:
+Event handlers construct `RecordSignalCommand` with `MethodologySlug: ""` (empty). The
+**service** resolves the slug via `IamServiceForRecs.GetFamilyMethodologySlug` before
+persisting. Resolution failure is **non-fatal** — the signal is still recorded with an
+empty slug rather than being dropped, because signal data has value even without methodology
+context.
 
 ```go
-// In event handler (simplified)
-family, err := db.First(&IamFamily{}, familyID)
-if err != nil {
-    return fmt.Errorf("looking up family: %w", err)
-}
+// In event handler (simplified — methodology resolved by service, not handler)
 command := RecordSignalCommand{
-    FamilyID:      event.FamilyID,
-    StudentID:     &event.StudentID,
-    SignalType:    SignalActivityLogged,
-    MethodologyID: family.PrimaryMethodologyID,
+    FamilyID:        event.FamilyID,
+    StudentID:       &event.StudentID,
+    SignalType:      SignalActivityLogged,
+    MethodologySlug: "",  // Resolved by service via IamServiceForRecs
     Payload: map[string]any{
         "subject_tags":     event.SubjectTags,
         "duration_minutes": event.DurationMinutes,
@@ -918,11 +925,26 @@ command := RecordSignalCommand{
     SignalDate: event.ActivityDate,
 }
 return service.RecordSignal(ctx, command)
+
+// In RecordSignal service method (simplified)
+if command.MethodologySlug == "" {
+    slug, err := s.iamSvc.GetFamilyMethodologySlug(ctx, command.FamilyID)
+    if err != nil {
+        slog.Error("recs: resolve methodology slug", "error", err)
+        // Non-fatal — record with empty slug
+    } else {
+        command.MethodologySlug = slug
+    }
+}
 ```
 
 **Why snapshot methodology?** If a family switches methodologies, old signals retain the
 methodology context in which they were generated. This is correct — an activity done under
 Charlotte Mason methodology should not retroactively become a Classical methodology signal.
+
+**Why resolve in the service, not the handler?** Keeps event handlers thin (no cross-domain
+calls). The service already has `IamServiceForRecs` injected — reusing it for methodology
+resolution avoids wiring another dependency into every handler.
 
 ### §9.4 ListingPublished Handling
 
@@ -962,14 +984,16 @@ the recommendation is an exploration slot (§10.7). `[S§10.1]`
 
 ```
 Candidate passes if:
-  candidate.methodology_ids INTERSECT family.active_methodology_ids != empty
+  candidate.methodology_slugs INTERSECT family.active_methodology_slugs != empty
   OR candidate is in an exploration slot (§10.7)
 ```
 
-**Active methodology IDs** = the family's `primary_methodology_id` plus any
-`secondary_methodology_ids` from `iam_families`. Resolved via direct DB read.
+**Active methodology slugs** = the family's `primary_methodology_slug` plus any
+`secondary_methodology_slugs` from `iam_families`. Resolved via direct DB read in
+background tasks.
 
-The algorithm uses `methodology_id` (UUID), never methodology name strings. There is no
+The algorithm uses `methodology_slug` (text), not UUIDs — matching the codebase convention
+where `method_definitions.slug TEXT PRIMARY KEY` is the canonical identifier. There is no
 branching on methodology name anywhere in the algorithm. `[CODING §6.2]`
 
 ### §10.2 Recommendation Types and Candidate Selection
@@ -1047,7 +1071,7 @@ relevant content:
 | Montessori | First Plane → Second Plane (~age 6), Second Plane → Third Plane (~age 12) |
 | Waldorf | Early Childhood → Grade School (~age 7), Grade School → High School (~age 14) |
 
-**Implementation**: For each student, compare `iam_students.date_of_birth` against the
+**Implementation**: For each student, compare `iam_students.birth_year` (int16) against the
 methodology's transition ages from `method_definitions`. If a student is within 6 months
 of a transition, generate `age_transition` recommendations for content tagged with the
 upcoming stage.
@@ -1085,7 +1109,7 @@ affiliation, or methodology preference beyond the user's own selections. `[S§10
    marketplace browse filters only (owned by `mkt::`).
 
 2. **Per-methodology popularity isolation**: Popularity scores are computed per-methodology
-   (`recs_popularity_scores.methodology_id`). A listing's popularity among Charlotte Mason
+   (`recs_popularity_scores.methodology_slug`). A listing's popularity among Charlotte Mason
    families does not influence its score for Classical families. This prevents majority
    methodology preferences from biasing minority methodology recommendations.
 
@@ -1160,9 +1184,9 @@ task is re-run on the same day, duplicate inserts are silently skipped (ON CONFL
 **Process**:
 1. For each methodology in `method_definitions`:
    a. Count purchases per listing in the last 90 days (from `recs_signals` where
-      `signal_type = 'purchase_completed'` and `methodology_id = ?`)
+      `signal_type = 'purchase_completed'` and `methodology_slug = ?`)
    b. Apply recency decay: `SUM(e^(-0.03 * days_since_purchase))`
-   c. Upsert into `recs_popularity_scores` (listing_id, methodology_id, period_start)
+   c. Upsert into `recs_popularity_scores` (listing_id, methodology_slug, period_start)
 2. Delete popularity scores where `period_end < now() - interval '90 days'`
 3. Log total scores computed, total methodologies processed, duration
 
@@ -1182,8 +1206,8 @@ task is re-run on the same day, duplicate inserts are silently skipped (ON CONFL
 1. Query `recs_signals` from the last 7 days
 2. For each signal, produce an anonymized record:
    a. `anonymous_id` = HMAC-SHA256(signal.family_id, server_secret)
-   b. `methodology_slug` = lookup from `method_definitions` by signal.methodology_id
-   c. `age_band` = compute from `iam_students.date_of_birth` (coarsen to 3-year range)
+   b. `methodology_slug` = directly from signal (already denormalized at record time)
+   c. `age_band` = compute from `iam_students.birth_year` (int16, coarsen to 3-year range)
    d. `subject_category` = first tag from signal payload (broad category only)
    e. `duration_minutes` = round to nearest 5 minutes
 3. Batch-insert into `recs_anonymized_interactions`
@@ -1229,7 +1253,7 @@ func (h *ActivityLoggedHandler) Handle(ctx context.Context, event *learnevents.A
         FamilyID:      event.FamilyID,
         StudentID:     &event.StudentID,
         SignalType:    SignalActivityLogged,
-        MethodologyID: uuid.Nil, // resolved by service from iam_families
+        MethodologySlug: "", // resolved by service from iam_families
         Payload: map[string]any{
             "subject_tags":     event.SubjectTags,
             "duration_minutes": event.DurationMinutes,
@@ -1249,7 +1273,7 @@ func (h *BookCompletedHandler) Handle(ctx context.Context, event *learnevents.Bo
         FamilyID:      event.FamilyID,
         StudentID:     &event.StudentID,
         SignalType:    SignalBookCompleted,
-        MethodologyID: uuid.Nil, // resolved by service from iam_families
+        MethodologySlug: "", // resolved by service from iam_families
         Payload: map[string]any{
             "title":           event.ReadingItemTitle,
             "reading_item_id": event.ReadingItemID,
@@ -1269,7 +1293,7 @@ func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event *mktevents.
         FamilyID:      event.FamilyID,
         StudentID:     nil, // purchases are family-level, not student-specific
         SignalType:    SignalPurchaseCompleted,
-        MethodologyID: uuid.Nil, // resolved by service from iam_families
+        MethodologySlug: "", // resolved by service from iam_families
         Payload: map[string]any{
             "listing_id":   event.ListingID,
             "content_type": event.ContentMetadata.ContentType,
@@ -1408,8 +1432,8 @@ capabilities.
 |-------|--------|---------------|
 | `anonymous_id` | `HMAC-SHA256(family_id, server_secret)` | One-way hash — cannot be reversed |
 | `interaction_type` | `recs_signals.signal_type` | Unchanged (non-PII) |
-| `methodology_slug` | `method_definitions.slug` via `signal.methodology_id` | Unchanged (non-PII) |
-| `age_band` | `iam_students.date_of_birth` | Coarsened to 3-year ranges: `4-6`, `7-9`, `10-12`, `13-15`, `16-18` |
+| `methodology_slug` | `signal.methodology_slug` (already denormalized at record time) | Unchanged (non-PII) |
+| `age_band` | `iam_students.birth_year` (int16) | Coarsened to 3-year ranges: `4-6`, `7-9`, `10-12`, `13-15`, `16-18` |
 | `subject_category` | `signal.payload.subject_tags[0]` | Broad category only (e.g., "math", "science"), not specific tags |
 | `duration_minutes` | `signal.payload.duration_minutes` | Rounded to nearest 5 minutes |
 | `interaction_date` | `signal.signal_date` | Unchanged (date only, no timestamp) |
@@ -1520,7 +1544,7 @@ Recommendations are consumed by the frontend directly, not by other backend doma
 | `FamilyScope` | `iam::` middleware | Family-scoped data access `[00-core §8]` |
 | `RequirePremium` | `iam::` extractor | Premium tier gating `[00-core §13.3]` |
 | `iam_families` table | `iam::` (direct DB read) | Family methodology IDs, subscription tier |
-| `iam_students` table | `iam::` (direct DB read) | Student age (date_of_birth) for age-band computation |
+| `iam_students` table | `iam::` (direct DB read) | Student age (`birth_year` int16) for age-band computation |
 | `method_definitions` table | `method::` (direct DB read) | Methodology config: expected subjects, transition ages, slugs |
 | `mkt_listings` table | `mkt::` (direct DB read) | Listing metadata: subject tags, content type, methodology tags |
 | `soc_groups` table | `social::` (direct DB read) | Group metadata: methodology tags, visibility |
@@ -1539,10 +1563,10 @@ the recommendation algorithm and event handlers. recs:: MUST NOT write to these 
 
 | Table | Owner | What recs:: Reads | Used By |
 |-------|-------|-------------------|---------|
-| `iam_families` | `iam::` | `primary_methodology_id`, `secondary_methodology_ids`, `subscription_tier` | Signal recording (methodology snapshot), algorithm (methodology filter) |
-| `iam_students` | `iam::` | `date_of_birth`, `family_id` | Age transition detection, age-band anonymization |
+| `iam_families` | `iam::` | `primary_methodology_slug`, `secondary_methodology_slugs`, `subscription_tier` | Signal recording (methodology snapshot via IamServiceForRecs), algorithm (methodology filter) |
+| `iam_students` | `iam::` | `birth_year` (int16), `family_id` | Age transition detection, age-band anonymization |
 | `method_definitions` | `method::` | `slug`, `expected_subjects`, `transition_ages`, `config` | Algorithm: gap detection, transition detection, seasonal mapping |
-| `mkt_listings` | `mkt::` | `id`, `subject_tags`, `content_type`, `methodology_ids`, `title`, `status` | Algorithm: marketplace content candidates |
+| `mkt_listings` | `mkt::` | `id`, `subject_tags`, `content_type`, `methodology_slugs`, `title`, `status` | Algorithm: marketplace content candidates |
 | `soc_groups` | `social::` | `id`, `methodology_tags`, `visibility`, `name` | Algorithm: community group candidates |
 
 ### §16.4 Event Struct Cross-References
@@ -1623,7 +1647,7 @@ each phase.
 3. `PurchaseCompleted` event creates a `recs_signals` row with `signal_type = 'purchase_completed'`
 4. `ListingPublished` event does NOT create a `recs_signals` row
 5. `ListingPublished` event updates `recs_popularity_scores` catalog
-6. Signal records include denormalized `methodology_id` from `iam_families`
+6. Signal records include denormalized `methodology_slug` resolved via `IamServiceForRecs.GetFamilyMethodologySlug`
 7. `FamilyDeletionScheduled` event deletes all `recs_signals`, `recs_recommendations`, `recs_recommendation_feedback`, and `recs_preferences` for the family
 8. `MethodologyConfigUpdated` event invalidates any cached methodology data
 

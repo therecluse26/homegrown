@@ -610,6 +610,59 @@ definitions:
     - StepChildren
     - StepMethodology
     - StepRoadmapReview
+  recs.RecommendationListResponse:
+    properties:
+      next_cursor:
+        type: string
+      recommendations:
+        items:
+          $ref: '#/definitions/recs.RecommendationResponse'
+        type: array
+    type: object
+  recs.RecommendationPreferencesResponse:
+    properties:
+      enabled_types:
+        items:
+          type: string
+        type: array
+      exploration_frequency:
+        type: string
+    type: object
+  recs.RecommendationResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      is_suggestion:
+        description: always true [S§10.4]
+        type: boolean
+      recommendation_type:
+        type: string
+      score:
+        type: number
+      source_label:
+        type: string
+      source_signal:
+        type: string
+      student_id:
+        type: string
+      target_entity_id:
+        type: string
+      target_entity_label:
+        type: string
+    type: object
+  recs.UpdatePreferencesCommand:
+    properties:
+      enabled_types:
+        items:
+          type: string
+        type: array
+      exploration_frequency:
+        type: string
+    type: object
   search.ActivitySearchResult:
     properties:
       activity_date:
@@ -1685,6 +1738,256 @@ paths:
       summary: Skip the onboarding wizard
       tags:
       - onboarding
+  /recommendations:
+    get:
+      parameters:
+      - description: Filter by type
+        enum:
+        - marketplace_content
+        - activity_idea
+        - reading_suggestion
+        - community_group
+        in: query
+        name: type
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page (default 20, max 50)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/recs.RecommendationListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get family recommendations
+      tags:
+      - recommendations
+  /recommendations/{id}/block:
+    post:
+      parameters:
+      - description: Recommendation UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Block a recommendation's source entity
+      tags:
+      - recommendations
+  /recommendations/{id}/dismiss:
+    post:
+      parameters:
+      - description: Recommendation UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Dismiss a recommendation
+      tags:
+      - recommendations
+  /recommendations/{id}/feedback:
+    delete:
+      parameters:
+      - description: Recommendation UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Undo a dismiss or block action
+      tags:
+      - recommendations
+  /recommendations/preferences:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/recs.RecommendationPreferencesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get family recommendation preferences
+      tags:
+      - recommendations
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Partial preferences update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/recs.UpdatePreferencesCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/recs.RecommendationPreferencesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update family recommendation preferences
+      tags:
+      - recommendations
+  /recommendations/students/{student_id}:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Filter by type
+        in: query
+        name: type
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page (default 20, max 50)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/recs.RecommendationListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get recommendations for a specific student
+      tags:
+      - recommendations
   /search:
     get:
       parameters:
