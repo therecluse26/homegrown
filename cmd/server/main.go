@@ -39,6 +39,7 @@ import (
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/safety"
+	"github.com/homegrown-academy/homegrown-academy/internal/search"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
 	"gorm.io/gorm"
@@ -826,6 +827,24 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(mkt.ReviewCreated{}), safety.NewReviewCreatedHandler(safetySvc, safetyFlagRepo))
 	eventBus.Subscribe(reflect.TypeOf(social.MessageReported{}), safety.NewMessageReportedHandler(safetyFlagRepo))
 
+	// ── Step 7k: Wire search:: domain ──────────────────────────────────────────
+	// search:: is a read-only cross-cutting query system. It reads search_vector
+	// columns on domain tables via PostgreSQL FTS. No cross-domain adapters needed —
+	// privacy enforcement is pure SQL (JOINs on soc_friendships, soc_blocks, etc.). [12-search §1]
+	searchSocialRepo := search.NewPgSocialSearchRepository(db)
+	searchMktRepo := search.NewPgMarketplaceSearchRepository(db)
+	searchLearnRepo := search.NewPgLearningSearchRepository(db)
+	searchAutoRepo := search.NewPgAutocompleteRepository(db)
+
+	searchSvc := search.NewSearchService(searchSocialRepo, searchMktRepo, searchLearnRepo, searchAutoRepo)
+
+	// Register search:: event subscriptions (Phase 1 — all no-ops)
+	eventBus.Subscribe(reflect.TypeOf(social.PostCreated{}), search.NewPostCreatedHandler(searchSvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.ListingPublished{}), search.NewListingPublishedHandler(searchSvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.ListingArchived{}), search.NewListingArchivedHandler(searchSvc))
+	eventBus.Subscribe(reflect.TypeOf(media.UploadPublished{}), search.NewUploadPublishedHandler(searchSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), search.NewFamilyDeletionScheduledHandler(searchSvc))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -847,6 +866,7 @@ func main() {
 		Notify:      notifySvc,
 		Billing:     billingSvc,
 		Safety:      safetySvc,
+		Search:      searchSvc,
 		PubSub:      pubsub,
 	}
 

@@ -356,6 +356,11 @@ type SocialSearchRepository interface {
     // - 'group': visible only to members of the associated group
     // Excludes: events by blocked families, cancelled events.
     SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
+
+    // SearchPosts searches posts by content.
+    // Privacy: friends-only posts visible to friends, group posts visible to group members.
+    // Block exclusion: posts by blocked families are excluded bidirectionally.
+    SearchPosts(ctx context.Context, searcherFamilyID uuid.UUID, query string, limit int, cursor *string) ([]SocialSearchResult, error)
 }
 ```
 
@@ -1880,29 +1885,22 @@ domain depends on search results for correctness.
 
 ## §20 Module Structure
 
+Flat layout matching all other domains (no subdirectories). `[CODING §2.1]`
+
 ```
 internal/search/
-├── search.go              # Package root — re-exports public types
-├── handlers.go            # Echo handlers (thin: binding → service → response)
-├── service.go             # SearchServiceImpl (CQRS query + command dispatch)
-├── models.go              # Request/response DTOs (SearchParams, SearchResponse, etc.)
-│                          # GORM models for search_index_state (Phase 2)
-├── errors.go              # SearchError types and sentinel errors
-├── repository/
-│   ├── social.go          # SocialSearchRepository impl (PostgreSQL FTS)
-│   ├── marketplace.go     # MarketplaceSearchRepository impl (PostgreSQL FTS)
-│   ├── learning.go        # LearningSearchRepository impl (PostgreSQL FTS)
-│   └── autocomplete.go    # AutocompleteRepository impl (pg_trgm + ILIKE)
-├── events/
-│   ├── post_created.go    # PostCreatedHandler (Phase 1 no-op)
-│   ├── listing_published.go  # ListingPublishedHandler (Phase 1 no-op)
-│   ├── listing_archived.go   # ListingArchivedHandler (Phase 1 no-op)
-│   ├── upload_published.go   # UploadPublishedHandler (Phase 1 no-op)
-│   └── family_deletion.go    # FamilyDeletionScheduledHandler (Phase 1 no-op)
-└── adapters/
-    └── typesense.go       # TypesenseAdapter impl (Phase 2)
+├── ports.go            # SearchService interface + 4 repository interfaces
+├── errors.go           # Sentinel errors (ErrQueryTooShort, etc.) + SearchError wrapper
+├── models.go           # All DTOs, enums, request/response types
+├── service.go          # SearchServiceImpl (validation, scope dispatch, response assembly)
+├── repository.go       # Pg*Repository impls (PostgreSQL FTS SQL for all 4 repos)
+├── handler.go          # Echo handlers: GET /v1/search, GET /v1/search/autocomplete
+├── event_handlers.go   # 5 event handler structs (Phase 1 no-ops, Phase 2 index triggers)
+├── service_test.go     # Service unit tests (38 tests)
+├── handler_test.go     # Handler unit tests (8 tests)
+└── mock_test.go        # Function-pointer stubs for repos + service
 ```
 
 > **Note on GORM models**: Search has no owned GORM models in Phase 1 (no owned tables active).
 > The `search_index_state` GORM model will be added in `models.go` in Phase 2 when the table
-> becomes active.
+> becomes active. The migration (`20260325000019_create_search_tables.sql`) is already in place.

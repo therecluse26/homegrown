@@ -1,6 +1,10 @@
 package iam
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Domain events published by the IAM domain. [CODING §8.4, §13.3]
 // All events implement shared.DomainEvent.
@@ -47,3 +51,19 @@ type CoppaConsentGranted struct {
 }
 
 func (CoppaConsentGranted) EventName() string { return "iam.CoppaConsentGranted" }
+
+// FamilyDeletionScheduled is published when a family requests account deletion. [§10, §4.3]
+// The family's data will be purged after DeleteAfter.
+// Subscribers:
+//   - social:: removes social profile and content
+//   - search:: removes family data from all search indexes
+//   - billing:: cancels subscriptions
+//   - learn:: removes learning data
+//   - mkt:: removes marketplace data
+//   - notify:: removes notification preferences and history
+type FamilyDeletionScheduled struct {
+	FamilyID    uuid.UUID
+	DeleteAfter time.Time
+}
+
+func (FamilyDeletionScheduled) EventName() string { return "iam.FamilyDeletionScheduled" }
