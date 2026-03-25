@@ -38,6 +38,7 @@ import (
 	notifyadapters "github.com/homegrown-academy/homegrown-academy/internal/notify/adapters"
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
+	"github.com/homegrown-academy/homegrown-academy/internal/safety"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
 	"gorm.io/gorm"
@@ -793,6 +794,38 @@ func main() {
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCreated{}), notify.NewSubscriptionCreatedHandler(notifySvc))
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), notify.NewSubscriptionCancelledHandler(notifySvc))
 
+	// ── Step 7j: Wire safety:: domain ──────────────────────────────────────────
+	// safety:: is the trust & safety domain — content moderation, CSAM detection,
+	// account enforcement, user reporting, appeals, and bot detection. [11-safety §1]
+	safetyReportRepo := safety.NewPgReportRepository(db)
+	safetyFlagRepo := safety.NewPgContentFlagRepository(db)
+	safetyActionRepo := safety.NewPgModActionRepository(db)
+	safetyAccountRepo := safety.NewPgAccountStatusRepository(db)
+	safetyAppealRepo := safety.NewPgAppealRepository(db)
+	safetyNcmecRepo := safety.NewPgNcmecReportRepository(db)
+	safetyBotRepo := safety.NewPgBotSignalRepository(db)
+
+	// IAM adapter for safety: bridges iam:: → safety::IamServiceForSafety
+	var iamForSafety safety.IamServiceForSafety = safety.NoopIamServiceForSafety{}
+	// FUTURE: wire real IamServiceForSafety when iam:: exposes RevokeSessions
+
+	safetyCfg := safety.DefaultSafetyConfig()
+	textScanner := safety.NewTextScanner(safetyCfg)
+
+	safetySvc := safety.NewSafetyService(
+		safetyReportRepo, safetyFlagRepo, safetyActionRepo, safetyAccountRepo,
+		safetyAppealRepo, safetyNcmecRepo, safetyBotRepo,
+		iamForSafety, cache, eventBus, jobs, textScanner, safetyCfg,
+	)
+
+	// Register safety:: event subscriptions
+	eventBus.Subscribe(reflect.TypeOf(media.UploadQuarantined{}), safety.NewUploadQuarantinedHandler(safetySvc))
+	eventBus.Subscribe(reflect.TypeOf(media.UploadRejected{}), safety.NewUploadRejectedHandler(safetyFlagRepo, eventBus))
+	eventBus.Subscribe(reflect.TypeOf(media.UploadFlagged{}), safety.NewUploadFlaggedHandler(safetyFlagRepo))
+	eventBus.Subscribe(reflect.TypeOf(social.PostCreated{}), safety.NewPostCreatedHandler(safetySvc, safetyFlagRepo))
+	eventBus.Subscribe(reflect.TypeOf(mkt.ReviewCreated{}), safety.NewReviewCreatedHandler(safetySvc, safetyFlagRepo))
+	eventBus.Subscribe(reflect.TypeOf(social.MessageReported{}), safety.NewMessageReportedHandler(safetyFlagRepo))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -813,6 +846,7 @@ func main() {
 		Media:       mediaSvc,
 		Notify:      notifySvc,
 		Billing:     billingSvc,
+		Safety:      safetySvc,
 		PubSub:      pubsub,
 	}
 
@@ -828,6 +862,7 @@ func main() {
 	social.RegisterFeedWorkers(worker, feedStore, socFriendshipRepo, socPostRepo)
 	media.RegisterMediaWorkers(worker, mediaUploadRepo, mediaProcJobRepo, mediaTranscodeRepo, mediaStorage, mediaSafety, eventBus, jobs)
 	notify.RegisterTaskHandlers(worker, emailAdapter)
+	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, safety.NoopThornAdapter{}, jobs)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
 			slog.Error("job worker error", "error", startErr)

@@ -17,6 +17,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/homegrown-academy/homegrown-academy/internal/notify"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
+	"github.com/homegrown-academy/homegrown-academy/internal/safety"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
 	"github.com/labstack/echo/v4"
@@ -49,6 +50,7 @@ type AppState struct {
 	Media       media.MediaService
 	Notify      notify.NotificationService
 	Billing     billing.BillingService
+	Safety      safety.SafetyService
 	PubSub      shared.PubSub // needed by social handler for WebSocket
 }
 
@@ -161,6 +163,10 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Billing != nil {
 		billing.NewHandler(state.Billing, state.Config.BillingWebhookSecret).Register(auth, hooks)
+	}
+	if state.Safety != nil {
+		admin := auth.Group("/admin")
+		safety.NewHandler(state.Safety).Register(auth, admin)
 	}
 
 	return e
