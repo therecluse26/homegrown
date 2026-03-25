@@ -105,7 +105,45 @@ incomplete, fix the spec first, then continue coding.
 
 ## Development Commands
 
-> To be filled in as the project scaffolds. Check `Makefile` or `justfile` at project root.
+| Command | Purpose |
+|---------|---------|
+| `make dev` | Start backend (air) + frontend (Vite) together |
+| `make dev-api` | Start only the Go backend with hot-reload |
+| `make dev-web` | Start only the Vite frontend dev server |
+| `make check` | Run all quality gates (lint + test + type-check) |
+| `make lint` | Run `golangci-lint` (zero warnings required) |
+| `make test` | Run `go test ./...` |
+| `make type-check` | Run TypeScript type checker in `frontend/` |
+| `make migrate` | Run pending database migrations (goose) |
+| `make db-reset` | Drop + recreate + migrate the database |
+| `make openapi` | Regenerate OpenAPI spec from Go swag annotations |
+| `make generate-types` | Regenerate TypeScript types from OpenAPI spec |
+| `make full-generate` | Run both `openapi` + `generate-types` in sequence |
+| `make install-tools` | Install required build tools (swag, lefthook) |
+| `make install-hooks` | Install lefthook git hooks (one-shot setup) |
+| `make audit` | Run `govulncheck` vulnerability check |
+
+---
+
+## Code Generation Protocol
+
+The project generates TypeScript API types from Go source via a three-stage pipeline:
+
+1. `make openapi` — runs `swag init` to produce `openapi/swagger.json` from Go annotations
+2. `make generate-types` — converts swagger → OpenAPI 3 → `frontend/src/api/generated/schema.ts`
+3. `make full-generate` — runs both steps in sequence (**use this by default**)
+
+**When to regenerate:**
+
+- **After changing any Go handler, request/response type, or swag annotation** — run
+  `make full-generate` and stage the generated output alongside your Go changes.
+- **Before starting any frontend feature work** — run `make full-generate` to ensure
+  `schema.ts` reflects the latest backend state. Types may have changed in a prior session.
+- **The lefthook pre-commit hook runs `make full-generate` automatically** when `.go` files
+  are staged, but you should still regenerate proactively during development to catch type
+  errors early.
+
+**Never hand-edit** `frontend/src/api/generated/schema.ts` — it will be overwritten.
 
 ---
 

@@ -52,6 +52,65 @@ These apply to **every** phase and are not listed per-item:
 
 ---
 
+## API Type Generation & Consumption
+
+### Generation Pipeline
+
+Before starting **any phase** that consumes API data, run:
+
+```bash
+make full-generate
+```
+
+This regenerates `frontend/src/api/generated/schema.ts` from Go source. The pipeline:
+`swag init` → `openapi/swagger.json` → `swagger2openapi` → `openapi/openapi3.json` →
+`openapi-typescript` → `schema.ts`.
+
+**Always run this first** — even if you think types are current. Backend changes from
+prior sessions may not be reflected yet.
+
+### Type Consumption Pattern
+
+The generated file exports two key interfaces: `paths` (route definitions) and
+`components` (schemas). All API types are accessed via:
+
+```typescript
+import type { components } from "@/api/generated/schema";
+
+// Create a local type alias for ergonomics
+type CurrentUser = components["schemas"]["iam.CurrentUserResponse"];
+type Student     = components["schemas"]["iam.StudentResponse"];
+type ErrorResp   = components["schemas"]["shared.ErrorResponse"];
+```
+
+Schema names follow the Go package-qualified convention: `{package}.{TypeName}`.
+
+### Hook Pattern
+
+Every API call goes through `apiClient<T>` with the generated type as the generic:
+
+```typescript
+import { apiClient } from "@/api/client";
+import type { components } from "@/api/generated/schema";
+
+type FamilyProfile = components["schemas"]["iam.FamilyProfileResponse"];
+
+export function useFamilyProfile() {
+  return useQuery({
+    queryKey: ["family", "profile"],
+    queryFn: () => apiClient<FamilyProfile>("/v1/families/profile"),
+  });
+}
+```
+
+**Rules** (from CODING_STANDARDS §3.1, §3.4, §6.2):
+- NEVER hand-write API request/response types — use generated types only
+- NEVER import `fetch`/`axios` in hooks or components — use `apiClient`
+- NEVER hand-edit files in `src/api/generated/`
+- Create type aliases at the top of hook files for readability
+
+---
+
 ## Phase 1: CSS Infrastructure & Tailwind v4 Wiring
 
 **Goal**: Get Tailwind v4 running with the Vite plugin so that token-based utility
@@ -531,7 +590,7 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### API Schema Prerequisite
 
-- [ ] Run `npm run generate-types` to pull in notification + billing + social endpoints (they exist in Go backend but are not yet in `schema.ts`)
+- [ ] Run `make full-generate` to pull in notification + billing + social endpoints (they exist in Go backend but are not yet in `schema.ts`)
 
 ### Verification
 
@@ -558,7 +617,7 @@ and family management from prior phases.
 
 ### Prerequisites
 
-- [ ] Run `npm run generate-types` if not already done — learning endpoints must be in `schema.ts`
+- [ ] Run `make full-generate` if not already done — learning endpoints must be in `schema.ts`
 
 ### Learning Hooks (`hooks/`)
 
@@ -688,7 +747,7 @@ from Phases 1–7 but are independent of Phase 8 (learning).
 
 ### Prerequisites
 
-- [ ] Run `npm run generate-types` — social, marketplace, and search endpoints must be in `schema.ts`
+- [ ] Run `make full-generate` — social, marketplace, and search endpoints must be in `schema.ts`
 
 ### WebSocket Infrastructure
 
@@ -935,5 +994,5 @@ Types currently in `schema.ts` (domains 01-04):
 
 Before starting any phase that consumes API types beyond domains 01-04, run:
 ```bash
-cd frontend && npm run generate-types
+make full-generate
 ```

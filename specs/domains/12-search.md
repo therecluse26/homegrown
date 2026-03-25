@@ -97,17 +97,9 @@ Listed here for reference only — search does not create or modify these.
 | `learn_journal_entries` | `06-learn.md §3.2` | `GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') \|\| ' ' \|\| coalesce(content, ''))) STORED` | `idx_learn_journal_entries_search` |
 | `learn_reading_items` | `06-learn.md §3.2` | `GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') \|\| ' ' \|\| coalesce(author, '') \|\| ' ' \|\| coalesce(description, ''))) STORED` | `idx_learn_reading_items_search` |
 
-> ¹ **Gap note**: `ARCH §9.1` defines expression-based GIN indexes on `soc_groups` and
-> `soc_events` for full-text search, but `05-social.md §3.2` does not yet include them.
-> These indexes MUST be added to `05-social.md` before implementing search queries. Without
-> these GIN indexes, the `to_tsvector(...)` expressions in §10.1 group/event search queries
-> will fall back to sequential scans. Proposed addition to `05-social.md`:
-> ```sql
-> CREATE INDEX idx_soc_groups_search ON soc_groups
->     USING GIN(to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')));
-> CREATE INDEX idx_soc_events_search ON soc_events
->     USING GIN(to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '')));
-> ```
+> ¹ GIN indexes on `soc_groups` and `soc_events` are defined in migration 009 (`idx_soc_groups_search`,
+> `idx_soc_events_search`) as expression indexes on `to_tsvector(...)`. These are used by the
+> `websearch_to_tsquery` expressions in §10.1 group/event search queries.
 
 **Additional indexes read by search (faceted filtering):**
 
@@ -196,7 +188,7 @@ Unified search across social, marketplace, or learning content.
 - **Auth**: `AuthContext` (required for all scopes); `FamilyScope` (required, used by learning scope and social privacy enforcement)
 - **Query**: `SearchParams { Q string, Scope SearchScope, Cursor *string, Limit *int (default 20, max 50), Sort *SearchSortOrder, filters: scope-specific }`
 - **Scope-specific query parameters**:
-  - `scope=social`: `sub_scope?: SocialSubScope (families|groups|events)`, `methodology_id?: uuid.UUID`
+  - `scope=social`: `sub_scope?: SocialSubScope (families|groups|events)`, `methodology_slug?: string`
   - `scope=marketplace`: `methodology_tags?: []uuid.UUID`, `subject_tags?: []string`, `grade_min?: *int16`, `grade_max?: *int16`, `price_max?: *int32`, `price_min?: *int32 (default 0)`, `content_type?: *string`, `worldview_tags?: []string`, `free_only?: *bool`
   - `scope=learning`: `student_id?: *uuid.UUID`, `source_type?: LearningSourceType (activity|journal|reading)`, `date_from?: *time.Time`, `date_to?: *time.Time`, `subject_tags?: []string`
 - **Response**: `200 OK` → `SearchResponse { Results []SearchResult, TotalCount int64, Facets *FacetCounts, NextCursor *string }`
@@ -347,7 +339,7 @@ type SocialSearchRepository interface {
     // SearchGroups searches groups by name and description.
     // Returns all non-private groups (searchable by any authenticated user).
     // Block exclusion: groups created by blocked families are excluded.
-    SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
+    SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error)
 
     // SearchEvents searches events by title, description, and location.
     // Visibility enforcement:
@@ -355,7 +347,7 @@ type SocialSearchRepository interface {
     // - 'friends': visible only to friends of the creator
     // - 'group': visible only to members of the associated group
     // Excludes: events by blocked families, cancelled events.
-    SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
+    SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error)
 
     // SearchPosts searches posts by content.
     // Privacy: friends-only posts visible to friends, group posts visible to group members.
@@ -511,9 +503,9 @@ type SearchParams struct {
 
     // ── Social-specific filters ────────────────────────────────────────
     // SubScope narrows social search to families, groups, or events.
-    SubScope      *SocialSubScope `json:"sub_scope,omitempty" query:"sub_scope"`
-    // MethodologyID filters by methodology (social and marketplace).
-    MethodologyID *uuid.UUID      `json:"methodology_id,omitempty" query:"methodology_id"`
+    SubScope        *SocialSubScope `json:"sub_scope,omitempty" query:"sub_scope"`
+    // MethodologySlug filters by methodology slug (social scope).
+    MethodologySlug *string         `json:"methodology_slug,omitempty" query:"methodology_slug"`
 
     // ── Marketplace-specific filters ───────────────────────────────────
     MethodologyTags []uuid.UUID `json:"methodology_tags,omitempty" query:"methodology_tags"`
@@ -899,7 +891,7 @@ SELECT
     ts_rank(to_tsvector('english', f.display_name), plainto_tsquery('english', $2)) AS relevance
 FROM iam_families f
 JOIN soc_profiles sp ON sp.family_id = f.id
-LEFT JOIN method_definitions md ON md.id = f.primary_methodology_id
+LEFT JOIN method_definitions md ON md.slug = f.primary_methodology_slug
 WHERE f.id != $1  -- exclude self
 AND (
     -- Friends [S§14.2]
@@ -943,7 +935,7 @@ SELECT
         websearch_to_tsquery('english', $2)
     ) AS relevance
 FROM soc_groups g
-LEFT JOIN method_definitions md ON md.id = g.methodology_id
+LEFT JOIN method_definitions md ON md.slug = g.methodology_slug
 WHERE to_tsvector('english', coalesce(g.name, '') || ' ' || coalesce(g.description, ''))
     @@ websearch_to_tsquery('english', $2)
 -- Block exclusion: exclude groups created by blocked families
@@ -953,7 +945,7 @@ AND NOT EXISTS (
        OR (sb.blocker_family_id = g.creator_family_id AND sb.blocked_family_id = $1)
 )
 -- Optional methodology filter
-AND ($3::uuid IS NULL OR g.methodology_id = $3)
+AND ($3::text IS NULL OR g.methodology_slug = $3)
 ORDER BY relevance DESC, g.id
 LIMIT $4;
 ```
@@ -1022,7 +1014,7 @@ AND NOT EXISTS (
        OR (sb.blocker_family_id = e.creator_family_id AND sb.blocked_family_id = $1)
 )
 -- Optional methodology filter
-AND ($3::uuid IS NULL OR e.methodology_id = $3)
+AND ($3::text IS NULL OR e.methodology_slug = $3)
 ORDER BY relevance DESC, e.id
 LIMIT $4;
 ```
