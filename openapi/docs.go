@@ -144,6 +144,43 @@ const docTemplate = `{
                 }
             }
         },
+        "/discovery/quiz/results/{share_id}/claim": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "discovery"
+                ],
+                "summary": "Claim a quiz result for the authenticated family",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Share ID",
+                        "name": "share_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Quiz result not found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Already claimed by another family",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/discovery/state-guides": {
             "get": {
                 "produces": [
@@ -1204,6 +1241,200 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/search": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "Search across social, marketplace, or learning content",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query (min 2 chars)",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "social",
+                            "marketplace",
+                            "learning"
+                        ],
+                        "type": "string",
+                        "description": "Search scope",
+                        "name": "scope",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Results per page (default 20, max 50)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "relevance",
+                            "price_asc",
+                            "price_desc",
+                            "rating",
+                            "recency"
+                        ],
+                        "type": "string",
+                        "description": "Sort order (marketplace only)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "families",
+                            "groups",
+                            "events"
+                        ],
+                        "type": "string",
+                        "description": "Social sub-scope",
+                        "name": "sub_scope",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Methodology slug filter (social scope)",
+                        "name": "methodology_slug",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/search.SearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/search/autocomplete": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "Type-ahead suggestions for search",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Prefix query (min 1 char)",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "social",
+                            "marketplace",
+                            "learning"
+                        ],
+                        "type": "string",
+                        "description": "Search scope",
+                        "name": "scope",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max suggestions (default 5, max 10)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/search.AutocompleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/search/suggestions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "AI-powered search suggestions (Phase 3 — not yet available)",
+                "responses": {
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -2110,6 +2341,414 @@ const docTemplate = `{
                 "StepMethodology",
                 "StepRoadmapReview"
             ]
+        },
+        "search.ActivitySearchResult": {
+            "type": "object",
+            "properties": {
+                "activity_date": {
+                    "type": "string"
+                },
+                "activity_id": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "student_name": {
+                    "type": "string"
+                },
+                "subject_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.AutocompleteResponse": {
+            "type": "object",
+            "properties": {
+                "suggestions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.AutocompleteSuggestion"
+                    }
+                }
+            }
+        },
+        "search.AutocompleteSuggestion": {
+            "type": "object",
+            "properties": {
+                "entity_id": {
+                    "type": "string"
+                },
+                "entity_type": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.EventSearchResult": {
+            "type": "object",
+            "properties": {
+                "attendee_count": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "event_date": {
+                    "type": "string"
+                },
+                "event_id": {
+                    "type": "string"
+                },
+                "is_virtual": {
+                    "type": "boolean"
+                },
+                "location_name": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "visibility": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.FacetBucket": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.FacetCounts": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.FacetBucket"
+                    }
+                },
+                "methodology_tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.FacetBucket"
+                    }
+                },
+                "price_ranges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.FacetBucket"
+                    }
+                },
+                "rating_ranges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.FacetBucket"
+                    }
+                },
+                "subject_tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.FacetBucket"
+                    }
+                },
+                "worldview_tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.FacetBucket"
+                    }
+                }
+            }
+        },
+        "search.FamilySearchResult": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "family_id": {
+                    "type": "string"
+                },
+                "is_friend": {
+                    "type": "boolean"
+                },
+                "location_region": {
+                    "type": "string"
+                },
+                "methodology_name": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                }
+            }
+        },
+        "search.GroupSearchResult": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "member_count": {
+                    "type": "integer"
+                },
+                "methodology_name": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                }
+            }
+        },
+        "search.JournalSearchResult": {
+            "type": "object",
+            "properties": {
+                "content_snippet": {
+                    "type": "string"
+                },
+                "entry_date": {
+                    "type": "string"
+                },
+                "entry_type": {
+                    "type": "string"
+                },
+                "journal_id": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "student_name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.ListingSearchResult": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string"
+                },
+                "description_snippet": {
+                    "type": "string"
+                },
+                "listing_id": {
+                    "type": "string"
+                },
+                "methodology_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "price_cents": {
+                    "type": "integer"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "publisher_name": {
+                    "type": "string"
+                },
+                "rating_avg": {
+                    "type": "number"
+                },
+                "rating_count": {
+                    "type": "integer"
+                },
+                "relevance": {
+                    "type": "number"
+                },
+                "subject_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.PostSearchResult": {
+            "type": "object",
+            "properties": {
+                "author_display_name": {
+                    "type": "string"
+                },
+                "author_family_id": {
+                    "type": "string"
+                },
+                "content_snippet": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "post_id": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                }
+            }
+        },
+        "search.ReadingItemSearchResult": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "reading_item_id": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "student_name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.SearchResponse": {
+            "type": "object",
+            "properties": {
+                "facets": {
+                    "$ref": "#/definitions/search.FacetCounts"
+                },
+                "next_cursor": {
+                    "type": "string"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.SearchResult"
+                    }
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "search.SearchResult": {
+            "type": "object",
+            "properties": {
+                "activity": {
+                    "description": "Learning",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/search.ActivitySearchResult"
+                        }
+                    ]
+                },
+                "event": {
+                    "$ref": "#/definitions/search.EventSearchResult"
+                },
+                "family": {
+                    "description": "Social",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/search.FamilySearchResult"
+                        }
+                    ]
+                },
+                "group": {
+                    "$ref": "#/definitions/search.GroupSearchResult"
+                },
+                "journal": {
+                    "$ref": "#/definitions/search.JournalSearchResult"
+                },
+                "listing": {
+                    "description": "Marketplace",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/search.ListingSearchResult"
+                        }
+                    ]
+                },
+                "post": {
+                    "$ref": "#/definitions/search.PostSearchResult"
+                },
+                "reading_item": {
+                    "$ref": "#/definitions/search.ReadingItemSearchResult"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "shared.AppError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "err": {
+                    "description": "wrapped internal error, never exposed to client"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "statusCode": {
+                    "type": "integer"
+                }
+            }
         },
         "shared.ErrorBody": {
             "type": "object",

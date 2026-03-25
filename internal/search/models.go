@@ -72,8 +72,8 @@ type SearchParams struct {
 	Sort SearchSortOrder `json:"sort,omitempty" query:"sort"`
 
 	// ── Social-specific filters ────────────────────────────────────────
-	SubScope      *SocialSubScope `json:"sub_scope,omitempty" query:"sub_scope"`
-	MethodologyID *uuid.UUID      `json:"methodology_id,omitempty" query:"methodology_id"`
+	SubScope        *SocialSubScope `json:"sub_scope,omitempty" query:"sub_scope"`
+	MethodologySlug *string         `json:"methodology_slug,omitempty" query:"methodology_slug"`
 
 	// ── Marketplace-specific filters ───────────────────────────────────
 	MethodologyTags []uuid.UUID `json:"methodology_tags,omitempty" query:"methodology_tags"`

@@ -262,7 +262,7 @@ func TestSearch_Social_SubScopeGroups(t *testing.T) {
 	svc, socRepo, _, _, _ := newTestService()
 	called := false
 	subScope := SocialSubScopeGroups
-	socRepo.searchGroupsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *uuid.UUID, _ int, _ *string) ([]SocialSearchResult, error) {
+	socRepo.searchGroupsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *string, _ int, _ *string) ([]SocialSearchResult, error) {
 		called = true
 		return nil, nil
 	}
@@ -281,7 +281,7 @@ func TestSearch_Social_SubScopeEvents(t *testing.T) {
 	svc, socRepo, _, _, _ := newTestService()
 	called := false
 	subScope := SocialSubScopeEvents
-	socRepo.searchEventsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *uuid.UUID, _ int, _ *string) ([]SocialSearchResult, error) {
+	socRepo.searchEventsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *string, _ int, _ *string) ([]SocialSearchResult, error) {
 		called = true
 		return nil, nil
 	}
@@ -303,11 +303,11 @@ func TestSearch_Social_NoSubScope_MergesAll(t *testing.T) {
 		familiesCalled = true
 		return []SocialSearchResult{{Relevance: 0.9, Result: SearchResult{Type: "family", Family: &FamilySearchResult{Relevance: 0.9}}}}, nil
 	}
-	socRepo.searchGroupsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *uuid.UUID, _ int, _ *string) ([]SocialSearchResult, error) {
+	socRepo.searchGroupsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *string, _ int, _ *string) ([]SocialSearchResult, error) {
 		groupsCalled = true
 		return []SocialSearchResult{{Relevance: 0.8, Result: SearchResult{Type: "group", Group: &GroupSearchResult{Relevance: 0.8}}}}, nil
 	}
-	socRepo.searchEventsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *uuid.UUID, _ int, _ *string) ([]SocialSearchResult, error) {
+	socRepo.searchEventsFn = func(_ context.Context, _ uuid.UUID, _ string, _ *string, _ int, _ *string) ([]SocialSearchResult, error) {
 		eventsCalled = true
 		return []SocialSearchResult{{Relevance: 0.7, Result: SearchResult{Type: "event", Event: &EventSearchResult{Relevance: 0.7}}}}, nil
 	}

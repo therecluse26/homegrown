@@ -5,5 +5,8 @@
   "description": "Root-level dev tooling (Reflex code search MCP)",
   "dependencies": {
     "reflex-search": "^1.0.3"
+  },
+  "devDependencies": {
+    "@evilmartians/lefthook": "*"
   }
 }

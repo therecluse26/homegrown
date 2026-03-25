@@ -38,6 +38,24 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	search.GET("/suggestions", h.suggestions)
 }
 
+// search godoc
+//
+// @Summary     Search across social, marketplace, or learning content
+// @Tags        search
+// @Produce     json
+// @Security    BearerAuth
+// @Param       q                query string  true  "Search query (min 2 chars)"
+// @Param       scope            query string  true  "Search scope" Enums(social,marketplace,learning)
+// @Param       cursor           query string  false "Pagination cursor"
+// @Param       limit            query int     false "Results per page (default 20, max 50)"
+// @Param       sort             query string  false "Sort order (marketplace only)" Enums(relevance,price_asc,price_desc,rating,recency)
+// @Param       sub_scope        query string  false "Social sub-scope" Enums(families,groups,events)
+// @Param       methodology_slug query string  false "Methodology slug filter (social scope)"
+// @Success     200 {object} SearchResponse
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Failure     422 {object} shared.AppError
+// @Router      /search [get]
 // GET /v1/search
 func (h *Handler) search(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
@@ -66,6 +84,19 @@ func (h *Handler) search(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// autocomplete godoc
+//
+// @Summary     Type-ahead suggestions for search
+// @Tags        search
+// @Produce     json
+// @Security    BearerAuth
+// @Param       q     query string  true  "Prefix query (min 1 char)"
+// @Param       scope query string  false "Search scope" Enums(social,marketplace,learning)
+// @Param       limit query int     false "Max suggestions (default 5, max 10)"
+// @Success     200 {object} AutocompleteResponse
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Router      /search/autocomplete [get]
 // GET /v1/search/autocomplete
 func (h *Handler) autocomplete(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
@@ -94,6 +125,14 @@ func (h *Handler) autocomplete(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// suggestions godoc
+//
+// @Summary     AI-powered search suggestions (Phase 3 — not yet available)
+// @Tags        search
+// @Produce     json
+// @Security    BearerAuth
+// @Success     501 {object} map[string]string
+// @Router      /search/suggestions [get]
 // GET /v1/search/suggestions — Phase 3 stub [12-search §4.3]
 // Returns 501 until the recs:: domain is implemented.
 func (h *Handler) suggestions(c echo.Context) error {

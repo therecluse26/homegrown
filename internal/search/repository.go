@@ -74,7 +74,7 @@ SELECT
     ts_rank(to_tsvector('english', f.display_name), plainto_tsquery('english', $2)) AS relevance
 FROM iam_families f
 JOIN soc_profiles sp ON sp.family_id = f.id
-LEFT JOIN method_definitions md ON md.id = f.primary_methodology_id
+LEFT JOIN method_definitions md ON md.slug = f.primary_methodology_slug
 WHERE f.id != $1
 AND (
     EXISTS (
@@ -131,7 +131,7 @@ LIMIT $3 OFFSET $4`
 }
 
 // SearchGroups searches groups by name and description. [12-search §10.1]
-func (r *PgSocialSearchRepository) SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error) {
+func (r *PgSocialSearchRepository) SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error) {
 	offset := 0
 	if cursor != nil {
 		var err error
@@ -153,7 +153,7 @@ SELECT
         websearch_to_tsquery('english', $2)
     ) AS relevance
 FROM soc_groups g
-LEFT JOIN method_definitions md ON md.id = g.methodology_id
+LEFT JOIN method_definitions md ON md.slug = g.methodology_slug
 WHERE to_tsvector('english', coalesce(g.name, '') || ' ' || coalesce(g.description, ''))
     @@ websearch_to_tsquery('english', $2)
 AND NOT EXISTS (
@@ -161,7 +161,7 @@ AND NOT EXISTS (
     WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = g.creator_family_id)
        OR (sb.blocker_family_id = g.creator_family_id AND sb.blocked_family_id = $1)
 )
-AND ($3::uuid IS NULL OR g.methodology_id = $3)
+AND ($3::text IS NULL OR g.methodology_slug = $3)
 ORDER BY relevance DESC, g.id
 LIMIT $4 OFFSET $5`
 
@@ -175,7 +175,7 @@ LIMIT $4 OFFSET $5`
 	}
 
 	var rows []groupRow
-	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, methodologyID, limit, offset).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, methodologySlug, limit, offset).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search groups: %w", err)
 	}
 
@@ -200,7 +200,7 @@ LIMIT $4 OFFSET $5`
 }
 
 // SearchEvents searches events by title and description with visibility enforcement. [12-search §10.1]
-func (r *PgSocialSearchRepository) SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error) {
+func (r *PgSocialSearchRepository) SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error) {
 	offset := 0
 	if cursor != nil {
 		var err error
@@ -258,7 +258,7 @@ AND NOT EXISTS (
     WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = e.creator_family_id)
        OR (sb.blocker_family_id = e.creator_family_id AND sb.blocked_family_id = $1)
 )
-AND ($3::uuid IS NULL OR e.methodology_id = $3)
+AND ($3::text IS NULL OR e.methodology_slug = $3)
 ORDER BY relevance DESC, e.id
 LIMIT $4 OFFSET $5`
 
@@ -275,7 +275,7 @@ LIMIT $4 OFFSET $5`
 	}
 
 	var rows []eventRow
-	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, methodologyID, limit, offset).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, methodologySlug, limit, offset).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search events: %w", err)
 	}
 

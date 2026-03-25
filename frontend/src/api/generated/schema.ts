@@ -201,6 +201,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discovery/quiz/results/{share_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim a quiz result for the authenticated family */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Share ID */
+                    share_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Quiz result not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+                /** @description Already claimed by another family */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discovery/state-guides": {
         parameters: {
             query?: never;
@@ -1734,6 +1789,183 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search across social, marketplace, or learning content */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Search query (min 2 chars) */
+                    q: string;
+                    /** @description Search scope */
+                    scope: "social" | "marketplace" | "learning";
+                    /** @description Pagination cursor */
+                    cursor?: string;
+                    /** @description Results per page (default 20, max 50) */
+                    limit?: number;
+                    /** @description Sort order (marketplace only) */
+                    sort?: "relevance" | "price_asc" | "price_desc" | "rating" | "recency";
+                    /** @description Social sub-scope */
+                    sub_scope?: "families" | "groups" | "events";
+                    /** @description Methodology slug filter (social scope) */
+                    methodology_slug?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["search.SearchResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search/autocomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Type-ahead suggestions for search */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Prefix query (min 1 char) */
+                    q: string;
+                    /** @description Search scope */
+                    scope?: "social" | "marketplace" | "learning";
+                    /** @description Max suggestions (default 5, max 10) */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["search.AutocompleteResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** AI-powered search suggestions (Phase 3 — not yet available) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Not Implemented */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2012,6 +2244,135 @@ export interface components {
         "onboard.WizardStatus": "in_progress" | "completed" | "skipped";
         /** @enum {string} */
         "onboard.WizardStep": "family_profile" | "children" | "methodology" | "roadmap_review";
+        "search.ActivitySearchResult": {
+            activity_date?: string;
+            activity_id?: string;
+            description?: string;
+            relevance?: number;
+            student_id?: string;
+            student_name?: string;
+            subject_tags?: string[];
+            title?: string;
+        };
+        "search.AutocompleteResponse": {
+            suggestions?: components["schemas"]["search.AutocompleteSuggestion"][];
+        };
+        "search.AutocompleteSuggestion": {
+            entity_id?: string;
+            entity_type?: string;
+            score?: number;
+            text?: string;
+        };
+        "search.EventSearchResult": {
+            attendee_count?: number;
+            description?: string;
+            event_date?: string;
+            event_id?: string;
+            is_virtual?: boolean;
+            location_name?: string;
+            relevance?: number;
+            title?: string;
+            visibility?: string;
+        };
+        "search.FacetBucket": {
+            count?: number;
+            display_name?: string;
+            value?: string;
+        };
+        "search.FacetCounts": {
+            content_type?: components["schemas"]["search.FacetBucket"][];
+            methodology_tags?: components["schemas"]["search.FacetBucket"][];
+            price_ranges?: components["schemas"]["search.FacetBucket"][];
+            rating_ranges?: components["schemas"]["search.FacetBucket"][];
+            subject_tags?: components["schemas"]["search.FacetBucket"][];
+            worldview_tags?: components["schemas"]["search.FacetBucket"][];
+        };
+        "search.FamilySearchResult": {
+            display_name?: string;
+            family_id?: string;
+            is_friend?: boolean;
+            location_region?: string;
+            methodology_name?: string;
+            relevance?: number;
+        };
+        "search.GroupSearchResult": {
+            description?: string;
+            group_id?: string;
+            member_count?: number;
+            methodology_name?: string;
+            name?: string;
+            relevance?: number;
+        };
+        "search.JournalSearchResult": {
+            content_snippet?: string;
+            entry_date?: string;
+            entry_type?: string;
+            journal_id?: string;
+            relevance?: number;
+            student_id?: string;
+            student_name?: string;
+            title?: string;
+        };
+        "search.ListingSearchResult": {
+            content_type?: string;
+            description_snippet?: string;
+            listing_id?: string;
+            methodology_tags?: string[];
+            price_cents?: number;
+            published_at?: string;
+            publisher_name?: string;
+            rating_avg?: number;
+            rating_count?: number;
+            relevance?: number;
+            subject_tags?: string[];
+            title?: string;
+        };
+        "search.PostSearchResult": {
+            author_display_name?: string;
+            author_family_id?: string;
+            content_snippet?: string;
+            created_at?: string;
+            group_name?: string;
+            post_id?: string;
+            relevance?: number;
+        };
+        "search.ReadingItemSearchResult": {
+            author?: string;
+            description?: string;
+            reading_item_id?: string;
+            relevance?: number;
+            status?: string;
+            student_id?: string;
+            student_name?: string;
+            title?: string;
+        };
+        "search.SearchResponse": {
+            facets?: components["schemas"]["search.FacetCounts"];
+            next_cursor?: string;
+            results?: components["schemas"]["search.SearchResult"][];
+            total_count?: number;
+        };
+        "search.SearchResult": {
+            /** @description Learning */
+            activity?: components["schemas"]["search.ActivitySearchResult"];
+            event?: components["schemas"]["search.EventSearchResult"];
+            /** @description Social */
+            family?: components["schemas"]["search.FamilySearchResult"];
+            group?: components["schemas"]["search.GroupSearchResult"];
+            journal?: components["schemas"]["search.JournalSearchResult"];
+            /** @description Marketplace */
+            listing?: components["schemas"]["search.ListingSearchResult"];
+            post?: components["schemas"]["search.PostSearchResult"];
+            reading_item?: components["schemas"]["search.ReadingItemSearchResult"];
+            type?: string;
+        };
+        "shared.AppError": {
+            code?: string;
+            /** @description wrapped internal error, never exposed to client */
+            err?: unknown;
+            message?: string;
+            statusCode?: number;
+        };
         "shared.ErrorBody": {
             code?: string;
             message?: string;

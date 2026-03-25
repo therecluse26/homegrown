@@ -610,6 +610,269 @@ definitions:
     - StepChildren
     - StepMethodology
     - StepRoadmapReview
+  search.ActivitySearchResult:
+    properties:
+      activity_date:
+        type: string
+      activity_id:
+        type: string
+      description:
+        type: string
+      relevance:
+        type: number
+      student_id:
+        type: string
+      student_name:
+        type: string
+      subject_tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  search.AutocompleteResponse:
+    properties:
+      suggestions:
+        items:
+          $ref: '#/definitions/search.AutocompleteSuggestion'
+        type: array
+    type: object
+  search.AutocompleteSuggestion:
+    properties:
+      entity_id:
+        type: string
+      entity_type:
+        type: string
+      score:
+        type: number
+      text:
+        type: string
+    type: object
+  search.EventSearchResult:
+    properties:
+      attendee_count:
+        type: integer
+      description:
+        type: string
+      event_date:
+        type: string
+      event_id:
+        type: string
+      is_virtual:
+        type: boolean
+      location_name:
+        type: string
+      relevance:
+        type: number
+      title:
+        type: string
+      visibility:
+        type: string
+    type: object
+  search.FacetBucket:
+    properties:
+      count:
+        type: integer
+      display_name:
+        type: string
+      value:
+        type: string
+    type: object
+  search.FacetCounts:
+    properties:
+      content_type:
+        items:
+          $ref: '#/definitions/search.FacetBucket'
+        type: array
+      methodology_tags:
+        items:
+          $ref: '#/definitions/search.FacetBucket'
+        type: array
+      price_ranges:
+        items:
+          $ref: '#/definitions/search.FacetBucket'
+        type: array
+      rating_ranges:
+        items:
+          $ref: '#/definitions/search.FacetBucket'
+        type: array
+      subject_tags:
+        items:
+          $ref: '#/definitions/search.FacetBucket'
+        type: array
+      worldview_tags:
+        items:
+          $ref: '#/definitions/search.FacetBucket'
+        type: array
+    type: object
+  search.FamilySearchResult:
+    properties:
+      display_name:
+        type: string
+      family_id:
+        type: string
+      is_friend:
+        type: boolean
+      location_region:
+        type: string
+      methodology_name:
+        type: string
+      relevance:
+        type: number
+    type: object
+  search.GroupSearchResult:
+    properties:
+      description:
+        type: string
+      group_id:
+        type: string
+      member_count:
+        type: integer
+      methodology_name:
+        type: string
+      name:
+        type: string
+      relevance:
+        type: number
+    type: object
+  search.JournalSearchResult:
+    properties:
+      content_snippet:
+        type: string
+      entry_date:
+        type: string
+      entry_type:
+        type: string
+      journal_id:
+        type: string
+      relevance:
+        type: number
+      student_id:
+        type: string
+      student_name:
+        type: string
+      title:
+        type: string
+    type: object
+  search.ListingSearchResult:
+    properties:
+      content_type:
+        type: string
+      description_snippet:
+        type: string
+      listing_id:
+        type: string
+      methodology_tags:
+        items:
+          type: string
+        type: array
+      price_cents:
+        type: integer
+      published_at:
+        type: string
+      publisher_name:
+        type: string
+      rating_avg:
+        type: number
+      rating_count:
+        type: integer
+      relevance:
+        type: number
+      subject_tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  search.PostSearchResult:
+    properties:
+      author_display_name:
+        type: string
+      author_family_id:
+        type: string
+      content_snippet:
+        type: string
+      created_at:
+        type: string
+      group_name:
+        type: string
+      post_id:
+        type: string
+      relevance:
+        type: number
+    type: object
+  search.ReadingItemSearchResult:
+    properties:
+      author:
+        type: string
+      description:
+        type: string
+      reading_item_id:
+        type: string
+      relevance:
+        type: number
+      status:
+        type: string
+      student_id:
+        type: string
+      student_name:
+        type: string
+      title:
+        type: string
+    type: object
+  search.SearchResponse:
+    properties:
+      facets:
+        $ref: '#/definitions/search.FacetCounts'
+      next_cursor:
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/search.SearchResult'
+        type: array
+      total_count:
+        type: integer
+    type: object
+  search.SearchResult:
+    properties:
+      activity:
+        allOf:
+        - $ref: '#/definitions/search.ActivitySearchResult'
+        description: Learning
+      event:
+        $ref: '#/definitions/search.EventSearchResult'
+      family:
+        allOf:
+        - $ref: '#/definitions/search.FamilySearchResult'
+        description: Social
+      group:
+        $ref: '#/definitions/search.GroupSearchResult'
+      journal:
+        $ref: '#/definitions/search.JournalSearchResult'
+      listing:
+        allOf:
+        - $ref: '#/definitions/search.ListingSearchResult'
+        description: Marketplace
+      post:
+        $ref: '#/definitions/search.PostSearchResult'
+      reading_item:
+        $ref: '#/definitions/search.ReadingItemSearchResult'
+      type:
+        type: string
+    type: object
+  shared.AppError:
+    properties:
+      code:
+        type: string
+      err:
+        description: wrapped internal error, never exposed to client
+      message:
+        type: string
+      statusCode:
+        type: integer
+    type: object
   shared.ErrorBody:
     properties:
       code:
@@ -710,6 +973,30 @@ paths:
           schema:
             $ref: '#/definitions/shared.ErrorResponse'
       summary: Get quiz result by share ID
+      tags:
+      - discovery
+  /discovery/quiz/results/{share_id}/claim:
+    post:
+      parameters:
+      - description: Share ID
+        in: path
+        name: share_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Quiz result not found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "409":
+          description: Already claimed by another family
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Claim a quiz result for the authenticated family
       tags:
       - discovery
   /discovery/state-guides:
@@ -1398,4 +1685,131 @@ paths:
       summary: Skip the onboarding wizard
       tags:
       - onboarding
+  /search:
+    get:
+      parameters:
+      - description: Search query (min 2 chars)
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Search scope
+        enum:
+        - social
+        - marketplace
+        - learning
+        in: query
+        name: scope
+        required: true
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page (default 20, max 50)
+        in: query
+        name: limit
+        type: integer
+      - description: Sort order (marketplace only)
+        enum:
+        - relevance
+        - price_asc
+        - price_desc
+        - rating
+        - recency
+        in: query
+        name: sort
+        type: string
+      - description: Social sub-scope
+        enum:
+        - families
+        - groups
+        - events
+        in: query
+        name: sub_scope
+        type: string
+      - description: Methodology slug filter (social scope)
+        in: query
+        name: methodology_slug
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/search.SearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Search across social, marketplace, or learning content
+      tags:
+      - search
+  /search/autocomplete:
+    get:
+      parameters:
+      - description: Prefix query (min 1 char)
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Search scope
+        enum:
+        - social
+        - marketplace
+        - learning
+        in: query
+        name: scope
+        type: string
+      - description: Max suggestions (default 5, max 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/search.AutocompleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Type-ahead suggestions for search
+      tags:
+      - search
+  /search/suggestions:
+    get:
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: AI-powered search suggestions (Phase 3 — not yet available)
+      tags:
+      - search
 swagger: "2.0"

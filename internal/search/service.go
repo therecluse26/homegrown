@@ -100,9 +100,9 @@ func (s *searchServiceImpl) searchSocial(ctx context.Context, auth *shared.AuthC
 		case SocialSubScopeFamilies:
 			results, err = s.socialRepo.SearchFamilies(ctx, familyID, params.Q, params.Limit, params.Cursor)
 		case SocialSubScopeGroups:
-			results, err = s.socialRepo.SearchGroups(ctx, familyID, params.Q, params.MethodologyID, params.Limit, params.Cursor)
+			results, err = s.socialRepo.SearchGroups(ctx, familyID, params.Q, params.MethodologySlug, params.Limit, params.Cursor)
 		case SocialSubScopeEvents:
-			results, err = s.socialRepo.SearchEvents(ctx, familyID, params.Q, params.MethodologyID, params.Limit, params.Cursor)
+			results, err = s.socialRepo.SearchEvents(ctx, familyID, params.Q, params.MethodologySlug, params.Limit, params.Cursor)
 		default:
 			return nil, &SearchError{Err: ErrInvalidScope, Field: "sub_scope"}
 		}
@@ -117,11 +117,11 @@ func (s *searchServiceImpl) searchSocial(ctx context.Context, auth *shared.AuthC
 	if err != nil {
 		return nil, err
 	}
-	groups, err := s.socialRepo.SearchGroups(ctx, familyID, params.Q, params.MethodologyID, params.Limit, params.Cursor)
+	groups, err := s.socialRepo.SearchGroups(ctx, familyID, params.Q, params.MethodologySlug, params.Limit, params.Cursor)
 	if err != nil {
 		return nil, err
 	}
-	events, err := s.socialRepo.SearchEvents(ctx, familyID, params.Q, params.MethodologyID, params.Limit, params.Cursor)
+	events, err := s.socialRepo.SearchEvents(ctx, familyID, params.Q, params.MethodologySlug, params.Limit, params.Cursor)
 	if err != nil {
 		return nil, err
 	}

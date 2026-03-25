@@ -40,8 +40,8 @@ type SearchService interface {
 // SocialSearchRepository queries soc_posts, soc_groups, soc_events, iam_families. [12-search §6.1]
 type SocialSearchRepository interface {
 	SearchFamilies(ctx context.Context, searcherFamilyID uuid.UUID, query string, limit int, cursor *string) ([]SocialSearchResult, error)
-	SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
-	SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
+	SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error)
+	SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error)
 
 	// SearchPosts searches posts by content.
 	// Privacy: friends-only posts visible to friends, group posts visible to group members.

@@ -78,6 +78,7 @@ install-tools:
 
 # Install lefthook binary and register git hooks (one-shot dev environment setup)
 install-hooks: install-tools
+	npm install
 	$(GOBIN)/lefthook install
 
 # Generate OpenAPI spec from Go annotations

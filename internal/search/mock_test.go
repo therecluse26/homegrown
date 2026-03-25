@@ -46,8 +46,8 @@ func (m *mockSearchService) HandleFamilyDeletionScheduled(context.Context, uuid.
 
 type stubSocialRepo struct {
 	searchFamiliesFn func(ctx context.Context, searcherFamilyID uuid.UUID, query string, limit int, cursor *string) ([]SocialSearchResult, error)
-	searchGroupsFn   func(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
-	searchEventsFn   func(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error)
+	searchGroupsFn   func(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error)
+	searchEventsFn   func(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error)
 	searchPostsFn    func(ctx context.Context, searcherFamilyID uuid.UUID, query string, limit int, cursor *string) ([]SocialSearchResult, error)
 }
 
@@ -58,16 +58,16 @@ func (s *stubSocialRepo) SearchFamilies(ctx context.Context, searcherFamilyID uu
 	return nil, nil
 }
 
-func (s *stubSocialRepo) SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error) {
+func (s *stubSocialRepo) SearchGroups(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error) {
 	if s.searchGroupsFn != nil {
-		return s.searchGroupsFn(ctx, searcherFamilyID, query, methodologyID, limit, cursor)
+		return s.searchGroupsFn(ctx, searcherFamilyID, query, methodologySlug, limit, cursor)
 	}
 	return nil, nil
 }
 
-func (s *stubSocialRepo) SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologyID *uuid.UUID, limit int, cursor *string) ([]SocialSearchResult, error) {
+func (s *stubSocialRepo) SearchEvents(ctx context.Context, searcherFamilyID uuid.UUID, query string, methodologySlug *string, limit int, cursor *string) ([]SocialSearchResult, error) {
 	if s.searchEventsFn != nil {
-		return s.searchEventsFn(ctx, searcherFamilyID, query, methodologyID, limit, cursor)
+		return s.searchEventsFn(ctx, searcherFamilyID, query, methodologySlug, limit, cursor)
 	}
 	return nil, nil
 }
