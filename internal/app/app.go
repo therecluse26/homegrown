@@ -172,9 +172,10 @@ func NewApp(state *AppState) *echo.Echo {
 	if state.Billing != nil {
 		billing.NewHandler(state.Billing, state.Config.BillingWebhookSecret).Register(auth, hooks)
 	}
+	// Shared admin group — used by both safety and admin domains.
+	adminGroup := auth.Group("/admin")
 	if state.Safety != nil {
-		admin := auth.Group("/admin")
-		safety.NewHandler(state.Safety).Register(auth, admin)
+		safety.NewHandler(state.Safety).Register(auth, adminGroup)
 	}
 	if state.Search != nil {
 		search.NewHandler(state.Search, state).Register(auth)
@@ -186,7 +187,7 @@ func NewApp(state *AppState) *echo.Echo {
 		comply.NewHandler(state.Comply).Register(auth)
 	}
 	if state.Admin != nil {
-		admin.NewHandler(state.Admin).Register(auth)
+		admin.NewHandler(state.Admin).Register(auth, adminGroup)
 	}
 
 	return e

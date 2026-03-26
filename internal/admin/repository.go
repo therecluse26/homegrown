@@ -214,6 +214,7 @@ func (r *PgFeatureFlagRepository) Delete(ctx context.Context, key string) error 
 type auditLogRow struct {
 	ID         uuid.UUID  `gorm:"column:id;type:uuid;primaryKey"`
 	AdminID    uuid.UUID  `gorm:"column:admin_id"`
+	AdminEmail *string    `gorm:"column:admin_email;-:migration"` // populated via LEFT JOIN
 	Action     string     `gorm:"column:action"`
 	TargetType string     `gorm:"column:target_type"`
 	TargetID   *uuid.UUID `gorm:"column:target_id"`
@@ -229,6 +230,7 @@ func (r auditLogRow) toModel() AuditLogEntry {
 	return AuditLogEntry{
 		ID:         r.ID,
 		AdminID:    r.AdminID,
+		AdminEmail: r.AdminEmail,
 		Action:     r.Action,
 		TargetType: r.TargetType,
 		TargetID:   r.TargetID,
@@ -277,25 +279,29 @@ func (r *PgAuditLogRepository) Create(ctx context.Context, entry *CreateAuditLog
 }
 
 func (r *PgAuditLogRepository) Search(ctx context.Context, query *AuditLogQuery, pagination *shared.PaginationParams) ([]AuditLogEntry, error) {
-	q := r.db.WithContext(ctx).Model(&auditLogRow{}).Order("created_at DESC")
+	q := r.db.WithContext(ctx).
+		Table("admin_audit_log").
+		Select("admin_audit_log.*, iam_parents.email AS admin_email").
+		Joins("LEFT JOIN iam_parents ON iam_parents.id = admin_audit_log.admin_id").
+		Order("admin_audit_log.created_at DESC")
 
 	if query.AdminID != nil {
-		q = q.Where("admin_id = ?", *query.AdminID)
+		q = q.Where("admin_audit_log.admin_id = ?", *query.AdminID)
 	}
 	if query.Action != nil {
-		q = q.Where("action = ?", *query.Action)
+		q = q.Where("admin_audit_log.action = ?", *query.Action)
 	}
 	if query.TargetType != nil {
-		q = q.Where("target_type = ?", *query.TargetType)
+		q = q.Where("admin_audit_log.target_type = ?", *query.TargetType)
 	}
 	if query.TargetID != nil {
-		q = q.Where("target_id = ?", *query.TargetID)
+		q = q.Where("admin_audit_log.target_id = ?", *query.TargetID)
 	}
 	if query.FromDate != nil {
-		q = q.Where("created_at >= ?", *query.FromDate)
+		q = q.Where("admin_audit_log.created_at >= ?", *query.FromDate)
 	}
 	if query.ToDate != nil {
-		q = q.Where("created_at <= ?", *query.ToDate)
+		q = q.Where("admin_audit_log.created_at <= ?", *query.ToDate)
 	}
 
 	q = q.Limit(pagination.EffectiveLimit())
@@ -315,8 +321,11 @@ func (r *PgAuditLogRepository) Search(ctx context.Context, query *AuditLogQuery,
 func (r *PgAuditLogRepository) FindByTarget(ctx context.Context, targetType string, targetID uuid.UUID, pagination *shared.PaginationParams) ([]AuditLogEntry, error) {
 	var rows []auditLogRow
 	if err := r.db.WithContext(ctx).
-		Where("target_type = ? AND target_id = ?", targetType, targetID).
-		Order("created_at DESC").
+		Table("admin_audit_log").
+		Select("admin_audit_log.*, iam_parents.email AS admin_email").
+		Joins("LEFT JOIN iam_parents ON iam_parents.id = admin_audit_log.admin_id").
+		Where("admin_audit_log.target_type = ? AND admin_audit_log.target_id = ?", targetType, targetID).
+		Order("admin_audit_log.created_at DESC").
 		Limit(pagination.EffectiveLimit()).
 		Find(&rows).Error; err != nil {
 		return nil, shared.ErrDatabase(err)

@@ -1031,12 +1031,15 @@ func main() {
 	iamForAdmin := &adminIamStub{}
 	safetyForAdmin := &adminSafetyStub{}
 	billingForAdmin := &adminBillingStub{}
+	methodForAdmin := &adminMethodStub{}
+	lifecycleForAdmin := &adminLifecycleStub{}
 	healthForAdmin := &adminHealthStub{}
 	jobsForAdmin := &adminJobInspectorStub{}
 
 	adminSvc := admin.NewAdminService(
 		adminFlagRepo, adminAuditRepo, cache,
 		iamForAdmin, safetyForAdmin, billingForAdmin,
+		methodForAdmin, lifecycleForAdmin,
 		healthForAdmin, jobsForAdmin,
 	)
 
@@ -1158,11 +1161,50 @@ type adminSafetyStub struct{}
 func (adminSafetyStub) GetModerationHistory(_ context.Context, _ uuid.UUID) ([]admin.ModerationActionSummary, error) {
 	return []admin.ModerationActionSummary{}, nil
 }
+func (adminSafetyStub) SuspendAccount(_ context.Context, _ uuid.UUID, _ string) error {
+	return fmt.Errorf("admin: safety suspend adapter not yet implemented")
+}
+func (adminSafetyStub) UnsuspendAccount(_ context.Context, _ uuid.UUID) error {
+	return fmt.Errorf("admin: safety unsuspend adapter not yet implemented")
+}
+func (adminSafetyStub) BanAccount(_ context.Context, _ uuid.UUID, _ string) error {
+	return fmt.Errorf("admin: safety ban adapter not yet implemented")
+}
+func (adminSafetyStub) GetReviewQueue(_ context.Context, _ *shared.PaginationParams) ([]admin.ModerationQueueItem, error) {
+	return []admin.ModerationQueueItem{}, nil
+}
+func (adminSafetyStub) GetReviewQueueItem(_ context.Context, _ uuid.UUID) (*admin.ModerationQueueItem, error) {
+	return nil, nil
+}
+func (adminSafetyStub) TakeModerationAction(_ context.Context, _ uuid.UUID, _ string, _ string) error {
+	return fmt.Errorf("admin: safety moderation action adapter not yet implemented")
+}
 
 type adminBillingStub struct{}
 
 func (adminBillingStub) GetSubscriptionInfo(_ context.Context, _ uuid.UUID) (*admin.AdminSubscriptionInfo, error) {
 	return nil, nil
+}
+
+type adminMethodStub struct{}
+
+func (adminMethodStub) ListMethodologies(_ context.Context) ([]admin.MethodologyConfig, error) {
+	return []admin.MethodologyConfig{}, nil
+}
+func (adminMethodStub) UpdateMethodologyConfig(_ context.Context, _ string, _ *admin.UpdateMethodologyInput) (*admin.MethodologyConfig, error) {
+	return nil, admin.ErrMethodologyNotFound
+}
+
+type adminLifecycleStub struct{}
+
+func (adminLifecycleStub) GetPendingDeletions(_ context.Context, _ *shared.PaginationParams) ([]admin.DeletionSummary, error) {
+	return []admin.DeletionSummary{}, nil
+}
+func (adminLifecycleStub) GetRecoveryRequests(_ context.Context, _ *shared.PaginationParams) ([]admin.RecoverySummary, error) {
+	return []admin.RecoverySummary{}, nil
+}
+func (adminLifecycleStub) ResolveRecoveryRequest(_ context.Context, _ uuid.UUID, _ bool) error {
+	return fmt.Errorf("admin: lifecycle recovery adapter not yet implemented")
 }
 
 type adminHealthStub struct{}

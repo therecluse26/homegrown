@@ -66,6 +66,8 @@ type AdminServiceImpl struct {
 	iamSvc        IamServiceForAdmin
 	safetySvc     SafetyServiceForAdmin
 	billingSvc    BillingServiceForAdmin
+	methodSvc     MethodologyServiceForAdmin
+	lifecycleSvc  LifecycleServiceForAdmin
 	healthChecker HealthChecker
 	jobInspector  JobInspector
 }
@@ -78,6 +80,8 @@ func NewAdminService(
 	iamSvc IamServiceForAdmin,
 	safetySvc SafetyServiceForAdmin,
 	billingSvc BillingServiceForAdmin,
+	methodSvc MethodologyServiceForAdmin,
+	lifecycleSvc LifecycleServiceForAdmin,
 	healthChecker HealthChecker,
 	jobInspector JobInspector,
 ) AdminService {
@@ -88,6 +92,8 @@ func NewAdminService(
 		iamSvc:        iamSvc,
 		safetySvc:     safetySvc,
 		billingSvc:    billingSvc,
+		methodSvc:     methodSvc,
+		lifecycleSvc:  lifecycleSvc,
 		healthChecker: healthChecker,
 		jobInspector:  jobInspector,
 	}
@@ -102,6 +108,18 @@ func (s *AdminServiceImpl) ListFlags(ctx context.Context, _ *shared.AuthContext)
 		return nil, fmt.Errorf("listing flags: %w", err)
 	}
 	return flags, nil
+}
+
+// GetFlag returns a single feature flag by key. [16-admin §4]
+func (s *AdminServiceImpl) GetFlag(ctx context.Context, _ *shared.AuthContext, key string) (*FeatureFlag, error) {
+	flag, err := s.flagRepo.FindByKey(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("finding flag: %w", err)
+	}
+	if flag == nil {
+		return nil, ErrFlagNotFound
+	}
+	return flag, nil
 }
 
 // CreateFlag creates a new feature flag with audit logging. [16-admin §5, §8]
@@ -194,6 +212,192 @@ func (s *AdminServiceImpl) IsFlagEnabled(ctx context.Context, key string, family
 	_ = shared.CacheSet(ctx, s.cache, cacheKey, *flag, flagCacheTTL)
 
 	return evaluateFlag(flag, familyID), nil
+}
+
+// ─── User Actions ───────────────────────────────────────────────────────────
+
+// SuspendUser suspends a family account with audit logging. [16-admin §4, §8]
+func (s *AdminServiceImpl) SuspendUser(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, reason string) error {
+	if err := s.safetySvc.SuspendAccount(ctx, familyID, reason); err != nil {
+		return fmt.Errorf("suspending account: %w", err)
+	}
+
+	if _, auditErr := s.auditRepo.Create(ctx, &CreateAuditLogEntry{
+		AdminID:    auth.ParentID,
+		Action:     "user_suspend",
+		TargetType: "family",
+		TargetID:   &familyID,
+		Details:    json.RawMessage(fmt.Sprintf(`{"reason":%q}`, reason)),
+	}); auditErr != nil {
+		return fmt.Errorf("logging audit: %w", auditErr)
+	}
+
+	return nil
+}
+
+// UnsuspendUser lifts a suspension on a family account with audit logging. [16-admin §4, §8]
+func (s *AdminServiceImpl) UnsuspendUser(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID) error {
+	if err := s.safetySvc.UnsuspendAccount(ctx, familyID); err != nil {
+		return fmt.Errorf("unsuspending account: %w", err)
+	}
+
+	if _, auditErr := s.auditRepo.Create(ctx, &CreateAuditLogEntry{
+		AdminID:    auth.ParentID,
+		Action:     "user_unsuspend",
+		TargetType: "family",
+		TargetID:   &familyID,
+	}); auditErr != nil {
+		return fmt.Errorf("logging audit: %w", auditErr)
+	}
+
+	return nil
+}
+
+// BanUser permanently bans a family account with audit logging. [16-admin §4, §8]
+func (s *AdminServiceImpl) BanUser(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, reason string) error {
+	if err := s.safetySvc.BanAccount(ctx, familyID, reason); err != nil {
+		return fmt.Errorf("banning account: %w", err)
+	}
+
+	if _, auditErr := s.auditRepo.Create(ctx, &CreateAuditLogEntry{
+		AdminID:    auth.ParentID,
+		Action:     "user_ban",
+		TargetType: "family",
+		TargetID:   &familyID,
+		Details:    json.RawMessage(fmt.Sprintf(`{"reason":%q}`, reason)),
+	}); auditErr != nil {
+		return fmt.Errorf("logging audit: %w", auditErr)
+	}
+
+	return nil
+}
+
+// ─── Moderation Queue ───────────────────────────────────────────────────────
+
+// GetModerationQueue returns the moderation review queue. [16-admin §4]
+func (s *AdminServiceImpl) GetModerationQueue(ctx context.Context, _ *shared.AuthContext, pagination *shared.PaginationParams) (*shared.PaginatedResponse[ModerationQueueItem], error) {
+	items, err := s.safetySvc.GetReviewQueue(ctx, pagination)
+	if err != nil {
+		return nil, fmt.Errorf("getting moderation queue: %w", err)
+	}
+
+	return &shared.PaginatedResponse[ModerationQueueItem]{
+		Data:    items,
+		HasMore: len(items) >= pagination.EffectiveLimit(),
+	}, nil
+}
+
+// GetModerationQueueItem returns a single moderation queue item. [16-admin §4]
+func (s *AdminServiceImpl) GetModerationQueueItem(ctx context.Context, _ *shared.AuthContext, itemID uuid.UUID) (*ModerationQueueItem, error) {
+	item, err := s.safetySvc.GetReviewQueueItem(ctx, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("getting moderation item: %w", err)
+	}
+	if item == nil {
+		return nil, ErrModerationItemNotFound
+	}
+	return item, nil
+}
+
+// TakeModerationAction performs an action on a moderation queue item with audit logging. [16-admin §4, §8]
+func (s *AdminServiceImpl) TakeModerationAction(ctx context.Context, auth *shared.AuthContext, itemID uuid.UUID, input *ModerationActionInput) error {
+	if err := s.safetySvc.TakeModerationAction(ctx, itemID, input.Action, input.Reason); err != nil {
+		return fmt.Errorf("taking moderation action: %w", err)
+	}
+
+	if _, auditErr := s.auditRepo.Create(ctx, &CreateAuditLogEntry{
+		AdminID:    auth.ParentID,
+		Action:     "moderation_action",
+		TargetType: "moderation_item",
+		TargetID:   &itemID,
+		Details:    json.RawMessage(fmt.Sprintf(`{"action":%q,"reason":%q}`, input.Action, input.Reason)),
+	}); auditErr != nil {
+		return fmt.Errorf("logging audit: %w", auditErr)
+	}
+
+	return nil
+}
+
+// ─── Methodology Config ─────────────────────────────────────────────────────
+
+// ListMethodologies returns all methodology configurations. [16-admin §4]
+func (s *AdminServiceImpl) ListMethodologies(ctx context.Context, _ *shared.AuthContext) ([]MethodologyConfig, error) {
+	configs, err := s.methodSvc.ListMethodologies(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing methodologies: %w", err)
+	}
+	return configs, nil
+}
+
+// UpdateMethodologyConfig updates a methodology configuration with audit logging. [16-admin §4, §8]
+func (s *AdminServiceImpl) UpdateMethodologyConfig(ctx context.Context, auth *shared.AuthContext, slug string, input *UpdateMethodologyInput) (*MethodologyConfig, error) {
+	config, err := s.methodSvc.UpdateMethodologyConfig(ctx, slug, input)
+	if err != nil {
+		return nil, fmt.Errorf("updating methodology config: %w", err)
+	}
+
+	if _, auditErr := s.auditRepo.Create(ctx, &CreateAuditLogEntry{
+		AdminID:    auth.ParentID,
+		Action:     "methodology_config_update",
+		TargetType: "methodology",
+		Details:    json.RawMessage(fmt.Sprintf(`{"slug":%q}`, slug)),
+	}); auditErr != nil {
+		return nil, fmt.Errorf("logging audit: %w", auditErr)
+	}
+
+	return config, nil
+}
+
+// ─── Lifecycle Management ───────────────────────────────────────────────────
+
+// GetPendingDeletions returns accounts pending deletion. [16-admin §4]
+func (s *AdminServiceImpl) GetPendingDeletions(ctx context.Context, _ *shared.AuthContext, pagination *shared.PaginationParams) (*shared.PaginatedResponse[DeletionSummary], error) {
+	deletions, err := s.lifecycleSvc.GetPendingDeletions(ctx, pagination)
+	if err != nil {
+		return nil, fmt.Errorf("getting pending deletions: %w", err)
+	}
+
+	return &shared.PaginatedResponse[DeletionSummary]{
+		Data:    deletions,
+		HasMore: len(deletions) >= pagination.EffectiveLimit(),
+	}, nil
+}
+
+// GetRecoveryRequests returns pending account recovery requests. [16-admin §4]
+func (s *AdminServiceImpl) GetRecoveryRequests(ctx context.Context, _ *shared.AuthContext, pagination *shared.PaginationParams) (*shared.PaginatedResponse[RecoverySummary], error) {
+	recoveries, err := s.lifecycleSvc.GetRecoveryRequests(ctx, pagination)
+	if err != nil {
+		return nil, fmt.Errorf("getting recovery requests: %w", err)
+	}
+
+	return &shared.PaginatedResponse[RecoverySummary]{
+		Data:    recoveries,
+		HasMore: len(recoveries) >= pagination.EffectiveLimit(),
+	}, nil
+}
+
+// ResolveRecoveryRequest approves or denies an account recovery request with audit logging. [16-admin §4, §8]
+func (s *AdminServiceImpl) ResolveRecoveryRequest(ctx context.Context, auth *shared.AuthContext, requestID uuid.UUID, approved bool) error {
+	if err := s.lifecycleSvc.ResolveRecoveryRequest(ctx, requestID, approved); err != nil {
+		return fmt.Errorf("resolving recovery: %w", err)
+	}
+
+	action := "recovery_denied"
+	if approved {
+		action = "recovery_approved"
+	}
+
+	if _, auditErr := s.auditRepo.Create(ctx, &CreateAuditLogEntry{
+		AdminID:    auth.ParentID,
+		Action:     action,
+		TargetType: "recovery_request",
+		TargetID:   &requestID,
+		Details:    json.RawMessage(fmt.Sprintf(`{"approved":%t}`, approved)),
+	}); auditErr != nil {
+		return fmt.Errorf("logging audit: %w", auditErr)
+	}
+
+	return nil
 }
 
 // ─── Audit Log ──────────────────────────────────────────────────────────────

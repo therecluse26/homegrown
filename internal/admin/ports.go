@@ -24,10 +24,22 @@ type AdminService interface {
 	// GetUserAuditTrail returns audit trail for a specific family.
 	GetUserAuditTrail(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, pagination *shared.PaginationParams) (*shared.PaginatedResponse[AuditLogEntry], error)
 
+	// SuspendUser suspends a family account. [16-admin §4]
+	SuspendUser(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, reason string) error
+
+	// UnsuspendUser lifts a suspension on a family account. [16-admin §4]
+	UnsuspendUser(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID) error
+
+	// BanUser permanently bans a family account. [16-admin §4]
+	BanUser(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, reason string) error
+
 	// === Feature Flags ===
 
 	// ListFlags lists all feature flags.
 	ListFlags(ctx context.Context, auth *shared.AuthContext) ([]FeatureFlag, error)
+
+	// GetFlag returns a single feature flag by key. [16-admin §4]
+	GetFlag(ctx context.Context, auth *shared.AuthContext, key string) (*FeatureFlag, error)
 
 	// CreateFlag creates a new feature flag.
 	CreateFlag(ctx context.Context, auth *shared.AuthContext, input *CreateFlagInput) (*FeatureFlag, error)
@@ -41,6 +53,36 @@ type AdminService interface {
 	// IsFlagEnabled evaluates whether a flag is enabled for a specific family.
 	// Used by other domains to check feature flags at runtime. [16-admin §10.2]
 	IsFlagEnabled(ctx context.Context, key string, familyID *uuid.UUID) (bool, error)
+
+	// === Moderation Queue ===
+
+	// GetModerationQueue returns the moderation review queue. [16-admin §4]
+	GetModerationQueue(ctx context.Context, auth *shared.AuthContext, pagination *shared.PaginationParams) (*shared.PaginatedResponse[ModerationQueueItem], error)
+
+	// GetModerationQueueItem returns a single moderation queue item. [16-admin §4]
+	GetModerationQueueItem(ctx context.Context, auth *shared.AuthContext, itemID uuid.UUID) (*ModerationQueueItem, error)
+
+	// TakeModerationAction performs an action on a moderation queue item. [16-admin §4]
+	TakeModerationAction(ctx context.Context, auth *shared.AuthContext, itemID uuid.UUID, input *ModerationActionInput) error
+
+	// === Methodology Config ===
+
+	// ListMethodologies returns all methodology configurations for admin editing. [16-admin §4]
+	ListMethodologies(ctx context.Context, auth *shared.AuthContext) ([]MethodologyConfig, error)
+
+	// UpdateMethodologyConfig updates a methodology configuration. [16-admin §4]
+	UpdateMethodologyConfig(ctx context.Context, auth *shared.AuthContext, slug string, input *UpdateMethodologyInput) (*MethodologyConfig, error)
+
+	// === Lifecycle Management ===
+
+	// GetPendingDeletions returns accounts pending deletion. [16-admin §4]
+	GetPendingDeletions(ctx context.Context, auth *shared.AuthContext, pagination *shared.PaginationParams) (*shared.PaginatedResponse[DeletionSummary], error)
+
+	// GetRecoveryRequests returns pending account recovery requests. [16-admin §4]
+	GetRecoveryRequests(ctx context.Context, auth *shared.AuthContext, pagination *shared.PaginationParams) (*shared.PaginatedResponse[RecoverySummary], error)
+
+	// ResolveRecoveryRequest approves or denies an account recovery request. [16-admin §4]
+	ResolveRecoveryRequest(ctx context.Context, auth *shared.AuthContext, requestID uuid.UUID, approved bool) error
 
 	// === System Health ===
 
@@ -129,10 +171,31 @@ type IamServiceForAdmin interface {
 // Implemented by a function adapter in main.go. [ARCH §4.4]
 type SafetyServiceForAdmin interface {
 	GetModerationHistory(ctx context.Context, familyID uuid.UUID) ([]ModerationActionSummary, error)
+	SuspendAccount(ctx context.Context, familyID uuid.UUID, reason string) error
+	UnsuspendAccount(ctx context.Context, familyID uuid.UUID) error
+	BanAccount(ctx context.Context, familyID uuid.UUID, reason string) error
+	GetReviewQueue(ctx context.Context, pagination *shared.PaginationParams) ([]ModerationQueueItem, error)
+	GetReviewQueueItem(ctx context.Context, itemID uuid.UUID) (*ModerationQueueItem, error)
+	TakeModerationAction(ctx context.Context, itemID uuid.UUID, action string, reason string) error
 }
 
 // BillingServiceForAdmin is a consumer-defined interface for cross-domain calls to billing::.
 // Implemented by a function adapter in main.go. [ARCH §4.4]
 type BillingServiceForAdmin interface {
 	GetSubscriptionInfo(ctx context.Context, familyID uuid.UUID) (*AdminSubscriptionInfo, error)
+}
+
+// MethodologyServiceForAdmin is a consumer-defined interface for cross-domain calls to method::.
+// Implemented by a function adapter in main.go. [ARCH §4.4]
+type MethodologyServiceForAdmin interface {
+	ListMethodologies(ctx context.Context) ([]MethodologyConfig, error)
+	UpdateMethodologyConfig(ctx context.Context, slug string, input *UpdateMethodologyInput) (*MethodologyConfig, error)
+}
+
+// LifecycleServiceForAdmin is a consumer-defined interface for cross-domain calls to iam:: lifecycle.
+// Implemented by a function adapter in main.go. [ARCH §4.4]
+type LifecycleServiceForAdmin interface {
+	GetPendingDeletions(ctx context.Context, pagination *shared.PaginationParams) ([]DeletionSummary, error)
+	GetRecoveryRequests(ctx context.Context, pagination *shared.PaginationParams) ([]RecoverySummary, error)
+	ResolveRecoveryRequest(ctx context.Context, requestID uuid.UUID, approved bool) error
 }

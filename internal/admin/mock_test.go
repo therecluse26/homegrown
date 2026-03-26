@@ -130,7 +130,13 @@ func (s *stubIamService) GetStudents(ctx context.Context, familyID uuid.UUID) ([
 // ─── stubSafetyService ──────────────────────────────────────────────────────
 
 type stubSafetyService struct {
-	getModerationHistoryFn func(ctx context.Context, familyID uuid.UUID) ([]ModerationActionSummary, error)
+	getModerationHistoryFn  func(ctx context.Context, familyID uuid.UUID) ([]ModerationActionSummary, error)
+	suspendAccountFn        func(ctx context.Context, familyID uuid.UUID, reason string) error
+	unsuspendAccountFn      func(ctx context.Context, familyID uuid.UUID) error
+	banAccountFn            func(ctx context.Context, familyID uuid.UUID, reason string) error
+	getReviewQueueFn        func(ctx context.Context, pagination *shared.PaginationParams) ([]ModerationQueueItem, error)
+	getReviewQueueItemFn    func(ctx context.Context, itemID uuid.UUID) (*ModerationQueueItem, error)
+	takeModerationActionFn  func(ctx context.Context, itemID uuid.UUID, action string, reason string) error
 }
 
 func (s *stubSafetyService) GetModerationHistory(ctx context.Context, familyID uuid.UUID) ([]ModerationActionSummary, error) {
@@ -138,6 +144,48 @@ func (s *stubSafetyService) GetModerationHistory(ctx context.Context, familyID u
 		return s.getModerationHistoryFn(ctx, familyID)
 	}
 	return nil, nil // safe default
+}
+
+func (s *stubSafetyService) SuspendAccount(ctx context.Context, familyID uuid.UUID, reason string) error {
+	if s.suspendAccountFn != nil {
+		return s.suspendAccountFn(ctx, familyID, reason)
+	}
+	return nil
+}
+
+func (s *stubSafetyService) UnsuspendAccount(ctx context.Context, familyID uuid.UUID) error {
+	if s.unsuspendAccountFn != nil {
+		return s.unsuspendAccountFn(ctx, familyID)
+	}
+	return nil
+}
+
+func (s *stubSafetyService) BanAccount(ctx context.Context, familyID uuid.UUID, reason string) error {
+	if s.banAccountFn != nil {
+		return s.banAccountFn(ctx, familyID, reason)
+	}
+	return nil
+}
+
+func (s *stubSafetyService) GetReviewQueue(ctx context.Context, pagination *shared.PaginationParams) ([]ModerationQueueItem, error) {
+	if s.getReviewQueueFn != nil {
+		return s.getReviewQueueFn(ctx, pagination)
+	}
+	return []ModerationQueueItem{}, nil
+}
+
+func (s *stubSafetyService) GetReviewQueueItem(ctx context.Context, itemID uuid.UUID) (*ModerationQueueItem, error) {
+	if s.getReviewQueueItemFn != nil {
+		return s.getReviewQueueItemFn(ctx, itemID)
+	}
+	return nil, nil
+}
+
+func (s *stubSafetyService) TakeModerationAction(ctx context.Context, itemID uuid.UUID, action string, reason string) error {
+	if s.takeModerationActionFn != nil {
+		return s.takeModerationActionFn(ctx, itemID, action, reason)
+	}
+	return nil
 }
 
 // ─── stubBillingService ─────────────────────────────────────────────────────
@@ -151,6 +199,56 @@ func (s *stubBillingService) GetSubscriptionInfo(ctx context.Context, familyID u
 		return s.getSubscriptionInfoFn(ctx, familyID)
 	}
 	return nil, nil // safe default
+}
+
+// ─── stubMethodService ──────────────────────────────────────────────────────
+
+type stubMethodService struct {
+	listMethodologiesFn       func(ctx context.Context) ([]MethodologyConfig, error)
+	updateMethodologyConfigFn func(ctx context.Context, slug string, input *UpdateMethodologyInput) (*MethodologyConfig, error)
+}
+
+func (s *stubMethodService) ListMethodologies(ctx context.Context) ([]MethodologyConfig, error) {
+	if s.listMethodologiesFn != nil {
+		return s.listMethodologiesFn(ctx)
+	}
+	return []MethodologyConfig{}, nil
+}
+
+func (s *stubMethodService) UpdateMethodologyConfig(ctx context.Context, slug string, input *UpdateMethodologyInput) (*MethodologyConfig, error) {
+	if s.updateMethodologyConfigFn != nil {
+		return s.updateMethodologyConfigFn(ctx, slug, input)
+	}
+	return nil, ErrMethodologyNotFound
+}
+
+// ─── stubLifecycleService ───────────────────────────────────────────────────
+
+type stubLifecycleService struct {
+	getPendingDeletionsFn    func(ctx context.Context, pagination *shared.PaginationParams) ([]DeletionSummary, error)
+	getRecoveryRequestsFn    func(ctx context.Context, pagination *shared.PaginationParams) ([]RecoverySummary, error)
+	resolveRecoveryRequestFn func(ctx context.Context, requestID uuid.UUID, approved bool) error
+}
+
+func (s *stubLifecycleService) GetPendingDeletions(ctx context.Context, pagination *shared.PaginationParams) ([]DeletionSummary, error) {
+	if s.getPendingDeletionsFn != nil {
+		return s.getPendingDeletionsFn(ctx, pagination)
+	}
+	return []DeletionSummary{}, nil
+}
+
+func (s *stubLifecycleService) GetRecoveryRequests(ctx context.Context, pagination *shared.PaginationParams) ([]RecoverySummary, error) {
+	if s.getRecoveryRequestsFn != nil {
+		return s.getRecoveryRequestsFn(ctx, pagination)
+	}
+	return []RecoverySummary{}, nil
+}
+
+func (s *stubLifecycleService) ResolveRecoveryRequest(ctx context.Context, requestID uuid.UUID, approved bool) error {
+	if s.resolveRecoveryRequestFn != nil {
+		return s.resolveRecoveryRequestFn(ctx, requestID, approved)
+	}
+	return nil
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -259,12 +357,15 @@ func newTestService(
 	iamSvc IamServiceForAdmin,
 	safetySvc SafetyServiceForAdmin,
 	billingSvc BillingServiceForAdmin,
+	methodSvc MethodologyServiceForAdmin,
+	lifecycleSvc LifecycleServiceForAdmin,
 	healthChecker HealthChecker,
 	jobInspector JobInspector,
 ) AdminService {
 	return NewAdminService(
 		flagRepo, auditRepo, cache,
 		iamSvc, safetySvc, billingSvc,
+		methodSvc, lifecycleSvc,
 		healthChecker, jobInspector,
 	)
 }

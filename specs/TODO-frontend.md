@@ -59,6 +59,10 @@ These apply to **every** phase and are not listed per-item:
 | Error handling | TanStack Query retries (3× w/ backoff), graceful offline/error states on all pages | CODING_STANDARDS §3.5 |
 | Print readiness | Compliance, scheduling, and progress output must be printable via `print.css` | SPEC §17.9 |
 | Dark mode readiness | No `dark:` prefixes; all colors via token classes; CSS-only theme switch structure | DESIGN_TOKENS §2.9 |
+| Family-scoped validation | All data-fetching hooks scope queries by family. Never display cross-family data. Include `familyId` in query keys. | ARCHITECTURE §5 |
+| API error handling | Never expose internal error details in UI. Map `apiClient` errors to user-friendly messages. Generic "Something went wrong" for 500s; specific messages only for 422 validation errors. | CODING_STANDARDS §5.2 |
+| Loading states | Every async page/component MUST show `<Skeleton>` or `<Spinner>` during loading. | CODING_STANDARDS §3.5 |
+| Empty states | Every list view MUST show `<EmptyState>` with contextual message + CTA when empty. | DESIGN §5 |
 
 ---
 
@@ -149,10 +153,13 @@ Create `frontend/src/styles/` with the following files (DESIGN_TOKENS §1.2):
   - Z-index scale (8 tiers) (DESIGN_TOKENS §9)
   - Animation durations (4) + easings (3) (DESIGN_TOKENS §10)
   - Breakpoint: `--breakpoint-3xl: 1920px` (DESIGN_TOKENS §15)
+  - Opacity tokens (8 values): `--opacity-disabled` (0.38), `--opacity-hover` (0.08), `--opacity-pressed` (0.12), `--opacity-focus` (0.12), `--opacity-dragged` (0.16), `--opacity-glass` (0.8), `--opacity-ghost-border` (0.2), `--opacity-scrim` (0.32) (DESIGN_TOKENS §11)
+  - Container width tokens: `--width-content` (72rem), `--width-content-narrow` (48rem), `--width-sidebar` (16rem), `--width-sidebar-collapsed` (4rem) (DESIGN_TOKENS §8.2)
   - `:root` block for non-theme tokens (gradients, focus-ring) (DESIGN_TOKENS §11)
+  - Gradient tokens in `:root` block: `--gradient-primary` (135deg primary→primary-container), `--gradient-surface` (180deg surface→surface-container-low) (DESIGN_TOKENS §16)
 - [ ] `base.css` — `@font-face` declarations, CSS reset additions, `:focus-visible` ring, `prefers-reduced-motion` (DESIGN_TOKENS §4, §10.2) `[P1]`
 - [ ] `components.css` — type-scale composite classes (`.text-display-lg` through `.text-label-sm`, 15 steps) (DESIGN_TOKENS §5) `[P1]`
-- [ ] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class using `::after` pseudo-element for 44×44px hit area (DESIGN_TOKENS §14.3), parent/student Tailwind custom variants (`parent:`, `student:`) using `@custom-variant` with `:where([data-context])` selectors (DESIGN_TOKENS §9, §12, §15.1) `[P1]`
+- [ ] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class using `::after` pseudo-element for 44×44px hit area (DESIGN_TOKENS §14.3), parent/student Tailwind custom variants (`parent:`, `student:`) using `@custom-variant` with `:where([data-context])` selectors (DESIGN_TOKENS §9, §12, §15.1), MD3 state layer utility classes: `.state-hover`, `.state-pressed`, `.state-focus`, `.state-dragged` applying opacity token overlays via `::before` pseudo-element (DESIGN_TOKENS §14.1) `[P1]`
 - [ ] `print.css` — `@media print` token overrides + hide rules (DESIGN_TOKENS §16) `[P1]`
 - [ ] `app.css` — entry point: `@import "tailwindcss"` then import all above files (DESIGN_TOKENS §1.2) `[P1]`
 
@@ -239,13 +246,13 @@ Building these first prevents duplication and ensures consistency.
 
 ### Core Primitives (`components/ui/`)
 
-- [ ] `button.tsx` — 3 variants: primary (solid primary bg), secondary (secondary-container fill), tertiary (transparent, hover surface-container-low). All use `radius-button` (0.75rem). Min tap target 44px on mobile. (DESIGN §5.1, DESIGN_TOKENS §7) `[P1]`
-- [ ] `input.tsx` — background `surface-container-highest`, no border. Focus: ghost border via `primary`. Error: `error-container` bg + `error` text. Visible `<label>` required. (DESIGN §5.3, CODING_STANDARDS §3.8) `[P1]`
+- [ ] `button.tsx` — 3 variants: primary (solid primary bg), secondary (secondary-container fill), tertiary (transparent, hover surface-container-low). All use `radius-button` (0.75rem). Min tap target 44px on mobile. Full MD3 state matrix: hover (8% on-* overlay), active/pressed (12% overlay), focus (focus ring), disabled (38% opacity), loading (spinner centered, text hidden). Context-dependent typography: parent context = `label-md` UPPERCASE; student context = `title-sm` sentence case. High-impact CTA gradient variant: `--gradient-primary` bg for "Start Lesson"-type CTAs. (DESIGN §2, §5.1, DESIGN_TOKENS §7, §14.2) `[P1]`
+- [ ] `input.tsx` — full 5-state matrix: default (bg `surface-container-highest`, no border), hover (bg `surface-container-high`), focus (2px inset `primary` ghost border via `box-shadow` — NOT standard border to avoid layout shift), error (bg `error-container`, 2px inset `error` border, error text below with `aria-describedby`), disabled (38% opacity, `pointer-events: none`). Visible `<label>` required. (DESIGN §5.3, DESIGN_TOKENS §6.2, §14.2, CODING_STANDARDS §3.8) `[P1]`
 - [ ] `textarea.tsx` — same styling rules as input, auto-resize optional `[P1]`
 - [ ] `select.tsx` — custom select with accessible keyboard nav, token styling `[P1]`
 - [ ] `checkbox.tsx` — accessible checkbox with `primary` accent `[P1]`
 - [ ] `radio.tsx` — accessible radio group with `primary` accent `[P1]`
-- [ ] `card.tsx` — accepts `context` prop for parent (`radius-lg`) vs student (`radius-xl`). Background `surface-container-lowest` (#fff) for "lifted" cards. Shadow `ambient-sm`. (DESIGN §4.2, DESIGN_TOKENS §7–§8) `[P1]`
+- [ ] `card.tsx` — accepts `context` prop for parent (`radius-lg`) vs student (`radius-xl`). Background `surface-container-lowest` (#fff) for "lifted" cards. Interactive card states: non-interactive (no shadow, depth via tonal shift only), interactive hover (`ambient-sm` shadow — subtle lift), interactive active (bg shifts to `surface-container-low`), interactive focus (focus ring). Shadow rule: tonal shifts for standard elements, shadows ONLY for floating/hover states. (DESIGN §4.2, DESIGN_TOKENS §7–§8, §14.2) `[P1]`
 - [ ] `badge.tsx` — pill shape (`radius-full`), methodology-aware coloring `[P1]`
 - [ ] `avatar.tsx` — circular, fallback initials, sizes xs–xl `[P1]`
 - [ ] `modal.tsx` — focus trap, return focus on close, overlay at `z-modal`, `Escape` to close. (CODING_STANDARDS §3.8, DESIGN_TOKENS §9) `[P1]`
@@ -269,6 +276,8 @@ Building these first prevents duplication and ensures consistency.
 - [ ] `stat-card.tsx` — reusable metric display card for dashboards (value, label, trend indicator) `[P1]`
 - [ ] `breadcrumb.tsx` — nested route breadcrumbs for deep navigation in settings, compliance, admin `[P1]`
 - [ ] `image-gallery.tsx` — photo grid with lightbox overlay for social posts, journals, portfolios `[P1]`
+- [ ] `link.tsx` — styled anchor with state matrix: default (`primary` color, no decoration), hover (`primary-container` color, underline), active (`primary`, underline), focus (focus ring), visited (same as default — privacy, no visited indicator). `external` prop adds `rel="noopener noreferrer"` + optional icon. (DESIGN_TOKENS §14.2) `[P1]`
+- [ ] `list.tsx` — list container enforcing "no divider" rule: items separated by `spacing-list-gap` (1.4rem) OR alternating `surface`/`surface-container-low` bg. NEVER 1px borders between items. (DESIGN §5.2) `[P1]`
 
 ### Common Components (`components/common/`)
 
@@ -278,13 +287,13 @@ Building these first prevents duplication and ensures consistency.
 - [ ] `tier-gate.tsx` — shows upgrade prompt when free user hits premium feature; links to `/settings/subscription`, shows specific feature name being gated (SPEC §10) `[P1]`
 - [ ] `error-boundary.tsx` — React error boundary with friendly fallback UI `[P1]`
 - [ ] `page-title.tsx` — sets `document.title` + renders `<h1>` for focus target on route transitions `[P1]`
-- [ ] `report-button.tsx` — report dialog accepting `targetType` + `targetId` (supports all 11 entity types per safety domain spec); links to community guidelines (SPEC §11) `[P1]`
+- [ ] `report-button.tsx` — report dialog accepting `targetType` + `targetId` (supports all 11 entity types per safety domain spec); links to community guidelines. Report category dropdown: inappropriate content, harassment, spam, misinformation, CSAM/child safety, methodology hostility, other. Free-text description field (optional). Confirmation acknowledgment after submission. (SPEC §11, §12.3, 11-safety §3.1) `[P1]`
 - [ ] `network-status.tsx` — offline/online banner/toast; detects connectivity via `navigator.onLine` + `online`/`offline` events `[P1]`
 
 ### Form Utilities
 
 - [ ] `form-field.tsx` — wraps input + label + error message with consistent spacing. Visible `<label>` required (never placeholder-only), `aria-describedby` linking error message `<span>` to input, `aria-live="assertive"` on error message container for screen reader announcements (CODING_STANDARDS §3.8) `[P1]`
-- [ ] `file-upload.tsx` — drag-and-drop zone, file type + size validation (client-side), progress indicator. Extension validation pre-upload, magic byte validation happens server-side. (SPEC §9, CODING_STANDARDS §3.9) `[P1]`
+- [ ] `file-upload.tsx` — drag-and-drop zone, file type + size validation (client-side), progress indicator. Extension validation pre-upload, magic byte validation happens server-side. Upload progress bar with `aria-valuenow`/`aria-valuemax`. Error states: file too large (show max size), wrong type (show allowed types), server rejection (generic message). (SPEC §9, CODING_STANDARDS §3.9, 09-media §9) `[P1]`
 
 ### Verification
 
@@ -355,6 +364,7 @@ a layout and depends on auth state. This is the app skeleton.
   - Responsive: sidebar collapses below `lg` breakpoint
   - Floating nav: `surface-container-low` at 80% opacity + `backdrop-blur: 20px` (DESIGN §4.4)
   - Note: `data-context="parent"` enables `parent:` Tailwind variant; `data-context="student"` enables `student:` variant
+  - Intentional Asymmetry: hero sections support offset `display-lg` headline overlapping floating card at 4rem offset (DESIGN §1)
 - [ ] `student-shell.tsx` — supervised student layout: `[P1]`
   - Simplified nav (no social, no marketplace, no settings)
   - `data-context="student"` on `<main>` (enables `student:` variant)
@@ -413,6 +423,7 @@ a layout and depends on auth state. This is the app skeleton.
     /settings/account/sessions → SessionManagement         [P1]
     /settings/account/export → DataExport                  [P1]
     /settings/account/delete → AccountDeletion             [P1]
+    /settings/account/appeals → ModerationAppeals          [P1]
     /settings/privacy → PrivacyControls                    [P1]
     /search → SearchResults
     /family/:familyId → FamilyProfile
@@ -428,6 +439,7 @@ a layout and depends on auth state. This is the app skeleton.
     /auth/register → Register
     /auth/recovery → AccountRecovery
     /auth/verification → EmailVerification
+    /auth/accept-invite/:token → AcceptInvitation          [P1]
   /onboarding (ProtectedRoute + OnboardingLayout)
     index → OnboardingWizard
   /student (ProtectedRoute + StudentGuard + StudentShell)
@@ -453,10 +465,17 @@ a layout and depends on auth state. This is the app skeleton.
     /compliance/portfolios/:id → PortfolioBuilder          [P3]
     /compliance/transcripts → TranscriptList               [P3]
     /compliance/transcripts/:id → TranscriptBuilder        [P3]
+    * → NotFoundPage                                      [P1]
   ```
   (ARCHITECTURE §11.3)
 - [ ] Update `src/App.tsx` — replace stub with `RouterProvider` + providers (Auth → Methodology → IntlProvider → Router) `[P1]`
 - [ ] Update `src/main.tsx` — ensure provider ordering: `StrictMode → QueryClientProvider → App` `[P1]`
+
+### Error Boundaries
+
+- [ ] Wrap each top-level route segment in `<RouteErrorBoundary>` with friendly fallback UI + "Go home" CTA `[P1]`
+  - Segments: auth, onboarding, learning, social, marketplace, creator, settings, compliance, admin, planning, student, legal, search
+- [ ] `features/auth/accept-invitation.tsx` — co-parent invitation acceptance: validates token, shows inviting family info, registration or account linking, join confirmation (SPEC §3.4, 01-iam) `[P1]`
 
 ### Route Transition Accessibility
 
@@ -519,6 +538,7 @@ Depends on Phase 4 auth context and layout.
 
 - [ ] `features/settings/session-management.tsx` — list active sessions, revoke individual sessions, "log out all devices" button `[P1]`
 - [ ] `features/settings/mfa-setup.tsx` — TOTP MFA setup: QR code display, verification input, recovery codes display + download `[P2]`
+- [ ] `features/auth/session-timeout-warning.tsx` — overlay 5min before session expiry: countdown timer, "Extend Session" button, auto-redirect to `/auth/login` on timeout, `aria-live="assertive"` for countdown announcements (SPEC §17.1) `[P1]`
 
 ### Legal Pages (`features/legal/`)
 
@@ -544,6 +564,7 @@ Depends on Phase 4 auth context and layout.
 - [ ] Rate limiting feedback on login — `429` response → friendly "Too many attempts" message + retry countdown timer (SPEC §1.2) `[P1]`
 - [ ] Email verification resend button with 60-second cooldown timer — disabled state + countdown during cooldown (SPEC §1.3) `[P1]`
 - [ ] COPPA consent re-verification prompt when ToS version changes for families with students already added (SPEC §7.3) `[P1]`
+- [ ] `features/auth/coppa-micro-charge.tsx` — COPPA micro-charge verification: micro-charge explanation, amount verification input, retry on mismatch (10-billing §13) `[P2]`
 
 ### WebSocket Foundation
 
@@ -632,6 +653,7 @@ Tests the entire data flow: auth → API → TanStack Query → UI.
   - GET `/onboarding/community` — methodology groups, nearby families count, mentor suggestions
   - Co-parent invite CTA (optional, can defer to settings)
   - "Complete" button → `POST /onboarding/complete` → redirect to `/`
+  - Note: Co-parent invitation acceptance has a dedicated `/auth/accept-invite/:token` page (component in Phase 4/5) — SPEC §3.4
 
 ### Methodology Explorer (shared — also used in settings)
 
@@ -691,16 +713,18 @@ pages exercise CRUD patterns that all subsequent features follow.
   - Per-student methodology override
   - Per-student tool display
 - [ ] `notification-prefs.tsx` — notification preference management: `[P1]`
-  - Per-type per-channel toggles
-  - Digest frequency: immediate/daily/weekly/off
-  - System-critical notifications shown as non-toggleable
-  - (SPEC §8, domain spec `specs/domains/08-notify.md`)
+  - Per-type per-channel toggle grid (in-app column, email column)
+  - Digest frequency with preview text explaining each option (immediate/daily/weekly/off)
+  - Lock icon on system-critical non-toggleable notifications
+  - "Opt out of all non-essential email" batch toggle
+  - CAN-SPAM compliant unsubscribe mechanism
+  - (SPEC §13.3, domain spec `specs/domains/08-notify.md`)
 - [ ] `subscription-manager.tsx` — subscription management: `[P2]`
   - Current plan display
-  - Upgrade/downgrade flow
+  - Upgrade/downgrade flow with downgrade consequence warning modal listing: "Learning data preserved", "Premium tools become read-only", "Compliance reports remain downloadable", "AI recommendations disabled". Explicit confirmation checkbox required.
   - Billing cycle info
   - Payment method management
-  - (SPEC §10, domain spec `specs/domains/10-billing.md`)
+  - (SPEC §10, §15.3, domain spec `specs/domains/10-billing.md`)
 - [ ] `account-settings.tsx` — account-level settings (`/settings/account`): email, password change, linked OAuth accounts `[P1]`
 - [ ] `privacy-controls.tsx` — per-field visibility toggles for family profile (friends-only / hidden); controls what other families can see (SPEC §5.2) `[P1]`
 
@@ -735,6 +759,18 @@ pages exercise CRUD patterns that all subsequent features follow.
 - [ ] `components/layout/notification-bell.tsx` — bell icon in header with unread count badge `[P1]`
 - [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications; notification type icons per category (social, learning, system, marketplace); system-critical notifications show lock icon + non-toggleable indicator `[P1]`
 - [ ] `features/settings/notification-history.tsx` — full notification history page (`/settings/notifications/history`) with filters by type, date range, and read/unread status `[P1]`
+
+### Notification Type → Phase Mapping
+
+Notification types delivered via WebSocket + notification center, phased as follows:
+
+- **Phase 1 (P1)**: `friend_request_received`, `friend_request_accepted`, `message_received`, `content_flagged`, `event_cancelled`
+- **Phase 2 (P2)**: `purchase_completed`, `review_received`, `subscription_created`, `subscription_cancelled`, `subscription_renewed`, `streak_milestone`, `learning_milestone`, `attendance_threshold_warning`, `payout_completed`
+- Source: 08-notify §9
+
+### Free Tier Verification
+
+- [ ] Verify free-tier features accessible without premium subscription: social feed, basic learning tools (activity log, journals, reading lists), marketplace browse/purchase, methodology selection, discovery quiz import, onboarding, data export. Premium-gated features (compliance, recommendations, advanced analytics) show `<TierGate>` upgrade prompt. (SPEC §15.1) `[P1]`
 
 ### API Schema Prerequisite
 
@@ -824,9 +860,10 @@ and family management from prior phases.
   - Subject tags via `<SubjectPicker>`
 - [ ] `reading-lists.tsx` — manage reading lists and items: `[P1]`
   - List view with status badges (to_read/in_progress/completed)
-  - Add book form: title, author, ISBN, student
+  - Add book form: title, author, ISBN (with auto-populate lookup, fallback to manual entry `[P2]`), student
   - Status transition buttons
   - Reading list grouping/organization
+  - Reading list sharing: share button → select friends/groups → shareable link, recipients can view or copy list `[P2]`
 - [ ] `progress-view.tsx` — per-student progress dashboard (`/learning/progress/:studentId`): `[P1]`
   - Activity counts by subject
   - Reading completion metrics
@@ -856,10 +893,19 @@ and family management from prior phases.
 
 - [ ] `quiz-player.tsx` — interactive quiz (`/learning/quiz/:sessionId`): `[P1]`
   - Session lifecycle: `not_started → in_progress → submitted → scored`
-  - Question display (multiple choice, free response, etc.)
-  - Answer submission
+  - Question types: multiple choice, fill-in-the-blank, true/false, matching, ordering, short answer
+  - Auto-save on each answer for save-and-resume (no data loss on browser crash/navigation)
+  - "Save & Exit" button preserving progress; returning restores exact state
+  - Short-answer questions show "Awaiting parent review" instead of auto-score
   - Score display on completion
   - `aria-live` for quiz feedback (CODING_STANDARDS §3.8)
+  - (SPEC §8.1.9)
+- [ ] `parent-quiz-scoring.tsx` — parent scoring interface for short-answer questions: `[P1]`
+  - Pending-review list with notification badge on learning dashboard when reviews are pending
+  - Question + student response display
+  - Score input (correct / partial / incorrect)
+  - "Score All" batch action for multiple pending answers
+  - (SPEC §8.1.9)
 - [ ] `video-player.tsx` — video playback (`/learning/video/:videoId`): `[P1]`
   - HLS streaming support + external video URLs
   - Progress tracking (last position, completion percentage)
@@ -875,6 +921,7 @@ and family management from prior phases.
   - Current step highlight
   - Unlock logic visualization
   - Navigation between sequence items
+  - Parent override controls: "Skip" button (marks item skipped, advances), "Unlock" button (unlocks ahead of progression). Confirmation dialog explaining override; override actions logged. (SPEC §8.1.12)
 
 ### Content Assignment UX
 
@@ -905,6 +952,12 @@ and family management from prior phases.
 ### Learning Data Export
 
 - [ ] Learning data export button on `progress-view.tsx` — triggers domain-scoped export via data lifecycle hooks `[P1]`
+
+### Streak & Milestone Display
+
+- [ ] Streak indicator on learning dashboard: flame/star icon + day count, milestone badges at 7/14/30/60/100 days `[P1]`
+- [ ] Milestone celebration toast on WebSocket event (`streak_milestone`, `learning_milestone`) `[P1]`
+- Source: SPEC §13.1, 08-notify §9
 
 ### Phase 3 Methodology-Specific Tools (future placeholders)
 
@@ -1001,6 +1054,8 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Message list with timestamps
   - Message composer
   - Real-time message delivery
+  - Image attachment button using `file-upload.tsx`, single image per message `[P1]`
+  - Inline image preview in message bubble, tap for lightbox (SPEC §7.5) `[P1]`
 - [ ] Conversation mute toggle — bell-off icon, server-persisted mute state, muted conversations show muted indicator in inbox (SPEC §5.4) `[P1]`
 - [ ] Message search within conversation — debounced search input, `Ctrl+F` keyboard shortcut, highlights matching messages (SPEC §5.4) `[P1]`
 - [ ] `groups-list.tsx` — group directory (`/groups`): `[P1]`
@@ -1015,8 +1070,10 @@ from Phases 1–7 but are independent of Phase 8 (learning).
 - [ ] Group role management UI — owner → moderator → member hierarchy display, role badges, role change confirmation dialogs (SPEC §5.5) `[P2]`
 - [ ] `events-list.tsx` — events directory (`/events`): `[P1]`
   - Event cards with RSVP 3-state button (going / interested / not going)
+  - Capacity indicator: "X of Y spots" / "Full" badge (disable RSVP "going" when full)
+  - Virtual event: video call link shown only to RSVPed attendees
   - Filter by date, location region, methodology tag
-- [ ] `event-creation.tsx` — create event: title, description, date/time, location, capacity, visibility (friends / group), methodology tag, group-linked option `[P1]`
+- [ ] `event-creation.tsx` — create event: title, description, date/time, location type selector (in-person / virtual / hybrid), virtual meeting URL field, capacity number input (optional), visibility (friends / group), methodology tag, group-linked option `[P1]`
 - [ ] Event attendee list for organizer — RSVP list with going/interested/not-going counts, attendee names, CSV export of attendee list (SPEC §5.6) `[P1]`
 - [ ] Event cancellation with attendee notification confirmation dialog `[P1]`
 - [ ] Recurring events support (weekly/monthly/custom) `[P2]`
@@ -1024,6 +1081,16 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Friends-only visibility
   - Family info, methodology, member count
 - [ ] Report button component — reusable "Report" action for posts, comments, messages, listings (uses `report-button.tsx` from Phase 3) (SPEC §11) `[P1]`
+
+### Moderation Appeals (`features/settings/`)
+
+- [ ] `moderation-appeals.tsx` — moderation appeals UI at `/settings/account/appeals`: `[P1]`
+  - List of moderation actions taken against user's content
+  - Appeal form: free-text explanation (one appeal per action)
+  - Status tracker: pending → in_review → granted / denied
+  - Resolution notification
+  - Hooks: `useMyModerationActions()`, `useSubmitAppeal()`, `useAppealStatus()`
+  - (SPEC §12.2, 11-safety §12.4)
 
 ### Location Features
 
@@ -1047,6 +1114,8 @@ from Phases 1–7 but are independent of Phase 8 (learning).
 - [ ] `cart.tsx` — shopping cart (`/marketplace/cart`): `[P1]`
   - Cart items, quantities, total
   - Checkout flow
+  - Cart groups bundle items with discount applied (SPEC §9.4) `[P2]`
+- [ ] Content bundle purchase: bundle badge on listing cards, "Buy Bundle" CTA on detail page (SPEC §9.4) `[P2]`
 - [ ] `purchase-history.tsx` — past purchases (`/marketplace/purchases`): `[P1]`
   - Purchase list with download links
   - Content access
@@ -1058,11 +1127,13 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Sales overview, earnings, payout status
   - Analytics: sales chart (line/bar, date range selector), earnings breakdown by listing, payout schedule with next payout date, per-listing metrics (views, purchases, ratings) (SPEC §9.6)
 - [ ] `payout-setup.tsx` — creator payout onboarding (`/creator/payouts`): payout method selection + account setup, payout history, minimum threshold display (SPEC §9.6) `[P2]`
+- [ ] `creator-verification.tsx` — creator identity verification: legal name, tax info (masked SSN/EIN), verification status indicator. Required before first payout. (SPEC §9.1, 07-mkt §11) `[P2]`
 - [ ] `create-listing.tsx` — new listing (`/creator/listings/new`): `[P1]`
   - Listing form: title, description, price, category, content upload
   - Preview before publish
   - Listing lifecycle state transition buttons (draft → submitted → published → archived)
 - [ ] `edit-listing.tsx` — edit existing listing (`/creator/listings/:id/edit`) `[P1]`
+- [ ] `listing-version-history.tsx` — version list with upload date, file size, "current" badge. View-only (no rollback in v1). (SPEC §9.2.3) `[P2]`
 - [ ] `creator-reviews.tsx` — view reviews on own listings, respond to reviews `[P2]`
 - [ ] `quiz-builder.tsx` — create quizzes for marketplace (`/creator/quiz-builder`): `[P1]`
   - Question editor (multiple types)
@@ -1158,11 +1229,11 @@ tasks that should only happen after core features are stable.
 - [ ] `calendar-view.tsx` — unified calendar (`/calendar`): `[P1]`
   - Synthesize: learning activities + social events + compliance attendance
   - Daily/weekly view toggle (`/calendar/day/:date`, `/calendar/week/:date`)
-  - Color-coded data sources (learning, events, attendance)
+  - Three data sources with distinct color coding: learning (tertiary), events (primary), attendance (secondary) + color legend
   - Print-friendly output (MUST be printable — SPEC §17)
 - [ ] `schedule-editor.tsx` — schedule item CRUD form: `[P1]`
   - Fields: title, description, student, date, time, duration, category enum, subject (via `<SubjectPicker>`), color, notes
-  - Schedule completion checkbox + "log as activity" button
+  - Schedule completion checkbox + auto-log workflow: completion checkbox prompts "Log as learning activity?" → auto-creates `learn::` activity with pre-populated fields, links via `linked_activity_id` (17-planning §3.1)
 - [ ] Drag-to-schedule with keyboard alternative (arrow keys + Enter to place items) `[P1]`
 - [ ] Print-friendly schedule output (separate from calendar print) `[P2]`
 - [ ] `schedule-templates.tsx` — recurring schedule templates (weekly patterns, methodology-specific defaults) `[P2]`
@@ -1187,6 +1258,7 @@ tasks that should only happen after core features are stable.
   - Bulk actions for multiple reports (select all, bulk approve/remove)
   - Admin notes field per moderation action (internal, not visible to content owner)
   - Moderation states visible to content owners
+  - **Appeals tab**: pending appeals with original action context, appeal text, Grant/Deny actions. Different admin than original action (enforced by backend, UI shows warning if same admin). (SPEC §12.2, 11-safety §12.4) `[P1]`
 - [ ] `audit-log.tsx` — admin audit log viewer: filterable by admin user, action type, target entity, date range `[P1]`
 - [ ] `feature-flags.tsx` — feature flag management: toggle, rollout percentage, family whitelist `[P2]`
 - [ ] `methodology-config.tsx` — methodology configuration editing (tool labels, descriptions, philosophy text) `[P2]`
@@ -1309,8 +1381,8 @@ Maps SPEC.md §19 release phases to this TODO's implementation phases:
 
 | SPEC §19 Phase | Definition | TODO Phases |
 |----------------|-----------|-------------|
-| **Phase 1 (MVP)** | Core auth (password strength indicator, rate limit feedback, email verification resend), family management, privacy controls, onboarding, learning tools (activity log, journals, reading, student session activity log), social feed (post/comment deletion, conversation mute/search, event attendee list), messaging, events, marketplace browse/purchase (refund requests, licensing display, creator analytics), WebSocket foundation, notifications (type icons, moderation preview), admin basics (moderation content preview, async export polling), safety reporting, data export/deletion | TODO Phases 1–9 `[P1]` items + Phase 10 `[P1]` items |
-| **Phase 2 (Enhanced)** | Compliance (attendance, assessments), billing/payments, advanced groups, recurring events, schedule templates, feature flags, methodology config, MFA, recommendations, data tables, Playwright tests, VPAT | Phase 10 `[P2]` items + scattered `[P2]` items in earlier phases |
+| **Phase 1 (MVP)** | Core auth (password strength indicator, rate limit feedback, email verification resend, session timeout warning, co-parent invitation acceptance), family management, privacy controls, onboarding, learning tools (activity log, journals, reading, quiz save-and-resume, parent quiz scoring, sequence parent override, streak display, student session activity log), social feed (post/comment deletion, conversation mute/search, DM attachments, event capacity/virtual, event attendee list), messaging, events, marketplace browse/purchase (refund requests, licensing display, creator analytics), moderation appeals, WebSocket foundation, notifications (type icons, moderation preview), admin basics (moderation content preview, appeals queue, async export polling), safety reporting, data export/deletion | TODO Phases 1–9 `[P1]` items + Phase 10 `[P1]` items |
+| **Phase 2 (Enhanced)** | Compliance (attendance, assessments), billing/payments, advanced groups, recurring events, schedule templates, feature flags, methodology config, MFA, recommendations, data tables, ISBN book import, reading list sharing, content bundles, creator identity verification, listing version history, COPPA micro-charge, Playwright tests, VPAT | Phase 10 `[P2]` items + scattered `[P2]` items in earlier phases |
 | **Phase 3 (Advanced)** | Portfolios, transcripts, GPA calculations, methodology-specific tools (nature journal, trivium tracker, rhythm planner, etc.) | Phase 8 `[P3]` items + Phase 10 `[P3]` items |
 
 **Tag convention**: Every checklist item is tagged `[P1]`, `[P2]`, or `[P3]` to indicate

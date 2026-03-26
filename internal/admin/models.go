@@ -89,6 +89,13 @@ type AdminUserDetail struct {
 	Students          []AdminStudentInfo        `json:"students"`
 	Subscription      *AdminSubscriptionInfo    `json:"subscription"`
 	ModerationHistory []ModerationActionSummary `json:"moderation_history"`
+	RecentActivity    UserActivitySummary       `json:"recent_activity"`
+}
+
+// UserActivitySummary provides a brief snapshot of recent user activity. [16-admin §7]
+type UserActivitySummary struct {
+	LastLoginAt     *time.Time `json:"last_login_at"`
+	ActivityCount7d int32      `json:"activity_count_7d"`
 }
 
 // AdminFamilyInfo represents family information for admin views.
@@ -194,4 +201,85 @@ type AuditLogEntry struct {
 	TargetID   *uuid.UUID      `json:"target_id"`
 	Details    json.RawMessage `json:"details"`
 	CreatedAt  time.Time       `json:"created_at"`
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// User Action Types [16-admin §4]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// SuspendUserInput is the request body for POST /admin/users/:id/suspend.
+type SuspendUserInput struct {
+	Reason string `json:"reason" validate:"required"`
+}
+
+// BanUserInput is the request body for POST /admin/users/:id/ban.
+type BanUserInput struct {
+	Reason string `json:"reason" validate:"required"`
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Moderation Queue Types [16-admin §4]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ModerationQueueItem represents an item pending moderation review.
+type ModerationQueueItem struct {
+	ID          uuid.UUID       `json:"id"`
+	ContentType string          `json:"content_type"`
+	ContentID   uuid.UUID       `json:"content_id"`
+	FamilyID    uuid.UUID       `json:"family_id"`
+	Reason      string          `json:"reason"`
+	Status      string          `json:"status"` // "pending", "approved", "rejected"
+	Details     json.RawMessage `json:"details"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
+// ModerationActionInput is the request body for POST /admin/moderation/queue/:id/action.
+type ModerationActionInput struct {
+	Action string `json:"action" validate:"required"` // "approve", "reject", "escalate"
+	Reason string `json:"reason"`
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Methodology Config Types [16-admin §4]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// MethodologyConfig represents an admin view of a methodology configuration.
+type MethodologyConfig struct {
+	Slug        string          `json:"slug"`
+	DisplayName string          `json:"display_name"`
+	Enabled     bool            `json:"enabled"`
+	Settings    json.RawMessage `json:"settings"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+// UpdateMethodologyInput is the request body for PATCH /admin/methodologies/:slug.
+type UpdateMethodologyInput struct {
+	Enabled  *bool            `json:"enabled"`
+	Settings *json.RawMessage `json:"settings"`
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Lifecycle Management Types [16-admin §4]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// DeletionSummary represents a pending account deletion for admin review.
+type DeletionSummary struct {
+	FamilyID    uuid.UUID `json:"family_id"`
+	FamilyName  string    `json:"family_name"`
+	RequestedAt time.Time `json:"requested_at"`
+	ScheduledAt time.Time `json:"scheduled_at"`
+}
+
+// RecoverySummary represents a pending account recovery request.
+type RecoverySummary struct {
+	ID          uuid.UUID `json:"id"`
+	FamilyID    uuid.UUID `json:"family_id"`
+	FamilyName  string    `json:"family_name"`
+	RequestedAt time.Time `json:"requested_at"`
+	Reason      string    `json:"reason"`
+}
+
+// ResolveRecoveryInput is the request body for POST /admin/lifecycle/recoveries/:id/resolve.
+type ResolveRecoveryInput struct {
+	Approved bool `json:"approved"`
 }
