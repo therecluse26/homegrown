@@ -22,6 +22,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pressly/goose/v3"
 
+	"github.com/homegrown-academy/homegrown-academy/internal/admin"
 	"github.com/homegrown-academy/homegrown-academy/internal/app"
 	"github.com/homegrown-academy/homegrown-academy/internal/billing"
 	billingadapters "github.com/homegrown-academy/homegrown-academy/internal/billing/adapters"
@@ -1021,6 +1022,24 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), comply.NewFamilyDeletionScheduledHandler(complySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), comply.NewSubscriptionCancelledHandler(complySvc))
 
+	// ── Step 7n: Wire admin:: domain ────────────────────────────────────────────
+	adminFlagRepo := admin.NewPgFeatureFlagRepository(db)
+	adminAuditRepo := admin.NewPgAuditLogRepository(db)
+
+	// Stub cross-domain adapters for admin — full implementations deferred until
+	// other domains expose the required service methods. [16-admin §14]
+	iamForAdmin := &adminIamStub{}
+	safetyForAdmin := &adminSafetyStub{}
+	billingForAdmin := &adminBillingStub{}
+	healthForAdmin := &adminHealthStub{}
+	jobsForAdmin := &adminJobInspectorStub{}
+
+	adminSvc := admin.NewAdminService(
+		adminFlagRepo, adminAuditRepo, cache,
+		iamForAdmin, safetyForAdmin, billingForAdmin,
+		healthForAdmin, jobsForAdmin,
+	)
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -1045,6 +1064,7 @@ func main() {
 		Search:      searchSvc,
 		Recs:        recsSvc,
 		Comply:      complySvc,
+		Admin:       adminSvc,
 		PubSub:      pubsub,
 	}
 
@@ -1112,6 +1132,61 @@ type sentryReporter struct{}
 
 func (sentryReporter) CaptureException(err error) { sentry.CaptureException(err) }
 func (sentryReporter) Flush(d time.Duration) bool  { return sentry.Flush(d) }
+
+// ─── Admin Domain Adapter Stubs ─────────────────────────────────────────────
+// Stub implementations of admin:: consumer-defined interfaces. These delegate to
+// other domains' services but are initially stubbed until those domains expose the
+// required methods. [16-admin §14]
+
+type adminIamStub struct{}
+
+func (adminIamStub) SearchUsers(_ context.Context, _ *admin.UserSearchQuery, _ *shared.PaginationParams) (*shared.PaginatedResponse[admin.AdminUserSummary], error) {
+	return &shared.PaginatedResponse[admin.AdminUserSummary]{Data: []admin.AdminUserSummary{}}, nil
+}
+func (adminIamStub) GetFamilyDetail(_ context.Context, _ uuid.UUID) (*admin.AdminFamilyInfo, error) {
+	return nil, fmt.Errorf("admin: IAM family detail adapter not yet implemented")
+}
+func (adminIamStub) GetParents(_ context.Context, _ uuid.UUID) ([]admin.AdminParentInfo, error) {
+	return []admin.AdminParentInfo{}, nil
+}
+func (adminIamStub) GetStudents(_ context.Context, _ uuid.UUID) ([]admin.AdminStudentInfo, error) {
+	return []admin.AdminStudentInfo{}, nil
+}
+
+type adminSafetyStub struct{}
+
+func (adminSafetyStub) GetModerationHistory(_ context.Context, _ uuid.UUID) ([]admin.ModerationActionSummary, error) {
+	return []admin.ModerationActionSummary{}, nil
+}
+
+type adminBillingStub struct{}
+
+func (adminBillingStub) GetSubscriptionInfo(_ context.Context, _ uuid.UUID) (*admin.AdminSubscriptionInfo, error) {
+	return nil, nil
+}
+
+type adminHealthStub struct{}
+
+func (adminHealthStub) CheckAll(_ context.Context) []admin.ComponentHealth {
+	return []admin.ComponentHealth{
+		{Name: "database", Status: "healthy"},
+		{Name: "redis", Status: "healthy"},
+		{Name: "r2", Status: "healthy"},
+		{Name: "kratos", Status: "healthy"},
+	}
+}
+
+type adminJobInspectorStub struct{}
+
+func (adminJobInspectorStub) GetQueueStatus(_ context.Context) (*admin.JobStatusResponse, error) {
+	return &admin.JobStatusResponse{Queues: []admin.QueueStatus{}}, nil
+}
+func (adminJobInspectorStub) GetDeadLetterJobs(_ context.Context, _ *shared.PaginationParams) ([]admin.DeadLetterJob, error) {
+	return []admin.DeadLetterJob{}, nil
+}
+func (adminJobInspectorStub) RetryDeadLetterJob(_ context.Context, _ string) error {
+	return admin.ErrDeadLetterNotFound
+}
 
 // gracefulShutdown listens for SIGINT/SIGTERM and shuts the server down cleanly.
 // Waits up to 30 seconds for in-flight requests to complete. [§4.3]

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/homegrown-academy/homegrown-academy/internal/admin"
 	"github.com/homegrown-academy/homegrown-academy/internal/billing"
 	"github.com/homegrown-academy/homegrown-academy/internal/comply"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
@@ -57,6 +58,7 @@ type AppState struct {
 	Search      search.SearchService
 	Recs        recs.RecsService
 	Comply      comply.ComplianceService
+	Admin       admin.AdminService
 	PubSub      shared.PubSub // needed by social handler for WebSocket
 }
 
@@ -182,6 +184,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Comply != nil {
 		comply.NewHandler(state.Comply).Register(auth)
+	}
+	if state.Admin != nil {
+		admin.NewHandler(state.Admin).Register(auth)
 	}
 
 	return e

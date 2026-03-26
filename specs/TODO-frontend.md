@@ -23,7 +23,7 @@ Phase 3 ─── Shared UI Component Library
    │
 Phase 4 ─── Routing, Layouts & Auth Context
    │
-Phase 5 ─── Auth Flows (Ory Kratos)
+Phase 5 ─── Auth Flows (Ory Kratos) + WebSocket Foundation
    │
 Phase 6 ─── Onboarding Wizard
    │
@@ -58,6 +58,7 @@ These apply to **every** phase and are not listed per-item:
 | axe-core CI | Zero critical/serious accessibility violations in automated checks | SPEC §17.6.6 |
 | Error handling | TanStack Query retries (3× w/ backoff), graceful offline/error states on all pages | CODING_STANDARDS §3.5 |
 | Print readiness | Compliance, scheduling, and progress output must be printable via `print.css` | SPEC §17.9 |
+| Dark mode readiness | No `dark:` prefixes; all colors via token classes; CSS-only theme switch structure | DESIGN_TOKENS §2.9 |
 
 ---
 
@@ -151,7 +152,7 @@ Create `frontend/src/styles/` with the following files (DESIGN_TOKENS §1.2):
   - `:root` block for non-theme tokens (gradients, focus-ring) (DESIGN_TOKENS §11)
 - [ ] `base.css` — `@font-face` declarations, CSS reset additions, `:focus-visible` ring, `prefers-reduced-motion` (DESIGN_TOKENS §4, §10.2) `[P1]`
 - [ ] `components.css` — type-scale composite classes (`.text-display-lg` through `.text-label-sm`, 15 steps) (DESIGN_TOKENS §5) `[P1]`
-- [ ] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class, parent/student Tailwind custom variants (`parent:`, `student:`) (DESIGN_TOKENS §9, §12, §15.1) `[P1]`
+- [ ] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class using `::after` pseudo-element for 44×44px hit area (DESIGN_TOKENS §14.3), parent/student Tailwind custom variants (`parent:`, `student:`) using `@custom-variant` with `:where([data-context])` selectors (DESIGN_TOKENS §9, §12, §15.1) `[P1]`
 - [ ] `print.css` — `@media print` token overrides + hide rules (DESIGN_TOKENS §16) `[P1]`
 - [ ] `app.css` — entry point: `@import "tailwindcss"` then import all above files (DESIGN_TOKENS §1.2) `[P1]`
 
@@ -204,6 +205,12 @@ Components built in Phase 3 inherit these automatically.
 - [ ] Implement `:focus-visible` ring: 2px solid `focus-ring` (#0c5252), 2px offset (DESIGN_TOKENS §10.3) `[P1]`
 - [ ] Implement `prefers-reduced-motion: reduce` — collapse all transitions to 0.01ms (DESIGN_TOKENS §10.2) `[P1]`
 
+### Token & Behavior Verification
+
+- [ ] No-flash guarantee: background transitions use `--duration-normal` or longer; no transition applied on first paint (DESIGN_TOKENS §7.4) `[P1]`
+- [ ] Semantic spacing alias verification: all 6 spacing aliases (`--space-xs` through `--space-3xl`) resolve to correct token values (DESIGN_TOKENS §4.2) `[P1]`
+- [ ] Print stylesheet verification: `print.css` renders correctly in browser print preview — no token colors bleeding into print, appropriate page breaks (DESIGN_TOKENS §16) `[P1]`
+
 ### Verification
 
 - [ ] Verify: `npm run type-check` passes `[P1]`
@@ -211,7 +218,7 @@ Components built in Phase 3 inherit these automatically.
 - [ ] Verify: all token utilities available in Tailwind IntelliSense `[P1]`
 
 ### References
-- DESIGN_TOKENS §3–§5, §10
+- DESIGN_TOKENS §3–§5, §7.4, §10, §16
 - DESIGN §3.1–§3.4 (Curated Hearth aesthetic)
 
 ---
@@ -276,7 +283,7 @@ Building these first prevents duplication and ensures consistency.
 
 ### Form Utilities
 
-- [ ] `form-field.tsx` — wraps input + label + error message with consistent spacing `[P1]`
+- [ ] `form-field.tsx` — wraps input + label + error message with consistent spacing. Visible `<label>` required (never placeholder-only), `aria-describedby` linking error message `<span>` to input, `aria-live="assertive"` on error message container for screen reader announcements (CODING_STANDARDS §3.8) `[P1]`
 - [ ] `file-upload.tsx` — drag-and-drop zone, file type + size validation (client-side), progress indicator. Extension validation pre-upload, magic byte validation happens server-side. (SPEC §9, CODING_STANDARDS §3.9) `[P1]`
 
 ### Verification
@@ -309,8 +316,11 @@ a layout and depends on auth state. This is the app skeleton.
 - [ ] Create `frontend/src/hooks/` directory `[P1]`
 - [ ] Create `frontend/src/lib/` directory `[P1]`
 - [ ] Move `src/query-client.ts` → `src/lib/query-client.ts` (update import in `main.tsx`) `[P1]`
+- [ ] Configure `lib/query-client.ts` — retry (3× exponential backoff), staleTime (5 min), gcTime (10 min) (CODING_STANDARDS §3.5) `[P1]`
 - [ ] Create `frontend/src/types/` directory with `index.ts` for shared frontend types `[P1]`
 - [ ] Create `frontend/src/components/layout/` directory `[P1]`
+- [ ] Create `frontend/src/features/` subdirectories matching all backend domains: `auth/`, `onboarding/`, `social/`, `learning/`, `marketplace/`, `settings/`, `billing/`, `compliance/`, `admin/`, `planning/`, `recommendations/`, `search/`, `legal/`, `student/` (ARCHITECTURE §11.1) `[P1]`
+- [ ] `hooks/use-focus-on-mount.ts` — reusable focus management hook for route transitions; accepts ref, focuses element on mount (CODING_STANDARDS §3.8) `[P1]`
 
 ### Auth Context & Hook
 
@@ -387,6 +397,7 @@ a layout and depends on auth state. This is the app skeleton.
     /marketplace/listings/:id → ListingDetail
     /marketplace/cart → Cart
     /marketplace/purchases → PurchaseHistory
+    /marketplace/purchases/:id/refund → RefundRequest      [P1]
     /creator → CreatorDashboard
     /creator/listings/new → CreateListing
     /creator/listings/:id/edit → EditListing
@@ -394,6 +405,7 @@ a layout and depends on auth state. This is the app skeleton.
     /creator/quiz-builder/:id → QuizBuilder
     /creator/sequence-builder → SequenceBuilder
     /creator/sequence-builder/:id → SequenceBuilder
+    /creator/payouts → PayoutSetup                         [P2]
     /settings → FamilySettings
     /settings/notifications → NotificationPrefs
     /settings/subscription → SubscriptionManager
@@ -401,6 +413,7 @@ a layout and depends on auth state. This is the app skeleton.
     /settings/account/sessions → SessionManagement         [P1]
     /settings/account/export → DataExport                  [P1]
     /settings/account/delete → AccountDeletion             [P1]
+    /settings/privacy → PrivacyControls                    [P1]
     /search → SearchResults
     /family/:familyId → FamilyProfile
     /calendar → CalendarView
@@ -461,16 +474,18 @@ a layout and depends on auth state. This is the app skeleton.
 - [ ] Verify: admin routes accessible only to `is_platform_admin` users `[P1]`
 - [ ] Verify: compliance routes show TierGate for free-tier families `[P2]`
 - [ ] Verify: route tree covers all 17 domains (IAM, method, discover-import, onboard, social, learn, mkt, notify, media, billing, safety, search, recs, comply, data-lifecycle, admin, planning) `[P1]`
+- [ ] Verify: skip link targets `#main-content` and is the first focusable element on every layout `[P1]`
+- [ ] Verify: `apiClient` is the sole fetch wrapper — no direct `fetch()` calls elsewhere in the codebase `[P1]`
 
 ### References
-- ARCHITECTURE §11.2–§11.3 (auth strategy, route table)
+- ARCHITECTURE §11.1 (project structure), §11.2–§11.3 (auth strategy, route table)
 - CODING_STANDARDS §3.5 (TanStack Query rules)
 - CODING_STANDARDS §3.8 (accessibility)
 - DESIGN §4.4 (floating nav)
 
 ---
 
-## Phase 5: Auth Flows (Ory Kratos Integration)
+## Phase 5: Auth Flows (Ory Kratos Integration) + WebSocket Foundation
 
 **Goal**: Implement login, registration, account recovery, and email verification
 screens using Ory Kratos Browser API. Wire COPPA consent flow.
@@ -510,7 +525,7 @@ Depends on Phase 4 auth context and layout.
 - [ ] `terms-of-service.tsx` — `/legal/terms` — rendered ToS content `[P1]`
 - [ ] `privacy-policy.tsx` — `/legal/privacy` — rendered privacy policy `[P1]`
 - [ ] `community-guidelines.tsx` — `/legal/guidelines` — community guidelines linked from report dialog `[P1]`
-- [ ] Terms versioning: re-acceptance prompt banner when policy version changes; dismissable only by accepting new terms `[P2]`
+- [ ] Terms versioning: re-acceptance prompt banner when policy version changes; dismissable only by accepting new terms. COPPA re-verification trigger for families with students when ToS version changes (SPEC §7.3) `[P2]`
 
 ### COPPA Consent Flow
 
@@ -523,6 +538,29 @@ Depends on Phase 4 auth context and layout.
   - Must be completed before any student can be created
   - Clear, parent-friendly language explaining data collection
 
+### Auth UX Enhancements
+
+- [ ] Password strength indicator on registration form — visual meter (colored bar) + descriptive text label (weak/fair/strong), colors use token feedback palette (SPEC §1) `[P1]`
+- [ ] Rate limiting feedback on login — `429` response → friendly "Too many attempts" message + retry countdown timer (SPEC §1.2) `[P1]`
+- [ ] Email verification resend button with 60-second cooldown timer — disabled state + countdown during cooldown (SPEC §1.3) `[P1]`
+- [ ] COPPA consent re-verification prompt when ToS version changes for families with students already added (SPEC §7.3) `[P1]`
+
+### WebSocket Foundation
+
+> Placed in Phase 5 because WebSocket is a foundation layer needed by notifications
+> (Phase 7) and social/messaging (Phase 9). ARCHITECTURE §11.4 places it alongside
+> core infrastructure.
+
+- [ ] `lib/websocket.ts` — WebSocket connection manager: `[P1]`
+  - Connect to `wss://api.homegrown.academy/ws` (or dev proxy)
+  - Message types: `new_message`, `notification`, `friend_request`
+  - Auto-reconnect with exponential backoff
+  - (ARCHITECTURE §11.5)
+- [ ] `hooks/use-websocket.ts` — hook that connects on mount, dispatches to TanStack Query invalidation: `[P1]`
+  - `new_message` → invalidate `["messages", conversationId]`
+  - `notification` → invalidate `["notifications"]`
+  - `friend_request` → invalidate `["friends", "requests"]`
+
 ### Verification
 
 - [ ] Verify: login flow works end-to-end with Kratos (or mock for dev) `[P1]`
@@ -533,9 +571,13 @@ Depends on Phase 4 auth context and layout.
 - [ ] Verify: `npm run type-check` passes `[P1]`
 - [ ] Verify: ToS/privacy acceptance required before registration completes `[P1]`
 - [ ] Verify: session management lists and revokes sessions correctly `[P1]`
+- [ ] Verify: password strength indicator updates reactively `[P1]`
+- [ ] Verify: rate limiting shows countdown and re-enables login `[P1]`
+- [ ] Verify: email verification resend cooldown works `[P1]`
+- [ ] Verify: WebSocket connects, reconnects on disconnect, and dispatches invalidations `[P1]`
 
 ### References
-- ARCHITECTURE §11.2 (Kratos integration)
+- ARCHITECTURE §11.2 (Kratos integration), §11.5 (WebSocket)
 - SPEC §1 (auth requirements)
 - SPEC §7 (COPPA compliance)
 - Domain spec: `specs/domains/01-iam.md`
@@ -660,6 +702,7 @@ pages exercise CRUD patterns that all subsequent features follow.
   - Payment method management
   - (SPEC §10, domain spec `specs/domains/10-billing.md`)
 - [ ] `account-settings.tsx` — account-level settings (`/settings/account`): email, password change, linked OAuth accounts `[P1]`
+- [ ] `privacy-controls.tsx` — per-field visibility toggles for family profile (friends-only / hidden); controls what other families can see (SPEC §5.2) `[P1]`
 
 ### Co-Parent Management
 
@@ -678,8 +721,8 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### Data Lifecycle
 
-- [ ] `features/settings/data-export.tsx` — data export request UI: format selection (JSON/CSV), domain selection, status tracking, download link, past exports list. Hooks: `useRequestExport()`, `useExportStatus()`, `useExportList()` `[P1]`
-- [ ] `features/settings/account-deletion.tsx` — account deletion flow: consequences display, export offer, grace period info (30 days), confirmation input (type family name), cancellation option during grace period. Hooks: `useRequestDeletion()`, `useCancelDeletion()` `[P1]`
+- [ ] `features/settings/data-export.tsx` — data export request UI: format selection (JSON/CSV), domain selector checkboxes (learn, social, comply, etc.), async polling (5-second interval via `useExportStatus()`), download link with expiry countdown timer, past exports list. Hooks: `useRequestExport()`, `useExportStatus()`, `useExportList()` `[P1]`
+- [ ] `features/settings/account-deletion.tsx` — account deletion flow: consequences display, export offer, grace period countdown timer (days/hours remaining), confirmation input (type family name), cancellation option during grace period. `useDeletionStatus()` hook polls for grace period state. Hooks: `useRequestDeletion()`, `useCancelDeletion()`, `useDeletionStatus()` `[P1]`
 - [ ] `features/settings/student-deletion.tsx` — student profile deletion: separate from full family deletion, COPPA-compliant immediate deletion option (no grace period for child data) `[P1]`
 
 ### Notification Center
@@ -690,7 +733,8 @@ pages exercise CRUD patterns that all subsequent features follow.
   - `useMarkRead(id)` — mark single notification read
   - `useMarkAllRead()` — mark all read
 - [ ] `components/layout/notification-bell.tsx` — bell icon in header with unread count badge `[P1]`
-- [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications `[P1]`
+- [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications; notification type icons per category (social, learning, system, marketplace); system-critical notifications show lock icon + non-toggleable indicator `[P1]`
+- [ ] `features/settings/notification-history.tsx` — full notification history page (`/settings/notifications/history`) with filters by type, date range, and read/unread status `[P1]`
 
 ### API Schema Prerequisite
 
@@ -821,6 +865,8 @@ and family management from prior phases.
   - Progress tracking (last position, completion percentage)
   - Accessible controls
   - Caption file support (VTT/SRT) `[P1]`
+  - Caption language selection dropdown when multiple tracks are available (SPEC §17.6.2) `[P1]`
+  - Caption styling options (font size, background opacity) stored in localStorage `[P2]`
 - [ ] `content-viewer.tsx` — document/content viewer (`/learning/read/:contentId`): `[P1]`
   - PDF/document rendering
   - Progress tracking
@@ -830,10 +876,15 @@ and family management from prior phases.
   - Unlock logic visualization
   - Navigation between sequence items
 
+### Content Assignment UX
+
+- [ ] Content assignment notification: confirmation toast for parent on successful assignment, "New" badge on student dashboard for unstarted assignments (SPEC §6.5) `[P1]`
+- [ ] Glassmorphism progress overlay for student sessions — semi-transparent `secondary-container` background + backdrop blur showing session progress, time remaining, and current activity (DESIGN §2.6) `[P1]`
+
 ### Student Features (`features/student/`)
 
 - [ ] `student-dashboard.tsx` — simplified student home: `[P1]`
-  - Assigned content list
+  - Assigned content list with "New" badge for unstarted assignments
   - Current sequence progress
   - No social/marketplace access
 - [ ] `student-quiz.tsx` — student-facing quiz (simplified wrapper of quiz-player) `[P1]`
@@ -848,7 +899,8 @@ and family management from prior phases.
   - Student shell: student is fixed from parent's selection
   - Stored in context (not server state)
   - (ARCHITECTURE §11.2)
-- [ ] Supervised student session detail: age gate (10+), session creation flow (parent selects student → confirms → enters student shell), session timeout, session revocation from parent view `[P1]`
+- [ ] Supervised student session detail: age gate UI (10+ verification), session creation flow (parent selects student → confirms → enters student shell), session duration presets (1h / 2h / 4h / end-of-day), timeout warning at 5 minutes remaining, session revocation from parent view, session activity log visible to parent `[P1]`
+- [ ] `features/learning/student-session-activity-log.tsx` — parent-visible log of all actions taken during a student session (pages visited, content viewed, time per item) (SPEC §6.5) `[P1]`
 
 ### Learning Data Export
 
@@ -904,15 +956,9 @@ from Phases 1–7 but are independent of Phase 8 (learning).
 
 ### WebSocket Infrastructure
 
-- [ ] `lib/websocket.ts` — WebSocket connection manager: `[P1]`
-  - Connect to `wss://api.homegrown.academy/ws` (or dev proxy)
-  - Message types: `new_message`, `notification`, `friend_request`
-  - Auto-reconnect with exponential backoff
-  - (ARCHITECTURE §11.5)
-- [ ] `hooks/use-websocket.ts` — hook that connects on mount, dispatches to TanStack Query invalidation: `[P1]`
-  - `new_message` → invalidate `["messages", conversationId]`
-  - `notification` → invalidate `["notifications"]`
-  - `friend_request` → invalidate `["friends", "requests"]`
+> **Moved to Phase 5.** WebSocket connection manager (`lib/websocket.ts`) and the
+> `use-websocket.ts` hook are implemented as part of Phase 5's "WebSocket Foundation"
+> subsection. Social and messaging features in this phase consume that foundation.
 
 ### Social Features (`features/social/`)
 
@@ -932,6 +978,9 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Comment threading: reply button, nested replies (one level), visual indentation
   - Comment composer
   - Post visibility indicator
+- [ ] Post edit action for author family — pencil icon, inline editor, "(edited)" timestamp indicator `[P2]`
+- [ ] Post delete action with confirmation dialog — removes post and all comments `[P1]`
+- [ ] Comment edit/delete by comment author; post author can delete any comment on their post `[P1]`
 - [ ] `friends-list.tsx` — friend management (`/friends`): `[P1]`
   - Friends list
   - Pending requests (incoming/outgoing)
@@ -952,6 +1001,8 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Message list with timestamps
   - Message composer
   - Real-time message delivery
+- [ ] Conversation mute toggle — bell-off icon, server-persisted mute state, muted conversations show muted indicator in inbox (SPEC §5.4) `[P1]`
+- [ ] Message search within conversation — debounced search input, `Ctrl+F` keyboard shortcut, highlights matching messages (SPEC §5.4) `[P1]`
 - [ ] `groups-list.tsx` — group directory (`/groups`): `[P1]`
   - Platform-managed groups (by methodology) + user-created
   - Join/leave functionality
@@ -961,10 +1012,12 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Group info
 - [ ] `group-creation.tsx` — create new group: name, description, join policy (open / request / invite-only) `[P2]`
 - [ ] `group-management.tsx` — group admin: promote moderator, remove member, pin posts, approve join requests `[P2]`
+- [ ] Group role management UI — owner → moderator → member hierarchy display, role badges, role change confirmation dialogs (SPEC §5.5) `[P2]`
 - [ ] `events-list.tsx` — events directory (`/events`): `[P1]`
   - Event cards with RSVP 3-state button (going / interested / not going)
   - Filter by date, location region, methodology tag
 - [ ] `event-creation.tsx` — create event: title, description, date/time, location, capacity, visibility (friends / group), methodology tag, group-linked option `[P1]`
+- [ ] Event attendee list for organizer — RSVP list with going/interested/not-going counts, attendee names, CSV export of attendee list (SPEC §5.6) `[P1]`
 - [ ] Event cancellation with attendee notification confirmation dialog `[P1]`
 - [ ] Recurring events support (weekly/monthly/custom) `[P2]`
 - [ ] `family-profile.tsx` — public family profile (`/family/:familyId`): `[P1]`
@@ -990,18 +1043,21 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Add to cart button
   - Verified-purchaser review display (1-5 stars, anonymous by default)
   - Listing lifecycle state badge (draft / submitted / published / archived)
+  - Content licensing badge (license type label + info tooltip explaining usage rights) (SPEC §9.2) `[P1]`
 - [ ] `cart.tsx` — shopping cart (`/marketplace/cart`): `[P1]`
   - Cart items, quantities, total
   - Checkout flow
 - [ ] `purchase-history.tsx` — past purchases (`/marketplace/purchases`): `[P1]`
   - Purchase list with download links
   - Content access
+- [ ] `refund-request.tsx` — refund flow (`/marketplace/purchases/:id/refund`): refund reason selector (dropdown), 7-day eligibility window check, refund status tracking (pending → approved → processed / denied), confirmation dialog (SPEC §9.5) `[P1]`
 
 ### Creator Features (`features/marketplace/creator/`)
 
 - [ ] `creator-dashboard.tsx` — creator home (`/creator`): `[P1]`
   - Sales overview, earnings, payout status
-  - Analytics
+  - Analytics: sales chart (line/bar, date range selector), earnings breakdown by listing, payout schedule with next payout date, per-listing metrics (views, purchases, ratings) (SPEC §9.6)
+- [ ] `payout-setup.tsx` — creator payout onboarding (`/creator/payouts`): payout method selection + account setup, payout history, minimum threshold display (SPEC §9.6) `[P2]`
 - [ ] `create-listing.tsx` — new listing (`/creator/listings/new`): `[P1]`
   - Listing form: title, description, price, category, content upload
   - Preview before publish
@@ -1011,11 +1067,11 @@ from Phases 1–7 but are independent of Phase 8 (learning).
 - [ ] `quiz-builder.tsx` — create quizzes for marketplace (`/creator/quiz-builder`): `[P1]`
   - Question editor (multiple types)
   - Preview and test
-  - Keyboard alternative for any drag-and-drop (CODING_STANDARDS §3.8)
+  - Keyboard alternative for drag-and-drop: arrow keys to select question, Enter to grab, arrow keys to move, Enter to drop, Escape to cancel. `aria-live` announcements for position changes (CODING_STANDARDS §3.8)
 - [ ] `sequence-builder.tsx` — create lesson sequences (`/creator/sequence-builder`): `[P1]`
   - Step editor with ordering
   - Content assignment per step
-  - Keyboard alternative for reordering (CODING_STANDARDS §3.8)
+  - Keyboard alternative for reordering: arrow keys to select step, Enter to grab, arrow keys to move, Enter to drop, Escape to cancel. `aria-live` announcements for position changes (CODING_STANDARDS §3.8)
 
 ### Search (`features/search/`)
 
@@ -1065,10 +1121,12 @@ tasks that should only happen after core features are stable.
   - Configure tracking thresholds
   - `<TierGate>` wrapper for free-tier users
 - [ ] `attendance-tracker.tsx` — daily attendance marking: `[P2]`
-  - Per-student daily attendance toggle
+  - Per-student daily attendance with 4 states: present / absent / partial / excused
   - Summary with threshold tracking
-  - Calendar heatmap view (color-coded by status per student)
-  - Attendance threshold/pace monitoring (progress bar vs state requirement)
+  - Calendar heatmap view (color-coded by status per student) with color legend
+  - Attendance threshold/pace indicator (ahead / on-track / behind) with progress bar vs state requirement
+  - Auto-generated attendance entries from logged learning activities with visual indicator distinguishing auto vs manual entries
+  - `aria-live` announcements for attendance state changes
 - [ ] `assessment-records.tsx` — assessment record management: `[P2]`
   - Link assessments to compliance requirements
   - Score tracking
@@ -1077,15 +1135,21 @@ tasks that should only happen after core features are stable.
   - List portfolios per student
   - Create new portfolio (select student + date range + template)
 - [ ] `portfolio-builder.tsx` — portfolio construction and PDF generation: `[P3]`
-  - Select student + date range
-  - Drag/arrange portfolio sections (work samples, assessments, attendance)
-  - Preview portfolio contents
+  - Item selection UI with filters (by subject, date range, type)
+  - Organization type selector (chronological / by-subject / by-type)
+  - Drag/arrange portfolio sections (work samples, assessments, attendance) with keyboard alternative (arrow keys + Enter/Escape)
+  - Cover page customization (student name, date range, family logo optional)
+  - Preview modal showing formatted portfolio before generation
+  - Status lifecycle: draft → generating → ready
   - Generate + download PDF
   - Print-ready layout (uses `print.css` tokens)
 - [ ] `transcript-list.tsx` — transcript management per student `[P3]`
 - [ ] `transcript-builder.tsx` — transcript construction: `[P3]`
-  - Course entry (title, subject, credits, grade, semester)
-  - GPA calculation display (weighted/unweighted, per-semester/cumulative)
+  - Course entry with level selector: regular / honors / AP / dual-enrollment
+  - Multi-semester tab navigation
+  - Weighted GPA calculation: honors +0.5, AP/dual-enrollment +1.0 weighting
+  - Multi-method GPA toggle: 4.0 scale / percentage / pass-fail display
+  - `aria-live` announcements for GPA recalculations on grade/course changes
   - PDF generation + print-ready layout
 - References: SPEC §14, domain spec `specs/domains/14-comply.md`
 
@@ -1118,7 +1182,10 @@ tasks that should only happen after core features are stable.
 - [ ] `user-detail.tsx` — individual user detail view (`/admin/users/:id`) `[P1]`
 - [ ] `moderation-queue.tsx` — content moderation: `[P1]`
   - Reported content queue (from safety domain reports)
-  - Review + action (approve, remove, warn)
+  - Content preview panel (shows reported content inline without navigating away)
+  - Review + action with reasons dropdown (approve, remove, warn) + action reason selection
+  - Bulk actions for multiple reports (select all, bulk approve/remove)
+  - Admin notes field per moderation action (internal, not visible to content owner)
   - Moderation states visible to content owners
 - [ ] `audit-log.tsx` — admin audit log viewer: filterable by admin user, action type, target entity, date range `[P1]`
 - [ ] `feature-flags.tsx` — feature flag management: toggle, rollout percentage, family whitelist `[P2]`
@@ -1146,23 +1213,36 @@ compliance exports and admin oversight.
 - [ ] Responsive audit — verify all pages work at all breakpoints (sm/md/lg/xl/2xl/3xl) `[P1]`
 - [ ] Touch target audit — verify all interactive elements ≥ 44×44px below `md` breakpoint `[P1]`
 - [ ] Focus management audit — verify focus moves to `<h1>` on every route change `[P1]`
-- [ ] Screen reader audit — verify `aria-live` regions for dynamic content (feed, quiz, notifications) `[P1]`
-- [ ] Print stylesheet audit — verify print output for compliance docs, schedules, portfolios `[P1]`
+- [ ] Screen reader audit — verify `aria-live` regions for all dynamic content: social feed, quiz feedback, notifications, attendance state changes, GPA recalculations, drag-and-drop position changes, search results, form validation errors, export status updates, session timeout warnings `[P1]`
+- [ ] Print stylesheet audit — verify print output for all printable pages: compliance docs, schedules, portfolios, transcripts, progress reports `[P1]`
 - [ ] `prefers-reduced-motion` audit — verify all animations collapse `[P1]`
 - [ ] Surface hierarchy audit — verify no `1px solid` borders, only tonal shifts `[P1]`
 - [ ] Token compliance audit — grep for hardcoded hex, arbitrary z-index, Tailwind default palette `[P1]`
+- [ ] Dark mode architecture readiness audit — zero `dark:` Tailwind prefixes anywhere in codebase, all colors via token classes only, CSS-only theme switch structure ready (DESIGN_TOKENS §2.9) `[P1]`
+- [ ] Parent/student context audit — `data-context` attribute present on layout wrappers, `parent:`/`student:` custom variant selectors functional in all applicable components `[P1]`
+- [ ] `aria-live` region audit — comprehensive list of all dynamic content areas that must have `aria-live` regions: form errors, toast notifications, feed updates, quiz scores, search results, export progress, session timers, attendance changes, GPA updates, drag reorder confirmations `[P1]`
+- [ ] Skip link audit — verify skip link present and functional on every layout (AppShell, StudentShell, AdminShell, OnboardingLayout, AuthLayout) `[P1]`
+- [ ] Drag-and-drop keyboard alternative audit — verify all drag interfaces have keyboard alternatives: quiz-builder, sequence-builder, portfolio-builder, schedule drag-to-schedule, calendar item reorder `[P1]`
+- [ ] Image alt text audit — verify all `<img>` elements have meaningful `alt` attributes; decorative images use `alt=""` `[P1]`
+- [ ] Print style verification for all printable pages — compliance docs, schedules, portfolios, transcripts, progress reports, calendar views `[P1]`
 - [ ] Error boundary coverage — verify all route segments have error boundaries `[P1]`
 - [ ] Loading state coverage — verify skeleton/spinner states for all async data `[P1]`
 - [ ] Empty state coverage — verify all list views have empty states with CTAs `[P1]`
 - [ ] 404 page — friendly not-found page within AppShell `[P1]`
 - [ ] i18n string externalization audit — no hardcoded English strings in components `[P1]`
-- [ ] axe-core CI integration — zero critical/serious accessibility violations `[P1]`
+- [ ] axe-core CI integration — Playwright + axe-core in GitHub Actions CI pipeline, zero critical/serious violations, PR comment reporting with violation details `[P1]`
 - [ ] 200% zoom verification across all pages (WCAG 1.4.4) `[P1]`
 - [ ] Video caption file support verification (VTT/SRT in video player) `[P1]`
 - [ ] Community guidelines page exists and linked from report dialog `[P1]`
 - [ ] Error retry/offline handling — TanStack Query retry config (3× exponential backoff) + `<NetworkStatus>` banner `[P1]`
 - [ ] VPAT (Voluntary Product Accessibility Template) documentation `[P2]`
-- [ ] Playwright accessibility regression tests for critical user journeys `[P2]`
+
+### Testing Infrastructure
+
+- [ ] Playwright accessibility regression test suite — covers critical user journeys (login, onboarding, activity logging, quiz taking, marketplace purchase, messaging) with axe-core assertions `[P1]`
+- [ ] axe-core CI pipeline — GitHub Actions workflow running Playwright a11y tests on every PR, failure blocks merge, PR comment with violation summary and links `[P1]`
+- [ ] Screen reader test matrix documentation — document tested combinations (NVDA + Firefox, VoiceOver + Safari, JAWS + Chrome) with pass/fail per critical journey `[P2]`
+- [ ] Image alt text automation — ESLint `jsx-a11y` rule enforcement for `img-redundant-alt`, `alt-text`, and `img-has-alt`; CI gate `[P1]`
 
 ### Performance
 
@@ -1229,7 +1309,7 @@ Maps SPEC.md §19 release phases to this TODO's implementation phases:
 
 | SPEC §19 Phase | Definition | TODO Phases |
 |----------------|-----------|-------------|
-| **Phase 1 (MVP)** | Core auth, family management, onboarding, learning tools (activity log, journals, reading), social feed, messaging, events, marketplace browse/purchase, creator tools, basic search, planning, notifications, admin basics, safety reporting, data export/deletion | TODO Phases 1–9 `[P1]` items + Phase 10 `[P1]` items |
+| **Phase 1 (MVP)** | Core auth (password strength indicator, rate limit feedback, email verification resend), family management, privacy controls, onboarding, learning tools (activity log, journals, reading, student session activity log), social feed (post/comment deletion, conversation mute/search, event attendee list), messaging, events, marketplace browse/purchase (refund requests, licensing display, creator analytics), WebSocket foundation, notifications (type icons, moderation preview), admin basics (moderation content preview, async export polling), safety reporting, data export/deletion | TODO Phases 1–9 `[P1]` items + Phase 10 `[P1]` items |
 | **Phase 2 (Enhanced)** | Compliance (attendance, assessments), billing/payments, advanced groups, recurring events, schedule templates, feature flags, methodology config, MFA, recommendations, data tables, Playwright tests, VPAT | Phase 10 `[P2]` items + scattered `[P2]` items in earlier phases |
 | **Phase 3 (Advanced)** | Portfolios, transcripts, GPA calculations, methodology-specific tools (nature journal, trivium tracker, rhythm planner, etc.) | Phase 8 `[P3]` items + Phase 10 `[P3]` items |
 
