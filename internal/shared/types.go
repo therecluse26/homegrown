@@ -94,6 +94,7 @@ type AuthContext struct {
 	SubscriptionTier   SubscriptionTier `json:"subscription_tier"`
 	CoppaConsentStatus string           `json:"coppa_consent_status"` // [§20.6]
 	Email              string           `json:"-"`                    // NOT logged or serialized — PII [CODING §5.2]
+	SessionID          string           `json:"-"`                    // Kratos session ID — set by auth middleware [15-lifecycle §12]
 }
 
 // contextKey is an unexported type to prevent key collisions in Echo's context store.

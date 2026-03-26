@@ -3,6 +3,12 @@
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
 > **Current state**: React 19 + Vite + TanStack Query wired. No CSS, no routes,
 > no components, no features. Only `api/client.ts` and `api/generated/schema.ts` exist.
+>
+> **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
+> guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
+> §2.4. The only Discovery-adjacent SPA feature is the **quiz result import** during
+> onboarding (entering a `share_id` from a quiz taken on the public site). A separate
+> TODO for the Astro public site will be created later.
 
 ---
 
@@ -26,7 +32,7 @@ Phase 7 ─── Parent Dashboard & Family Management
    ├──────────────────┬──────────────────┐
 Phase 8               Phase 9            Phase 10
 Learning Tools        Social, Mkt,       Compliance, Admin,
-& Progress            Discovery          Polish & QA
+& Progress            & Search           Polish & QA
 ```
 
 Phases 8–10 may proceed in parallel once Phase 7 is complete.
@@ -45,10 +51,13 @@ These apply to **every** phase and are not listed per-item:
 | No inline styles | Tailwind classes exclusively | CODING_STANDARDS §3 |
 | No 1px borders | Use tonal surface shifts for sectioning | DESIGN §4.1 |
 | Accessibility | WCAG 2.1 AA, visible labels, focus management, 44px tap targets | CODING_STANDARDS §3.8 |
-| No methodology branching | Config lookup via `useMethodologyContext()` | CODING_STANDARDS §3.7 |
-| Custom hooks for queries | No TanStack Query in components directly | CODING_STANDARDS §3.5 |
+| Family-scoped data | All data queries scoped by family — never show cross-family data | ARCHITECTURE §5 |
 | File naming | kebab-case for files, PascalCase for components | CODING_STANDARDS §3.6 |
 | Privacy | No GPS, no PII in logs, COPPA compliance | SPEC §7, ARCHITECTURE §8 |
+| i18n readiness | All user-facing strings externalized via react-intl; no hardcoded English | SPEC §17.7, ARCHITECTURE §11.6 |
+| axe-core CI | Zero critical/serious accessibility violations in automated checks | SPEC §17.6.6 |
+| Error handling | TanStack Query retries (3× w/ backoff), graceful offline/error states on all pages | CODING_STANDARDS §3.5 |
+| Print readiness | Compliance, scheduling, and progress output must be printable via `print.css` | SPEC §17.9 |
 
 ---
 
@@ -121,16 +130,16 @@ Nothing visual can be built without this.
 
 ### Package & Config Changes
 
-- [ ] `npm install @tailwindcss/vite lucide-react` — add missing deps (DESIGN_TOKENS §1.3, §13.1)
-- [ ] `npm uninstall autoprefixer postcss` — unnecessary with Tailwind v4 (DESIGN_TOKENS §1.3)
-- [ ] Update `frontend/vite.config.ts` — add `import tailwindcss from "@tailwindcss/vite"` and include `tailwindcss()` in `plugins[]` (DESIGN_TOKENS §1.3)
-- [ ] Remove `postcss.config.*` if present — Tailwind v4 needs no PostCSS config
+- [ ] `npm install @tailwindcss/vite lucide-react` — add missing deps (DESIGN_TOKENS §1.3, §13.1) `[P1]`
+- [ ] `npm uninstall autoprefixer postcss` — unnecessary with Tailwind v4 (DESIGN_TOKENS §1.3) `[P1]`
+- [ ] Update `frontend/vite.config.ts` — add `import tailwindcss from "@tailwindcss/vite"` and include `tailwindcss()` in `plugins[]` (DESIGN_TOKENS §1.3) `[P1]`
+- [ ] Remove `postcss.config.*` if present — Tailwind v4 needs no PostCSS config `[P1]`
 
 ### CSS File Structure
 
 Create `frontend/src/styles/` with the following files (DESIGN_TOKENS §1.2):
 
-- [ ] `tokens.css` — `@theme` block with all CSS custom properties:
+- [ ] `tokens.css` — `@theme` block with all CSS custom properties: `[P1]`
   - Surface colors (7 tiers), primary (3), secondary (4), tertiary (2), feedback (6), text/outline (4), inverse (2) (DESIGN_TOKENS §3)
   - Font families: `--font-display`, `--font-body` (DESIGN_TOKENS §4)
   - Spacing semantic aliases (6 tokens) (DESIGN_TOKENS §6)
@@ -140,17 +149,17 @@ Create `frontend/src/styles/` with the following files (DESIGN_TOKENS §1.2):
   - Animation durations (4) + easings (3) (DESIGN_TOKENS §10)
   - Breakpoint: `--breakpoint-3xl: 1920px` (DESIGN_TOKENS §15)
   - `:root` block for non-theme tokens (gradients, focus-ring) (DESIGN_TOKENS §11)
-- [ ] `base.css` — `@font-face` declarations, CSS reset additions, `:focus-visible` ring, `prefers-reduced-motion` (DESIGN_TOKENS §4, §10.2)
-- [ ] `components.css` — type-scale composite classes (`.text-display-lg` through `.text-label-sm`, 15 steps) (DESIGN_TOKENS §5)
-- [ ] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class, parent/student Tailwind custom variants (`parent:`, `student:`) (DESIGN_TOKENS §9, §12, §15.1)
-- [ ] `print.css` — `@media print` token overrides + hide rules (DESIGN_TOKENS §16)
-- [ ] `app.css` — entry point: `@import "tailwindcss"` then import all above files (DESIGN_TOKENS §1.2)
+- [ ] `base.css` — `@font-face` declarations, CSS reset additions, `:focus-visible` ring, `prefers-reduced-motion` (DESIGN_TOKENS §4, §10.2) `[P1]`
+- [ ] `components.css` — type-scale composite classes (`.text-display-lg` through `.text-label-sm`, 15 steps) (DESIGN_TOKENS §5) `[P1]`
+- [ ] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class, parent/student Tailwind custom variants (`parent:`, `student:`) (DESIGN_TOKENS §9, §12, §15.1) `[P1]`
+- [ ] `print.css` — `@media print` token overrides + hide rules (DESIGN_TOKENS §16) `[P1]`
+- [ ] `app.css` — entry point: `@import "tailwindcss"` then import all above files (DESIGN_TOKENS §1.2) `[P1]`
 
 ### Wiring
 
-- [ ] Add `import "./styles/app.css"` to `frontend/src/main.tsx` (before QueryClientProvider)
-- [ ] Verify: Vite dev server starts without CSS errors
-- [ ] Verify: Tailwind utility classes (e.g. `bg-primary`, `text-on-surface`) resolve correctly in a test `<div>`
+- [ ] Add `import "./styles/app.css"` to `frontend/src/main.tsx` (before QueryClientProvider) `[P1]`
+- [ ] Verify: Vite dev server starts without CSS errors `[P1]`
+- [ ] Verify: Tailwind utility classes (e.g. `bg-primary`, `text-on-surface`) resolve correctly in a test `<div>` `[P1]`
 
 ### References
 - DESIGN_TOKENS §1–§3, §6–§11, §15–§17
@@ -168,38 +177,38 @@ Components built in Phase 3 inherit these automatically.
 
 ### Font Hosting
 
-- [ ] Download WOFF2 files for **Plus Jakarta Sans** (SemiBold 600, Bold 700) and **Manrope** (Regular 400, Medium 500, SemiBold 600) — COPPA: no Google Fonts CDN (DESIGN_TOKENS §4.1, SPEC §7)
-- [ ] Create `frontend/public/fonts/` directory and place WOFF2 files there
-- [ ] Add font preload hints to `frontend/index.html`:
+- [ ] Download WOFF2 files for **Plus Jakarta Sans** (SemiBold 600, Bold 700) and **Manrope** (Regular 400, Medium 500, SemiBold 600) — COPPA: no Google Fonts CDN (DESIGN_TOKENS §4.1, SPEC §7) `[P1]`
+- [ ] Create `frontend/public/fonts/` directory and place WOFF2 files there `[P1]`
+- [ ] Add font preload hints to `frontend/index.html`: `[P1]`
   ```html
   <link rel="preload" href="/fonts/PlusJakartaSans-SemiBold.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/Manrope-Regular.woff2" as="font" type="font/woff2" crossorigin />
   ```
-- [ ] Write `@font-face` rules in `base.css` with `font-display: swap` (DESIGN_TOKENS §4.2)
+- [ ] Write `@font-face` rules in `base.css` with `font-display: swap` (DESIGN_TOKENS §4.2) `[P1]`
 
 ### Type Scale Verification
 
-- [ ] Confirm all 15 type-scale composite classes render correctly (DESIGN_TOKENS §5):
+- [ ] Confirm all 15 type-scale composite classes render correctly (DESIGN_TOKENS §5): `[P1]`
   - Display: `display-lg` (3.5rem), `display-md` (2.8125rem), `display-sm` (2.25rem)
   - Headline: `headline-lg` (2rem), `headline-md` (1.75rem), `headline-sm` (1.5rem)
   - Title: `title-lg` (1.375rem), `title-md` (1rem), `title-sm` (0.875rem)
   - Body: `body-lg` (1rem/1.6), `body-md` (0.875rem/1.55), `body-sm` (0.75rem)
   - Label: `label-lg` (0.875rem), `label-md` (0.75rem), `label-sm` (0.6875rem)
-- [ ] Verify display/headline fonts use Plus Jakarta Sans (SemiBold/Bold)
-- [ ] Verify body/label fonts use Manrope (Regular/Medium/SemiBold)
+- [ ] Verify display/headline fonts use Plus Jakarta Sans (SemiBold/Bold) `[P1]`
+- [ ] Verify body/label fonts use Manrope (Regular/Medium/SemiBold) `[P1]`
 
 ### Base Styles
 
-- [ ] Set `body` background to `surface` (#faf9f5), text color to `on-surface` (#1b1c1a) (DESIGN_TOKENS §3.1, DESIGN §3.1)
-- [ ] Configure `::selection` style (primary-container bg, on-primary text)
-- [ ] Implement `:focus-visible` ring: 2px solid `focus-ring` (#0c5252), 2px offset (DESIGN_TOKENS §10.3)
-- [ ] Implement `prefers-reduced-motion: reduce` — collapse all transitions to 0.01ms (DESIGN_TOKENS §10.2)
+- [ ] Set `body` background to `surface` (#faf9f5), text color to `on-surface` (#1b1c1a) (DESIGN_TOKENS §3.1, DESIGN §3.1) `[P1]`
+- [ ] Configure `::selection` style (primary-container bg, on-primary text) `[P1]`
+- [ ] Implement `:focus-visible` ring: 2px solid `focus-ring` (#0c5252), 2px offset (DESIGN_TOKENS §10.3) `[P1]`
+- [ ] Implement `prefers-reduced-motion: reduce` — collapse all transitions to 0.01ms (DESIGN_TOKENS §10.2) `[P1]`
 
 ### Verification
 
-- [ ] Verify: `npm run type-check` passes
-- [ ] Verify: Vite dev server renders correct fonts and colors on a test page
-- [ ] Verify: all token utilities available in Tailwind IntelliSense
+- [ ] Verify: `npm run type-check` passes `[P1]`
+- [ ] Verify: Vite dev server renders correct fonts and colors on a test page `[P1]`
+- [ ] Verify: all token utilities available in Tailwind IntelliSense `[P1]`
 
 ### References
 - DESIGN_TOKENS §3–§5, §10
@@ -217,52 +226,68 @@ Building these first prevents duplication and ensures consistency.
 
 ### Directory Setup
 
-- [ ] Establish `frontend/src/components/ui/` structure
-- [ ] Establish `frontend/src/components/common/` structure
-- [ ] Create barrel exports (`index.ts`) for each directory
+- [ ] Establish `frontend/src/components/ui/` structure `[P1]`
+- [ ] Establish `frontend/src/components/common/` structure `[P1]`
+- [ ] Create barrel exports (`index.ts`) for each directory `[P1]`
 
 ### Core Primitives (`components/ui/`)
 
-- [ ] `button.tsx` — 3 variants: primary (solid primary bg), secondary (secondary-container fill), tertiary (transparent, hover surface-container-low). All use `radius-button` (0.75rem). Min tap target 44px on mobile. (DESIGN §5.1, DESIGN_TOKENS §7)
-- [ ] `input.tsx` — background `surface-container-highest`, no border. Focus: ghost border via `primary`. Error: `error-container` bg + `error` text. Visible `<label>` required. (DESIGN §5.3, CODING_STANDARDS §3.8)
-- [ ] `textarea.tsx` — same styling rules as input, auto-resize optional
-- [ ] `select.tsx` — custom select with accessible keyboard nav, token styling
-- [ ] `checkbox.tsx` — accessible checkbox with `primary` accent
-- [ ] `radio.tsx` — accessible radio group with `primary` accent
-- [ ] `card.tsx` — accepts `context` prop for parent (`radius-lg`) vs student (`radius-xl`). Background `surface-container-lowest` (#fff) for "lifted" cards. Shadow `ambient-sm`. (DESIGN §4.2, DESIGN_TOKENS §7–§8)
-- [ ] `badge.tsx` — pill shape (`radius-full`), methodology-aware coloring
-- [ ] `avatar.tsx` — circular, fallback initials, sizes xs–xl
-- [ ] `modal.tsx` — focus trap, return focus on close, overlay at `z-modal`, `Escape` to close. (CODING_STANDARDS §3.8, DESIGN_TOKENS §9)
-- [ ] `toast.tsx` — auto-dismiss, `z-notification`, `aria-live="polite"`. Success/error/warning variants using feedback tokens. (DESIGN_TOKENS §3.5, §9)
-- [ ] `spinner.tsx` — loading indicator with `primary` color
-- [ ] `skeleton.tsx` — content placeholder with pulse animation
-- [ ] `icon.tsx` — Lucide icon wrapper with standard sizes (xs=12, sm=16, md=20, lg=24, xl=32, 2xl=48) (DESIGN_TOKENS §13)
-- [ ] `tooltip.tsx` — `z-tooltip`, accessible (shows on focus), delay on hover
-- [ ] `dropdown-menu.tsx` — `z-popover`, keyboard navigable, focus management
-- [ ] `tabs.tsx` — accessible tab panel with `aria-selected`, keyboard arrow nav
-- [ ] `progress-bar.tsx` — progress ribbon: `tertiary-fixed` bg, `primary` fill (DESIGN §5.4)
-- [ ] `empty-state.tsx` — illustration slot + message + CTA button
+- [ ] `button.tsx` — 3 variants: primary (solid primary bg), secondary (secondary-container fill), tertiary (transparent, hover surface-container-low). All use `radius-button` (0.75rem). Min tap target 44px on mobile. (DESIGN §5.1, DESIGN_TOKENS §7) `[P1]`
+- [ ] `input.tsx` — background `surface-container-highest`, no border. Focus: ghost border via `primary`. Error: `error-container` bg + `error` text. Visible `<label>` required. (DESIGN §5.3, CODING_STANDARDS §3.8) `[P1]`
+- [ ] `textarea.tsx` — same styling rules as input, auto-resize optional `[P1]`
+- [ ] `select.tsx` — custom select with accessible keyboard nav, token styling `[P1]`
+- [ ] `checkbox.tsx` — accessible checkbox with `primary` accent `[P1]`
+- [ ] `radio.tsx` — accessible radio group with `primary` accent `[P1]`
+- [ ] `card.tsx` — accepts `context` prop for parent (`radius-lg`) vs student (`radius-xl`). Background `surface-container-lowest` (#fff) for "lifted" cards. Shadow `ambient-sm`. (DESIGN §4.2, DESIGN_TOKENS §7–§8) `[P1]`
+- [ ] `badge.tsx` — pill shape (`radius-full`), methodology-aware coloring `[P1]`
+- [ ] `avatar.tsx` — circular, fallback initials, sizes xs–xl `[P1]`
+- [ ] `modal.tsx` — focus trap, return focus on close, overlay at `z-modal`, `Escape` to close. (CODING_STANDARDS §3.8, DESIGN_TOKENS §9) `[P1]`
+- [ ] `toast.tsx` — auto-dismiss, `z-notification`, `aria-live="polite"`. Success/error/warning variants using feedback tokens. (DESIGN_TOKENS §3.5, §9) `[P1]`
+- [ ] `spinner.tsx` — loading indicator with `primary` color `[P1]`
+- [ ] `skeleton.tsx` — content placeholder with pulse animation `[P1]`
+- [ ] `icon.tsx` — Lucide icon wrapper with standard sizes (xs=12, sm=16, md=20, lg=24, xl=32, 2xl=48) (DESIGN_TOKENS §13) `[P1]`
+- [ ] `tooltip.tsx` — `z-tooltip`, accessible (shows on focus), delay on hover `[P1]`
+- [ ] `dropdown-menu.tsx` — `z-popover`, keyboard navigable, focus management `[P1]`
+- [ ] `tabs.tsx` — accessible tab panel with `aria-selected`, keyboard arrow nav `[P1]`
+- [ ] `progress-bar.tsx` — progress ribbon: `tertiary-fixed` bg, `primary` fill (DESIGN §5.4) `[P1]`
+- [ ] `empty-state.tsx` — illustration slot + message + CTA button `[P1]`
+- [ ] `date-picker.tsx` — WAI-ARIA date picker, keyboard navigable (arrow keys, Escape), used by events/attendance/planning `[P1]`
+- [ ] `calendar.tsx` — shared calendar grid component for planning domain's unified view `[P1]`
+- [ ] `rich-text-editor.tsx` — structured text editor for journals, post creation, listing descriptions; toolbar with basic formatting `[P1]`
+- [ ] `star-rating.tsx` — 1–5 star input/display for marketplace reviews, keyboard accessible (arrow keys) `[P1]`
+- [ ] `faceted-filter.tsx` — checkbox/range filter panel for marketplace browse and global search `[P1]`
+- [ ] `infinite-scroll.tsx` — Intersection Observer-based pagination trigger for feeds and list views `[P1]`
+- [ ] `data-table.tsx` — sortable/filterable table for admin views, compliance logs, activity history `[P2]`
+- [ ] `confirmation-dialog.tsx` — reusable delete/destructive-action confirmation dialog with customizable message `[P1]`
+- [ ] `stat-card.tsx` — reusable metric display card for dashboards (value, label, trend indicator) `[P1]`
+- [ ] `breadcrumb.tsx` — nested route breadcrumbs for deep navigation in settings, compliance, admin `[P1]`
+- [ ] `image-gallery.tsx` — photo grid with lightbox overlay for social posts, journals, portfolios `[P1]`
 
 ### Common Components (`components/common/`)
 
-- [ ] `skip-link.tsx` — "Skip to main content" as first focusable element on every page (CODING_STANDARDS §3.8)
-- [ ] `methodology-badge.tsx` — methodology chip with config-driven label (not hardcoded)
-- [ ] `user-avatar.tsx` — wraps avatar with user/student data
-- [ ] `tier-gate.tsx` — shows upgrade prompt when free user hits premium feature (SPEC §10)
-- [ ] `error-boundary.tsx` — React error boundary with friendly fallback UI
-- [ ] `page-title.tsx` — sets `document.title` + renders `<h1>` for focus target on route transitions
+- [ ] `skip-link.tsx` — "Skip to main content" as first focusable element on every page (CODING_STANDARDS §3.8) `[P1]`
+- [ ] `methodology-badge.tsx` — methodology chip with config-driven label (not hardcoded) `[P1]`
+- [ ] `user-avatar.tsx` — wraps avatar with user/student data `[P1]`
+- [ ] `tier-gate.tsx` — shows upgrade prompt when free user hits premium feature; links to `/settings/subscription`, shows specific feature name being gated (SPEC §10) `[P1]`
+- [ ] `error-boundary.tsx` — React error boundary with friendly fallback UI `[P1]`
+- [ ] `page-title.tsx` — sets `document.title` + renders `<h1>` for focus target on route transitions `[P1]`
+- [ ] `report-button.tsx` — report dialog accepting `targetType` + `targetId` (supports all 11 entity types per safety domain spec); links to community guidelines (SPEC §11) `[P1]`
+- [ ] `network-status.tsx` — offline/online banner/toast; detects connectivity via `navigator.onLine` + `online`/`offline` events `[P1]`
 
 ### Form Utilities
 
-- [ ] `form-field.tsx` — wraps input + label + error message with consistent spacing
-- [ ] `file-upload.tsx` — drag-and-drop zone, file type + size validation (client-side), progress indicator. Extension validation pre-upload, magic byte validation happens server-side. (SPEC §9, CODING_STANDARDS §3.9)
+- [ ] `form-field.tsx` — wraps input + label + error message with consistent spacing `[P1]`
+- [ ] `file-upload.tsx` — drag-and-drop zone, file type + size validation (client-side), progress indicator. Extension validation pre-upload, magic byte validation happens server-side. (SPEC §9, CODING_STANDARDS §3.9) `[P1]`
 
 ### Verification
 
-- [ ] Verify: all components render correctly in isolation (consider Storybook or a dev route)
-- [ ] Verify: `npm run type-check` passes
-- [ ] Verify: tab navigation works through all interactive components
-- [ ] Verify: screen reader announces all components correctly
+- [ ] Verify: all components render correctly in isolation (consider Storybook or a dev route) `[P1]`
+- [ ] Verify: `npm run type-check` passes `[P1]`
+- [ ] Verify: tab navigation works through all interactive components `[P1]`
+- [ ] Verify: screen reader announces all components correctly `[P1]`
+- [ ] Verify: date-picker keyboard nav per WAI-ARIA (arrow keys, Enter, Escape) `[P1]`
+- [ ] Verify: star-rating keyboard accessible (arrow keys to change value) `[P1]`
+- [ ] Verify: infinite-scroll announces new content via `aria-live` region `[P1]`
 
 ### References
 - DESIGN §4–§5 (component visual spec)
@@ -281,56 +306,64 @@ a layout and depends on auth state. This is the app skeleton.
 
 ### Project Structure Refactor
 
-- [ ] Create `frontend/src/hooks/` directory
-- [ ] Create `frontend/src/lib/` directory
-- [ ] Move `src/query-client.ts` → `src/lib/query-client.ts` (update import in `main.tsx`)
-- [ ] Create `frontend/src/types/` directory with `index.ts` for shared frontend types
-- [ ] Create `frontend/src/components/layout/` directory
+- [ ] Create `frontend/src/hooks/` directory `[P1]`
+- [ ] Create `frontend/src/lib/` directory `[P1]`
+- [ ] Move `src/query-client.ts` → `src/lib/query-client.ts` (update import in `main.tsx`) `[P1]`
+- [ ] Create `frontend/src/types/` directory with `index.ts` for shared frontend types `[P1]`
+- [ ] Create `frontend/src/components/layout/` directory `[P1]`
 
 ### Auth Context & Hook
 
-- [ ] `hooks/use-auth.ts` — custom hook wrapping TanStack Query for `GET /auth/me`:
+- [ ] `hooks/use-auth.ts` — custom hook wrapping TanStack Query for `GET /auth/me`: `[P1]`
   - Returns `{ user, isLoading, isAuthenticated, isParent, isPrimaryParent, tier, coppaStatus }`
   - Uses `CurrentUserResponse` from generated types
   - Handles 401 (not logged in) gracefully — sets `isAuthenticated: false`
   - Query key: `["auth", "me"]`
-- [ ] `features/auth/auth-provider.tsx` — `AuthContext` provider wrapping the app, uses `use-auth` internally (ARCHITECTURE §11.2)
+- [ ] `features/auth/auth-provider.tsx` — `AuthContext` provider wrapping the app, uses `use-auth` internally (ARCHITECTURE §11.2) `[P1]`
 
 ### Methodology Context & Hook
 
-- [ ] `hooks/use-methodology.ts` — wraps TanStack Query for `GET /families/tools` and methodology config:
+- [ ] `hooks/use-methodology.ts` — wraps TanStack Query for `GET /families/tools` and methodology config: `[P1]`
   - Returns tools, terminology labels, active methodology slug
   - Depends on auth (only fetches when authenticated)
   - Query key: `["family", "tools"]`
-- [ ] `features/auth/methodology-provider.tsx` — `MethodologyContext` provider (ARCHITECTURE §11.2)
+- [ ] `features/auth/methodology-provider.tsx` — `MethodologyContext` provider (ARCHITECTURE §11.2) `[P1]`
+
+### i18n Infrastructure
+
+- [ ] `lib/i18n.ts` — react-intl setup with lazy-loaded locale data `[P1]`
+- [ ] `locales/en.json` — initial English string catalog (all user-facing strings extracted here) `[P1]`
+- [ ] Wrap `App.tsx` with `<IntlProvider>` using locale from `lib/i18n.ts` `[P1]`
 
 ### Layout Components (`components/layout/`)
 
-- [ ] `app-shell.tsx` — main authenticated layout:
+- [ ] `app-shell.tsx` — main authenticated layout: `[P1]`
   - Sidebar navigation (desktop) / bottom nav (mobile)
   - Header with search bar, notification bell, user menu
   - `<main>` content area with `data-context="parent"` attribute
   - Skip-link as first child
   - Responsive: sidebar collapses below `lg` breakpoint
   - Floating nav: `surface-container-low` at 80% opacity + `backdrop-blur: 20px` (DESIGN §4.4)
-- [ ] `student-shell.tsx` — supervised student layout:
+  - Note: `data-context="parent"` enables `parent:` Tailwind variant; `data-context="student"` enables `student:` variant
+- [ ] `student-shell.tsx` — supervised student layout: `[P1]`
   - Simplified nav (no social, no marketplace, no settings)
   - `data-context="student"` on `<main>` (enables `student:` variant)
   - Larger tap targets, more rounded corners (`radius-xl`)
   - Back-to-parent button always visible
-- [ ] `auth-layout.tsx` — unauthenticated layout for login/register/recovery pages (centered card, no sidebar)
-- [ ] `onboarding-layout.tsx` — minimal layout for the onboarding wizard (progress indicator, no full nav)
+- [ ] `auth-layout.tsx` — unauthenticated layout for login/register/recovery pages (centered card, no sidebar) `[P1]`
+- [ ] `onboarding-layout.tsx` — minimal layout for the onboarding wizard (progress indicator, no full nav) `[P1]`
+- [ ] `admin-shell.tsx` — admin-specific layout with admin navigation sidebar, system health indicators, and admin-only actions `[P1]`
 
 ### Route Guards
 
-- [ ] `components/layout/protected-route.tsx` — redirects to `/auth/login` if not authenticated
-- [ ] `components/layout/onboarding-guard.tsx` — redirects to `/onboarding` if authenticated but onboarding not complete (check `WizardProgressResponse.status !== "completed"` and `!== "skipped"`)
-- [ ] `components/layout/admin-guard.tsx` — redirects to `/` if not admin (SPEC §16)
-- [ ] `components/layout/student-guard.tsx` — validates active student session
+- [ ] `components/layout/protected-route.tsx` — redirects to `/auth/login` if not authenticated `[P1]`
+- [ ] `components/layout/onboarding-guard.tsx` — redirects to `/onboarding` if authenticated but onboarding not complete (check `WizardProgressResponse.status !== "completed"` and `!== "skipped"`) `[P1]`
+- [ ] `components/layout/admin-guard.tsx` — redirects to `/` if not `is_platform_admin` (SPEC §16) `[P1]`
+- [ ] `components/layout/student-guard.tsx` — validates active student session `[P1]`
 
 ### Router Setup
 
-- [ ] `src/routes.tsx` — full route tree using React Router v7 with lazy loading:
+- [ ] `src/routes.tsx` — full route tree using React Router v7 with lazy loading: `[P1]`
   ```
   / (ProtectedRoute + OnboardingGuard + AppShell)
     index → Feed
@@ -364,9 +397,19 @@ a layout and depends on auth state. This is the app skeleton.
     /settings → FamilySettings
     /settings/notifications → NotificationPrefs
     /settings/subscription → SubscriptionManager
+    /settings/account → AccountSettings                    [P1]
+    /settings/account/sessions → SessionManagement         [P1]
+    /settings/account/export → DataExport                  [P1]
+    /settings/account/delete → AccountDeletion             [P1]
     /search → SearchResults
     /family/:familyId → FamilyProfile
     /calendar → CalendarView
+    /calendar/day/:date → DayView                          [P1]
+    /calendar/week/:date → WeekView                        [P1]
+    /planning/templates → ScheduleTemplates                [P2]
+    /legal/terms → TermsOfService                          [P1]
+    /legal/privacy → PrivacyPolicy                         [P1]
+    /legal/guidelines → CommunityGuidelines                [P1]
   /auth (AuthLayout)
     /auth/login → Login
     /auth/register → Register
@@ -380,24 +423,44 @@ a layout and depends on auth state. This is the app skeleton.
     /student/video/:videoId → StudentVideo
     /student/read/:contentId → StudentReader
     /student/sequence/:progressId → StudentSequence
+  /admin (ProtectedRoute + AdminGuard + AdminShell)        [P1]
+    index → AdminDashboard
+    /admin/users → UserManagement                          [P1]
+    /admin/users/:id → UserDetail                          [P1]
+    /admin/moderation → ModerationQueue                    [P1]
+    /admin/flags → FeatureFlags                            [P2]
+    /admin/audit → AuditLog                                [P1]
+    /admin/methodologies → MethodologyConfig               [P2]
+  /compliance (ProtectedRoute + TierGate)                  [P2]
+    index → ComplianceSetup
+    /compliance/attendance → AttendanceTracker
+    /compliance/assessments → AssessmentRecords
+    /compliance/tests → StandardizedTests                  [P2]
+    /compliance/portfolios → PortfolioList                 [P3]
+    /compliance/portfolios/:id → PortfolioBuilder          [P3]
+    /compliance/transcripts → TranscriptList               [P3]
+    /compliance/transcripts/:id → TranscriptBuilder        [P3]
   ```
   (ARCHITECTURE §11.3)
-- [ ] Update `src/App.tsx` — replace stub with `RouterProvider` + providers (Auth → Methodology → Router)
-- [ ] Update `src/main.tsx` — ensure provider ordering: `StrictMode → QueryClientProvider → App`
+- [ ] Update `src/App.tsx` — replace stub with `RouterProvider` + providers (Auth → Methodology → IntlProvider → Router) `[P1]`
+- [ ] Update `src/main.tsx` — ensure provider ordering: `StrictMode → QueryClientProvider → App` `[P1]`
 
 ### Route Transition Accessibility
 
-- [ ] On every route change, move focus to the page's `<h1>` or main content region (CODING_STANDARDS §3.8)
-- [ ] Announce page title changes to screen readers via `aria-live` or `document.title` update
+- [ ] On every route change, move focus to the page's `<h1>` or main content region (CODING_STANDARDS §3.8) `[P1]`
+- [ ] Announce page title changes to screen readers via `aria-live` or `document.title` update `[P1]`
 
 ### Verification
 
-- [ ] Verify: unauthenticated user sees `/auth/login`
-- [ ] Verify: authenticated user with incomplete onboarding redirects to `/onboarding`
-- [ ] Verify: authenticated user with complete onboarding sees AppShell at `/`
-- [ ] Verify: all routes lazy-load correctly (check network tab)
-- [ ] Verify: `npm run type-check` passes
-- [ ] Verify: keyboard navigation through sidebar/nav links works
+- [ ] Verify: unauthenticated user sees `/auth/login` `[P1]`
+- [ ] Verify: authenticated user with incomplete onboarding redirects to `/onboarding` `[P1]`
+- [ ] Verify: authenticated user with complete onboarding sees AppShell at `/` `[P1]`
+- [ ] Verify: all routes lazy-load correctly (check network tab) `[P1]`
+- [ ] Verify: `npm run type-check` passes `[P1]`
+- [ ] Verify: keyboard navigation through sidebar/nav links works `[P1]`
+- [ ] Verify: admin routes accessible only to `is_platform_admin` users `[P1]`
+- [ ] Verify: compliance routes show TierGate for free-tier families `[P2]`
+- [ ] Verify: route tree covers all 17 domains (IAM, method, discover-import, onboard, social, learn, mkt, notify, media, billing, safety, search, recs, comply, data-lifecycle, admin, planning) `[P1]`
 
 ### References
 - ARCHITECTURE §11.2–§11.3 (auth strategy, route table)
@@ -417,7 +480,7 @@ Depends on Phase 4 auth context and layout.
 
 ### Kratos Integration Utilities
 
-- [ ] `lib/kratos.ts` — helper functions for Kratos Browser API:
+- [ ] `lib/kratos.ts` — helper functions for Kratos Browser API: `[P1]`
   - `initLoginFlow()` — fetches login flow from Kratos
   - `initRegistrationFlow()` — fetches registration flow
   - `initRecoveryFlow()` — fetches recovery flow
@@ -429,17 +492,32 @@ Depends on Phase 4 auth context and layout.
 
 ### Auth Pages (`features/auth/`)
 
-- [ ] `login.tsx` — email/password form + OAuth buttons (Google, Facebook, Apple). Error display for invalid credentials. Link to register + recovery. (SPEC §1, ARCHITECTURE §11.2)
-- [ ] `register.tsx` — email/password + optional OAuth. On success: Kratos webhook triggers `POST /hooks/kratos/post-registration` → family+parent created automatically. Redirect to `/onboarding`. (SPEC §1, ARCHITECTURE §11.2)
-- [ ] `account-recovery.tsx` — email input for password reset link. Success confirmation message.
-- [ ] `email-verification.tsx` — handles verification token from URL. Shows success/error state.
+- [ ] `login.tsx` — email/password form + OAuth buttons (Google, Facebook, Apple). Error display for invalid credentials. Link to register + recovery. (SPEC §1, ARCHITECTURE §11.2) `[P1]`
+- [ ] `register.tsx` — email/password + optional OAuth. On success: Kratos webhook triggers `POST /hooks/kratos/post-registration` → family+parent created automatically. Redirect to `/onboarding`. (SPEC §1, ARCHITECTURE §11.2) `[P1]`
+- [ ] `account-recovery.tsx` — email input for password reset link. Success confirmation message. `[P1]`
+- [ ] `email-verification.tsx` — handles verification token from URL. Shows success/error state. `[P1]`
+- [ ] `oauth-button.tsx` — reusable OAuth button component with provider-specific icons (Google, Facebook, Apple) + Kratos OAuth redirect initiation `[P1]`
+- [ ] Terms of service / privacy policy acceptance checkbox on registration form (must accept before submit) `[P1]`
+- [ ] CAPTCHA integration on registration (hCaptcha or Turnstile) to prevent automated signups `[P1]`
+
+### Session & MFA Management
+
+- [ ] `features/settings/session-management.tsx` — list active sessions, revoke individual sessions, "log out all devices" button `[P1]`
+- [ ] `features/settings/mfa-setup.tsx` — TOTP MFA setup: QR code display, verification input, recovery codes display + download `[P2]`
+
+### Legal Pages (`features/legal/`)
+
+- [ ] `terms-of-service.tsx` — `/legal/terms` — rendered ToS content `[P1]`
+- [ ] `privacy-policy.tsx` — `/legal/privacy` — rendered privacy policy `[P1]`
+- [ ] `community-guidelines.tsx` — `/legal/guidelines` — community guidelines linked from report dialog `[P1]`
+- [ ] Terms versioning: re-acceptance prompt banner when policy version changes; dismissable only by accepting new terms `[P2]`
 
 ### COPPA Consent Flow
 
-- [ ] `hooks/use-consent.ts` — wraps `GET /families/consent` + `POST /families/consent`:
+- [ ] `hooks/use-consent.ts` — wraps `GET /families/consent` + `POST /families/consent`: `[P1]`
   - Returns `{ consentStatus, acknowledge, provideConsent }`
   - Query key: `["family", "consent"]`
-- [ ] `features/auth/coppa-consent.tsx` — consent gate component:
+- [ ] `features/auth/coppa-consent.tsx` — consent gate component: `[P1]`
   - Shown after registration before adding students
   - Status flow: `registered → noticed → consented` (SPEC §7.3)
   - Must be completed before any student can be created
@@ -447,12 +525,14 @@ Depends on Phase 4 auth context and layout.
 
 ### Verification
 
-- [ ] Verify: login flow works end-to-end with Kratos (or mock for dev)
-- [ ] Verify: registration creates family + parent via webhook
-- [ ] Verify: COPPA consent blocks student creation until consented
-- [ ] Verify: recovery email flow works
-- [ ] Verify: OAuth buttons present and functional
-- [ ] Verify: `npm run type-check` passes
+- [ ] Verify: login flow works end-to-end with Kratos (or mock for dev) `[P1]`
+- [ ] Verify: registration creates family + parent via webhook `[P1]`
+- [ ] Verify: COPPA consent blocks student creation until consented `[P1]`
+- [ ] Verify: recovery email flow works `[P1]`
+- [ ] Verify: OAuth buttons present and functional `[P1]`
+- [ ] Verify: `npm run type-check` passes `[P1]`
+- [ ] Verify: ToS/privacy acceptance required before registration completes `[P1]`
+- [ ] Verify: session management lists and revokes sessions correctly `[P1]`
 
 ### References
 - ARCHITECTURE §11.2 (Kratos integration)
@@ -472,7 +552,7 @@ Tests the entire data flow: auth → API → TanStack Query → UI.
 
 ### Onboarding Hooks
 
-- [ ] `hooks/use-onboarding.ts` — wraps onboarding API endpoints:
+- [ ] `hooks/use-onboarding.ts` — wraps onboarding API endpoints: `[P1]`
   - `useOnboardingProgress()` — `GET /onboarding/progress` (query key: `["onboarding", "progress"]`)
   - `useUpdateFamilyProfile()` — `PATCH /onboarding/family-profile`
   - `useAddChild()` / `useRemoveChild()` — `POST` / `DELETE /onboarding/children`
@@ -486,46 +566,48 @@ Tests the entire data flow: auth → API → TanStack Query → UI.
 
 ### Wizard UI (`features/onboarding/`)
 
-- [ ] `onboarding-wizard.tsx` — wizard container:
+- [ ] `onboarding-wizard.tsx` — wizard container: `[P1]`
   - Progress indicator showing 4 steps with current/completed/upcoming states
   - Step navigation (back/next) with validation
   - Skip button always available (`POST /onboarding/skip`)
   - Reads `WizardProgressResponse.current_step` and `completed_steps[]` to determine state
   - Step enum: `family_profile → children → methodology → roadmap_review`
-- [ ] `steps/family-profile-step.tsx` — family name, state selection, location region
+- [ ] `steps/family-profile-step.tsx` — family name, state selection, location region `[P1]`
   - Validate required fields before allowing next
-- [ ] `steps/children-step.tsx` — add student profiles:
+- [ ] `steps/children-step.tsx` — add student profiles: `[P1]`
   - Display name, birth year, grade level
   - Add/remove students dynamically
   - COPPA consent must be complete before this step (gate check)
   - Optional step — can proceed with zero students
-- [ ] `steps/methodology-step.tsx` — three methodology paths:
-  - **Quiz-informed**: Import results from pre-registration quiz via `share_id`, or link to take quiz
+- [ ] `steps/methodology-step.tsx` — three methodology paths: `[P1]`
+  - **Quiz-informed**: text input for `share_id` or full quiz URL, "Take the quiz first" outbound link to public site, success state showing matched methodology + confidence score
   - **Exploration**: Browse methodology cards (GET `/methodologies`), drill into detail (GET `/methodologies/{slug}`), select one
   - **Skip**: Proceed with no methodology selected
   - Display methodology tools preview for selected methodology
-- [ ] `steps/roadmap-review-step.tsx` — personalized roadmap:
-  - GET `/onboarding/roadmap` — age-adapted recommendations (5 age brackets)
-  - GET `/onboarding/recommendations` — starter resources
-  - GET `/onboarding/community` — local community info
+- [ ] `steps/roadmap-review-step.tsx` — personalized roadmap: `[P1]`
+  - GET `/onboarding/roadmap` — age-adapted recommendations with visual age bracket indicator (0–4, 5–7, 8–10, 11–13, 14–18), different content per bracket
+  - GET `/onboarding/recommendations` — starter curriculum recommendation cards: top 3 per methodology+grade
+  - GET `/onboarding/community` — methodology groups, nearby families count, mentor suggestions
+  - Co-parent invite CTA (optional, can defer to settings)
   - "Complete" button → `POST /onboarding/complete` → redirect to `/`
 
 ### Methodology Explorer (shared — also used in settings)
 
-- [ ] `hooks/use-methodologies.ts` — wraps `GET /methodologies` and `GET /methodologies/{slug}`:
+- [ ] `hooks/use-methodologies.ts` — wraps `GET /methodologies` and `GET /methodologies/{slug}`: `[P1]`
   - `useMethodologyList()` — query key: `["methodologies"]`
   - `useMethodologyDetail(slug)` — query key: `["methodologies", slug]`
   - `useMethodologyTools(slug)` — query key: `["methodologies", slug, "tools"]`
-- [ ] `components/common/methodology-card.tsx` — methodology summary card for browsing
+- [ ] `components/common/methodology-card.tsx` — methodology summary card for browsing `[P1]`
 
 ### Verification
 
-- [ ] Verify: wizard renders correct step based on `current_step`
-- [ ] Verify: completed steps show checkmarks, allow revisiting
-- [ ] Verify: skip onboarding redirects to `/` with `status: "skipped"`
-- [ ] Verify: methodology import from quiz works
-- [ ] Verify: roadmap displays age-appropriate recommendations
-- [ ] Verify: `npm run type-check` passes
+- [ ] Verify: wizard renders correct step based on `current_step` `[P1]`
+- [ ] Verify: completed steps show checkmarks, allow revisiting `[P1]`
+- [ ] Verify: skip onboarding redirects to `/` with `status: "skipped"` `[P1]`
+- [ ] Verify: methodology import from quiz works (valid share_id → matched methodology + confidence) `[P1]`
+- [ ] Verify: roadmap displays age-appropriate recommendations per bracket `[P1]`
+- [ ] Verify: starter curriculum cards display for selected methodology `[P1]`
+- [ ] Verify: `npm run type-check` passes `[P1]`
 
 ### References
 - SPEC §4 (onboarding requirements)
@@ -544,7 +626,7 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### Family Management Hooks
 
-- [ ] `hooks/use-family.ts` — wraps family API endpoints:
+- [ ] `hooks/use-family.ts` — wraps family API endpoints: `[P1]`
   - `useFamilyProfile()` — `GET /families/profile` (query key: `["family", "profile"]`)
   - `useUpdateFamilyProfile()` — `PATCH /families/profile`
   - `useStudents()` — `GET /families/students` (query key: `["family", "students"]`)
@@ -556,53 +638,78 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### Settings Pages (`features/settings/`)
 
-- [ ] `family-settings.tsx` — main settings page:
+- [ ] `family-settings.tsx` — main settings page: `[P1]`
   - Edit family display name, state, location region
   - Change primary methodology (PATCH `/families/methodology`)
   - Manage secondary methodology slugs
   - View subscription tier
-- [ ] `student-management.tsx` — student CRUD embedded in settings:
+- [ ] `student-management.tsx` — student CRUD embedded in settings: `[P1]`
   - List students with edit/delete
   - Add student form (requires COPPA consent)
   - Per-student methodology override
   - Per-student tool display
-- [ ] `notification-prefs.tsx` — notification preference management:
+- [ ] `notification-prefs.tsx` — notification preference management: `[P1]`
   - Per-type per-channel toggles
   - Digest frequency: immediate/daily/weekly/off
   - System-critical notifications shown as non-toggleable
   - (SPEC §8, domain spec `specs/domains/08-notify.md`)
-- [ ] `subscription-manager.tsx` — subscription management:
+- [ ] `subscription-manager.tsx` — subscription management: `[P2]`
   - Current plan display
   - Upgrade/downgrade flow
   - Billing cycle info
   - Payment method management
   - (SPEC §10, domain spec `specs/domains/10-billing.md`)
+- [ ] `account-settings.tsx` — account-level settings (`/settings/account`): email, password change, linked OAuth accounts `[P1]`
+
+### Co-Parent Management
+
+- [ ] `features/settings/co-parent-management.tsx` — co-parent invite + management: `[P1]`
+  - Invite by email (sends invitation)
+  - List co-parents with role badges (primary / co-parent)
+  - Remove co-parent with confirmation dialog
+  - Transfer primary parent role (with billing responsibility warning)
+- [ ] Primary parent indicator badge in family settings showing who holds billing responsibility `[P1]`
+
+### Billing & Payments
+
+- [ ] `features/billing/pricing-page.tsx` — tier comparison table, monthly/annual toggle, feature matrix with CTA buttons `[P2]`
+- [ ] `features/billing/payment-methods.tsx` — list saved payment methods, add/remove, set default (Hyperswitch integration) `[P2]`
+- [ ] `features/billing/transaction-history.tsx` — purchases, subscription payments, creator payouts with date range filter `[P2]`
+
+### Data Lifecycle
+
+- [ ] `features/settings/data-export.tsx` — data export request UI: format selection (JSON/CSV), domain selection, status tracking, download link, past exports list. Hooks: `useRequestExport()`, `useExportStatus()`, `useExportList()` `[P1]`
+- [ ] `features/settings/account-deletion.tsx` — account deletion flow: consequences display, export offer, grace period info (30 days), confirmation input (type family name), cancellation option during grace period. Hooks: `useRequestDeletion()`, `useCancelDeletion()` `[P1]`
+- [ ] `features/settings/student-deletion.tsx` — student profile deletion: separate from full family deletion, COPPA-compliant immediate deletion option (no grace period for child data) `[P1]`
 
 ### Notification Center
 
-- [ ] `hooks/use-notifications.ts` — notification queries + mutations:
+- [ ] `hooks/use-notifications.ts` — notification queries + mutations: `[P1]`
   - `useNotifications()` — paginated notification list
   - `useUnreadCount()` — unread notification count (for bell badge)
   - `useMarkRead(id)` — mark single notification read
   - `useMarkAllRead()` — mark all read
-- [ ] `components/layout/notification-bell.tsx` — bell icon in header with unread count badge
-- [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications
+- [ ] `components/layout/notification-bell.tsx` — bell icon in header with unread count badge `[P1]`
+- [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications `[P1]`
 
 ### API Schema Prerequisite
 
-- [ ] Run `make full-generate` to pull in notification + billing + social endpoints (they exist in Go backend but are not yet in `schema.ts`)
+- [ ] Run `make full-generate` to pull in notification + billing + social endpoints (they exist in Go backend but are not yet in `schema.ts`) `[P1]`
 
 ### Verification
 
-- [ ] Verify: family profile edits persist and reflect in UI
-- [ ] Verify: student CRUD works, COPPA gate enforced
-- [ ] Verify: methodology change updates tools across the app
-- [ ] Verify: notification preferences save correctly
-- [ ] Verify: `npm run type-check` passes
+- [ ] Verify: family profile edits persist and reflect in UI `[P1]`
+- [ ] Verify: student CRUD works, COPPA gate enforced `[P1]`
+- [ ] Verify: methodology change updates tools across the app `[P1]`
+- [ ] Verify: notification preferences save correctly `[P1]`
+- [ ] Verify: co-parent invite sends and co-parent appears in list `[P1]`
+- [ ] Verify: data export request completes and download works `[P1]`
+- [ ] Verify: account deletion flow shows consequences and respects grace period `[P1]`
+- [ ] Verify: `npm run type-check` passes `[P1]`
 
 ### References
-- SPEC §1.4 (family management), §8 (notifications), §10 (billing)
-- Domain specs: `specs/domains/01-iam.md`, `specs/domains/08-notify.md`, `specs/domains/10-billing.md`
+- SPEC §1.4 (family management), §8 (notifications), §10 (billing), §15 (data lifecycle)
+- Domain specs: `specs/domains/01-iam.md`, `specs/domains/08-notify.md`, `specs/domains/10-billing.md`, `specs/domains/15-data-lifecycle.md`
 
 ---
 
@@ -617,81 +724,107 @@ and family management from prior phases.
 
 ### Prerequisites
 
-- [ ] Run `make full-generate` if not already done — learning endpoints must be in `schema.ts`
+- [ ] Run `make full-generate` if not already done — learning endpoints must be in `schema.ts` `[P1]`
 
 ### Learning Hooks (`hooks/`)
 
-- [ ] `use-activities.ts` — activity definitions + activity log CRUD:
+- [ ] `use-activities.ts` — activity definitions + activity log CRUD: `[P1]`
   - `useActivityDefs()`, `useCreateActivityDef()`, `useLogActivity()`, etc.
   - Query keys: `["learning", "activity-defs"]`, `["learning", "activity-log", filters]`
-- [ ] `use-journals.ts` — journal entry CRUD:
+- [ ] `use-journals.ts` — journal entry CRUD: `[P1]`
   - `useJournalEntries(filters)`, `useCreateJournalEntry()`, `useUpdateJournalEntry()`, etc.
   - Query keys: `["learning", "journals", filters]`
-- [ ] `use-reading.ts` — reading items, progress, lists:
+- [ ] `use-reading.ts` — reading items, progress, lists: `[P1]`
   - `useReadingItems()`, `useReadingLists()`, `useUpdateReadingProgress()`, etc.
   - Query keys: `["learning", "reading-items"]`, `["learning", "reading-lists"]`
-- [ ] `use-progress.ts` — student progress aggregation:
+- [ ] `use-progress.ts` — student progress aggregation: `[P1]`
   - `useStudentProgress(studentId)` — activity counts, hours, reading completion
   - Query key: `["learning", "progress", studentId]`
-- [ ] `use-quiz.ts` — quiz session management:
+- [ ] `use-quiz.ts` — quiz session management: `[P1]`
   - `useQuizSession(sessionId)`, `useSubmitAnswer()`, `useCompleteQuiz()`, etc.
   - Query keys: `["learning", "quiz", sessionId]`
-- [ ] `use-video.ts` — video definitions + progress:
+- [ ] `use-video.ts` — video definitions + progress: `[P1]`
   - `useVideoProgress(videoId)`, `useUpdateVideoProgress()`, etc.
-- [ ] `use-sequences.ts` — sequence definitions + progress:
+- [ ] `use-sequences.ts` — sequence definitions + progress: `[P1]`
   - `useSequenceProgress(progressId)`, `useAdvanceSequence()`, etc.
-- [ ] `use-assignments.ts` — parent assigns content to students:
+- [ ] `use-assignments.ts` — parent assigns content to students: `[P1]`
   - `useAssignments(studentId)`, `useCreateAssignment()`, etc.
-- [ ] `use-subjects.ts` — subject taxonomy:
+- [ ] `use-subjects.ts` — subject taxonomy: `[P1]`
   - `useSubjectTaxonomy()`, `useCreateCustomSubject()`
+- [ ] `use-assessments.ts` — assessment/test score CRUD: `[P1]`
+  - `useAssessments(studentId, filters)`, `useCreateAssessment()`, `useGradingScales()`, etc.
+  - Query keys: `["learning", "assessments", studentId]`, `["learning", "grading-scales"]`
+
+### Subject Taxonomy Picker
+
+- [ ] `components/common/subject-picker.tsx` — 3-level hierarchical picker (Category → Subject → Topic) with inline custom subject creation; used in activity logging, assessments, journals, schedules `[P1]`
 
 ### Learning Pages (`features/learning/`)
 
-- [ ] `learning-dashboard.tsx` — overview landing page:
-  - Quick stats per student (recent activities, reading progress)
+- [ ] `learning-dashboard.tsx` — overview landing page: `[P1]`
+  - Quick stats per student (recent activities, reading progress) using `<StatCard>`
   - Methodology-aware tool labels (via `useMethodologyContext()`)
   - Quick-add buttons for logging, journaling, etc.
   - Premium features gated with `<TierGate>`
-- [ ] `activity-log.tsx` — log and browse activities:
+- [ ] `activity-log.tsx` — log and browse activities: `[P1]`
   - Activity log table/list with date, subject, duration, student
-  - Add activity form: title, description, subject tags (from taxonomy), date, duration, student selector
+  - Add activity form: title, description, subject tags (from taxonomy via `<SubjectPicker>`), date, duration, student selector
   - Filter by student, date range, subject
-- [ ] `journal-list.tsx` — browse journal entries:
+- [ ] `journal-list.tsx` — browse journal entries: `[P1]`
   - List view with entry type badge (freeform/narration/reflection)
   - Filter by student, type, date range
-- [ ] `journal-editor.tsx` — create/edit journal entry:
-  - Rich text area (or structured form per entry type)
+- [ ] `journal-editor.tsx` — create/edit journal entry: `[P1]`
+  - Rich text editor (uses `rich-text-editor.tsx` component)
   - File attachment support (uses `file-upload.tsx` component)
   - Student selector
-  - Subject tags
-- [ ] `reading-lists.tsx` — manage reading lists and items:
+  - Subject tags via `<SubjectPicker>`
+- [ ] `reading-lists.tsx` — manage reading lists and items: `[P1]`
   - List view with status badges (to_read/in_progress/completed)
   - Add book form: title, author, ISBN, student
   - Status transition buttons
   - Reading list grouping/organization
-- [ ] `progress-view.tsx` — per-student progress dashboard (`/learning/progress/:studentId`):
+- [ ] `progress-view.tsx` — per-student progress dashboard (`/learning/progress/:studentId`): `[P1]`
   - Activity counts by subject
   - Reading completion metrics
   - Hours per week chart
   - Assessment scores overview
-  - Export button (async export generation)
+  - Export button (async export generation via data lifecycle hooks)
+- [ ] `tests-and-grades.tsx` — assessment entry and grade tracking: `[P1]`
+  - Assessment entry form: title, subject (via `<SubjectPicker>`), student, date, score type (points/percentage/letter), weight
+  - Grading scale configuration (per-family custom scales)
+  - Running averages by subject and student
+  - Hooks: `useAssessments()`, `useGradingScales()`
+- [ ] `projects.tsx` — project creation and tracking: `[P2]`
+  - Project creation with milestones (title, description, due date)
+  - Status lifecycle: planning → in_progress → completed
+  - Per-student project list with progress indicators
+
+### Methodology Integration
+
+- [ ] All learning tool labels MUST come from methodology config via `useMethodologyContext()` — no hardcoded "Activity Log", "Journal", etc. `[P1]`
+- [ ] `components/common/parent-education-panel.tsx` — expandable guidance panel sourcing content from `ActiveToolResponse.guidance`; includes "Why this tool?" explanation from methodology philosophy `[P1]`
+
+### Tool Assignment
+
+- [ ] `features/learning/tool-assignment.tsx` — per-student tool activation/deactivation with methodology defaults; parent can show/hide tools per student `[P2]`
 
 ### Interactive Learning Players
 
-- [ ] `quiz-player.tsx` — interactive quiz (`/learning/quiz/:sessionId`):
+- [ ] `quiz-player.tsx` — interactive quiz (`/learning/quiz/:sessionId`): `[P1]`
   - Session lifecycle: `not_started → in_progress → submitted → scored`
   - Question display (multiple choice, free response, etc.)
   - Answer submission
   - Score display on completion
   - `aria-live` for quiz feedback (CODING_STANDARDS §3.8)
-- [ ] `video-player.tsx` — video playback (`/learning/video/:videoId`):
+- [ ] `video-player.tsx` — video playback (`/learning/video/:videoId`): `[P1]`
   - HLS streaming support + external video URLs
   - Progress tracking (last position, completion percentage)
   - Accessible controls
-- [ ] `content-viewer.tsx` — document/content viewer (`/learning/read/:contentId`):
+  - Caption file support (VTT/SRT) `[P1]`
+- [ ] `content-viewer.tsx` — document/content viewer (`/learning/read/:contentId`): `[P1]`
   - PDF/document rendering
   - Progress tracking
-- [ ] `sequence-view.tsx` — lesson sequence (`/learning/sequence/:progressId`):
+- [ ] `sequence-view.tsx` — lesson sequence (`/learning/sequence/:progressId`): `[P1]`
   - Linear progression display
   - Current step highlight
   - Unlock logic visualization
@@ -699,35 +832,55 @@ and family management from prior phases.
 
 ### Student Features (`features/student/`)
 
-- [ ] `student-dashboard.tsx` — simplified student home:
+- [ ] `student-dashboard.tsx` — simplified student home: `[P1]`
   - Assigned content list
   - Current sequence progress
   - No social/marketplace access
-- [ ] `student-quiz.tsx` — student-facing quiz (simplified wrapper of quiz-player)
-- [ ] `student-video.tsx` — student-facing video player
-- [ ] `student-reader.tsx` — student-facing content viewer
-- [ ] `student-sequence.tsx` — student-facing sequence progression
+- [ ] `student-quiz.tsx` — student-facing quiz (simplified wrapper of quiz-player) `[P1]`
+- [ ] `student-video.tsx` — student-facing video player `[P1]`
+- [ ] `student-reader.tsx` — student-facing content viewer `[P1]`
+- [ ] `student-sequence.tsx` — student-facing sequence progression `[P1]`
 
 ### Student Session Management
 
-- [ ] `hooks/use-student-session.ts` — manages which student is active:
+- [ ] `hooks/use-student-session.ts` — manages which student is active: `[P1]`
   - Parent switches between students for logging/viewing
   - Student shell: student is fixed from parent's selection
   - Stored in context (not server state)
   - (ARCHITECTURE §11.2)
+- [ ] Supervised student session detail: age gate (10+), session creation flow (parent selects student → confirms → enters student shell), session timeout, session revocation from parent view `[P1]`
+
+### Learning Data Export
+
+- [ ] Learning data export button on `progress-view.tsx` — triggers domain-scoped export via data lifecycle hooks `[P1]`
+
+### Phase 3 Methodology-Specific Tools (future placeholders)
+
+These tools are methodology-specific extensions. Listed here as `[P3]` placeholders to ensure they are tracked:
+
+- [ ] Nature journal (Charlotte Mason) — `observation_type`, species, weather, drawing/photo upload `[P3]`
+- [ ] Trivium tracker (Classical) — grammar/logic/rhetoric stage tracking per subject `[P3]`
+- [ ] Rhythm planner (Waldorf) — day-of-week time blocks, rhythm templates `[P3]`
+- [ ] Observation logs (Montessori) — work chosen, duration, concentration level `[P3]`
+- [ ] Habit tracking (Charlotte Mason) — habit goals, streaks, parent notes `[P3]`
+- [ ] Interest-led activity log (Unschooling) — auto-tagging activities to subjects `[P3]`
+- [ ] Handwork project tracker (Waldorf) — materials, techniques, photos `[P3]`
+- [ ] Practical life activities (Montessori) — life skill categories, mastery levels `[P3]`
 
 ### Verification
 
-- [ ] Verify: activity logging creates entries and appears in log
-- [ ] Verify: journal creation with attachments works
-- [ ] Verify: reading list status transitions work correctly
-- [ ] Verify: progress view aggregates data accurately
-- [ ] Verify: quiz player handles full session lifecycle
-- [ ] Verify: video player tracks progress
-- [ ] Verify: sequence navigation enforces unlock logic
-- [ ] Verify: student shell restricts navigation
-- [ ] Verify: methodology terminology used throughout (not hardcoded labels)
-- [ ] Verify: `npm run type-check` passes
+- [ ] Verify: activity logging creates entries and appears in log `[P1]`
+- [ ] Verify: journal creation with attachments works `[P1]`
+- [ ] Verify: reading list status transitions work correctly `[P1]`
+- [ ] Verify: progress view aggregates data accurately `[P1]`
+- [ ] Verify: quiz player handles full session lifecycle `[P1]`
+- [ ] Verify: video player tracks progress `[P1]`
+- [ ] Verify: sequence navigation enforces unlock logic `[P1]`
+- [ ] Verify: student shell restricts navigation `[P1]`
+- [ ] Verify: methodology terminology used throughout (not hardcoded labels) `[P1]`
+- [ ] Verify: assessment entry with grading scales works `[P1]`
+- [ ] Verify: subject taxonomy picker supports 3-level hierarchy + custom subjects `[P1]`
+- [ ] Verify: `npm run type-check` passes `[P1]`
 
 ### References
 - SPEC §6 (learning requirements)
@@ -737,131 +890,158 @@ and family management from prior phases.
 
 ---
 
-## Phase 9: Social, Marketplace & Discovery
+## Phase 9: Social, Marketplace & Search
 
 **Goal**: Build the social feed, messaging, groups, events, marketplace browse/
-purchase flow, and creator tools. These are the community features.
+purchase flow, creator tools, and global search. These are the community features.
 
 **Why here**: These are large feature surfaces that depend on the foundation
 from Phases 1–7 but are independent of Phase 8 (learning).
 
 ### Prerequisites
 
-- [ ] Run `make full-generate` — social, marketplace, and search endpoints must be in `schema.ts`
+- [ ] Run `make full-generate` — social, marketplace, and search endpoints must be in `schema.ts` `[P1]`
 
 ### WebSocket Infrastructure
 
-- [ ] `lib/websocket.ts` — WebSocket connection manager:
+- [ ] `lib/websocket.ts` — WebSocket connection manager: `[P1]`
   - Connect to `wss://api.homegrown.academy/ws` (or dev proxy)
   - Message types: `new_message`, `notification`, `friend_request`
   - Auto-reconnect with exponential backoff
   - (ARCHITECTURE §11.5)
-- [ ] `hooks/use-websocket.ts` — hook that connects on mount, dispatches to TanStack Query invalidation:
+- [ ] `hooks/use-websocket.ts` — hook that connects on mount, dispatches to TanStack Query invalidation: `[P1]`
   - `new_message` → invalidate `["messages", conversationId]`
   - `notification` → invalidate `["notifications"]`
   - `friend_request` → invalidate `["friends", "requests"]`
 
 ### Social Features (`features/social/`)
 
-- [ ] `feed.tsx` — social feed (index route `/`):
+- [ ] `feed.tsx` — social feed (index route `/`): `[P1]`
   - Reverse-chronological posts from friends only
-  - 6 post types: text, photo, milestone, event_share, marketplace_review, resource_share
-  - Post cards with type-specific rendering
-  - Infinite scroll / pagination
+  - Post type-specific rendering for all 6 types: text, photo, milestone, event_share, marketplace_review, resource_share
+  - Post cards with type-specific UI variants
+  - Infinite scroll / pagination (uses `infinite-scroll.tsx`)
   - `aria-live` region for new posts
-- [ ] `post-composer.tsx` — create new post:
-  - Type selector
+- [ ] `post-composer.tsx` — create new post: `[P1]`
+  - Type selector with type-specific UI variants per post type
   - Text input + photo upload (for photo posts)
   - Student mention (for milestone posts)
-- [ ] `post-detail.tsx` — single post view with comments:
-  - One level of comment threading
+  - Post visibility indicator (friends icon / group icon)
+- [ ] `post-detail.tsx` — single post view with comments: `[P1]`
+  - Like button (one like per family per post, toggle)
+  - Comment threading: reply button, nested replies (one level), visual indentation
   - Comment composer
-- [ ] `friends-list.tsx` — friend management (`/friends`):
+  - Post visibility indicator
+- [ ] `friends-list.tsx` — friend management (`/friends`): `[P1]`
   - Friends list
   - Pending requests (incoming/outgoing)
   - Friend search (by display name)
   - Block (silent — blocked user sees no change)
-- [ ] `direct-messages.tsx` — DM inbox (`/messages`):
+- [ ] `friend-discovery.tsx` — find new friends: `[P1]`
+  - Methodology match suggestions
+  - Location-based suggestions (if location sharing enabled)
+  - Shared groups indicator
+  - Name search
+- [ ] `block-management.tsx` — block list in settings (view blocked users, unblock) `[P1]`
+- [ ] Unfriend action with confirmation dialog (silent, no notification sent) `[P1]`
+- [ ] `direct-messages.tsx` — DM inbox (`/messages`): `[P1]`
   - Conversation list (friends only, parent-to-parent)
   - Unread indicators
   - Real-time via WebSocket
-- [ ] `conversation.tsx` — DM thread (`/messages/:conversationId`):
+- [ ] `conversation.tsx` — DM thread (`/messages/:conversationId`): `[P1]`
   - Message list with timestamps
   - Message composer
   - Real-time message delivery
-- [ ] `groups-list.tsx` — group directory (`/groups`):
+- [ ] `groups-list.tsx` — group directory (`/groups`): `[P1]`
   - Platform-managed groups (by methodology) + user-created
   - Join/leave functionality
-- [ ] `group-detail.tsx` — group page (`/groups/:groupId`):
+- [ ] `group-detail.tsx` — group page (`/groups/:groupId`): `[P1]`
   - Group feed
   - Member list
   - Group info
-- [ ] `events-list.tsx` — events directory (`/events`):
-  - Event cards with RSVP
-  - Filter by date, location region
-- [ ] `family-profile.tsx` — public family profile (`/family/:familyId`):
+- [ ] `group-creation.tsx` — create new group: name, description, join policy (open / request / invite-only) `[P2]`
+- [ ] `group-management.tsx` — group admin: promote moderator, remove member, pin posts, approve join requests `[P2]`
+- [ ] `events-list.tsx` — events directory (`/events`): `[P1]`
+  - Event cards with RSVP 3-state button (going / interested / not going)
+  - Filter by date, location region, methodology tag
+- [ ] `event-creation.tsx` — create event: title, description, date/time, location, capacity, visibility (friends / group), methodology tag, group-linked option `[P1]`
+- [ ] Event cancellation with attendee notification confirmation dialog `[P1]`
+- [ ] Recurring events support (weekly/monthly/custom) `[P2]`
+- [ ] `family-profile.tsx` — public family profile (`/family/:familyId`): `[P1]`
   - Friends-only visibility
   - Family info, methodology, member count
-- [ ] Report button component — reusable "Report" action for posts, comments, messages, listings (SPEC §11)
+- [ ] Report button component — reusable "Report" action for posts, comments, messages, listings (uses `report-button.tsx` from Phase 3) (SPEC §11) `[P1]`
+
+### Location Features
+
+- [ ] Location sharing toggle in profile settings (opt-in, never stores GPS coordinates — region only) `[P1]`
+- [ ] Nearby discovery sections in friends/groups/events browsing (when location sharing enabled) `[P1]`
 
 ### Marketplace Features (`features/marketplace/`)
 
-- [ ] `marketplace-browse.tsx` — browse listings (`/marketplace`):
+- [ ] `marketplace-browse.tsx` — browse listings (`/marketplace`): `[P1]`
   - Faceted filtering: methodology, subject, grade, price, rating, content type, worldview
   - Full-text search
   - Curated sections: Featured, Trending, New Arrivals, Staff Picks
   - Sort: relevance, price, rating, recency
-- [ ] `listing-detail.tsx` — listing page (`/marketplace/listings/:id`):
-  - Full listing info, preview, reviews
+  - Worldview tag badges on listing cards + worldview filter option
+- [ ] `listing-detail.tsx` — listing page (`/marketplace/listings/:id`): `[P1]`
+  - Full listing info, preview, reviews (using `star-rating.tsx`)
   - Add to cart button
   - Verified-purchaser review display (1-5 stars, anonymous by default)
-- [ ] `cart.tsx` — shopping cart (`/marketplace/cart`):
+  - Listing lifecycle state badge (draft / submitted / published / archived)
+- [ ] `cart.tsx` — shopping cart (`/marketplace/cart`): `[P1]`
   - Cart items, quantities, total
   - Checkout flow
-- [ ] `purchase-history.tsx` — past purchases (`/marketplace/purchases`):
+- [ ] `purchase-history.tsx` — past purchases (`/marketplace/purchases`): `[P1]`
   - Purchase list with download links
   - Content access
 
 ### Creator Features (`features/marketplace/creator/`)
 
-- [ ] `creator-dashboard.tsx` — creator home (`/creator`):
+- [ ] `creator-dashboard.tsx` — creator home (`/creator`): `[P1]`
   - Sales overview, earnings, payout status
   - Analytics
-- [ ] `create-listing.tsx` — new listing (`/creator/listings/new`):
+- [ ] `create-listing.tsx` — new listing (`/creator/listings/new`): `[P1]`
   - Listing form: title, description, price, category, content upload
   - Preview before publish
-- [ ] `edit-listing.tsx` — edit existing listing (`/creator/listings/:id/edit`)
-- [ ] `quiz-builder.tsx` — create quizzes for marketplace (`/creator/quiz-builder`):
+  - Listing lifecycle state transition buttons (draft → submitted → published → archived)
+- [ ] `edit-listing.tsx` — edit existing listing (`/creator/listings/:id/edit`) `[P1]`
+- [ ] `creator-reviews.tsx` — view reviews on own listings, respond to reviews `[P2]`
+- [ ] `quiz-builder.tsx` — create quizzes for marketplace (`/creator/quiz-builder`): `[P1]`
   - Question editor (multiple types)
   - Preview and test
   - Keyboard alternative for any drag-and-drop (CODING_STANDARDS §3.8)
-- [ ] `sequence-builder.tsx` — create lesson sequences (`/creator/sequence-builder`):
+- [ ] `sequence-builder.tsx` — create lesson sequences (`/creator/sequence-builder`): `[P1]`
   - Step editor with ordering
   - Content assignment per step
   - Keyboard alternative for reordering (CODING_STANDARDS §3.8)
 
 ### Search (`features/search/`)
 
-- [ ] `search-results.tsx` — global search results (`/search`):
-  - Scopes: Social (users, groups, events), Marketplace (listings), Learning (family-scoped)
-  - Faceted filtering for marketplace results
+- [ ] `search-results.tsx` — global search results (`/search`): `[P1]`
+  - Scope switching tabs: Social / Marketplace / Learning (family-scoped)
+  - Faceted filtering for marketplace results (uses `faceted-filter.tsx`)
   - Sort: relevance, price, rating, recency
-- [ ] `components/layout/search-bar.tsx` — persistent search input in header/sidebar:
-  - Typeahead/autocomplete
+- [ ] `components/layout/search-bar.tsx` — persistent search input in header/sidebar: `[P1]`
+  - Debounced autocomplete (300ms delay, top 5 suggestions, keyboard navigation)
   - Navigates to `/search?q=...`
   - (SPEC §12, domain spec `specs/domains/12-search.md`)
 
 ### Verification
 
-- [ ] Verify: social feed displays posts from friends only
-- [ ] Verify: DM real-time delivery works via WebSocket
-- [ ] Verify: marketplace filtering and search work
-- [ ] Verify: cart → purchase flow completes
-- [ ] Verify: creator listing authoring works
-- [ ] Verify: search returns results across all scopes
-- [ ] Verify: report buttons present on all user content
-- [ ] Verify: no public profiles — friends-only visibility enforced
-- [ ] Verify: `npm run type-check` passes
+- [ ] Verify: social feed displays posts from friends only `[P1]`
+- [ ] Verify: all 6 post types render with type-specific UI `[P1]`
+- [ ] Verify: like toggle and comment threading work `[P1]`
+- [ ] Verify: DM real-time delivery works via WebSocket `[P1]`
+- [ ] Verify: marketplace filtering and search work `[P1]`
+- [ ] Verify: cart → purchase flow completes `[P1]`
+- [ ] Verify: creator listing authoring works `[P1]`
+- [ ] Verify: search returns results across all scopes with debounced autocomplete `[P1]`
+- [ ] Verify: report buttons present on all user content `[P1]`
+- [ ] Verify: no public profiles — friends-only visibility enforced `[P1]`
+- [ ] Verify: RSVP state persists and updates event attendee count `[P1]`
+- [ ] Verify: `npm run type-check` passes `[P1]`
 
 ### References
 - SPEC §5 (social), §7 (marketplace), §12 (search)
@@ -873,106 +1053,150 @@ from Phases 1–7 but are independent of Phase 8 (learning).
 ## Phase 10: Compliance, Admin, Planning, Polish & Quality Gates
 
 **Goal**: Build premium compliance features, admin panel, calendar/planning,
-and complete all cross-cutting polish work. Final quality verification.
+recommendations, and complete all cross-cutting polish work. Final quality verification.
 
 **Why last**: These features are either premium-gated, admin-only, or polish
 tasks that should only happen after core features are stable.
 
 ### Compliance Features (`features/compliance/`) — Premium Only
 
-- [ ] `compliance-setup.tsx` — state compliance configuration:
+- [ ] `compliance-setup.tsx` — state compliance configuration: `[P2]`
   - Select state requirements
   - Configure tracking thresholds
   - `<TierGate>` wrapper for free-tier users
-- [ ] `attendance-tracker.tsx` — daily attendance marking:
+- [ ] `attendance-tracker.tsx` — daily attendance marking: `[P2]`
   - Per-student daily attendance toggle
   - Summary with threshold tracking
-  - Calendar heatmap view
-- [ ] `assessment-records.tsx` — assessment record management:
+  - Calendar heatmap view (color-coded by status per student)
+  - Attendance threshold/pace monitoring (progress bar vs state requirement)
+- [ ] `assessment-records.tsx` — assessment record management: `[P2]`
   - Link assessments to compliance requirements
   - Score tracking
-- [ ] `portfolio-generator.tsx` — portfolio PDF generation:
+- [ ] `standardized-tests.tsx` — standardized test score entry form (title, test name, date, scores by section) `[P2]`
+- [ ] `portfolio-list.tsx` — portfolio management: `[P3]`
+  - List portfolios per student
+  - Create new portfolio (select student + date range + template)
+- [ ] `portfolio-builder.tsx` — portfolio construction and PDF generation: `[P3]`
   - Select student + date range
+  - Drag/arrange portfolio sections (work samples, assessments, attendance)
   - Preview portfolio contents
   - Generate + download PDF
   - Print-ready layout (uses `print.css` tokens)
-- [ ] References: SPEC §14, domain spec `specs/domains/14-comply.md`
+- [ ] `transcript-list.tsx` — transcript management per student `[P3]`
+- [ ] `transcript-builder.tsx` — transcript construction: `[P3]`
+  - Course entry (title, subject, credits, grade, semester)
+  - GPA calculation display (weighted/unweighted, per-semester/cumulative)
+  - PDF generation + print-ready layout
+- References: SPEC §14, domain spec `specs/domains/14-comply.md`
 
 ### Planning & Calendar (`features/planning/`)
 
-- [ ] `calendar-view.tsx` — unified calendar (`/calendar`):
+- [ ] `calendar-view.tsx` — unified calendar (`/calendar`): `[P1]`
   - Synthesize: learning activities + social events + compliance attendance
-  - Daily/weekly view toggle
-  - Drag-to-schedule (with keyboard alternative)
+  - Daily/weekly view toggle (`/calendar/day/:date`, `/calendar/week/:date`)
+  - Color-coded data sources (learning, events, attendance)
   - Print-friendly output (MUST be printable — SPEC §17)
-- [ ] `schedule-editor.tsx` — create/edit daily/weekly schedules
-- [ ] References: SPEC §17, domain spec `specs/domains/17-planning.md`
+- [ ] `schedule-editor.tsx` — schedule item CRUD form: `[P1]`
+  - Fields: title, description, student, date, time, duration, category enum, subject (via `<SubjectPicker>`), color, notes
+  - Schedule completion checkbox + "log as activity" button
+- [ ] Drag-to-schedule with keyboard alternative (arrow keys + Enter to place items) `[P1]`
+- [ ] Print-friendly schedule output (separate from calendar print) `[P2]`
+- [ ] `schedule-templates.tsx` — recurring schedule templates (weekly patterns, methodology-specific defaults) `[P2]`
+- [ ] Co-op coordination view (shared schedules between families in a group) `[P2]`
+- [ ] Schedule sharing/export (CSV, iCal formats) `[P2]`
+- References: SPEC §17, domain spec `specs/domains/17-planning.md`
 
 ### Admin Panel (`features/admin/`) — Admin Only
 
-- [ ] `admin-dashboard.tsx` — system health overview (`/admin`):
+- [ ] `admin-dashboard.tsx` — system health overview (`/admin`): `[P1]`
   - User counts, content stats, system metrics
   - `<AdminGuard>` wrapper
-- [ ] `user-management.tsx` — user admin:
-  - Search users, view family details
-  - Account actions (suspend, delete)
-- [ ] `moderation-queue.tsx` — content moderation:
-  - Reported content queue
+- [ ] `user-management.tsx` — user admin: `[P1]`
+  - Search users by email/name, filter by status
+  - View family details
+  - Account actions: suspend (with reason), ban (with reason), reactivate
+- [ ] `user-detail.tsx` — individual user detail view (`/admin/users/:id`) `[P1]`
+- [ ] `moderation-queue.tsx` — content moderation: `[P1]`
+  - Reported content queue (from safety domain reports)
   - Review + action (approve, remove, warn)
   - Moderation states visible to content owners
-- [ ] `feature-flags.tsx` — feature flag management
-- [ ] References: SPEC §16, domain spec `specs/domains/16-admin.md`
+- [ ] `audit-log.tsx` — admin audit log viewer: filterable by admin user, action type, target entity, date range `[P1]`
+- [ ] `feature-flags.tsx` — feature flag management: toggle, rollout percentage, family whitelist `[P2]`
+- [ ] `methodology-config.tsx` — methodology configuration editing (tool labels, descriptions, philosophy text) `[P2]`
+- References: SPEC §16, domain spec `specs/domains/16-admin.md`
 
-### Data Lifecycle (`features/settings/`)
+### Recommendations (`features/recommendations/`)
 
-- [ ] Add data export button to settings — request full data export (GDPR/privacy) (SPEC §15)
-- [ ] Add account deletion flow to settings — with confirmation and consequences (SPEC §15)
-- [ ] References: domain spec `specs/domains/15-data-lifecycle.md`
+- [ ] Recommendation cards/carousel on learning dashboard (content suggestions based on methodology + student profile) `[P2]`
+- [ ] Recommendation preferences: dismiss individual recommendation, block category, undo dismiss `[P2]`
+- [ ] Transparency labels: "Why recommended?" expandable explanation + AI-generated content badge where applicable `[P2]`
+- References: SPEC §13, domain spec `specs/domains/13-recs.md`
+
+### Data Lifecycle
+
+Data export, account deletion, and student deletion are implemented in **Phase 7** under
+"Data Lifecycle" (see `features/settings/data-export.tsx`, `account-deletion.tsx`,
+`student-deletion.tsx`). Phase 10 verification ensures they integrate correctly with
+compliance exports and admin oversight.
+
+- References: domain spec `specs/domains/15-data-lifecycle.md`
 
 ### Cross-Cutting Polish
 
-- [ ] Responsive audit — verify all pages work at all breakpoints (sm/md/lg/xl/2xl/3xl)
-- [ ] Touch target audit — verify all interactive elements ≥ 44×44px below `md` breakpoint
-- [ ] Focus management audit — verify focus moves to `<h1>` on every route change
-- [ ] Screen reader audit — verify `aria-live` regions for dynamic content (feed, quiz, notifications)
-- [ ] Print stylesheet audit — verify print output for compliance docs, schedules, portfolios
-- [ ] `prefers-reduced-motion` audit — verify all animations collapse
-- [ ] Surface hierarchy audit — verify no `1px solid` borders, only tonal shifts
-- [ ] Token compliance audit — grep for hardcoded hex, arbitrary z-index, Tailwind default palette
-- [ ] Error boundary coverage — verify all route segments have error boundaries
-- [ ] Loading state coverage — verify skeleton/spinner states for all async data
-- [ ] Empty state coverage — verify all list views have empty states with CTAs
-- [ ] 404 page — friendly not-found page within AppShell
+- [ ] Responsive audit — verify all pages work at all breakpoints (sm/md/lg/xl/2xl/3xl) `[P1]`
+- [ ] Touch target audit — verify all interactive elements ≥ 44×44px below `md` breakpoint `[P1]`
+- [ ] Focus management audit — verify focus moves to `<h1>` on every route change `[P1]`
+- [ ] Screen reader audit — verify `aria-live` regions for dynamic content (feed, quiz, notifications) `[P1]`
+- [ ] Print stylesheet audit — verify print output for compliance docs, schedules, portfolios `[P1]`
+- [ ] `prefers-reduced-motion` audit — verify all animations collapse `[P1]`
+- [ ] Surface hierarchy audit — verify no `1px solid` borders, only tonal shifts `[P1]`
+- [ ] Token compliance audit — grep for hardcoded hex, arbitrary z-index, Tailwind default palette `[P1]`
+- [ ] Error boundary coverage — verify all route segments have error boundaries `[P1]`
+- [ ] Loading state coverage — verify skeleton/spinner states for all async data `[P1]`
+- [ ] Empty state coverage — verify all list views have empty states with CTAs `[P1]`
+- [ ] 404 page — friendly not-found page within AppShell `[P1]`
+- [ ] i18n string externalization audit — no hardcoded English strings in components `[P1]`
+- [ ] axe-core CI integration — zero critical/serious accessibility violations `[P1]`
+- [ ] 200% zoom verification across all pages (WCAG 1.4.4) `[P1]`
+- [ ] Video caption file support verification (VTT/SRT in video player) `[P1]`
+- [ ] Community guidelines page exists and linked from report dialog `[P1]`
+- [ ] Error retry/offline handling — TanStack Query retry config (3× exponential backoff) + `<NetworkStatus>` banner `[P1]`
+- [ ] VPAT (Voluntary Product Accessibility Template) documentation `[P2]`
+- [ ] Playwright accessibility regression tests for critical user journeys `[P2]`
 
 ### Performance
 
-- [ ] Route code-splitting — verify all feature routes lazy-load
-- [ ] Image optimization — verify all images use appropriate formats, lazy loading
-- [ ] Bundle analysis — check for unexpectedly large dependencies
-- [ ] TanStack Query optimization — verify staleTime/gcTime tuned per query type
+- [ ] Route code-splitting — verify all feature routes lazy-load `[P1]`
+- [ ] Image optimization — verify all images use appropriate formats, lazy loading `[P1]`
+- [ ] Bundle analysis — check for unexpectedly large dependencies `[P1]`
+- [ ] TanStack Query optimization — verify staleTime/gcTime tuned per query type `[P1]`
 
 ### Final Quality Gates
 
-- [ ] `npm run type-check` — zero TypeScript errors
-- [ ] All pages render without console errors
-- [ ] All interactive elements keyboard accessible
-- [ ] Lighthouse accessibility score ≥ 90 on all primary pages
-- [ ] No `any` types anywhere in codebase (search: `as any`, `: any`)
-- [ ] No hardcoded hex colors (search: `#[0-9a-f]`)
-- [ ] No `style={{ }}` inline styles
-- [ ] No direct `fetch()` calls outside `api/client.ts`
-- [ ] No TanStack Query usage outside custom hooks
-- [ ] All API types from `src/api/generated/schema.ts` only
+- [ ] `npm run type-check` — zero TypeScript errors `[P1]`
+- [ ] All pages render without console errors `[P1]`
+- [ ] All interactive elements keyboard accessible `[P1]`
+- [ ] Lighthouse accessibility score ≥ 90 on all primary pages `[P1]`
+- [ ] No `any` types anywhere in codebase (search: `as any`, `: any`) `[P1]`
+- [ ] No hardcoded hex colors (search: `#[0-9a-f]`) `[P1]`
+- [ ] No `style={{ }}` inline styles `[P1]`
+- [ ] No direct `fetch()` calls outside `api/client.ts` `[P1]`
+- [ ] No TanStack Query usage outside custom hooks `[P1]`
+- [ ] All API types from `src/api/generated/schema.ts` only `[P1]`
+- [ ] No hardcoded English strings — all user-facing text from i18n catalogs `[P1]`
+- [ ] axe-core: zero critical/serious violations `[P1]`
+- [ ] All pages usable at 200% zoom `[P1]`
+- [ ] Community guidelines page exists and linked from report dialog `[P1]`
 
 ### References
-- SPEC §14 (compliance), §16 (admin), §17 (planning), §15 (data lifecycle)
+- SPEC §14 (compliance), §16 (admin), §17 (planning), §15 (data lifecycle), §13 (recommendations)
 - CODING_STANDARDS §3 (all frontend rules)
 - DESIGN_TOKENS §18 (implementation checklist)
 - DESIGN §3–§5 (visual rules)
 
 ---
 
-## Appendix: Generated API Schema Coverage
+## Appendix A: Generated API Schema Coverage
 
 Types currently in `schema.ts` (domains 01-04):
 
@@ -996,3 +1220,18 @@ Before starting any phase that consumes API types beyond domains 01-04, run:
 ```bash
 make full-generate
 ```
+
+---
+
+## Appendix B: Phase Scope Reference
+
+Maps SPEC.md §19 release phases to this TODO's implementation phases:
+
+| SPEC §19 Phase | Definition | TODO Phases |
+|----------------|-----------|-------------|
+| **Phase 1 (MVP)** | Core auth, family management, onboarding, learning tools (activity log, journals, reading), social feed, messaging, events, marketplace browse/purchase, creator tools, basic search, planning, notifications, admin basics, safety reporting, data export/deletion | TODO Phases 1–9 `[P1]` items + Phase 10 `[P1]` items |
+| **Phase 2 (Enhanced)** | Compliance (attendance, assessments), billing/payments, advanced groups, recurring events, schedule templates, feature flags, methodology config, MFA, recommendations, data tables, Playwright tests, VPAT | Phase 10 `[P2]` items + scattered `[P2]` items in earlier phases |
+| **Phase 3 (Advanced)** | Portfolios, transcripts, GPA calculations, methodology-specific tools (nature journal, trivium tracker, rhythm planner, etc.) | Phase 8 `[P3]` items + Phase 10 `[P3]` items |
+
+**Tag convention**: Every checklist item is tagged `[P1]`, `[P2]`, or `[P3]` to indicate
+which SPEC §19 release phase it belongs to. Filter by tag to scope work to a specific release.
