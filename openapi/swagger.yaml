@@ -7,6 +7,789 @@ definitions:
       version:
         type: string
     type: object
+  comply.AddPortfolioItemsCommand:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/comply.PortfolioItemInput'
+        type: array
+    required:
+    - items
+    type: object
+  comply.AssessmentListResponse:
+    properties:
+      next_cursor:
+        type: string
+      records:
+        items:
+          $ref: '#/definitions/comply.AssessmentResponse'
+        type: array
+    type: object
+  comply.AssessmentResponse:
+    properties:
+      assessment_date:
+        type: string
+      assessment_type:
+        type: string
+      created_at:
+        type: string
+      grade_letter:
+        type: string
+      grade_points:
+        type: number
+      id:
+        type: string
+      is_passing:
+        type: boolean
+      max_score:
+        type: number
+      notes:
+        type: string
+      score:
+        type: number
+      student_id:
+        type: string
+      subject:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.AttendanceListResponse:
+    properties:
+      next_cursor:
+        type: string
+      records:
+        items:
+          $ref: '#/definitions/comply.AttendanceResponse'
+        type: array
+    type: object
+  comply.AttendanceResponse:
+    properties:
+      attendance_date:
+        type: string
+      created_at:
+        type: string
+      duration_minutes:
+        type: integer
+      id:
+        type: string
+      is_auto:
+        type: boolean
+      manual_override:
+        type: boolean
+      notes:
+        type: string
+      status:
+        type: string
+      student_id:
+        type: string
+    type: object
+  comply.AttendanceSummaryResponse:
+    properties:
+      absent:
+        type: integer
+      not_applicable:
+        type: integer
+      pace_status:
+        type: string
+      present_full:
+        type: integer
+      present_partial:
+        type: integer
+      projected_total_days:
+        type: integer
+      state_required_days:
+        type: integer
+      state_required_hours:
+        type: integer
+      total_days:
+        type: integer
+      total_hours:
+        type: number
+    type: object
+  comply.BulkRecordAttendanceCommand:
+    properties:
+      records:
+        items:
+          $ref: '#/definitions/comply.RecordAttendanceCommand'
+        maxItems: 31
+        type: array
+    required:
+    - records
+    type: object
+  comply.ComplianceDashboardResponse:
+    properties:
+      family_config:
+        $ref: '#/definitions/comply.FamilyConfigResponse'
+      students:
+        items:
+          $ref: '#/definitions/comply.StudentComplianceSummary'
+        type: array
+    type: object
+  comply.CourseListResponse:
+    properties:
+      courses:
+        items:
+          $ref: '#/definitions/comply.CourseResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  comply.CourseResponse:
+    properties:
+      created_at:
+        type: string
+      credits:
+        type: number
+      grade_letter:
+        type: string
+      grade_level:
+        type: integer
+      grade_points:
+        type: number
+      id:
+        type: string
+      level:
+        type: string
+      school_year:
+        type: string
+      semester:
+        type: string
+      student_id:
+        type: string
+      subject:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.CreateAssessmentCommand:
+    properties:
+      assessment_date:
+        type: string
+      assessment_type:
+        enum:
+        - test
+        - quiz
+        - project
+        - assignment
+        - presentation
+        - portfolio_piece
+        - other
+        type: string
+      grade_letter:
+        type: string
+      grade_points:
+        type: number
+      is_passing:
+        type: boolean
+      max_score:
+        type: number
+      notes:
+        type: string
+      score:
+        type: number
+      source_activity_id:
+        type: string
+      subject:
+        type: string
+      title:
+        type: string
+    required:
+    - assessment_date
+    - assessment_type
+    - subject
+    - title
+    type: object
+  comply.CreateCourseCommand:
+    properties:
+      credits:
+        type: number
+      grade_letter:
+        type: string
+      grade_level:
+        type: integer
+      grade_points:
+        type: number
+      level:
+        enum:
+        - regular
+        - honors
+        - ap
+        type: string
+      school_year:
+        type: string
+      semester:
+        enum:
+        - fall
+        - spring
+        - summer
+        - full_year
+        type: string
+      subject:
+        type: string
+      title:
+        type: string
+    required:
+    - credits
+    - grade_level
+    - level
+    - school_year
+    - subject
+    - title
+    type: object
+  comply.CreatePortfolioCommand:
+    properties:
+      date_range_end:
+        type: string
+      date_range_start:
+        type: string
+      description:
+        type: string
+      include_assessments:
+        type: boolean
+      include_attendance:
+        type: boolean
+      organization:
+        enum:
+        - by_subject
+        - chronological
+        - by_student
+        type: string
+      title:
+        type: string
+    required:
+    - date_range_end
+    - date_range_start
+    - organization
+    - title
+    type: object
+  comply.CreateScheduleCommand:
+    properties:
+      exclusion_periods:
+        items:
+          $ref: '#/definitions/comply.ExclusionPeriod'
+        type: array
+      name:
+        type: string
+      school_days:
+        items:
+          type: boolean
+        type: array
+    required:
+    - name
+    - school_days
+    type: object
+  comply.CreateTestScoreCommand:
+    properties:
+      composite_score:
+        type: number
+      grade_level:
+        type: integer
+      notes:
+        type: string
+      percentile:
+        type: integer
+      scores:
+        type: object
+      test_date:
+        type: string
+      test_name:
+        type: string
+    required:
+    - scores
+    - test_date
+    - test_name
+    type: object
+  comply.CreateTranscriptCommand:
+    properties:
+      grade_levels:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    required:
+    - grade_levels
+    - title
+    type: object
+  comply.ExclusionPeriod:
+    properties:
+      end:
+        type: string
+      label:
+        type: string
+      start:
+        type: string
+    required:
+    - end
+    - label
+    - start
+    type: object
+  comply.FamilyConfigResponse:
+    properties:
+      created_at:
+        type: string
+      custom_schedule_id:
+        type: string
+      family_id:
+        type: string
+      gpa_scale:
+        type: string
+      school_year_end:
+        type: string
+      school_year_start:
+        type: string
+      state_code:
+        type: string
+      state_name:
+        type: string
+      total_school_days:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  comply.GpaGradeLevelResponse:
+    properties:
+      credits:
+        type: number
+      grade_level:
+        type: integer
+      unweighted:
+        type: number
+      weighted:
+        type: number
+    type: object
+  comply.GpaResponse:
+    properties:
+      by_grade_level:
+        items:
+          $ref: '#/definitions/comply.GpaGradeLevelResponse'
+        type: array
+      total_courses:
+        type: integer
+      total_credits:
+        type: number
+      unweighted_gpa:
+        type: number
+      weighted_gpa:
+        type: number
+    type: object
+  comply.GpaTermResponse:
+    properties:
+      course_count:
+        type: integer
+      credits:
+        type: number
+      school_year:
+        type: string
+      semester:
+        type: string
+      unweighted_gpa:
+        type: number
+      weighted_gpa:
+        type: number
+    type: object
+  comply.GpaWhatIfParams:
+    properties:
+      additional_courses:
+        items:
+          $ref: '#/definitions/comply.WhatIfCourse'
+        type: array
+    required:
+    - additional_courses
+    type: object
+  comply.PortfolioItemInput:
+    properties:
+      source_id:
+        type: string
+      source_type:
+        enum:
+        - activity
+        - journal
+        - project
+        - reading_list
+        - assessment
+        type: string
+    required:
+    - source_id
+    - source_type
+    type: object
+  comply.PortfolioItemResponse:
+    properties:
+      cached_date:
+        type: string
+      cached_description:
+        type: string
+      cached_subject:
+        type: string
+      cached_title:
+        type: string
+      display_order:
+        type: integer
+      id:
+        type: string
+      source_id:
+        type: string
+      source_type:
+        type: string
+    type: object
+  comply.PortfolioResponse:
+    properties:
+      created_at:
+        type: string
+      date_range_end:
+        type: string
+      date_range_start:
+        type: string
+      description:
+        type: string
+      expires_at:
+        type: string
+      generated_at:
+        type: string
+      id:
+        type: string
+      include_assessments:
+        type: boolean
+      include_attendance:
+        type: boolean
+      item_count:
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/comply.PortfolioItemResponse'
+        type: array
+      organization:
+        type: string
+      status:
+        type: string
+      student_id:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.PortfolioSummaryResponse:
+    properties:
+      created_at:
+        type: string
+      date_range_end:
+        type: string
+      date_range_start:
+        type: string
+      expires_at:
+        type: string
+      generated_at:
+        type: string
+      id:
+        type: string
+      item_count:
+        type: integer
+      status:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.RecordAttendanceCommand:
+    properties:
+      attendance_date:
+        type: string
+      duration_minutes:
+        type: integer
+      notes:
+        type: string
+      status:
+        enum:
+        - present_full
+        - present_partial
+        - absent
+        - not_applicable
+        type: string
+    required:
+    - attendance_date
+    - status
+    type: object
+  comply.ScheduleResponse:
+    properties:
+      created_at:
+        type: string
+      exclusion_periods:
+        items:
+          $ref: '#/definitions/comply.ExclusionPeriod'
+        type: array
+      id:
+        type: string
+      name:
+        type: string
+      school_days:
+        items:
+          type: boolean
+        type: array
+    type: object
+  comply.StateConfigResponse:
+    properties:
+      assessment_details:
+        type: string
+      assessment_required:
+        type: boolean
+      attendance_days:
+        type: integer
+      attendance_details:
+        type: string
+      attendance_hours:
+        type: integer
+      attendance_required:
+        type: boolean
+      notification_details:
+        type: string
+      notification_required:
+        type: boolean
+      record_keeping_details:
+        type: string
+      record_keeping_required:
+        type: boolean
+      regulation_level:
+        type: string
+      required_subjects:
+        items:
+          type: string
+        type: array
+      state_code:
+        type: string
+      state_name:
+        type: string
+    type: object
+  comply.StateConfigSummaryResponse:
+    properties:
+      attendance_days:
+        type: integer
+      attendance_required:
+        type: boolean
+      regulation_level:
+        type: string
+      state_code:
+        type: string
+      state_name:
+        type: string
+    type: object
+  comply.StudentComplianceSummary:
+    properties:
+      active_portfolios:
+        items:
+          $ref: '#/definitions/comply.PortfolioSummaryResponse'
+        type: array
+      attendance_summary:
+        $ref: '#/definitions/comply.AttendanceSummaryResponse'
+      pace_status:
+        type: string
+      recent_assessments_count:
+        type: integer
+      recent_tests_count:
+        type: integer
+      student_id:
+        type: string
+      student_name:
+        type: string
+    type: object
+  comply.TestListResponse:
+    properties:
+      next_cursor:
+        type: string
+      tests:
+        items:
+          $ref: '#/definitions/comply.TestScoreResponse'
+        type: array
+    type: object
+  comply.TestScoreResponse:
+    properties:
+      composite_score:
+        type: number
+      created_at:
+        type: string
+      grade_level:
+        type: integer
+      id:
+        type: string
+      notes:
+        type: string
+      percentile:
+        type: integer
+      scores:
+        type: object
+      student_id:
+        type: string
+      test_date:
+        type: string
+      test_name:
+        type: string
+    type: object
+  comply.TranscriptResponse:
+    properties:
+      courses:
+        items:
+          $ref: '#/definitions/comply.CourseResponse'
+        type: array
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      generated_at:
+        type: string
+      gpa_unweighted:
+        type: number
+      gpa_weighted:
+        type: number
+      grade_levels:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      status:
+        type: string
+      student_id:
+        type: string
+      student_name:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.TranscriptSummaryResponse:
+    properties:
+      created_at:
+        type: string
+      generated_at:
+        type: string
+      grade_levels:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.UpdateAssessmentCommand:
+    properties:
+      assessment_date:
+        type: string
+      grade_letter:
+        type: string
+      grade_points:
+        type: number
+      is_passing:
+        type: boolean
+      max_score:
+        type: number
+      notes:
+        type: string
+      score:
+        type: number
+      subject:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.UpdateAttendanceCommand:
+    properties:
+      duration_minutes:
+        type: integer
+      notes:
+        type: string
+      status:
+        type: string
+    type: object
+  comply.UpdateCourseCommand:
+    properties:
+      credits:
+        type: number
+      grade_letter:
+        type: string
+      grade_points:
+        type: number
+      level:
+        type: string
+      semester:
+        type: string
+      subject:
+        type: string
+      title:
+        type: string
+    type: object
+  comply.UpdateScheduleCommand:
+    properties:
+      exclusion_periods:
+        items:
+          $ref: '#/definitions/comply.ExclusionPeriod'
+        type: array
+      name:
+        type: string
+      school_days:
+        items:
+          type: boolean
+        type: array
+    type: object
+  comply.UpdateTestScoreCommand:
+    properties:
+      composite_score:
+        type: number
+      notes:
+        type: string
+      percentile:
+        type: integer
+      scores:
+        type: object
+      test_date:
+        type: string
+      test_name:
+        type: string
+    type: object
+  comply.UpsertFamilyConfigCommand:
+    properties:
+      custom_schedule_id:
+        type: string
+      gpa_custom_config:
+        type: object
+      gpa_scale:
+        enum:
+        - standard_4
+        - weighted
+        - custom
+        type: string
+      school_year_end:
+        type: string
+      school_year_start:
+        type: string
+      state_code:
+        type: string
+      total_school_days:
+        type: integer
+    required:
+    - gpa_scale
+    - school_year_end
+    - school_year_start
+    - state_code
+    - total_school_days
+    type: object
+  comply.WhatIfCourse:
+    properties:
+      credits:
+        type: number
+      grade_points:
+        minimum: 0
+        type: number
+      level:
+        enum:
+        - regular
+        - honors
+        - ap
+        type: string
+    required:
+    - credits
+    - grade_points
+    - level
+    type: object
   discover.MethodologyRecommendation:
     properties:
       explanation:
@@ -961,6 +1744,1552 @@ paths:
       summary: Get current user
       tags:
       - auth
+  /compliance/config:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.FamilyConfigResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get family compliance configuration
+      tags:
+      - compliance
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Family config
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.UpsertFamilyConfigCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.FamilyConfigResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create or update family compliance configuration
+      tags:
+      - compliance
+  /compliance/dashboard:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.ComplianceDashboardResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get compliance dashboard overview
+      tags:
+      - compliance
+  /compliance/schedules:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/comply.ScheduleResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List family's custom schedules
+      tags:
+      - compliance
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Schedule
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.CreateScheduleCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/comply.ScheduleResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create a custom schedule
+      tags:
+      - compliance
+  /compliance/schedules/{id}:
+    delete:
+      parameters:
+      - description: Schedule UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete a custom schedule
+      tags:
+      - compliance
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Schedule UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Partial update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.UpdateScheduleCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.ScheduleResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update a custom schedule
+      tags:
+      - compliance
+  /compliance/state-requirements:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/comply.StateConfigSummaryResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List all state compliance requirements
+      tags:
+      - compliance
+  /compliance/state-requirements/{state_code}:
+    get:
+      parameters:
+      - description: Two-letter state code
+        in: path
+        name: state_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.StateConfigResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get state compliance requirements
+      tags:
+      - compliance
+  /compliance/students/{student_id}/assessments:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Filter by subject
+        in: query
+        name: subject
+        type: string
+      - description: Start date
+        in: query
+        name: start_date
+        type: string
+      - description: End date
+        in: query
+        name: end_date
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.AssessmentListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List assessment records for a student
+      tags:
+      - compliance
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Assessment
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.CreateAssessmentCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/comply.AssessmentResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create an assessment record
+      tags:
+      - compliance
+  /compliance/students/{student_id}/assessments/{id}:
+    delete:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Assessment UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete an assessment record
+      tags:
+      - compliance
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Assessment UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Partial update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.UpdateAssessmentCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.AssessmentResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update an assessment record
+      tags:
+      - compliance
+  /compliance/students/{student_id}/attendance:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Start date
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.AttendanceListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List attendance records for a student
+      tags:
+      - compliance
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Attendance record
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.RecordAttendanceCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/comply.AttendanceResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Record daily attendance
+      tags:
+      - compliance
+  /compliance/students/{student_id}/attendance/{id}:
+    delete:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Attendance UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete an attendance record
+      tags:
+      - compliance
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Attendance UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Partial update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.UpdateAttendanceCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.AttendanceResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update an attendance record
+      tags:
+      - compliance
+  /compliance/students/{student_id}/attendance/bulk:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Bulk records
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.BulkRecordAttendanceCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            items:
+              $ref: '#/definitions/comply.AttendanceResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Bulk record attendance (up to 31 records)
+      tags:
+      - compliance
+  /compliance/students/{student_id}/attendance/summary:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Start date
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.AttendanceSummaryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get attendance summary with pace calculation
+      tags:
+      - compliance
+  /compliance/students/{student_id}/courses:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Filter by grade level
+        in: query
+        name: grade_level
+        type: integer
+      - description: Filter by school year
+        in: query
+        name: school_year
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.CourseListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List courses for a student
+      tags:
+      - compliance
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Course
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.CreateCourseCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/comply.CourseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create a course
+      tags:
+      - compliance
+  /compliance/students/{student_id}/courses/{id}:
+    delete:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Course UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete a course
+      tags:
+      - compliance
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Course UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Partial update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.UpdateCourseCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.CourseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update a course
+      tags:
+      - compliance
+  /compliance/students/{student_id}/gpa:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: GPA scale
+        in: query
+        name: scale
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.GpaResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Calculate current GPA
+      tags:
+      - compliance
+  /compliance/students/{student_id}/gpa/history:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/comply.GpaTermResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get GPA history by term
+      tags:
+      - compliance
+  /compliance/students/{student_id}/gpa/what-if:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: What-if params
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.GpaWhatIfParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.GpaResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Calculate what-if GPA with hypothetical courses
+      tags:
+      - compliance
+  /compliance/students/{student_id}/portfolios:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/comply.PortfolioSummaryResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List portfolios for a student
+      tags:
+      - compliance
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Portfolio
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.CreatePortfolioCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/comply.PortfolioResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create a portfolio
+      tags:
+      - compliance
+  /compliance/students/{student_id}/portfolios/{id}:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Portfolio UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.PortfolioResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get portfolio details
+      tags:
+      - compliance
+  /compliance/students/{student_id}/portfolios/{id}/download:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Portfolio UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "410":
+          description: Gone
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get portfolio download URL
+      tags:
+      - compliance
+  /compliance/students/{student_id}/portfolios/{id}/generate:
+    post:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Portfolio UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/comply.PortfolioResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Trigger portfolio PDF generation
+      tags:
+      - compliance
+  /compliance/students/{student_id}/portfolios/{id}/items:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Portfolio UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Items to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.AddPortfolioItemsCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            items:
+              $ref: '#/definitions/comply.PortfolioItemResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Add items to a portfolio
+      tags:
+      - compliance
+  /compliance/students/{student_id}/tests:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.TestListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List standardized test scores
+      tags:
+      - compliance
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Test score
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.CreateTestScoreCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/comply.TestScoreResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Record a standardized test score
+      tags:
+      - compliance
+  /compliance/students/{student_id}/tests/{id}:
+    delete:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Test UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete a test score
+      tags:
+      - compliance
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Test UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Partial update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.UpdateTestScoreCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.TestScoreResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update a test score
+      tags:
+      - compliance
+  /compliance/students/{student_id}/transcripts:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/comply.TranscriptSummaryResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List transcripts for a student
+      tags:
+      - compliance
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Transcript
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/comply.CreateTranscriptCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/comply.TranscriptResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create a transcript
+      tags:
+      - compliance
+  /compliance/students/{student_id}/transcripts/{id}:
+    delete:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Transcript UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete a transcript
+      tags:
+      - compliance
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Transcript UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/comply.TranscriptResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get transcript details
+      tags:
+      - compliance
+  /compliance/students/{student_id}/transcripts/{id}/download:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Transcript UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "410":
+          description: Gone
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get transcript download URL
+      tags:
+      - compliance
+  /compliance/students/{student_id}/transcripts/{id}/generate:
+    post:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Transcript UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/comply.TranscriptResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Trigger transcript PDF generation
+      tags:
+      - compliance
   /discovery/quiz:
     get:
       produces:

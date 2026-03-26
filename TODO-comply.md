@@ -243,31 +243,31 @@ Build after all TDD cycles are green.
 
 ### Repository Implementations
 
-- [ ] `internal/comply/repository.go` — PostgreSQL implementations for all repository interfaces
+- [x] `internal/comply/repository.go` — PostgreSQL implementations for all repository interfaces
 
 ### Handler
 
-- [ ] `internal/comply/handler.go` — Echo HTTP handlers with swag annotations
-- [ ] `internal/comply/jobs.go` — background jobs (portfolio generation, expiry)
+- [x] `internal/comply/handler.go` — Echo HTTP handlers with swag annotations
+- [x] `internal/comply/jobs.go` — background jobs (portfolio generation, expiry)
 
 ### Migrations
 
-- [ ] Migration: create comply_state_configs + comply_attendance tables (Phase 1)
-- [ ] Migration: create comply_family_configs + comply_custom_schedules tables (Phase 2)
-- [ ] Migration: create comply_assessments + comply_standardized_tests tables (Phase 2)
-- [ ] Migration: create comply_portfolios + comply_portfolio_items tables (Phase 2)
-- [ ] Migration: create comply_transcripts + comply_courses tables (Phase 3)
+- [x] Migration: create comply_state_configs + comply_attendance tables (Phase 1)
+- [x] Migration: create comply_family_configs + comply_custom_schedules tables (Phase 2)
+- [x] Migration: create comply_assessments + comply_standardized_tests tables (Phase 2)
+- [x] Migration: create comply_portfolios + comply_portfolio_items tables (Phase 2)
+- [x] Migration: create comply_transcripts + comply_courses tables (Phase 3)
 
 ### Wiring & Integration
 
-- [ ] Wire ComplianceService in `main.go` (constructor + dependency injection)
-- [ ] Register comply routes in `app.go`
-- [ ] Register event handlers (ActivityLogged, StudentDeleted, FamilyDeletion, SubscriptionCancelled)
-- [ ] `make full-generate` — regenerate OpenAPI + TypeScript types
+- [x] Wire ComplianceService in `main.go` (constructor + dependency injection)
+- [x] Register comply routes in `app.go`
+- [x] Register event handlers (ActivityLogged, StudentDeleted, FamilyDeletion, SubscriptionCancelled)
+- [x] `make full-generate` — regenerate OpenAPI + TypeScript types
 
 ### Quality Gates
 
-- [ ] `go test ./internal/comply/...` — all tests pass
-- [ ] `golangci-lint run ./internal/comply/...` — zero warnings
-- [ ] `make check` — full quality gate green
-- [ ] Update `specs/domains/14-comply.md` if any spec decisions changed during implementation
+- [x] `go test ./internal/comply/...` — all tests pass
+- [x] `golangci-lint run ./internal/comply/...` — zero warnings
+- [x] `make check` — full quality gate green
+- [x] Update `specs/domains/14-comply.md` if any spec decisions changed during implementation

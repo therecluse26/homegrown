@@ -86,7 +86,7 @@ type UpsertFamilyConfigCommand struct {
 	TotalSchoolDays  int16           `json:"total_school_days" validate:"required,gt=0"`
 	CustomScheduleID *uuid.UUID      `json:"custom_schedule_id"`
 	GpaScale         string          `json:"gpa_scale" validate:"required,oneof=standard_4 weighted custom"`
-	GpaCustomConfig  json.RawMessage `json:"gpa_custom_config"`
+	GpaCustomConfig  json.RawMessage `json:"gpa_custom_config" swaggertype:"object"`
 }
 
 // CreateScheduleCommand is the body for POST /v1/compliance/schedules.
@@ -163,7 +163,7 @@ type CreateTestScoreCommand struct {
 	TestName       string          `json:"test_name" validate:"required"`
 	TestDate       time.Time       `json:"test_date" validate:"required"`
 	GradeLevel     *int16          `json:"grade_level"`
-	Scores         json.RawMessage `json:"scores" validate:"required"`
+	Scores         json.RawMessage `json:"scores" validate:"required" swaggertype:"object"`
 	CompositeScore *float64        `json:"composite_score"`
 	Percentile     *int16          `json:"percentile"`
 	Notes          *string         `json:"notes"`
@@ -173,7 +173,7 @@ type CreateTestScoreCommand struct {
 type UpdateTestScoreCommand struct {
 	TestName       *string          `json:"test_name"`
 	TestDate       *time.Time       `json:"test_date"`
-	Scores         *json.RawMessage `json:"scores"`
+	Scores         *json.RawMessage `json:"scores" swaggertype:"object"`
 	CompositeScore *float64         `json:"composite_score"`
 	Percentile     *int16           `json:"percentile"`
 	Notes          *string          `json:"notes"`
@@ -406,7 +406,7 @@ type TestScoreResponse struct {
 	TestName       string          `json:"test_name"`
 	TestDate       time.Time       `json:"test_date"`
 	GradeLevel     *int16          `json:"grade_level"`
-	Scores         json.RawMessage `json:"scores"`
+	Scores         json.RawMessage `json:"scores" swaggertype:"object"`
 	CompositeScore *float64        `json:"composite_score"`
 	Percentile     *int16          `json:"percentile"`
 	Notes          *string         `json:"notes"`

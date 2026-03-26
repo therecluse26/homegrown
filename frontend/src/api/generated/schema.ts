@@ -49,6 +49,2585 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/compliance/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get family compliance configuration */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.FamilyConfigResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        /** Create or update family compliance configuration */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Family config */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.UpsertFamilyConfigCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.FamilyConfigResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get compliance dashboard overview */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.ComplianceDashboardResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List family's custom schedules */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.ScheduleResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a custom schedule */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Schedule */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.CreateScheduleCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.ScheduleResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/schedules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a custom schedule */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update a custom schedule */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Partial update */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.UpdateScheduleCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.ScheduleResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/compliance/state-requirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all state compliance requirements */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.StateConfigSummaryResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/state-requirements/{state_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get state compliance requirements */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Two-letter state code */
+                    state_code: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.StateConfigResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List assessment records for a student */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by subject */
+                    subject?: string;
+                    /** @description Start date */
+                    start_date?: string;
+                    /** @description End date */
+                    end_date?: string;
+                    /** @description Pagination cursor */
+                    cursor?: string;
+                    /** @description Results per page */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AssessmentListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create an assessment record */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Assessment */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.CreateAssessmentCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AssessmentResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/assessments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an assessment record */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Assessment UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update an assessment record */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Assessment UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Partial update */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.UpdateAssessmentCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AssessmentResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List attendance records for a student */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Start date */
+                    start_date: string;
+                    /** @description End date */
+                    end_date: string;
+                    /** @description Filter by status */
+                    status?: string;
+                    /** @description Pagination cursor */
+                    cursor?: string;
+                    /** @description Results per page */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AttendanceListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Record daily attendance */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Attendance record */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.RecordAttendanceCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AttendanceResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/attendance/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk record attendance (up to 31 records) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Bulk records */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.BulkRecordAttendanceCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AttendanceResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/attendance/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get attendance summary with pace calculation */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Start date */
+                    start_date: string;
+                    /** @description End date */
+                    end_date: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AttendanceSummaryResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/attendance/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an attendance record */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Attendance UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update an attendance record */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Attendance UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Partial update */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.UpdateAttendanceCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.AttendanceResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List courses for a student */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by grade level */
+                    grade_level?: number;
+                    /** @description Filter by school year */
+                    school_year?: string;
+                    /** @description Pagination cursor */
+                    cursor?: string;
+                    /** @description Results per page */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.CourseListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a course */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Course */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.CreateCourseCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.CourseResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/courses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a course */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Course UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update a course */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Course UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Partial update */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.UpdateCourseCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.CourseResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/gpa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calculate current GPA */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description GPA scale */
+                    scale?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.GpaResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/gpa/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get GPA history by term */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.GpaTermResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/gpa/what-if": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calculate what-if GPA with hypothetical courses */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description What-if params */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.GpaWhatIfParams"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.GpaResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/portfolios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List portfolios for a student */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.PortfolioSummaryResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a portfolio */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Portfolio */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.CreatePortfolioCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.PortfolioResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/portfolios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get portfolio details */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Portfolio UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.PortfolioResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/portfolios/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get portfolio download URL */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Portfolio UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/portfolios/{id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger portfolio PDF generation */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Portfolio UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.PortfolioResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/portfolios/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add items to a portfolio */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Portfolio UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Items to add */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.AddPortfolioItemsCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.PortfolioItemResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List standardized test scores */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Pagination cursor */
+                    cursor?: string;
+                    /** @description Results per page */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.TestListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Record a standardized test score */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Test score */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.CreateTestScoreCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.TestScoreResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/tests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a test score */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Test UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update a test score */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Test UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Partial update */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.UpdateTestScoreCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.TestScoreResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/transcripts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List transcripts for a student */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.TranscriptSummaryResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a transcript */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Transcript */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["comply.CreateTranscriptCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.TranscriptResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/transcripts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get transcript details */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Transcript UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.TranscriptResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Delete a transcript */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Transcript UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/transcripts/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get transcript download URL */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Transcript UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compliance/students/{student_id}/transcripts/{id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger transcript PDF generation */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                    /** @description Transcript UUID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["comply.TranscriptResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Payment Required */
+                402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discovery/quiz": {
         parameters: {
             query?: never;
@@ -2435,6 +5014,357 @@ export interface components {
         "app.HealthResponse": {
             status?: string;
             version?: string;
+        };
+        "comply.AddPortfolioItemsCommand": {
+            items: components["schemas"]["comply.PortfolioItemInput"][];
+        };
+        "comply.AssessmentListResponse": {
+            next_cursor?: string;
+            records?: components["schemas"]["comply.AssessmentResponse"][];
+        };
+        "comply.AssessmentResponse": {
+            assessment_date?: string;
+            assessment_type?: string;
+            created_at?: string;
+            grade_letter?: string;
+            grade_points?: number;
+            id?: string;
+            is_passing?: boolean;
+            max_score?: number;
+            notes?: string;
+            score?: number;
+            student_id?: string;
+            subject?: string;
+            title?: string;
+        };
+        "comply.AttendanceListResponse": {
+            next_cursor?: string;
+            records?: components["schemas"]["comply.AttendanceResponse"][];
+        };
+        "comply.AttendanceResponse": {
+            attendance_date?: string;
+            created_at?: string;
+            duration_minutes?: number;
+            id?: string;
+            is_auto?: boolean;
+            manual_override?: boolean;
+            notes?: string;
+            status?: string;
+            student_id?: string;
+        };
+        "comply.AttendanceSummaryResponse": {
+            absent?: number;
+            not_applicable?: number;
+            pace_status?: string;
+            present_full?: number;
+            present_partial?: number;
+            projected_total_days?: number;
+            state_required_days?: number;
+            state_required_hours?: number;
+            total_days?: number;
+            total_hours?: number;
+        };
+        "comply.BulkRecordAttendanceCommand": {
+            records: components["schemas"]["comply.RecordAttendanceCommand"][];
+        };
+        "comply.ComplianceDashboardResponse": {
+            family_config?: components["schemas"]["comply.FamilyConfigResponse"];
+            students?: components["schemas"]["comply.StudentComplianceSummary"][];
+        };
+        "comply.CourseListResponse": {
+            courses?: components["schemas"]["comply.CourseResponse"][];
+            next_cursor?: string;
+        };
+        "comply.CourseResponse": {
+            created_at?: string;
+            credits?: number;
+            grade_letter?: string;
+            grade_level?: number;
+            grade_points?: number;
+            id?: string;
+            level?: string;
+            school_year?: string;
+            semester?: string;
+            student_id?: string;
+            subject?: string;
+            title?: string;
+        };
+        "comply.CreateAssessmentCommand": {
+            assessment_date: string;
+            /** @enum {string} */
+            assessment_type: "test" | "quiz" | "project" | "assignment" | "presentation" | "portfolio_piece" | "other";
+            grade_letter?: string;
+            grade_points?: number;
+            is_passing?: boolean;
+            max_score?: number;
+            notes?: string;
+            score?: number;
+            source_activity_id?: string;
+            subject: string;
+            title: string;
+        };
+        "comply.CreateCourseCommand": {
+            credits: number;
+            grade_letter?: string;
+            grade_level: number;
+            grade_points?: number;
+            /** @enum {string} */
+            level: "regular" | "honors" | "ap";
+            school_year: string;
+            /** @enum {string} */
+            semester?: "fall" | "spring" | "summer" | "full_year";
+            subject: string;
+            title: string;
+        };
+        "comply.CreatePortfolioCommand": {
+            date_range_end: string;
+            date_range_start: string;
+            description?: string;
+            include_assessments?: boolean;
+            include_attendance?: boolean;
+            /** @enum {string} */
+            organization: "by_subject" | "chronological" | "by_student";
+            title: string;
+        };
+        "comply.CreateScheduleCommand": {
+            exclusion_periods?: components["schemas"]["comply.ExclusionPeriod"][];
+            name: string;
+            school_days: boolean[];
+        };
+        "comply.CreateTestScoreCommand": {
+            composite_score?: number;
+            grade_level?: number;
+            notes?: string;
+            percentile?: number;
+            scores: Record<string, never>;
+            test_date: string;
+            test_name: string;
+        };
+        "comply.CreateTranscriptCommand": {
+            grade_levels: string[];
+            title: string;
+        };
+        "comply.ExclusionPeriod": {
+            end: string;
+            label: string;
+            start: string;
+        };
+        "comply.FamilyConfigResponse": {
+            created_at?: string;
+            custom_schedule_id?: string;
+            family_id?: string;
+            gpa_scale?: string;
+            school_year_end?: string;
+            school_year_start?: string;
+            state_code?: string;
+            state_name?: string;
+            total_school_days?: number;
+            updated_at?: string;
+        };
+        "comply.GpaGradeLevelResponse": {
+            credits?: number;
+            grade_level?: number;
+            unweighted?: number;
+            weighted?: number;
+        };
+        "comply.GpaResponse": {
+            by_grade_level?: components["schemas"]["comply.GpaGradeLevelResponse"][];
+            total_courses?: number;
+            total_credits?: number;
+            unweighted_gpa?: number;
+            weighted_gpa?: number;
+        };
+        "comply.GpaTermResponse": {
+            course_count?: number;
+            credits?: number;
+            school_year?: string;
+            semester?: string;
+            unweighted_gpa?: number;
+            weighted_gpa?: number;
+        };
+        "comply.GpaWhatIfParams": {
+            additional_courses: components["schemas"]["comply.WhatIfCourse"][];
+        };
+        "comply.PortfolioItemInput": {
+            source_id: string;
+            /** @enum {string} */
+            source_type: "activity" | "journal" | "project" | "reading_list" | "assessment";
+        };
+        "comply.PortfolioItemResponse": {
+            cached_date?: string;
+            cached_description?: string;
+            cached_subject?: string;
+            cached_title?: string;
+            display_order?: number;
+            id?: string;
+            source_id?: string;
+            source_type?: string;
+        };
+        "comply.PortfolioResponse": {
+            created_at?: string;
+            date_range_end?: string;
+            date_range_start?: string;
+            description?: string;
+            expires_at?: string;
+            generated_at?: string;
+            id?: string;
+            include_assessments?: boolean;
+            include_attendance?: boolean;
+            item_count?: number;
+            items?: components["schemas"]["comply.PortfolioItemResponse"][];
+            organization?: string;
+            status?: string;
+            student_id?: string;
+            title?: string;
+        };
+        "comply.PortfolioSummaryResponse": {
+            created_at?: string;
+            date_range_end?: string;
+            date_range_start?: string;
+            expires_at?: string;
+            generated_at?: string;
+            id?: string;
+            item_count?: number;
+            status?: string;
+            title?: string;
+        };
+        "comply.RecordAttendanceCommand": {
+            attendance_date: string;
+            duration_minutes?: number;
+            notes?: string;
+            /** @enum {string} */
+            status: "present_full" | "present_partial" | "absent" | "not_applicable";
+        };
+        "comply.ScheduleResponse": {
+            created_at?: string;
+            exclusion_periods?: components["schemas"]["comply.ExclusionPeriod"][];
+            id?: string;
+            name?: string;
+            school_days?: boolean[];
+        };
+        "comply.StateConfigResponse": {
+            assessment_details?: string;
+            assessment_required?: boolean;
+            attendance_days?: number;
+            attendance_details?: string;
+            attendance_hours?: number;
+            attendance_required?: boolean;
+            notification_details?: string;
+            notification_required?: boolean;
+            record_keeping_details?: string;
+            record_keeping_required?: boolean;
+            regulation_level?: string;
+            required_subjects?: string[];
+            state_code?: string;
+            state_name?: string;
+        };
+        "comply.StateConfigSummaryResponse": {
+            attendance_days?: number;
+            attendance_required?: boolean;
+            regulation_level?: string;
+            state_code?: string;
+            state_name?: string;
+        };
+        "comply.StudentComplianceSummary": {
+            active_portfolios?: components["schemas"]["comply.PortfolioSummaryResponse"][];
+            attendance_summary?: components["schemas"]["comply.AttendanceSummaryResponse"];
+            pace_status?: string;
+            recent_assessments_count?: number;
+            recent_tests_count?: number;
+            student_id?: string;
+            student_name?: string;
+        };
+        "comply.TestListResponse": {
+            next_cursor?: string;
+            tests?: components["schemas"]["comply.TestScoreResponse"][];
+        };
+        "comply.TestScoreResponse": {
+            composite_score?: number;
+            created_at?: string;
+            grade_level?: number;
+            id?: string;
+            notes?: string;
+            percentile?: number;
+            scores?: Record<string, never>;
+            student_id?: string;
+            test_date?: string;
+            test_name?: string;
+        };
+        "comply.TranscriptResponse": {
+            courses?: components["schemas"]["comply.CourseResponse"][];
+            created_at?: string;
+            expires_at?: string;
+            generated_at?: string;
+            gpa_unweighted?: number;
+            gpa_weighted?: number;
+            grade_levels?: string[];
+            id?: string;
+            status?: string;
+            student_id?: string;
+            student_name?: string;
+            title?: string;
+        };
+        "comply.TranscriptSummaryResponse": {
+            created_at?: string;
+            generated_at?: string;
+            grade_levels?: string[];
+            id?: string;
+            status?: string;
+            title?: string;
+        };
+        "comply.UpdateAssessmentCommand": {
+            assessment_date?: string;
+            grade_letter?: string;
+            grade_points?: number;
+            is_passing?: boolean;
+            max_score?: number;
+            notes?: string;
+            score?: number;
+            subject?: string;
+            title?: string;
+        };
+        "comply.UpdateAttendanceCommand": {
+            duration_minutes?: number;
+            notes?: string;
+            status?: string;
+        };
+        "comply.UpdateCourseCommand": {
+            credits?: number;
+            grade_letter?: string;
+            grade_points?: number;
+            level?: string;
+            semester?: string;
+            subject?: string;
+            title?: string;
+        };
+        "comply.UpdateScheduleCommand": {
+            exclusion_periods?: components["schemas"]["comply.ExclusionPeriod"][];
+            name?: string;
+            school_days?: boolean[];
+        };
+        "comply.UpdateTestScoreCommand": {
+            composite_score?: number;
+            notes?: string;
+            percentile?: number;
+            scores?: Record<string, never>;
+            test_date?: string;
+            test_name?: string;
+        };
+        "comply.UpsertFamilyConfigCommand": {
+            custom_schedule_id?: string;
+            gpa_custom_config?: Record<string, never>;
+            /** @enum {string} */
+            gpa_scale: "standard_4" | "weighted" | "custom";
+            school_year_end: string;
+            school_year_start: string;
+            state_code: string;
+            total_school_days: number;
+        };
+        "comply.WhatIfCourse": {
+            credits: number;
+            grade_points: number;
+            /** @enum {string} */
+            level: "regular" | "honors" | "ap";
         };
         "discover.MethodologyRecommendation": {
             explanation?: string;

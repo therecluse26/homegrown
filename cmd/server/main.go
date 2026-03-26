@@ -37,6 +37,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/notify"
 	notifyadapters "github.com/homegrown-academy/homegrown-academy/internal/notify/adapters"
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
+	"github.com/homegrown-academy/homegrown-academy/internal/comply"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/recs"
 	"github.com/homegrown-academy/homegrown-academy/internal/safety"
@@ -889,6 +890,137 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), recs.NewFamilyDeletionScheduledHandler(recsSvc))
 	eventBus.Subscribe(reflect.TypeOf(method.MethodologyConfigUpdated{}), recs.NewMethodologyConfigUpdatedHandler(recsSvc))
 
+	// ── Step 7m: Wire comply:: domain ──────────────────────────────────────────────
+	// comply:: is the compliance & reporting domain. It tracks attendance, assessments,
+	// portfolios, transcripts, courses, and GPA for state homeschool compliance. [14-comply §1]
+	complyStateConfigRepo   := comply.NewPgStateConfigRepository(db)
+	complyFamilyConfigRepo  := comply.NewPgFamilyConfigRepository(db)
+	complyScheduleRepo      := comply.NewPgScheduleRepository(db)
+	complyAttendanceRepo    := comply.NewPgAttendanceRepository(db)
+	complyAssessmentRepo    := comply.NewPgAssessmentRepository(db)
+	complyTestRepo          := comply.NewPgTestScoreRepository(db)
+	complyPortfolioRepo     := comply.NewPgPortfolioRepository(db)
+	complyPortfolioItemRepo := comply.NewPgPortfolioItemRepository(db)
+	complyTranscriptRepo    := comply.NewPgTranscriptRepository(db)
+	complyCourseRepo        := comply.NewPgCourseRepository(db)
+
+	// IAM adapter for comply: bridges iam.IamService → comply.IamServiceForComply.
+	iamForComply := comply.NewIamAdapter(
+		func(ctx context.Context, studentID uuid.UUID, familyID shared.FamilyID) (bool, error) {
+			scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID.UUID})
+			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
+			if err != nil {
+				return false, nil
+			}
+			return student != nil, nil
+		},
+		func(ctx context.Context, studentID uuid.UUID) (string, error) {
+			// Cross-family read for background jobs — look up student name via raw DB.
+			type nameRow struct {
+				DisplayName string `gorm:"column:display_name"`
+			}
+			var row nameRow
+			if err := db.WithContext(ctx).Raw(
+				`SELECT display_name FROM iam_students WHERE id = ?`, studentID,
+			).Scan(&row).Error; err != nil {
+				return "", err
+			}
+			return row.DisplayName, nil
+		},
+	)
+
+	// Learn adapter for comply: stub — portfolio item data loading deferred until PDF rendering. [14-comply §9.2]
+	learnForComply := comply.NewLearnAdapter(
+		func(_ context.Context, _ string, _ uuid.UUID) (*comply.PortfolioItemData, error) {
+			return nil, fmt.Errorf("comply: learn adapter not yet implemented (PDF rendering deferred)")
+		},
+	)
+
+	// Discovery adapter for comply: bridges discover.DiscoveryService → comply.DiscoveryServiceForComply.
+	discoverForComply := comply.NewDiscoveryAdapter(
+		func(ctx context.Context, stateCode string) (*comply.StateRequirementsData, error) {
+			reqs, err := discoverSvc.GetStateRequirements(ctx, stateCode)
+			if err != nil {
+				return nil, err
+			}
+			if reqs == nil {
+				return nil, nil
+			}
+			// Get state name from guide list (best-effort).
+			stateName := stateCode
+			guides, listErr := discoverSvc.ListStateGuides(ctx)
+			if listErr == nil {
+				for _, g := range guides {
+					if g.StateCode == stateCode {
+						stateName = g.StateName
+						break
+					}
+				}
+			}
+			// Convert *uint16 → *int16 for attendance days.
+			var attendanceDays *int16
+			if reqs.AttendanceDays != nil {
+				v := int16(*reqs.AttendanceDays)
+				attendanceDays = &v
+			}
+			return &comply.StateRequirementsData{
+				StateCode:               stateCode,
+				StateName:               stateName,
+				NotificationRequired:    reqs.NotificationRequired,
+				NotificationDetails:     reqs.NotificationDetails,
+				RequiredSubjects:        reqs.RequiredSubjects,
+				AssessmentRequired:      reqs.AssessmentRequired,
+				AssessmentDetails:       reqs.AssessmentDetails,
+				RecordKeepingRequired:   reqs.RecordKeepingRequired,
+				RecordKeepingDetails:    reqs.RecordKeepingDetails,
+				AttendanceRequired:      reqs.AttendanceRequired,
+				AttendanceDays:          attendanceDays,
+				AttendanceDetails:       reqs.AttendanceDetails,
+				UmbrellaSchoolAvailable: reqs.UmbrellaSchoolAvailable,
+				UmbrellaSchoolDetails:   reqs.UmbrellaSchoolDetails,
+				RegulationLevel:         reqs.RegulationLevel,
+			}, nil
+		},
+		func(ctx context.Context) ([]comply.StateGuideSummary, error) {
+			guides, err := discoverSvc.ListStateGuides(ctx)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]comply.StateGuideSummary, len(guides))
+			for i, g := range guides {
+				out[i] = comply.StateGuideSummary{
+					StateCode: g.StateCode,
+					StateName: g.StateName,
+				}
+			}
+			return out, nil
+		},
+	)
+
+	// Media adapter for comply: stub — server-side PDF upload deferred until gofpdf integration. [14-comply §9.2]
+	mediaForComply := comply.NewMediaAdapter(
+		func(_ context.Context, _ uuid.UUID, _ string, _ string, _ string, _ []byte) (*uuid.UUID, error) {
+			return nil, fmt.Errorf("comply: media adapter not yet implemented (PDF upload deferred)")
+		},
+		func(_ context.Context, _ uuid.UUID) (string, error) {
+			return "", fmt.Errorf("comply: media adapter not yet implemented (presigned URL deferred)")
+		},
+	)
+
+	complySvc := comply.NewComplianceService(
+		complyStateConfigRepo, complyFamilyConfigRepo, complyScheduleRepo,
+		complyAttendanceRepo, complyAssessmentRepo, complyTestRepo,
+		complyPortfolioRepo, complyPortfolioItemRepo, complyTranscriptRepo, complyCourseRepo,
+		iamForComply, learnForComply, discoverForComply, mediaForComply,
+		eventBus,
+	)
+
+	// Register comply:: event subscriptions
+	eventBus.Subscribe(reflect.TypeOf(learn.ActivityLogged{}), comply.NewActivityLoggedHandler(complySvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.StudentDeleted{}), comply.NewStudentDeletedHandler(complySvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), comply.NewFamilyDeletionScheduledHandler(complySvc))
+	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), comply.NewSubscriptionCancelledHandler(complySvc))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -912,6 +1044,7 @@ func main() {
 		Safety:      safetySvc,
 		Search:      searchSvc,
 		Recs:        recsSvc,
+		Comply:      complySvc,
 		PubSub:      pubsub,
 	}
 
@@ -932,6 +1065,11 @@ func main() {
 		recSignalRepo, recRecRepo, recFeedbackRepo,
 		recPopularityRepo, recPrefRepo, recAnonRepo,
 		cfg.RecsAnonymizationSecret,
+	)
+	comply.RegisterTaskHandlers(worker, db,
+		complyStateConfigRepo, complyFamilyConfigRepo, complyAttendanceRepo,
+		complyPortfolioRepo, complyPortfolioItemRepo, complyTranscriptRepo, complyCourseRepo,
+		iamForComply, discoverForComply, mediaForComply, eventBus,
 	)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {

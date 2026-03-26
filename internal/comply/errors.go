@@ -48,6 +48,7 @@ var ErrTestScoreNotFound = errors.New("test score not found")
 
 var (
 	ErrPortfolioNotFound           = errors.New("portfolio not found")
+	ErrPortfolioNotReady           = errors.New("portfolio is not ready for download")
 	ErrPortfolioExpired            = errors.New("portfolio has expired")
 	ErrPortfolioItemSourceNotFound = errors.New("portfolio item source not found in learning domain")
 	ErrDuplicatePortfolioItem      = errors.New("duplicate item in portfolio")

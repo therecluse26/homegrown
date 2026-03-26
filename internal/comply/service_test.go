@@ -1633,8 +1633,8 @@ func TestGetPortfolioDownloadURL_RejectsNonReady(t *testing.T) {
 	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, portfolioRepo, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
 
 	_, err := svc.GetPortfolioDownloadURL(context.Background(), studentID, portfolioID, *scope)
-	if !errors.Is(err, domain.ErrPortfolioNotConfiguring) {
-		t.Fatalf("got %v, want ErrPortfolioNotConfiguring", err)
+	if !errors.Is(err, ErrPortfolioNotReady) {
+		t.Fatalf("got %v, want ErrPortfolioNotReady", err)
 	}
 }
 
@@ -1674,6 +1674,9 @@ func TestGetPortfolioDownloadURL_RejectsExpired(t *testing.T) {
 func TestHandleActivityLogged_CreatesAutoAttendance(t *testing.T) {
 	created := false
 	attRepo := &stubAttendanceRepo{
+		findByStudentAndDateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ time.Time) (*ComplyAttendance, error) {
+			return nil, nil // no existing record
+		},
 		upsertFn: func(_ context.Context, _ shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error) {
 			if !input.IsAuto {
 				t.Fatal("expected is_auto=true for auto-attendance")
@@ -1699,13 +1702,16 @@ func TestHandleActivityLogged_CreatesAutoAttendance(t *testing.T) {
 }
 
 func TestHandleActivityLogged_DoesNotOverrideManual(t *testing.T) {
+	upsertCalled := false
 	attRepo := &stubAttendanceRepo{
-		upsertFn: func(_ context.Context, _ shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error) {
-			// Repo upsert should be called with is_auto=true, manual_override=false
-			// The repo handles the "don't override manual" logic via ON CONFLICT
-			if input.ManualOverride {
-				t.Fatal("auto-attendance should not set manual_override=true")
-			}
+		findByStudentAndDateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ time.Time) (*ComplyAttendance, error) {
+			return &ComplyAttendance{
+				ID:             uuid.Must(uuid.NewV7()),
+				ManualOverride: true, // manual record exists
+			}, nil
+		},
+		upsertFn: func(_ context.Context, _ shared.FamilyScope, _ UpsertAttendanceRow) (*ComplyAttendance, error) {
+			upsertCalled = true
 			return &ComplyAttendance{ID: uuid.Must(uuid.NewV7())}, nil
 		},
 	}
@@ -1720,27 +1726,38 @@ func TestHandleActivityLogged_DoesNotOverrideManual(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if upsertCalled {
+		t.Fatal("expected upsert to be skipped when manual record exists")
+	}
 }
 
 func TestHandleStudentDeleted_CascadesDelete(t *testing.T) {
-	attDeleted := false
-	assessDeleted := false
 	familyID := uuid.Must(uuid.NewV7())
 	studentID := uuid.Must(uuid.NewV7())
 
+	deleted := map[string]bool{}
 	attRepo := &stubAttendanceRepo{
-		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-			attDeleted = true
-			return nil
-		},
+		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { deleted["attendance"] = true; return nil },
 	}
 	assessRepo := &stubAssessmentRepo{
-		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-			assessDeleted = true
-			return nil
-		},
+		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { deleted["assessments"] = true; return nil },
 	}
-	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, attRepo, assessRepo, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+	testRepo := &stubTestScoreRepo{
+		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { deleted["tests"] = true; return nil },
+	}
+	portfolioRepo := &stubPortfolioRepo{
+		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { deleted["portfolios"] = true; return nil },
+	}
+	portfolioItemRepo := &stubPortfolioItemRepo{
+		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { deleted["portfolio_items"] = true; return nil },
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { deleted["transcripts"] = true; return nil },
+	}
+	courseRepo := &stubCourseRepo{
+		deleteByStudentFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { deleted["courses"] = true; return nil },
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, attRepo, assessRepo, testRepo, portfolioRepo, portfolioItemRepo, transcriptRepo, courseRepo, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
 
 	err := svc.HandleStudentDeleted(context.Background(), &StudentDeletedEvent{
 		FamilyID:  familyID,
@@ -1749,29 +1766,46 @@ func TestHandleStudentDeleted_CascadesDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !attDeleted || !assessDeleted {
-		t.Fatal("expected all student data to be cascade deleted")
+	expected := []string{"attendance", "assessments", "tests", "portfolios", "portfolio_items", "transcripts", "courses"}
+	for _, key := range expected {
+		if !deleted[key] {
+			t.Fatalf("expected %s to be cascade deleted", key)
+		}
 	}
 }
 
 func TestHandleFamilyDeletionScheduled_CascadesDelete(t *testing.T) {
-	attDeleted := false
-	configDeleted := false
 	familyID := uuid.Must(uuid.NewV7())
 
+	deleted := map[string]bool{}
 	attRepo := &stubAttendanceRepo{
-		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error {
-			attDeleted = true
-			return nil
-		},
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["attendance"] = true; return nil },
 	}
 	familyRepo := &stubFamilyConfigRepo{
-		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error {
-			configDeleted = true
-			return nil
-		},
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["config"] = true; return nil },
 	}
-	svc := newTestService(&stubStateConfigRepo{}, familyRepo, &stubScheduleRepo{}, attRepo, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+	schedRepo := &stubScheduleRepo{
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["schedules"] = true; return nil },
+	}
+	assessRepo := &stubAssessmentRepo{
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["assessments"] = true; return nil },
+	}
+	testRepo := &stubTestScoreRepo{
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["tests"] = true; return nil },
+	}
+	portfolioRepo := &stubPortfolioRepo{
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["portfolios"] = true; return nil },
+	}
+	portfolioItemRepo := &stubPortfolioItemRepo{
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["portfolio_items"] = true; return nil },
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["transcripts"] = true; return nil },
+	}
+	courseRepo := &stubCourseRepo{
+		deleteByFamilyFn: func(_ context.Context, _ uuid.UUID) error { deleted["courses"] = true; return nil },
+	}
+	svc := newTestService(&stubStateConfigRepo{}, familyRepo, schedRepo, attRepo, assessRepo, testRepo, portfolioRepo, portfolioItemRepo, transcriptRepo, courseRepo, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
 
 	err := svc.HandleFamilyDeletionScheduled(context.Background(), &FamilyDeletionScheduledEvent{
 		FamilyID:    familyID,
@@ -1780,8 +1814,11 @@ func TestHandleFamilyDeletionScheduled_CascadesDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !attDeleted || !configDeleted {
-		t.Fatal("expected all family data to be cascade deleted")
+	expected := []string{"attendance", "assessments", "tests", "portfolios", "portfolio_items", "transcripts", "courses", "schedules", "config"}
+	for _, key := range expected {
+		if !deleted[key] {
+			t.Fatalf("expected %s to be cascade deleted", key)
+		}
 	}
 }
 

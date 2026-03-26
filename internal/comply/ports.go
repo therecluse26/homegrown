@@ -220,6 +220,7 @@ type ScheduleRepository interface {
 	ListByFamily(ctx context.Context, scope shared.FamilyScope) ([]ComplyCustomSchedule, error)
 	Update(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope, updates UpdateScheduleRow) (*ComplyCustomSchedule, error)
 	Delete(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) error
+	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // AttendanceRepository is the repository for comply_attendance.
@@ -227,6 +228,7 @@ type ScheduleRepository interface {
 type AttendanceRepository interface {
 	Upsert(ctx context.Context, scope shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error)
 	FindByID(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) (*ComplyAttendance, error)
+	FindByStudentAndDate(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, date time.Time) (*ComplyAttendance, error)
 	ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *AttendanceListParams) ([]ComplyAttendance, error)
 	Summarize(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, startDate time.Time, endDate time.Time) (*AttendanceSummaryRow, error)
 	Update(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope, updates UpdateAttendanceRow) (*ComplyAttendance, error)
@@ -244,6 +246,7 @@ type AssessmentRepository interface {
 	Update(ctx context.Context, assessmentID uuid.UUID, scope shared.FamilyScope, updates UpdateAssessmentRow) (*ComplyAssessmentRecord, error)
 	Delete(ctx context.Context, assessmentID uuid.UUID, scope shared.FamilyScope) error
 	DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // TestScoreRepository is the repository for comply_standardized_tests.
@@ -253,6 +256,8 @@ type TestScoreRepository interface {
 	ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *TestListParams) ([]ComplyStandardizedTest, error)
 	Update(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope, updates UpdateTestScoreRow) (*ComplyStandardizedTest, error)
 	Delete(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope) error
+	DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // PortfolioRepository is the repository for comply_portfolios.
@@ -263,13 +268,18 @@ type PortfolioRepository interface {
 	ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyPortfolio, error)
 	UpdateStatus(ctx context.Context, portfolioID uuid.UUID, status string, uploadID *uuid.UUID, errorMessage *string) (*ComplyPortfolio, error)
 	FindExpired(ctx context.Context, before time.Time) ([]ComplyPortfolio, error)
+	DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // PortfolioItemRepository is the repository for comply_portfolio_items.
 type PortfolioItemRepository interface {
 	CreateBatch(ctx context.Context, items []CreatePortfolioItemRow) ([]ComplyPortfolioItem, error)
 	ListByPortfolio(ctx context.Context, portfolioID uuid.UUID) ([]ComplyPortfolioItem, error)
+	CountByPortfolio(ctx context.Context, portfolioID uuid.UUID) (int32, error)
 	DeleteByPortfolio(ctx context.Context, portfolioID uuid.UUID) error
+	DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // TranscriptRepository is the repository for comply_transcripts (Phase 3).
@@ -279,6 +289,8 @@ type TranscriptRepository interface {
 	ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyTranscript, error)
 	UpdateStatus(ctx context.Context, transcriptID uuid.UUID, status string, uploadID *uuid.UUID, gpaUnweighted *float64, gpaWeighted *float64, errorMessage *string) (*ComplyTranscript, error)
 	Delete(ctx context.Context, transcriptID uuid.UUID, scope shared.FamilyScope) error
+	DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
 // CourseRepository is the repository for comply_courses (Phase 3).
@@ -287,5 +299,7 @@ type CourseRepository interface {
 	ListByStudent(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *CourseListParams) ([]ComplyCourse, error)
 	Update(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope, updates UpdateCourseRow) (*ComplyCourse, error)
 	Delete(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope) error
+	DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 

@@ -754,7 +754,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **GET /v1/compliance/students/:student_id/portfolios/:id/download** — Download portfolio PDF.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Response**: `302 Found` → Redirect to presigned download URL (from `media::`)
+- **Response**: `200 OK` → `{ "download_url": string }` (presigned URL from `media::`)
 - **Error codes**: `404`, `409` (not in `ready` status), `410` (expired)
 
 #### Compliance Dashboard (1 endpoint)
@@ -803,7 +803,7 @@ that records attendance signals into `comply_attendance`. `[S§19 Phase 1]`
 
 **GET /v1/compliance/students/:student_id/transcripts/:id/download** — Download transcript PDF.
 - **Auth**: `RequirePremium` + `FamilyScope`
-- **Response**: `302 Found` → Redirect to presigned download URL
+- **Response**: `200 OK` → `{ "download_url": string }` (presigned URL from `media::`)
 
 **DELETE /v1/compliance/students/:student_id/transcripts/:id** — Delete a transcript.
 - **Auth**: `RequirePremium` + `FamilyScope`
@@ -1943,7 +1943,7 @@ type GpaResult struct {
 
 5. Parent downloads PDF (GET .../portfolios/:id/download)
    → Calls media::MediaService.presigned_get() for download URL
-   → Returns 302 redirect to presigned URL
+   → Returns 200 OK with `{ "download_url": string }`
 ```
 
 ### State Machine

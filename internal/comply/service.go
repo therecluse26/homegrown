@@ -787,11 +787,15 @@ func (s *ComplianceServiceImpl) ListPortfolios(ctx context.Context, studentID uu
 
 	results := make([]PortfolioSummaryResponse, len(portfolios))
 	for i, p := range portfolios {
+		count, err := s.portfolioItemRepo.CountByPortfolio(ctx, p.ID)
+		if err != nil {
+			return nil, err
+		}
 		results[i] = PortfolioSummaryResponse{
 			ID:             p.ID,
 			Title:          p.Title,
 			Status:         p.Status,
-			ItemCount:      0, // computed at repo level or via count query
+			ItemCount:      count,
 			DateRangeStart: p.DateRangeStart,
 			DateRangeEnd:   p.DateRangeEnd,
 			GeneratedAt:    p.GeneratedAt,
@@ -816,7 +820,7 @@ func (s *ComplianceServiceImpl) GetPortfolioDownloadURL(ctx context.Context, stu
 	}
 
 	if portfolio.Status != string(PortfolioStatusReady) {
-		return "", domain.ErrPortfolioNotConfiguring
+		return "", ErrPortfolioNotReady
 	}
 
 	// Check expiry
@@ -923,7 +927,7 @@ func (s *ComplianceServiceImpl) GetTranscriptDownloadURL(ctx context.Context, st
 	}
 
 	if transcript.Status != string(PortfolioStatusReady) {
-		return "", domain.ErrPortfolioNotConfiguring
+		return "", ErrPortfolioNotReady
 	}
 
 	if transcript.ExpiresAt != nil && transcript.ExpiresAt.Before(time.Now().UTC()) {
@@ -955,9 +959,25 @@ func (s *ComplianceServiceImpl) CalculateGPA(ctx context.Context, studentID uuid
 		return nil, err
 	}
 
-	courses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, nil)
+	allCourses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	// Filter by grade levels if specified. [14-comply §4.3]
+	courses := allCourses
+	if len(params.GradeLevels) > 0 {
+		glSet := make(map[int16]bool, len(params.GradeLevels))
+		for _, gl := range params.GradeLevels {
+			glSet[gl] = true
+		}
+		filtered := make([]ComplyCourse, 0, len(allCourses))
+		for _, c := range allCourses {
+			if glSet[c.GradeLevel] {
+				filtered = append(filtered, c)
+			}
+		}
+		courses = filtered
 	}
 
 	scale, customConfig, err := s.getGpaScaleForFamily(ctx, scope)
@@ -1101,7 +1121,17 @@ func (s *ComplianceServiceImpl) GetGPAHistory(ctx context.Context, studentID uui
 
 func (s *ComplianceServiceImpl) HandleActivityLogged(ctx context.Context, event *ActivityLoggedEvent) error {
 	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: event.FamilyID})
-	_, err := s.attendanceRepo.Upsert(ctx, scope, UpsertAttendanceRow{
+
+	// Check if a manual record already exists for this date — do not override. [14-comply §17.4]
+	existing, err := s.attendanceRepo.FindByStudentAndDate(ctx, event.StudentID, scope, event.ActivityDate)
+	if err != nil {
+		return err
+	}
+	if existing != nil && existing.ManualOverride {
+		return nil // manual record takes precedence
+	}
+
+	_, err = s.attendanceRepo.Upsert(ctx, scope, UpsertAttendanceRow{
 		StudentID:       event.StudentID,
 		AttendanceDate:  event.ActivityDate,
 		Status:          string(AttendanceStatusPresentFull),
@@ -1113,17 +1143,57 @@ func (s *ComplianceServiceImpl) HandleActivityLogged(ctx context.Context, event 
 }
 
 func (s *ComplianceServiceImpl) HandleStudentDeleted(ctx context.Context, event *StudentDeletedEvent) error {
+	// Cascade delete all student compliance data. [14-comply §17.4]
+	// Order: items before portfolios (FK dependency).
+	if err := s.portfolioItemRepo.DeleteByStudent(ctx, event.StudentID, event.FamilyID); err != nil {
+		return err
+	}
 	if err := s.attendanceRepo.DeleteByStudent(ctx, event.StudentID, event.FamilyID); err != nil {
 		return err
 	}
 	if err := s.assessmentRepo.DeleteByStudent(ctx, event.StudentID, event.FamilyID); err != nil {
 		return err
 	}
+	if err := s.testRepo.DeleteByStudent(ctx, event.StudentID, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.portfolioRepo.DeleteByStudent(ctx, event.StudentID, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.courseRepo.DeleteByStudent(ctx, event.StudentID, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.transcriptRepo.DeleteByStudent(ctx, event.StudentID, event.FamilyID); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (s *ComplianceServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, event *FamilyDeletionScheduledEvent) error {
+	// Cascade delete all family compliance data. [14-comply §17.4]
+	// Order: items before portfolios (FK dependency), config + schedules last.
+	if err := s.portfolioItemRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
+		return err
+	}
 	if err := s.attendanceRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.assessmentRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.testRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.portfolioRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.courseRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.transcriptRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
+		return err
+	}
+	if err := s.scheduleRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {
 		return err
 	}
 	if err := s.familyConfigRepo.DeleteByFamily(ctx, event.FamilyID); err != nil {

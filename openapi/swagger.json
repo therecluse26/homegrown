@@ -34,6 +34,2435 @@
                 }
             }
         },
+        "/compliance/config": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get family compliance configuration",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.FamilyConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Create or update family compliance configuration",
+                "parameters": [
+                    {
+                        "description": "Family config",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.UpsertFamilyConfigCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.FamilyConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/dashboard": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get compliance dashboard overview",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.ComplianceDashboardResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List family's custom schedules",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/comply.ScheduleResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Create a custom schedule",
+                "parameters": [
+                    {
+                        "description": "Schedule",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.CreateScheduleCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/comply.ScheduleResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/schedules/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Delete a custom schedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Schedule UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Update a custom schedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Schedule UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Partial update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.UpdateScheduleCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.ScheduleResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/state-requirements": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List all state compliance requirements",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/comply.StateConfigSummaryResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/state-requirements/{state_code}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get state compliance requirements",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Two-letter state code",
+                        "name": "state_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.StateConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/assessments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List assessment records for a student",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by subject",
+                        "name": "subject",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Results per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.AssessmentListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Create an assessment record",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Assessment",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.CreateAssessmentCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/comply.AssessmentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/assessments/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Delete an assessment record",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Assessment UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Update an assessment record",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Assessment UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Partial update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.UpdateAssessmentCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.AssessmentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/attendance": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List attendance records for a student",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Results per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.AttendanceListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Record daily attendance",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Attendance record",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.RecordAttendanceCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/comply.AttendanceResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/attendance/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Bulk record attendance (up to 31 records)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Bulk records",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.BulkRecordAttendanceCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/comply.AttendanceResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/attendance/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get attendance summary with pace calculation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.AttendanceSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/attendance/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Delete an attendance record",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Attendance UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Update an attendance record",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Attendance UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Partial update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.UpdateAttendanceCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.AttendanceResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/courses": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List courses for a student",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by grade level",
+                        "name": "grade_level",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by school year",
+                        "name": "school_year",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Results per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.CourseListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Create a course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Course",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.CreateCourseCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/comply.CourseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/courses/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Delete a course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Course UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Update a course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Course UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Partial update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.UpdateCourseCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.CourseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/gpa": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Calculate current GPA",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "GPA scale",
+                        "name": "scale",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.GpaResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/gpa/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get GPA history by term",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/comply.GpaTermResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/gpa/what-if": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Calculate what-if GPA with hypothetical courses",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "What-if params",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.GpaWhatIfParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.GpaResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/portfolios": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List portfolios for a student",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/comply.PortfolioSummaryResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Create a portfolio",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Portfolio",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.CreatePortfolioCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/comply.PortfolioResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/portfolios/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get portfolio details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Portfolio UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.PortfolioResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/portfolios/{id}/download": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get portfolio download URL",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Portfolio UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "410": {
+                        "description": "Gone",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/portfolios/{id}/generate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Trigger portfolio PDF generation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Portfolio UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/comply.PortfolioResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/portfolios/{id}/items": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Add items to a portfolio",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Portfolio UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Items to add",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.AddPortfolioItemsCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/comply.PortfolioItemResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/tests": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List standardized test scores",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Results per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.TestListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Record a standardized test score",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Test score",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.CreateTestScoreCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/comply.TestScoreResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/tests/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Delete a test score",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Test UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Update a test score",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Test UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Partial update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.UpdateTestScoreCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.TestScoreResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/transcripts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "List transcripts for a student",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/comply.TranscriptSummaryResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Create a transcript",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Transcript",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comply.CreateTranscriptCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/comply.TranscriptResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/transcripts/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get transcript details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Transcript UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/comply.TranscriptResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Delete a transcript",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Transcript UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/transcripts/{id}/download": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Get transcript download URL",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Transcript UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "410": {
+                        "description": "Gone",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/students/{student_id}/transcripts/{id}/generate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "summary": "Trigger transcript PDF generation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Transcript UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/comply.TranscriptResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/discovery/quiz": {
             "get": {
                 "produces": [
@@ -1835,6 +4264,1176 @@
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "comply.AddPortfolioItemsCommand": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.PortfolioItemInput"
+                    }
+                }
+            }
+        },
+        "comply.AssessmentListResponse": {
+            "type": "object",
+            "properties": {
+                "next_cursor": {
+                    "type": "string"
+                },
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.AssessmentResponse"
+                    }
+                }
+            }
+        },
+        "comply.AssessmentResponse": {
+            "type": "object",
+            "properties": {
+                "assessment_date": {
+                    "type": "string"
+                },
+                "assessment_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "grade_letter": {
+                    "type": "string"
+                },
+                "grade_points": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_passing": {
+                    "type": "boolean"
+                },
+                "max_score": {
+                    "type": "number"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.AttendanceListResponse": {
+            "type": "object",
+            "properties": {
+                "next_cursor": {
+                    "type": "string"
+                },
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.AttendanceResponse"
+                    }
+                }
+            }
+        },
+        "comply.AttendanceResponse": {
+            "type": "object",
+            "properties": {
+                "attendance_date": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "duration_minutes": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_auto": {
+                    "type": "boolean"
+                },
+                "manual_override": {
+                    "type": "boolean"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "student_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.AttendanceSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "absent": {
+                    "type": "integer"
+                },
+                "not_applicable": {
+                    "type": "integer"
+                },
+                "pace_status": {
+                    "type": "string"
+                },
+                "present_full": {
+                    "type": "integer"
+                },
+                "present_partial": {
+                    "type": "integer"
+                },
+                "projected_total_days": {
+                    "type": "integer"
+                },
+                "state_required_days": {
+                    "type": "integer"
+                },
+                "state_required_hours": {
+                    "type": "integer"
+                },
+                "total_days": {
+                    "type": "integer"
+                },
+                "total_hours": {
+                    "type": "number"
+                }
+            }
+        },
+        "comply.BulkRecordAttendanceCommand": {
+            "type": "object",
+            "required": [
+                "records"
+            ],
+            "properties": {
+                "records": {
+                    "type": "array",
+                    "maxItems": 31,
+                    "items": {
+                        "$ref": "#/definitions/comply.RecordAttendanceCommand"
+                    }
+                }
+            }
+        },
+        "comply.ComplianceDashboardResponse": {
+            "type": "object",
+            "properties": {
+                "family_config": {
+                    "$ref": "#/definitions/comply.FamilyConfigResponse"
+                },
+                "students": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.StudentComplianceSummary"
+                    }
+                }
+            }
+        },
+        "comply.CourseListResponse": {
+            "type": "object",
+            "properties": {
+                "courses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.CourseResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.CourseResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "credits": {
+                    "type": "number"
+                },
+                "grade_letter": {
+                    "type": "string"
+                },
+                "grade_level": {
+                    "type": "integer"
+                },
+                "grade_points": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "school_year": {
+                    "type": "string"
+                },
+                "semester": {
+                    "type": "string"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.CreateAssessmentCommand": {
+            "type": "object",
+            "required": [
+                "assessment_date",
+                "assessment_type",
+                "subject",
+                "title"
+            ],
+            "properties": {
+                "assessment_date": {
+                    "type": "string"
+                },
+                "assessment_type": {
+                    "type": "string",
+                    "enum": [
+                        "test",
+                        "quiz",
+                        "project",
+                        "assignment",
+                        "presentation",
+                        "portfolio_piece",
+                        "other"
+                    ]
+                },
+                "grade_letter": {
+                    "type": "string"
+                },
+                "grade_points": {
+                    "type": "number"
+                },
+                "is_passing": {
+                    "type": "boolean"
+                },
+                "max_score": {
+                    "type": "number"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "source_activity_id": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.CreateCourseCommand": {
+            "type": "object",
+            "required": [
+                "credits",
+                "grade_level",
+                "level",
+                "school_year",
+                "subject",
+                "title"
+            ],
+            "properties": {
+                "credits": {
+                    "type": "number"
+                },
+                "grade_letter": {
+                    "type": "string"
+                },
+                "grade_level": {
+                    "type": "integer"
+                },
+                "grade_points": {
+                    "type": "number"
+                },
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "regular",
+                        "honors",
+                        "ap"
+                    ]
+                },
+                "school_year": {
+                    "type": "string"
+                },
+                "semester": {
+                    "type": "string",
+                    "enum": [
+                        "fall",
+                        "spring",
+                        "summer",
+                        "full_year"
+                    ]
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.CreatePortfolioCommand": {
+            "type": "object",
+            "required": [
+                "date_range_end",
+                "date_range_start",
+                "organization",
+                "title"
+            ],
+            "properties": {
+                "date_range_end": {
+                    "type": "string"
+                },
+                "date_range_start": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "include_assessments": {
+                    "type": "boolean"
+                },
+                "include_attendance": {
+                    "type": "boolean"
+                },
+                "organization": {
+                    "type": "string",
+                    "enum": [
+                        "by_subject",
+                        "chronological",
+                        "by_student"
+                    ]
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.CreateScheduleCommand": {
+            "type": "object",
+            "required": [
+                "name",
+                "school_days"
+            ],
+            "properties": {
+                "exclusion_periods": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.ExclusionPeriod"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "school_days": {
+                    "type": "array",
+                    "items": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        },
+        "comply.CreateTestScoreCommand": {
+            "type": "object",
+            "required": [
+                "scores",
+                "test_date",
+                "test_name"
+            ],
+            "properties": {
+                "composite_score": {
+                    "type": "number"
+                },
+                "grade_level": {
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "percentile": {
+                    "type": "integer"
+                },
+                "scores": {
+                    "type": "object"
+                },
+                "test_date": {
+                    "type": "string"
+                },
+                "test_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.CreateTranscriptCommand": {
+            "type": "object",
+            "required": [
+                "grade_levels",
+                "title"
+            ],
+            "properties": {
+                "grade_levels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.ExclusionPeriod": {
+            "type": "object",
+            "required": [
+                "end",
+                "label",
+                "start"
+            ],
+            "properties": {
+                "end": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "start": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.FamilyConfigResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "custom_schedule_id": {
+                    "type": "string"
+                },
+                "family_id": {
+                    "type": "string"
+                },
+                "gpa_scale": {
+                    "type": "string"
+                },
+                "school_year_end": {
+                    "type": "string"
+                },
+                "school_year_start": {
+                    "type": "string"
+                },
+                "state_code": {
+                    "type": "string"
+                },
+                "state_name": {
+                    "type": "string"
+                },
+                "total_school_days": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.GpaGradeLevelResponse": {
+            "type": "object",
+            "properties": {
+                "credits": {
+                    "type": "number"
+                },
+                "grade_level": {
+                    "type": "integer"
+                },
+                "unweighted": {
+                    "type": "number"
+                },
+                "weighted": {
+                    "type": "number"
+                }
+            }
+        },
+        "comply.GpaResponse": {
+            "type": "object",
+            "properties": {
+                "by_grade_level": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.GpaGradeLevelResponse"
+                    }
+                },
+                "total_courses": {
+                    "type": "integer"
+                },
+                "total_credits": {
+                    "type": "number"
+                },
+                "unweighted_gpa": {
+                    "type": "number"
+                },
+                "weighted_gpa": {
+                    "type": "number"
+                }
+            }
+        },
+        "comply.GpaTermResponse": {
+            "type": "object",
+            "properties": {
+                "course_count": {
+                    "type": "integer"
+                },
+                "credits": {
+                    "type": "number"
+                },
+                "school_year": {
+                    "type": "string"
+                },
+                "semester": {
+                    "type": "string"
+                },
+                "unweighted_gpa": {
+                    "type": "number"
+                },
+                "weighted_gpa": {
+                    "type": "number"
+                }
+            }
+        },
+        "comply.GpaWhatIfParams": {
+            "type": "object",
+            "required": [
+                "additional_courses"
+            ],
+            "properties": {
+                "additional_courses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.WhatIfCourse"
+                    }
+                }
+            }
+        },
+        "comply.PortfolioItemInput": {
+            "type": "object",
+            "required": [
+                "source_id",
+                "source_type"
+            ],
+            "properties": {
+                "source_id": {
+                    "type": "string"
+                },
+                "source_type": {
+                    "type": "string",
+                    "enum": [
+                        "activity",
+                        "journal",
+                        "project",
+                        "reading_list",
+                        "assessment"
+                    ]
+                }
+            }
+        },
+        "comply.PortfolioItemResponse": {
+            "type": "object",
+            "properties": {
+                "cached_date": {
+                    "type": "string"
+                },
+                "cached_description": {
+                    "type": "string"
+                },
+                "cached_subject": {
+                    "type": "string"
+                },
+                "cached_title": {
+                    "type": "string"
+                },
+                "display_order": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "source_id": {
+                    "type": "string"
+                },
+                "source_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.PortfolioResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "date_range_end": {
+                    "type": "string"
+                },
+                "date_range_start": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "include_assessments": {
+                    "type": "boolean"
+                },
+                "include_attendance": {
+                    "type": "boolean"
+                },
+                "item_count": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.PortfolioItemResponse"
+                    }
+                },
+                "organization": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.PortfolioSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "date_range_end": {
+                    "type": "string"
+                },
+                "date_range_start": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "item_count": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.RecordAttendanceCommand": {
+            "type": "object",
+            "required": [
+                "attendance_date",
+                "status"
+            ],
+            "properties": {
+                "attendance_date": {
+                    "type": "string"
+                },
+                "duration_minutes": {
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "present_full",
+                        "present_partial",
+                        "absent",
+                        "not_applicable"
+                    ]
+                }
+            }
+        },
+        "comply.ScheduleResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "exclusion_periods": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.ExclusionPeriod"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "school_days": {
+                    "type": "array",
+                    "items": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        },
+        "comply.StateConfigResponse": {
+            "type": "object",
+            "properties": {
+                "assessment_details": {
+                    "type": "string"
+                },
+                "assessment_required": {
+                    "type": "boolean"
+                },
+                "attendance_days": {
+                    "type": "integer"
+                },
+                "attendance_details": {
+                    "type": "string"
+                },
+                "attendance_hours": {
+                    "type": "integer"
+                },
+                "attendance_required": {
+                    "type": "boolean"
+                },
+                "notification_details": {
+                    "type": "string"
+                },
+                "notification_required": {
+                    "type": "boolean"
+                },
+                "record_keeping_details": {
+                    "type": "string"
+                },
+                "record_keeping_required": {
+                    "type": "boolean"
+                },
+                "regulation_level": {
+                    "type": "string"
+                },
+                "required_subjects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "state_code": {
+                    "type": "string"
+                },
+                "state_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.StateConfigSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "attendance_days": {
+                    "type": "integer"
+                },
+                "attendance_required": {
+                    "type": "boolean"
+                },
+                "regulation_level": {
+                    "type": "string"
+                },
+                "state_code": {
+                    "type": "string"
+                },
+                "state_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.StudentComplianceSummary": {
+            "type": "object",
+            "properties": {
+                "active_portfolios": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.PortfolioSummaryResponse"
+                    }
+                },
+                "attendance_summary": {
+                    "$ref": "#/definitions/comply.AttendanceSummaryResponse"
+                },
+                "pace_status": {
+                    "type": "string"
+                },
+                "recent_assessments_count": {
+                    "type": "integer"
+                },
+                "recent_tests_count": {
+                    "type": "integer"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "student_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.TestListResponse": {
+            "type": "object",
+            "properties": {
+                "next_cursor": {
+                    "type": "string"
+                },
+                "tests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.TestScoreResponse"
+                    }
+                }
+            }
+        },
+        "comply.TestScoreResponse": {
+            "type": "object",
+            "properties": {
+                "composite_score": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "grade_level": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "percentile": {
+                    "type": "integer"
+                },
+                "scores": {
+                    "type": "object"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "test_date": {
+                    "type": "string"
+                },
+                "test_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.TranscriptResponse": {
+            "type": "object",
+            "properties": {
+                "courses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.CourseResponse"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "gpa_unweighted": {
+                    "type": "number"
+                },
+                "gpa_weighted": {
+                    "type": "number"
+                },
+                "grade_levels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "student_name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.TranscriptSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "grade_levels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.UpdateAssessmentCommand": {
+            "type": "object",
+            "properties": {
+                "assessment_date": {
+                    "type": "string"
+                },
+                "grade_letter": {
+                    "type": "string"
+                },
+                "grade_points": {
+                    "type": "number"
+                },
+                "is_passing": {
+                    "type": "boolean"
+                },
+                "max_score": {
+                    "type": "number"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.UpdateAttendanceCommand": {
+            "type": "object",
+            "properties": {
+                "duration_minutes": {
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.UpdateCourseCommand": {
+            "type": "object",
+            "properties": {
+                "credits": {
+                    "type": "number"
+                },
+                "grade_letter": {
+                    "type": "string"
+                },
+                "grade_points": {
+                    "type": "number"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "semester": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.UpdateScheduleCommand": {
+            "type": "object",
+            "properties": {
+                "exclusion_periods": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/comply.ExclusionPeriod"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "school_days": {
+                    "type": "array",
+                    "items": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        },
+        "comply.UpdateTestScoreCommand": {
+            "type": "object",
+            "properties": {
+                "composite_score": {
+                    "type": "number"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "percentile": {
+                    "type": "integer"
+                },
+                "scores": {
+                    "type": "object"
+                },
+                "test_date": {
+                    "type": "string"
+                },
+                "test_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "comply.UpsertFamilyConfigCommand": {
+            "type": "object",
+            "required": [
+                "gpa_scale",
+                "school_year_end",
+                "school_year_start",
+                "state_code",
+                "total_school_days"
+            ],
+            "properties": {
+                "custom_schedule_id": {
+                    "type": "string"
+                },
+                "gpa_custom_config": {
+                    "type": "object"
+                },
+                "gpa_scale": {
+                    "type": "string",
+                    "enum": [
+                        "standard_4",
+                        "weighted",
+                        "custom"
+                    ]
+                },
+                "school_year_end": {
+                    "type": "string"
+                },
+                "school_year_start": {
+                    "type": "string"
+                },
+                "state_code": {
+                    "type": "string"
+                },
+                "total_school_days": {
+                    "type": "integer"
+                }
+            }
+        },
+        "comply.WhatIfCourse": {
+            "type": "object",
+            "required": [
+                "credits",
+                "grade_points",
+                "level"
+            ],
+            "properties": {
+                "credits": {
+                    "type": "number"
+                },
+                "grade_points": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "regular",
+                        "honors",
+                        "ap"
+                    ]
                 }
             }
         },

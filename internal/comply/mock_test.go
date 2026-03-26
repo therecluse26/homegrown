@@ -74,11 +74,12 @@ func (s *stubFamilyConfigRepo) DeleteByFamily(ctx context.Context, familyID uuid
 // ─── stubScheduleRepo ─────────────────────────────────────────────────────────
 
 type stubScheduleRepo struct {
-	createFn       func(ctx context.Context, scope shared.FamilyScope, input CreateScheduleRow) (*ComplyCustomSchedule, error)
-	findByIDFn     func(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) (*ComplyCustomSchedule, error)
-	listByFamilyFn func(ctx context.Context, scope shared.FamilyScope) ([]ComplyCustomSchedule, error)
-	updateFn       func(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope, updates UpdateScheduleRow) (*ComplyCustomSchedule, error)
-	deleteFn       func(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) error
+	createFn         func(ctx context.Context, scope shared.FamilyScope, input CreateScheduleRow) (*ComplyCustomSchedule, error)
+	findByIDFn       func(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) (*ComplyCustomSchedule, error)
+	listByFamilyFn   func(ctx context.Context, scope shared.FamilyScope) ([]ComplyCustomSchedule, error)
+	updateFn         func(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope, updates UpdateScheduleRow) (*ComplyCustomSchedule, error)
+	deleteFn         func(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) error
+	deleteByFamilyFn func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubScheduleRepo) Create(ctx context.Context, scope shared.FamilyScope, input CreateScheduleRow) (*ComplyCustomSchedule, error) {
@@ -116,17 +117,25 @@ func (s *stubScheduleRepo) Delete(ctx context.Context, scheduleID uuid.UUID, sco
 	panic("stubScheduleRepo.Delete not stubbed")
 }
 
+func (s *stubScheduleRepo) DeleteByFamily(ctx context.Context, familyID uuid.UUID) error {
+	if s.deleteByFamilyFn != nil {
+		return s.deleteByFamilyFn(ctx, familyID)
+	}
+	return nil // default: no-op for tests that don't care
+}
+
 // ─── stubAttendanceRepo ───────────────────────────────────────────────────────
 
 type stubAttendanceRepo struct {
-	upsertFn          func(ctx context.Context, scope shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error)
-	findByIDFn        func(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) (*ComplyAttendance, error)
-	listByStudentFn   func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *AttendanceListParams) ([]ComplyAttendance, error)
-	summarizeFn       func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, startDate time.Time, endDate time.Time) (*AttendanceSummaryRow, error)
-	updateFn          func(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope, updates UpdateAttendanceRow) (*ComplyAttendance, error)
-	deleteFn          func(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) error
-	deleteByStudentFn func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
-	deleteByFamilyFn  func(ctx context.Context, familyID uuid.UUID) error
+	upsertFn               func(ctx context.Context, scope shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error)
+	findByIDFn             func(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) (*ComplyAttendance, error)
+	findByStudentAndDateFn func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, date time.Time) (*ComplyAttendance, error)
+	listByStudentFn        func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *AttendanceListParams) ([]ComplyAttendance, error)
+	summarizeFn            func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, startDate time.Time, endDate time.Time) (*AttendanceSummaryRow, error)
+	updateFn               func(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope, updates UpdateAttendanceRow) (*ComplyAttendance, error)
+	deleteFn               func(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) error
+	deleteByStudentFn      func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	deleteByFamilyFn       func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubAttendanceRepo) Upsert(ctx context.Context, scope shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error) {
@@ -134,6 +143,13 @@ func (s *stubAttendanceRepo) Upsert(ctx context.Context, scope shared.FamilyScop
 		return s.upsertFn(ctx, scope, input)
 	}
 	panic("stubAttendanceRepo.Upsert not stubbed")
+}
+
+func (s *stubAttendanceRepo) FindByStudentAndDate(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, date time.Time) (*ComplyAttendance, error) {
+	if s.findByStudentAndDateFn != nil {
+		return s.findByStudentAndDateFn(ctx, studentID, scope, date)
+	}
+	return nil, nil // default: no existing record
 }
 
 func (s *stubAttendanceRepo) FindByID(ctx context.Context, attendanceID uuid.UUID, scope shared.FamilyScope) (*ComplyAttendance, error) {
@@ -194,6 +210,7 @@ type stubAssessmentRepo struct {
 	updateFn          func(ctx context.Context, assessmentID uuid.UUID, scope shared.FamilyScope, updates UpdateAssessmentRow) (*ComplyAssessmentRecord, error)
 	deleteFn          func(ctx context.Context, assessmentID uuid.UUID, scope shared.FamilyScope) error
 	deleteByStudentFn func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	deleteByFamilyFn  func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubAssessmentRepo) Create(ctx context.Context, scope shared.FamilyScope, input CreateAssessmentRow) (*ComplyAssessmentRecord, error) {
@@ -238,13 +255,22 @@ func (s *stubAssessmentRepo) DeleteByStudent(ctx context.Context, studentID uuid
 	panic("stubAssessmentRepo.DeleteByStudent not stubbed")
 }
 
+func (s *stubAssessmentRepo) DeleteByFamily(ctx context.Context, familyID uuid.UUID) error {
+	if s.deleteByFamilyFn != nil {
+		return s.deleteByFamilyFn(ctx, familyID)
+	}
+	return nil
+}
+
 // ─── stubTestScoreRepo ────────────────────────────────────────────────────────
 
 type stubTestScoreRepo struct {
-	createFn        func(ctx context.Context, scope shared.FamilyScope, input CreateTestScoreRow) (*ComplyStandardizedTest, error)
-	listByStudentFn func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *TestListParams) ([]ComplyStandardizedTest, error)
-	updateFn        func(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope, updates UpdateTestScoreRow) (*ComplyStandardizedTest, error)
-	deleteFn        func(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope) error
+	createFn          func(ctx context.Context, scope shared.FamilyScope, input CreateTestScoreRow) (*ComplyStandardizedTest, error)
+	listByStudentFn   func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *TestListParams) ([]ComplyStandardizedTest, error)
+	updateFn          func(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope, updates UpdateTestScoreRow) (*ComplyStandardizedTest, error)
+	deleteFn          func(ctx context.Context, testID uuid.UUID, scope shared.FamilyScope) error
+	deleteByStudentFn func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	deleteByFamilyFn  func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubTestScoreRepo) Create(ctx context.Context, scope shared.FamilyScope, input CreateTestScoreRow) (*ComplyStandardizedTest, error) {
@@ -275,14 +301,30 @@ func (s *stubTestScoreRepo) Delete(ctx context.Context, testID uuid.UUID, scope 
 	panic("stubTestScoreRepo.Delete not stubbed")
 }
 
+func (s *stubTestScoreRepo) DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error {
+	if s.deleteByStudentFn != nil {
+		return s.deleteByStudentFn(ctx, studentID, familyID)
+	}
+	return nil
+}
+
+func (s *stubTestScoreRepo) DeleteByFamily(ctx context.Context, familyID uuid.UUID) error {
+	if s.deleteByFamilyFn != nil {
+		return s.deleteByFamilyFn(ctx, familyID)
+	}
+	return nil
+}
+
 // ─── stubPortfolioRepo ────────────────────────────────────────────────────────
 
 type stubPortfolioRepo struct {
-	createFn        func(ctx context.Context, scope shared.FamilyScope, input CreatePortfolioRow) (*ComplyPortfolio, error)
-	findByIDFn      func(ctx context.Context, portfolioID uuid.UUID, scope shared.FamilyScope) (*ComplyPortfolio, error)
-	listByStudentFn func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyPortfolio, error)
-	updateStatusFn  func(ctx context.Context, portfolioID uuid.UUID, status string, uploadID *uuid.UUID, errorMessage *string) (*ComplyPortfolio, error)
-	findExpiredFn   func(ctx context.Context, before time.Time) ([]ComplyPortfolio, error)
+	createFn          func(ctx context.Context, scope shared.FamilyScope, input CreatePortfolioRow) (*ComplyPortfolio, error)
+	findByIDFn        func(ctx context.Context, portfolioID uuid.UUID, scope shared.FamilyScope) (*ComplyPortfolio, error)
+	listByStudentFn   func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyPortfolio, error)
+	updateStatusFn    func(ctx context.Context, portfolioID uuid.UUID, status string, uploadID *uuid.UUID, errorMessage *string) (*ComplyPortfolio, error)
+	findExpiredFn     func(ctx context.Context, before time.Time) ([]ComplyPortfolio, error)
+	deleteByStudentFn func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	deleteByFamilyFn  func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubPortfolioRepo) Create(ctx context.Context, scope shared.FamilyScope, input CreatePortfolioRow) (*ComplyPortfolio, error) {
@@ -320,12 +362,29 @@ func (s *stubPortfolioRepo) FindExpired(ctx context.Context, before time.Time) (
 	panic("stubPortfolioRepo.FindExpired not stubbed")
 }
 
+func (s *stubPortfolioRepo) DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error {
+	if s.deleteByStudentFn != nil {
+		return s.deleteByStudentFn(ctx, studentID, familyID)
+	}
+	return nil
+}
+
+func (s *stubPortfolioRepo) DeleteByFamily(ctx context.Context, familyID uuid.UUID) error {
+	if s.deleteByFamilyFn != nil {
+		return s.deleteByFamilyFn(ctx, familyID)
+	}
+	return nil
+}
+
 // ─── stubPortfolioItemRepo ────────────────────────────────────────────────────
 
 type stubPortfolioItemRepo struct {
-	createBatchFn     func(ctx context.Context, items []CreatePortfolioItemRow) ([]ComplyPortfolioItem, error)
-	listByPortfolioFn func(ctx context.Context, portfolioID uuid.UUID) ([]ComplyPortfolioItem, error)
+	createBatchFn       func(ctx context.Context, items []CreatePortfolioItemRow) ([]ComplyPortfolioItem, error)
+	listByPortfolioFn   func(ctx context.Context, portfolioID uuid.UUID) ([]ComplyPortfolioItem, error)
+	countByPortfolioFn  func(ctx context.Context, portfolioID uuid.UUID) (int32, error)
 	deleteByPortfolioFn func(ctx context.Context, portfolioID uuid.UUID) error
+	deleteByStudentFn   func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	deleteByFamilyFn    func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubPortfolioItemRepo) CreateBatch(ctx context.Context, items []CreatePortfolioItemRow) ([]ComplyPortfolioItem, error) {
@@ -342,6 +401,13 @@ func (s *stubPortfolioItemRepo) ListByPortfolio(ctx context.Context, portfolioID
 	panic("stubPortfolioItemRepo.ListByPortfolio not stubbed")
 }
 
+func (s *stubPortfolioItemRepo) CountByPortfolio(ctx context.Context, portfolioID uuid.UUID) (int32, error) {
+	if s.countByPortfolioFn != nil {
+		return s.countByPortfolioFn(ctx, portfolioID)
+	}
+	return 0, nil
+}
+
 func (s *stubPortfolioItemRepo) DeleteByPortfolio(ctx context.Context, portfolioID uuid.UUID) error {
 	if s.deleteByPortfolioFn != nil {
 		return s.deleteByPortfolioFn(ctx, portfolioID)
@@ -349,14 +415,30 @@ func (s *stubPortfolioItemRepo) DeleteByPortfolio(ctx context.Context, portfolio
 	panic("stubPortfolioItemRepo.DeleteByPortfolio not stubbed")
 }
 
+func (s *stubPortfolioItemRepo) DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error {
+	if s.deleteByStudentFn != nil {
+		return s.deleteByStudentFn(ctx, studentID, familyID)
+	}
+	return nil
+}
+
+func (s *stubPortfolioItemRepo) DeleteByFamily(ctx context.Context, familyID uuid.UUID) error {
+	if s.deleteByFamilyFn != nil {
+		return s.deleteByFamilyFn(ctx, familyID)
+	}
+	return nil
+}
+
 // ─── stubTranscriptRepo ──────────────────────────────────────────────────────
 
 type stubTranscriptRepo struct {
-	createFn        func(ctx context.Context, scope shared.FamilyScope, input CreateTranscriptRow) (*ComplyTranscript, error)
-	findByIDFn      func(ctx context.Context, transcriptID uuid.UUID, scope shared.FamilyScope) (*ComplyTranscript, error)
-	listByStudentFn func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyTranscript, error)
-	updateStatusFn  func(ctx context.Context, transcriptID uuid.UUID, status string, uploadID *uuid.UUID, gpaUnweighted *float64, gpaWeighted *float64, errorMessage *string) (*ComplyTranscript, error)
-	deleteFn        func(ctx context.Context, transcriptID uuid.UUID, scope shared.FamilyScope) error
+	createFn          func(ctx context.Context, scope shared.FamilyScope, input CreateTranscriptRow) (*ComplyTranscript, error)
+	findByIDFn        func(ctx context.Context, transcriptID uuid.UUID, scope shared.FamilyScope) (*ComplyTranscript, error)
+	listByStudentFn   func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]ComplyTranscript, error)
+	updateStatusFn    func(ctx context.Context, transcriptID uuid.UUID, status string, uploadID *uuid.UUID, gpaUnweighted *float64, gpaWeighted *float64, errorMessage *string) (*ComplyTranscript, error)
+	deleteFn          func(ctx context.Context, transcriptID uuid.UUID, scope shared.FamilyScope) error
+	deleteByStudentFn func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	deleteByFamilyFn  func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubTranscriptRepo) Create(ctx context.Context, scope shared.FamilyScope, input CreateTranscriptRow) (*ComplyTranscript, error) {
@@ -394,13 +476,29 @@ func (s *stubTranscriptRepo) Delete(ctx context.Context, transcriptID uuid.UUID,
 	panic("stubTranscriptRepo.Delete not stubbed")
 }
 
+func (s *stubTranscriptRepo) DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error {
+	if s.deleteByStudentFn != nil {
+		return s.deleteByStudentFn(ctx, studentID, familyID)
+	}
+	return nil
+}
+
+func (s *stubTranscriptRepo) DeleteByFamily(ctx context.Context, familyID uuid.UUID) error {
+	if s.deleteByFamilyFn != nil {
+		return s.deleteByFamilyFn(ctx, familyID)
+	}
+	return nil
+}
+
 // ─── stubCourseRepo ──────────────────────────────────────────────────────────
 
 type stubCourseRepo struct {
-	createFn        func(ctx context.Context, scope shared.FamilyScope, input CreateCourseRow) (*ComplyCourse, error)
-	listByStudentFn func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *CourseListParams) ([]ComplyCourse, error)
-	updateFn        func(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope, updates UpdateCourseRow) (*ComplyCourse, error)
-	deleteFn        func(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope) error
+	createFn          func(ctx context.Context, scope shared.FamilyScope, input CreateCourseRow) (*ComplyCourse, error)
+	listByStudentFn   func(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope, params *CourseListParams) ([]ComplyCourse, error)
+	updateFn          func(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope, updates UpdateCourseRow) (*ComplyCourse, error)
+	deleteFn          func(ctx context.Context, courseID uuid.UUID, scope shared.FamilyScope) error
+	deleteByStudentFn func(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error
+	deleteByFamilyFn  func(ctx context.Context, familyID uuid.UUID) error
 }
 
 func (s *stubCourseRepo) Create(ctx context.Context, scope shared.FamilyScope, input CreateCourseRow) (*ComplyCourse, error) {
@@ -429,6 +527,20 @@ func (s *stubCourseRepo) Delete(ctx context.Context, courseID uuid.UUID, scope s
 		return s.deleteFn(ctx, courseID, scope)
 	}
 	panic("stubCourseRepo.Delete not stubbed")
+}
+
+func (s *stubCourseRepo) DeleteByStudent(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) error {
+	if s.deleteByStudentFn != nil {
+		return s.deleteByStudentFn(ctx, studentID, familyID)
+	}
+	return nil
+}
+
+func (s *stubCourseRepo) DeleteByFamily(ctx context.Context, familyID uuid.UUID) error {
+	if s.deleteByFamilyFn != nil {
+		return s.deleteByFamilyFn(ctx, familyID)
+	}
+	return nil
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
