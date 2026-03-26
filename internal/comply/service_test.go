@@ -1188,6 +1188,28 @@ func TestUpdateTestScore_UpdatesExisting(t *testing.T) {
 	}
 }
 
+func TestUpdateTestScore_ReturnsNotFound(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	testRepo := &stubTestScoreRepo{
+		updateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ UpdateTestScoreRow) (*ComplyStandardizedTest, error) {
+			return nil, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, testRepo, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	_, err := svc.UpdateTestScore(context.Background(), studentID, uuid.Must(uuid.NewV7()), UpdateTestScoreCommand{}, *scope)
+	if !errors.Is(err, ErrTestScoreNotFound) {
+		t.Fatalf("got %v, want ErrTestScoreNotFound", err)
+	}
+}
+
 func TestDeleteTestScore_DeletesRecord(t *testing.T) {
 	scope := testScope()
 	studentID := uuid.Must(uuid.NewV7())
@@ -2298,6 +2320,28 @@ func TestUpdateCourse_UpdatesExisting(t *testing.T) {
 	}
 	if resp.Title != "Algebra II" {
 		t.Fatalf("got title=%q, want Algebra II", resp.Title)
+	}
+}
+
+func TestUpdateCourse_ReturnsNotFound(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		updateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ UpdateCourseRow) (*ComplyCourse, error) {
+			return nil, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	_, err := svc.UpdateCourse(context.Background(), studentID, uuid.Must(uuid.NewV7()), UpdateCourseCommand{}, *scope)
+	if !errors.Is(err, ErrCourseNotFound) {
+		t.Fatalf("got %v, want ErrCourseNotFound", err)
 	}
 }
 

@@ -373,6 +373,9 @@ func (s *ComplianceServiceImpl) UpdateTestScore(ctx context.Context, studentID u
 	if err != nil {
 		return nil, err
 	}
+	if updated == nil {
+		return nil, ErrTestScoreNotFound
+	}
 	return mapTestScoreToResponse(updated), nil
 }
 
@@ -582,6 +585,9 @@ func (s *ComplianceServiceImpl) UpdateCourse(ctx context.Context, studentID uuid
 	updated, err := s.courseRepo.Update(ctx, courseID, scope, UpdateCourseRow(cmd))
 	if err != nil {
 		return nil, err
+	}
+	if updated == nil {
+		return nil, ErrCourseNotFound
 	}
 	return mapCourseToResponse(updated), nil
 }
