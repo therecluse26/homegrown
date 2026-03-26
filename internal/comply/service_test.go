@@ -1855,6 +1855,590 @@ func TestGetDashboard_ReturnsStudentSummaries(t *testing.T) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Group J: Transcripts (J1–J7)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func TestCreateTranscript_CreatesInConfiguringStatus(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+		getStudentNameFn: func(_ context.Context, _ uuid.UUID) (string, error) {
+			return "Alice Johnson", nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		createFn: func(_ context.Context, _ shared.FamilyScope, input CreateTranscriptRow) (*ComplyTranscript, error) {
+			return &ComplyTranscript{
+				ID:          uuid.Must(uuid.NewV7()),
+				FamilyID:    scope.FamilyID(),
+				StudentID:   input.StudentID,
+				Title:       input.Title,
+				StudentName: input.StudentName,
+				GradeLevels: input.GradeLevels,
+				Status:      string(PortfolioStatusConfiguring),
+				CreatedAt:   time.Now().UTC(),
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	resp, err := svc.CreateTranscript(context.Background(), studentID, CreateTranscriptCommand{
+		Title:       "High School Transcript",
+		GradeLevels: []string{"9", "10"},
+	}, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Status != "configuring" {
+		t.Fatalf("got status=%q, want configuring", resp.Status)
+	}
+	if resp.StudentName != "Alice Johnson" {
+		t.Fatalf("got student_name=%q, want Alice Johnson", resp.StudentName)
+	}
+}
+
+func TestGenerateTranscript_TransitionsToGenerating(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	transcriptID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		findByIDFn: func(_ context.Context, id uuid.UUID, _ shared.FamilyScope) (*ComplyTranscript, error) {
+			if id == transcriptID {
+				return &ComplyTranscript{
+					ID:     transcriptID,
+					Status: string(PortfolioStatusConfiguring),
+				}, nil
+			}
+			return nil, nil
+		},
+		updateStatusFn: func(_ context.Context, _ uuid.UUID, status string, _ *uuid.UUID, _ *float64, _ *float64, _ *string) (*ComplyTranscript, error) {
+			return &ComplyTranscript{
+				ID:     transcriptID,
+				Status: status,
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	resp, err := svc.GenerateTranscript(context.Background(), studentID, transcriptID, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Status != "generating" {
+		t.Fatalf("got status=%q, want generating", resp.Status)
+	}
+}
+
+func TestGenerateTranscript_RejectsNonConfiguring(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	transcriptID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyTranscript, error) {
+			return &ComplyTranscript{
+				ID:     transcriptID,
+				Status: string(PortfolioStatusReady),
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	_, err := svc.GenerateTranscript(context.Background(), studentID, transcriptID, *scope)
+	var transErr *domain.InvalidPortfolioTransitionError
+	if !errors.As(err, &transErr) {
+		t.Fatalf("got %v, want InvalidPortfolioTransitionError", err)
+	}
+}
+
+func TestGetTranscript_ReturnsCourseAndGPA(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	transcriptID := uuid.Must(uuid.NewV7())
+	gp := 3.5
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyTranscript, error) {
+			return &ComplyTranscript{
+				ID:          transcriptID,
+				StudentID:   studentID,
+				Title:       "HS Transcript",
+				StudentName: "Alice",
+				Status:      "configuring",
+				CreatedAt:   time.Now().UTC(),
+			}, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		listByStudentFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ *CourseListParams) ([]ComplyCourse, error) {
+			return []ComplyCourse{
+				{ID: uuid.Must(uuid.NewV7()), StudentID: studentID, Title: "Algebra I", Credits: 1.0, GradePoints: &gp, Level: "regular", GradeLevel: 9},
+			}, nil
+		},
+	}
+	familyConfigRepo := &stubFamilyConfigRepo{
+		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
+			return &ComplyFamilyConfig{GpaScale: "standard_4"}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, familyConfigRepo, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	resp, err := svc.GetTranscript(context.Background(), studentID, transcriptID, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Courses) != 1 {
+		t.Fatalf("got %d courses, want 1", len(resp.Courses))
+	}
+	if resp.GPAUnweighted == nil || *resp.GPAUnweighted != 3.5 {
+		t.Fatalf("got gpa_unweighted=%v, want 3.5", resp.GPAUnweighted)
+	}
+}
+
+func TestListTranscripts_ReturnsForStudent(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		listByStudentFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) ([]ComplyTranscript, error) {
+			return []ComplyTranscript{
+				{ID: uuid.Must(uuid.NewV7()), Title: "9th Grade", Status: "configuring", GradeLevels: []string{"9"}, CreatedAt: time.Now().UTC()},
+				{ID: uuid.Must(uuid.NewV7()), Title: "10th Grade", Status: "ready", GradeLevels: []string{"10"}, CreatedAt: time.Now().UTC()},
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	results, err := svc.ListTranscripts(context.Background(), studentID, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("got %d transcripts, want 2", len(results))
+	}
+	if results[0].Title != "9th Grade" {
+		t.Fatalf("got title=%q, want 9th Grade", results[0].Title)
+	}
+}
+
+func TestDeleteTranscript_DeletesExisting(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	transcriptID := uuid.Must(uuid.NewV7())
+	deleted := false
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyTranscript, error) {
+			return &ComplyTranscript{ID: transcriptID, Status: "configuring"}, nil
+		},
+		deleteFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) error {
+			deleted = true
+			return nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	err := svc.DeleteTranscript(context.Background(), studentID, transcriptID, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Fatal("expected transcript to be deleted")
+	}
+}
+
+func TestGetTranscriptDownloadURL_ReturnsPresignedURL(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	transcriptID := uuid.Must(uuid.NewV7())
+	uploadID := uuid.Must(uuid.NewV7())
+	future := time.Now().UTC().Add(24 * time.Hour)
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyTranscript, error) {
+			return &ComplyTranscript{
+				ID:        transcriptID,
+				Status:    string(PortfolioStatusReady),
+				UploadID:  &uploadID,
+				ExpiresAt: &future,
+			}, nil
+		},
+	}
+	mediaSvc := &stubMediaService{
+		presignedGetFn: func(_ context.Context, id uuid.UUID) (string, error) {
+			if id == uploadID {
+				return "https://cdn.example.com/transcript.pdf?sig=abc", nil
+			}
+			return "", nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, mediaSvc)
+
+	url, err := svc.GetTranscriptDownloadURL(context.Background(), studentID, transcriptID, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if url != "https://cdn.example.com/transcript.pdf?sig=abc" {
+		t.Fatalf("got url=%q, want presigned URL", url)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Group K: Courses (K1–K5)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func TestCreateCourse_CreatesWithValidLevel(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	gp := 3.7
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		createFn: func(_ context.Context, _ shared.FamilyScope, input CreateCourseRow) (*ComplyCourse, error) {
+			return &ComplyCourse{
+				ID:          uuid.Must(uuid.NewV7()),
+				FamilyID:    scope.FamilyID(),
+				StudentID:   input.StudentID,
+				Title:       input.Title,
+				Subject:     input.Subject,
+				GradeLevel:  input.GradeLevel,
+				Credits:     input.Credits,
+				GradeLetter: input.GradeLetter,
+				GradePoints: input.GradePoints,
+				Level:       input.Level,
+				SchoolYear:  input.SchoolYear,
+				Semester:    input.Semester,
+				CreatedAt:   time.Now().UTC(),
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	resp, err := svc.CreateCourse(context.Background(), studentID, CreateCourseCommand{
+		Title:       "Algebra I",
+		Subject:     "Mathematics",
+		GradeLevel:  9,
+		Credits:     1.0,
+		GradePoints: &gp,
+		Level:       "regular",
+		SchoolYear:  "2025-2026",
+	}, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Title != "Algebra I" {
+		t.Fatalf("got title=%q, want Algebra I", resp.Title)
+	}
+	if resp.Level != "regular" {
+		t.Fatalf("got level=%q, want regular", resp.Level)
+	}
+}
+
+func TestCreateCourse_ValidatesStudentInFamily(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return false, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	_, err := svc.CreateCourse(context.Background(), studentID, CreateCourseCommand{
+		Title:      "Algebra I",
+		Subject:    "Mathematics",
+		GradeLevel: 9,
+		Credits:    1.0,
+		Level:      "regular",
+		SchoolYear: "2025-2026",
+	}, *scope)
+	if !errors.Is(err, ErrStudentNotInFamily) {
+		t.Fatalf("got %v, want ErrStudentNotInFamily", err)
+	}
+}
+
+func TestListCourses_FiltersByGradeLevelAndSchoolYear(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	var capturedParams *CourseListParams
+	courseRepo := &stubCourseRepo{
+		listByStudentFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, params *CourseListParams) ([]ComplyCourse, error) {
+			capturedParams = params
+			return []ComplyCourse{
+				{ID: uuid.Must(uuid.NewV7()), Title: "Algebra I", GradeLevel: 9, SchoolYear: "2025-2026", Level: "regular", Credits: 1.0},
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	gl := int16(9)
+	sy := "2025-2026"
+	resp, err := svc.ListCourses(context.Background(), studentID, CourseListParams{GradeLevel: &gl, SchoolYear: &sy}, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Courses) != 1 {
+		t.Fatalf("got %d courses, want 1", len(resp.Courses))
+	}
+	if capturedParams == nil || capturedParams.GradeLevel == nil || *capturedParams.GradeLevel != 9 {
+		t.Fatal("expected params to pass through grade_level=9")
+	}
+}
+
+func TestUpdateCourse_UpdatesExisting(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	courseID := uuid.Must(uuid.NewV7())
+	newTitle := "Algebra II"
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		updateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, updates UpdateCourseRow) (*ComplyCourse, error) {
+			return &ComplyCourse{
+				ID:        courseID,
+				StudentID: studentID,
+				Title:     *updates.Title,
+				Level:     "regular",
+				Credits:   1.0,
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	resp, err := svc.UpdateCourse(context.Background(), studentID, courseID, UpdateCourseCommand{Title: &newTitle}, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Title != "Algebra II" {
+		t.Fatalf("got title=%q, want Algebra II", resp.Title)
+	}
+}
+
+func TestDeleteCourse_DeletesExisting(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	courseID := uuid.Must(uuid.NewV7())
+	deleted := false
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		deleteFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) error {
+			deleted = true
+			return nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	err := svc.DeleteCourse(context.Background(), studentID, courseID, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Fatal("expected course to be deleted")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Group L: GPA Service (L1–L3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func TestCalculateGPA_ReturnsWithGradeLevelBreakdown(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	gp4 := 4.0
+	gp3 := 3.0
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		listByStudentFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ *CourseListParams) ([]ComplyCourse, error) {
+			return []ComplyCourse{
+				{ID: uuid.Must(uuid.NewV7()), Title: "Algebra I", GradeLevel: 9, Credits: 1.0, GradePoints: &gp4, Level: "regular"},
+				{ID: uuid.Must(uuid.NewV7()), Title: "English 9", GradeLevel: 9, Credits: 1.0, GradePoints: &gp3, Level: "regular"},
+				{ID: uuid.Must(uuid.NewV7()), Title: "Biology", GradeLevel: 10, Credits: 1.0, GradePoints: &gp4, Level: "honors"},
+			}, nil
+		},
+	}
+	familyConfigRepo := &stubFamilyConfigRepo{
+		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
+			return &ComplyFamilyConfig{GpaScale: "standard_4"}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, familyConfigRepo, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	resp, err := svc.CalculateGPA(context.Background(), studentID, GpaParams{}, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.TotalCourses != 3 {
+		t.Fatalf("got total_courses=%d, want 3", resp.TotalCourses)
+	}
+	if resp.TotalCredits != 3.0 {
+		t.Fatalf("got total_credits=%v, want 3.0", resp.TotalCredits)
+	}
+	if len(resp.ByGradeLevel) != 2 {
+		t.Fatalf("got %d grade levels, want 2", len(resp.ByGradeLevel))
+	}
+	// Grade 9: (4.0*1 + 3.0*1)/2 = 3.5
+	if resp.ByGradeLevel[0].GradeLevel != 9 {
+		t.Fatalf("got first grade_level=%d, want 9", resp.ByGradeLevel[0].GradeLevel)
+	}
+	if resp.ByGradeLevel[0].Unweighted != 3.5 {
+		t.Fatalf("got grade 9 unweighted=%v, want 3.5", resp.ByGradeLevel[0].Unweighted)
+	}
+	// Grade 10: 4.0/1 = 4.0 unweighted, (4.0+0.5)/1 = 4.5 weighted (honors)
+	if resp.ByGradeLevel[1].Weighted != 4.5 {
+		t.Fatalf("got grade 10 weighted=%v, want 4.5", resp.ByGradeLevel[1].Weighted)
+	}
+}
+
+func TestCalculateGPAWhatIf_ProjectsWithHypotheticalCourses(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	gp3 := 3.0
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		listByStudentFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ *CourseListParams) ([]ComplyCourse, error) {
+			return []ComplyCourse{
+				{ID: uuid.Must(uuid.NewV7()), Title: "Algebra I", Credits: 1.0, GradePoints: &gp3, Level: "regular"},
+			}, nil
+		},
+	}
+	familyConfigRepo := &stubFamilyConfigRepo{
+		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
+			return &ComplyFamilyConfig{GpaScale: "standard_4"}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, familyConfigRepo, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	resp, err := svc.CalculateGPAWhatIf(context.Background(), studentID, GpaWhatIfParams{
+		AdditionalCourses: []WhatIfCourse{
+			{Credits: 1.0, GradePoints: 4.0, Level: "regular"},
+		},
+	}, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.TotalCourses != 2 {
+		t.Fatalf("got total_courses=%d, want 2", resp.TotalCourses)
+	}
+	// (3.0*1 + 4.0*1) / 2 = 3.5
+	if resp.UnweightedGPA != 3.5 {
+		t.Fatalf("got unweighted_gpa=%v, want 3.5", resp.UnweightedGPA)
+	}
+}
+
+func TestGetGPAHistory_ReturnsBySchoolYear(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	gp4 := 4.0
+	gp3 := 3.0
+	fall := "fall"
+	spring := "spring"
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	courseRepo := &stubCourseRepo{
+		listByStudentFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ *CourseListParams) ([]ComplyCourse, error) {
+			return []ComplyCourse{
+				{ID: uuid.Must(uuid.NewV7()), Title: "Algebra I", Credits: 1.0, GradePoints: &gp4, Level: "regular", SchoolYear: "2024-2025", Semester: &fall},
+				{ID: uuid.Must(uuid.NewV7()), Title: "English 9", Credits: 1.0, GradePoints: &gp3, Level: "regular", SchoolYear: "2024-2025", Semester: &spring},
+				{ID: uuid.Must(uuid.NewV7()), Title: "Geometry", Credits: 1.0, GradePoints: &gp4, Level: "regular", SchoolYear: "2025-2026", Semester: &fall},
+			}, nil
+		},
+	}
+	familyConfigRepo := &stubFamilyConfigRepo{
+		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
+			return &ComplyFamilyConfig{GpaScale: "standard_4"}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, familyConfigRepo, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, courseRepo, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	results, err := svc.GetGPAHistory(context.Background(), studentID, *scope)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("got %d terms, want 3", len(results))
+	}
+	// Sorted: 2024-2025 fall, 2024-2025 spring, 2025-2026 fall
+	if results[0].SchoolYear != "2024-2025" || *results[0].Semester != "fall" {
+		t.Fatalf("got first term=%s/%v, want 2024-2025/fall", results[0].SchoolYear, results[0].Semester)
+	}
+	if results[0].UnweightedGPA != 4.0 {
+		t.Fatalf("got first term gpa=%v, want 4.0", results[0].UnweightedGPA)
+	}
+	if results[2].SchoolYear != "2025-2026" {
+		t.Fatalf("got last school_year=%q, want 2025-2026", results[2].SchoolYear)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Test Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 

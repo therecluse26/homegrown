@@ -16,6 +16,7 @@ import (
 // Implemented by a function adapter in main.go over iam.Service.
 type IamServiceForComply interface {
 	StudentBelongsToFamily(ctx context.Context, studentID uuid.UUID, familyID shared.FamilyID) (bool, error)
+	GetStudentName(ctx context.Context, studentID uuid.UUID) (string, error)
 }
 
 // LearningServiceForComply is a consumer-defined interface for cross-domain reads from learn::.

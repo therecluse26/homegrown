@@ -127,20 +127,20 @@ Service-layer tests with mock repos.
 
 Needs mock repos + state config from Groups B–C.
 
-- [ ] **D1.** RecordAttendance: creates manual record with manual_override=true, is_auto=false
-- [ ] **D2.** RecordAttendance: upserts over auto-generated record for same date (manual wins)
-- [ ] **D3.** RecordAttendance: rejects future date → ErrFutureAttendanceDate
-- [ ] **D4.** RecordAttendance: rejects present_partial without duration → ErrDurationRequiredForPartial
-- [ ] **D5.** RecordAttendance: validates student belongs to family → ErrStudentNotInFamily
-- [ ] **D6.** BulkRecordAttendance: creates up to 31 records
-- [ ] **D7.** BulkRecordAttendance: rejects > 31 records → ErrBulkAttendanceLimitExceeded
-- [ ] **D8.** BulkRecordAttendance: validates each record individually
-- [ ] **D9.** UpdateAttendance: updates existing record
-- [ ] **D10.** UpdateAttendance: returns ErrAttendanceNotFound for non-existent
-- [ ] **D11.** DeleteAttendance: deletes existing record
-- [ ] **D12.** ListAttendance: returns records in date range for student
-- [ ] **D13.** GetAttendanceSummary: returns correct day counts by status
-- [ ] **D14.** GetAttendanceSummary: includes pace calculation (on_track/at_risk/behind)
+- [x] **D1.** RecordAttendance: creates manual record with manual_override=true, is_auto=false
+- [x] **D2.** RecordAttendance: upserts over auto-generated record for same date (manual wins)
+- [x] **D3.** RecordAttendance: rejects future date → ErrFutureAttendanceDate
+- [x] **D4.** RecordAttendance: rejects present_partial without duration → ErrDurationRequiredForPartial
+- [x] **D5.** RecordAttendance: validates student belongs to family → ErrStudentNotInFamily
+- [x] **D6.** BulkRecordAttendance: creates up to 31 records
+- [x] **D7.** BulkRecordAttendance: rejects > 31 records → ErrBulkAttendanceLimitExceeded
+- [x] **D8.** BulkRecordAttendance: validates each record individually
+- [x] **D9.** UpdateAttendance: updates existing record
+- [x] **D10.** UpdateAttendance: returns ErrAttendanceNotFound for non-existent
+- [x] **D11.** DeleteAttendance: deletes existing record
+- [x] **D12.** ListAttendance: returns records in date range for student
+- [x] **D13.** GetAttendanceSummary: returns correct day counts by status
+- [x] **D14.** GetAttendanceSummary: includes pace calculation (on_track/at_risk/behind)
 
 ---
 
@@ -150,20 +150,20 @@ Straightforward CRUD.
 
 ### E: Assessments (6 cycles)
 
-- [ ] **E1.** CreateAssessment: creates record with valid assessment type
-- [ ] **E2.** CreateAssessment: validates student belongs to family
-- [ ] **E3.** ListAssessments: filters by subject and date range
-- [ ] **E4.** UpdateAssessment: updates existing record
-- [ ] **E5.** UpdateAssessment: returns ErrAssessmentNotFound
-- [ ] **E6.** DeleteAssessment: deletes record
+- [x] **E1.** CreateAssessment: creates record with valid assessment type
+- [x] **E2.** CreateAssessment: validates student belongs to family
+- [x] **E3.** ListAssessments: filters by subject and date range
+- [x] **E4.** UpdateAssessment: updates existing record
+- [x] **E5.** UpdateAssessment: returns ErrAssessmentNotFound
+- [x] **E6.** DeleteAssessment: deletes record
 
 ### F: Standardized Tests (5 cycles)
 
-- [ ] **F1.** CreateTestScore: stores JSONB scores correctly
-- [ ] **F2.** CreateTestScore: validates student belongs to family
-- [ ] **F3.** ListTestScores: returns scores sorted by date descending
-- [ ] **F4.** UpdateTestScore: updates existing record
-- [ ] **F5.** DeleteTestScore: deletes record
+- [x] **F1.** CreateTestScore: stores JSONB scores correctly
+- [x] **F2.** CreateTestScore: validates student belongs to family
+- [x] **F3.** ListTestScores: returns scores sorted by date descending
+- [x] **F4.** UpdateTestScore: updates existing record
+- [x] **F5.** DeleteTestScore: deletes record
 
 ---
 
@@ -171,20 +171,20 @@ Straightforward CRUD.
 
 Complex state machine + cross-domain mocks (learn:: for source items).
 
-- [ ] **G1.** CreatePortfolio: creates in configuring status
-- [ ] **G2.** CreatePortfolio: rejects date_range_end ≤ date_range_start
-- [ ] **G3.** AddPortfolioItems: caches display data from learn:: at selection time
-- [ ] **G4.** AddPortfolioItems: rejects if portfolio not in configuring status → ErrPortfolioNotConfiguring
-- [ ] **G5.** AddPortfolioItems: rejects if source item not found in learn:: → ErrPortfolioItemSourceNotFound
-- [ ] **G6.** GeneratePortfolio: transitions configuring → generating
-- [ ] **G7.** GeneratePortfolio: rejects empty portfolio → ErrEmptyPortfolio
-- [ ] **G8.** GeneratePortfolio: rejects non-configuring portfolio → ErrPortfolioNotConfiguring
-- [ ] **G9.** GetPortfolio: returns portfolio with items
-- [ ] **G10.** GetPortfolio: returns ErrPortfolioNotFound
-- [ ] **G11.** ListPortfolios: returns portfolios for student
-- [ ] **G12.** GetPortfolioDownloadURL: returns presigned URL for ready portfolio
-- [ ] **G13.** GetPortfolioDownloadURL: returns ErrPortfolioNotConfiguring for non-ready portfolio
-- [ ] **G14.** GetPortfolioDownloadURL: returns ErrPortfolioExpired for expired portfolio
+- [x] **G1.** CreatePortfolio: creates in configuring status
+- [x] **G2.** CreatePortfolio: rejects date_range_end ≤ date_range_start
+- [x] **G3.** AddPortfolioItems: caches display data from learn:: at selection time
+- [x] **G4.** AddPortfolioItems: rejects if portfolio not in configuring status → ErrPortfolioNotConfiguring
+- [x] **G5.** AddPortfolioItems: rejects if source item not found in learn:: → ErrPortfolioItemSourceNotFound
+- [x] **G6.** GeneratePortfolio: transitions configuring → generating
+- [x] **G7.** GeneratePortfolio: rejects empty portfolio → ErrEmptyPortfolio
+- [x] **G8.** GeneratePortfolio: rejects non-configuring portfolio → ErrPortfolioNotConfiguring
+- [x] **G9.** GetPortfolio: returns portfolio with items
+- [x] **G10.** GetPortfolio: returns ErrPortfolioNotFound
+- [x] **G11.** ListPortfolios: returns portfolios for student
+- [x] **G12.** GetPortfolioDownloadURL: returns presigned URL for ready portfolio
+- [x] **G13.** GetPortfolioDownloadURL: returns ErrPortfolioNotConfiguring for non-ready portfolio
+- [x] **G14.** GetPortfolioDownloadURL: returns ErrPortfolioExpired for expired portfolio
 
 ---
 
@@ -192,11 +192,11 @@ Complex state machine + cross-domain mocks (learn:: for source items).
 
 Cross-domain event types (learn::, iam::, billing::).
 
-- [ ] **H1.** HandleActivityLogged: creates auto-attendance (is_auto=true) when no record exists
-- [ ] **H2.** HandleActivityLogged: does NOT override existing manual record for same date
-- [ ] **H3.** HandleStudentDeleted: cascades deletion of all student compliance data
-- [ ] **H4.** HandleFamilyDeletionScheduled: cascades deletion of all family compliance data
-- [ ] **H5.** HandleSubscriptionCancelled: preserves data, no deletion
+- [x] **H1.** HandleActivityLogged: creates auto-attendance (is_auto=true) when no record exists
+- [x] **H2.** HandleActivityLogged: does NOT override existing manual record for same date
+- [x] **H3.** HandleStudentDeleted: cascades deletion of all student compliance data
+- [x] **H4.** HandleFamilyDeletionScheduled: cascades deletion of all family compliance data
+- [x] **H5.** HandleSubscriptionCancelled: preserves data, no deletion
 
 ---
 
@@ -204,8 +204,8 @@ Cross-domain event types (learn::, iam::, billing::).
 
 Aggregation query across attendance, assessments, portfolios.
 
-- [ ] **I1.** GetDashboard: returns null family_config when unconfigured
-- [ ] **I2.** GetDashboard: returns student summaries with attendance, assessment counts, portfolios
+- [x] **I1.** GetDashboard: returns null family_config when unconfigured
+- [x] **I2.** GetDashboard: returns student summaries with attendance, assessment counts, portfolios
 
 ---
 
@@ -213,27 +213,27 @@ Aggregation query across attendance, assessments, portfolios.
 
 ### J: Transcripts (7 cycles)
 
-- [ ] **J1.** CreateTranscript: creates in configuring status
-- [ ] **J2.** GenerateTranscript: transitions configuring → generating
-- [ ] **J3.** GenerateTranscript: rejects non-configuring transcript
-- [ ] **J4.** GetTranscript: returns transcript with courses and GPA
-- [ ] **J5.** ListTranscripts: returns transcripts for student
-- [ ] **J6.** DeleteTranscript: deletes transcript
-- [ ] **J7.** GetTranscriptDownloadURL: returns presigned URL for ready transcript
+- [x] **J1.** CreateTranscript: creates in configuring status
+- [x] **J2.** GenerateTranscript: transitions configuring → generating
+- [x] **J3.** GenerateTranscript: rejects non-configuring transcript
+- [x] **J4.** GetTranscript: returns transcript with courses and GPA
+- [x] **J5.** ListTranscripts: returns transcripts for student
+- [x] **J6.** DeleteTranscript: deletes transcript
+- [x] **J7.** GetTranscriptDownloadURL: returns presigned URL for ready transcript
 
 ### K: Courses (5 cycles)
 
-- [ ] **K1.** CreateCourse: creates course with valid level
-- [ ] **K2.** CreateCourse: validates student belongs to family
-- [ ] **K3.** ListCourses: filters by grade_level, school_year
-- [ ] **K4.** UpdateCourse: updates existing course
-- [ ] **K5.** DeleteCourse: deletes course
+- [x] **K1.** CreateCourse: creates course with valid level
+- [x] **K2.** CreateCourse: validates student belongs to family
+- [x] **K3.** ListCourses: filters by grade_level, school_year
+- [x] **K4.** UpdateCourse: updates existing course
+- [x] **K5.** DeleteCourse: deletes course
 
 ### L: GPA Service (3 cycles)
 
-- [ ] **L1.** CalculateGPA service: returns GPA from courses with by_grade_level breakdown
-- [ ] **L2.** CalculateGPAWhatIf: projects GPA with hypothetical courses
-- [ ] **L3.** GetGPAHistory: returns GPA by school year/term
+- [x] **L1.** CalculateGPA service: returns GPA from courses with by_grade_level breakdown
+- [x] **L2.** CalculateGPAWhatIf: projects GPA with hypothetical courses
+- [x] **L3.** GetGPAHistory: returns GPA by school year/term
 
 ---
 

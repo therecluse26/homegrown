@@ -3,6 +3,7 @@ package comply
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -488,28 +489,108 @@ func (s *ComplianceServiceImpl) GeneratePortfolio(ctx context.Context, studentID
 	return mapPortfolioToResponse(updated, nil), nil
 }
 
-func (s *ComplianceServiceImpl) CreateTranscript(_ context.Context, _ uuid.UUID, _ CreateTranscriptCommand, _ shared.FamilyScope) (*TranscriptResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) CreateTranscript(ctx context.Context, studentID uuid.UUID, cmd CreateTranscriptCommand, scope shared.FamilyScope) (*TranscriptResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	studentName, err := s.iamSvc.GetStudentName(ctx, studentID)
+	if err != nil {
+		return nil, err
+	}
+
+	transcript, err := s.transcriptRepo.Create(ctx, scope, CreateTranscriptRow{
+		StudentID:   studentID,
+		Title:       cmd.Title,
+		StudentName: studentName,
+		GradeLevels: cmd.GradeLevels,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapTranscriptToResponse(transcript, nil, nil), nil
 }
 
-func (s *ComplianceServiceImpl) GenerateTranscript(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ shared.FamilyScope) (*TranscriptResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) GenerateTranscript(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) (*TranscriptResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	transcript, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope)
+	if err != nil {
+		return nil, err
+	}
+	if transcript == nil {
+		return nil, ErrTranscriptNotFound
+	}
+
+	if err := domain.ValidateTranscriptTransition(transcript.Status, string(PortfolioStatusGenerating)); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.transcriptRepo.UpdateStatus(ctx, transcriptID, string(PortfolioStatusGenerating), nil, nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return mapTranscriptToResponse(updated, nil, nil), nil
 }
 
-func (s *ComplianceServiceImpl) DeleteTranscript(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ shared.FamilyScope) error {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) DeleteTranscript(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) error {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return err
+	}
+
+	transcript, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope)
+	if err != nil {
+		return err
+	}
+	if transcript == nil {
+		return ErrTranscriptNotFound
+	}
+
+	return s.transcriptRepo.Delete(ctx, transcriptID, scope)
 }
 
-func (s *ComplianceServiceImpl) CreateCourse(_ context.Context, _ uuid.UUID, _ CreateCourseCommand, _ shared.FamilyScope) (*CourseResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) CreateCourse(ctx context.Context, studentID uuid.UUID, cmd CreateCourseCommand, scope shared.FamilyScope) (*CourseResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	course, err := s.courseRepo.Create(ctx, scope, CreateCourseRow{
+		StudentID:   studentID,
+		Title:       cmd.Title,
+		Subject:     cmd.Subject,
+		GradeLevel:  cmd.GradeLevel,
+		Credits:     cmd.Credits,
+		GradeLetter: cmd.GradeLetter,
+		GradePoints: cmd.GradePoints,
+		Level:       cmd.Level,
+		SchoolYear:  cmd.SchoolYear,
+		Semester:    cmd.Semester,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapCourseToResponse(course), nil
 }
 
-func (s *ComplianceServiceImpl) UpdateCourse(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ UpdateCourseCommand, _ shared.FamilyScope) (*CourseResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) UpdateCourse(ctx context.Context, studentID uuid.UUID, courseID uuid.UUID, cmd UpdateCourseCommand, scope shared.FamilyScope) (*CourseResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.courseRepo.Update(ctx, courseID, scope, UpdateCourseRow(cmd))
+	if err != nil {
+		return nil, err
+	}
+	return mapCourseToResponse(updated), nil
 }
 
-func (s *ComplianceServiceImpl) DeleteCourse(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ shared.FamilyScope) error {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) DeleteCourse(ctx context.Context, studentID uuid.UUID, courseID uuid.UUID, scope shared.FamilyScope) error {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return err
+	}
+	return s.courseRepo.Delete(ctx, courseID, scope)
 }
 
 // ─── Query side ───────────────────────────────────────────────────────────────
@@ -771,32 +852,249 @@ func (s *ComplianceServiceImpl) GetDashboard(ctx context.Context, scope shared.F
 	return resp, nil
 }
 
-func (s *ComplianceServiceImpl) GetTranscript(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ shared.FamilyScope) (*TranscriptResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) GetTranscript(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) (*TranscriptResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	transcript, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope)
+	if err != nil {
+		return nil, err
+	}
+	if transcript == nil {
+		return nil, ErrTranscriptNotFound
+	}
+
+	courses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	courseResponses := make([]CourseResponse, len(courses))
+	for i, c := range courses {
+		courseResponses[i] = *mapCourseToResponse(&c)
+	}
+
+	scale, customConfig, err := s.getGpaScaleForFamily(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	gpaInput := coursesToGpaInput(courses)
+	gpaResult := domain.CalculateGPA(gpaInput, scale, customConfig)
+	gpaResp := &GpaResponse{
+		UnweightedGPA: gpaResult.Unweighted,
+		WeightedGPA:   gpaResult.Weighted,
+		TotalCredits:  gpaResult.TotalCredits,
+		TotalCourses:  int32(len(courses)),
+	}
+
+	return mapTranscriptToResponse(transcript, courseResponses, gpaResp), nil
 }
 
-func (s *ComplianceServiceImpl) ListTranscripts(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) ([]TranscriptSummaryResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) ListTranscripts(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]TranscriptSummaryResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	transcripts, err := s.transcriptRepo.ListByStudent(ctx, studentID, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]TranscriptSummaryResponse, len(transcripts))
+	for i, t := range transcripts {
+		results[i] = mapTranscriptToSummary(&t)
+	}
+	return results, nil
 }
 
-func (s *ComplianceServiceImpl) GetTranscriptDownloadURL(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ shared.FamilyScope) (string, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) GetTranscriptDownloadURL(ctx context.Context, studentID uuid.UUID, transcriptID uuid.UUID, scope shared.FamilyScope) (string, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return "", err
+	}
+
+	transcript, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope)
+	if err != nil {
+		return "", err
+	}
+	if transcript == nil {
+		return "", ErrTranscriptNotFound
+	}
+
+	if transcript.Status != string(PortfolioStatusReady) {
+		return "", domain.ErrPortfolioNotConfiguring
+	}
+
+	if transcript.ExpiresAt != nil && transcript.ExpiresAt.Before(time.Now().UTC()) {
+		return "", ErrPortfolioExpired
+	}
+
+	return s.mediaSvc.PresignedGet(ctx, *transcript.UploadID)
 }
 
-func (s *ComplianceServiceImpl) ListCourses(_ context.Context, _ uuid.UUID, _ CourseListParams, _ shared.FamilyScope) (*CourseListResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) ListCourses(ctx context.Context, studentID uuid.UUID, params CourseListParams, scope shared.FamilyScope) (*CourseListResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	courses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, &params)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]CourseResponse, len(courses))
+	for i, c := range courses {
+		results[i] = *mapCourseToResponse(&c)
+	}
+	return &CourseListResponse{Courses: results}, nil
 }
 
-func (s *ComplianceServiceImpl) CalculateGPA(_ context.Context, _ uuid.UUID, _ GpaParams, _ shared.FamilyScope) (*GpaResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) CalculateGPA(ctx context.Context, studentID uuid.UUID, params GpaParams, scope shared.FamilyScope) (*GpaResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	courses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	scale, customConfig, err := s.getGpaScaleForFamily(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	if params.Scale != nil {
+		scale = domain.GpaScale(*params.Scale)
+	}
+
+	gpaInput := coursesToGpaInput(courses)
+	overall := domain.CalculateGPA(gpaInput, scale, customConfig)
+
+	// Group by grade level for breakdown
+	gradeGroups := make(map[int16][]ComplyCourse)
+	for _, c := range courses {
+		gradeGroups[c.GradeLevel] = append(gradeGroups[c.GradeLevel], c)
+	}
+
+	byGradeLevel := make([]GpaGradeLevelResponse, 0, len(gradeGroups))
+	for gl, groupCourses := range gradeGroups {
+		groupInput := coursesToGpaInput(groupCourses)
+		result := domain.CalculateGPA(groupInput, scale, customConfig)
+		byGradeLevel = append(byGradeLevel, GpaGradeLevelResponse{
+			GradeLevel: gl,
+			Unweighted: result.Unweighted,
+			Weighted:   result.Weighted,
+			Credits:    result.TotalCredits,
+		})
+	}
+	sort.Slice(byGradeLevel, func(i, j int) bool {
+		return byGradeLevel[i].GradeLevel < byGradeLevel[j].GradeLevel
+	})
+
+	return &GpaResponse{
+		UnweightedGPA: overall.Unweighted,
+		WeightedGPA:   overall.Weighted,
+		TotalCredits:  overall.TotalCredits,
+		TotalCourses:  int32(len(courses)),
+		ByGradeLevel:  byGradeLevel,
+	}, nil
 }
 
-func (s *ComplianceServiceImpl) CalculateGPAWhatIf(_ context.Context, _ uuid.UUID, _ GpaWhatIfParams, _ shared.FamilyScope) (*GpaResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) CalculateGPAWhatIf(ctx context.Context, studentID uuid.UUID, params GpaWhatIfParams, scope shared.FamilyScope) (*GpaResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	courses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	scale, customConfig, err := s.getGpaScaleForFamily(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	gpaInput := coursesToGpaInput(courses)
+	for _, wc := range params.AdditionalCourses {
+		gp := wc.GradePoints
+		gpaInput = append(gpaInput, domain.CourseForGpa{
+			GradePoints: &gp,
+			Credits:     wc.Credits,
+			Level:       wc.Level,
+		})
+	}
+
+	result := domain.CalculateGPA(gpaInput, scale, customConfig)
+
+	return &GpaResponse{
+		UnweightedGPA: result.Unweighted,
+		WeightedGPA:   result.Weighted,
+		TotalCredits:  result.TotalCredits,
+		TotalCourses:  int32(len(gpaInput)),
+	}, nil
 }
 
-func (s *ComplianceServiceImpl) GetGPAHistory(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) ([]GpaTermResponse, error) {
-	panic("not implemented — Phase 3")
+func (s *ComplianceServiceImpl) GetGPAHistory(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]GpaTermResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return nil, err
+	}
+
+	courses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	scale, customConfig, err := s.getGpaScaleForFamily(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	type termKey struct {
+		SchoolYear string
+		Semester   string
+	}
+	termGroups := make(map[termKey][]ComplyCourse)
+	termOrder := make([]termKey, 0)
+	for _, c := range courses {
+		sem := ""
+		if c.Semester != nil {
+			sem = *c.Semester
+		}
+		key := termKey{SchoolYear: c.SchoolYear, Semester: sem}
+		if _, exists := termGroups[key]; !exists {
+			termOrder = append(termOrder, key)
+		}
+		termGroups[key] = append(termGroups[key], c)
+	}
+
+	sort.Slice(termOrder, func(i, j int) bool {
+		if termOrder[i].SchoolYear != termOrder[j].SchoolYear {
+			return termOrder[i].SchoolYear < termOrder[j].SchoolYear
+		}
+		return termOrder[i].Semester < termOrder[j].Semester
+	})
+
+	results := make([]GpaTermResponse, 0, len(termGroups))
+	for _, key := range termOrder {
+		groupCourses := termGroups[key]
+		groupInput := coursesToGpaInput(groupCourses)
+		result := domain.CalculateGPA(groupInput, scale, customConfig)
+		resp := GpaTermResponse{
+			SchoolYear:    key.SchoolYear,
+			UnweightedGPA: result.Unweighted,
+			WeightedGPA:   result.Weighted,
+			Credits:       result.TotalCredits,
+			CourseCount:   int32(len(groupCourses)),
+		}
+		if key.Semester != "" {
+			sem := key.Semester
+			resp.Semester = &sem
+		}
+		results = append(results, resp)
+	}
+	return results, nil
 }
 
 // ─── Event handlers ───────────────────────────────────────────────────────────
@@ -987,4 +1285,79 @@ func mapPortfolioItemToResponse(item *ComplyPortfolioItem) PortfolioItemResponse
 		CachedDate:        item.CachedDate,
 		CachedDescription: item.CachedDescription,
 	}
+}
+
+func mapTranscriptToResponse(t *ComplyTranscript, courses []CourseResponse, gpa *GpaResponse) *TranscriptResponse {
+	resp := &TranscriptResponse{
+		ID:            t.ID,
+		StudentID:     t.StudentID,
+		Title:         t.Title,
+		StudentName:   t.StudentName,
+		GradeLevels:   t.GradeLevels,
+		Status:        t.Status,
+		GPAUnweighted: t.SnapshotGpaUnweighted,
+		GPAWeighted:   t.SnapshotGpaWeighted,
+		GeneratedAt:   t.GeneratedAt,
+		ExpiresAt:     t.ExpiresAt,
+		CreatedAt:     t.CreatedAt,
+	}
+	if courses != nil {
+		resp.Courses = courses
+	}
+	if gpa != nil {
+		resp.GPAUnweighted = &gpa.UnweightedGPA
+		resp.GPAWeighted = &gpa.WeightedGPA
+	}
+	return resp
+}
+
+func mapTranscriptToSummary(t *ComplyTranscript) TranscriptSummaryResponse {
+	return TranscriptSummaryResponse{
+		ID:          t.ID,
+		Title:       t.Title,
+		Status:      t.Status,
+		GradeLevels: t.GradeLevels,
+		GeneratedAt: t.GeneratedAt,
+		CreatedAt:   t.CreatedAt,
+	}
+}
+
+func mapCourseToResponse(c *ComplyCourse) *CourseResponse {
+	return &CourseResponse{
+		ID:          c.ID,
+		StudentID:   c.StudentID,
+		Title:       c.Title,
+		Subject:     c.Subject,
+		GradeLevel:  c.GradeLevel,
+		Credits:     c.Credits,
+		GradeLetter: c.GradeLetter,
+		GradePoints: c.GradePoints,
+		Level:       c.Level,
+		SchoolYear:  c.SchoolYear,
+		Semester:    c.Semester,
+		CreatedAt:   c.CreatedAt,
+	}
+}
+
+func coursesToGpaInput(courses []ComplyCourse) []domain.CourseForGpa {
+	result := make([]domain.CourseForGpa, len(courses))
+	for i, c := range courses {
+		result[i] = domain.CourseForGpa{
+			GradePoints: c.GradePoints,
+			Credits:     c.Credits,
+			Level:       c.Level,
+		}
+	}
+	return result
+}
+
+func (s *ComplianceServiceImpl) getGpaScaleForFamily(ctx context.Context, scope shared.FamilyScope) (domain.GpaScale, json.RawMessage, error) {
+	config, err := s.familyConfigRepo.FindByFamily(ctx, scope)
+	if err != nil {
+		return domain.GpaScaleStandard4, nil, err
+	}
+	if config == nil {
+		return domain.GpaScaleStandard4, nil, nil
+	}
+	return domain.GpaScale(config.GpaScale), config.GpaCustomConfig, nil
 }

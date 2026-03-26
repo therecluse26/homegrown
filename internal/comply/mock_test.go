@@ -439,6 +439,7 @@ func (s *stubCourseRepo) Delete(ctx context.Context, courseID uuid.UUID, scope s
 
 type stubIamService struct {
 	studentBelongsToFamilyFn func(ctx context.Context, studentID uuid.UUID, familyID shared.FamilyID) (bool, error)
+	getStudentNameFn         func(ctx context.Context, studentID uuid.UUID) (string, error)
 }
 
 func (s *stubIamService) StudentBelongsToFamily(ctx context.Context, studentID uuid.UUID, familyID shared.FamilyID) (bool, error) {
@@ -446,6 +447,13 @@ func (s *stubIamService) StudentBelongsToFamily(ctx context.Context, studentID u
 		return s.studentBelongsToFamilyFn(ctx, studentID, familyID)
 	}
 	panic("stubIamService.StudentBelongsToFamily not stubbed")
+}
+
+func (s *stubIamService) GetStudentName(ctx context.Context, studentID uuid.UUID) (string, error) {
+	if s.getStudentNameFn != nil {
+		return s.getStudentNameFn(ctx, studentID)
+	}
+	panic("stubIamService.GetStudentName not stubbed")
 }
 
 // ─── stubLearningService ──────────────────────────────────────────────────────
