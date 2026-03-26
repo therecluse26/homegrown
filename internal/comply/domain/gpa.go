@@ -28,7 +28,40 @@ type CourseForGpa struct {
 	Level       string // "regular", "honors", "ap"
 }
 
-// CalculateGPA calculates GPA from a list of courses.
+// CalculateGPA calculates GPA from a list of courses. [14-comply §10]
+// Courses with nil GradePoints are skipped. Zero courses returns {0,0,0}.
+// Weighted GPA applies boosts: honors +0.5, AP +1.0.
 func CalculateGPA(courses []CourseForGpa, scale GpaScale, customConfig json.RawMessage) GpaResult {
-	panic("not implemented")
+	var totalUnweightedPoints float64
+	var totalWeightedPoints float64
+	var totalCredits float64
+
+	for _, c := range courses {
+		if c.GradePoints == nil {
+			continue
+		}
+		gp := *c.GradePoints
+		credits := c.Credits
+		totalUnweightedPoints += gp * credits
+
+		var boost float64
+		switch c.Level {
+		case "honors":
+			boost = 0.5
+		case "ap":
+			boost = 1.0
+		}
+		totalWeightedPoints += (gp + boost) * credits
+		totalCredits += credits
+	}
+
+	if totalCredits == 0.0 {
+		return GpaResult{}
+	}
+
+	return GpaResult{
+		Unweighted:   totalUnweightedPoints / totalCredits,
+		Weighted:     totalWeightedPoints / totalCredits,
+		TotalCredits: totalCredits,
+	}
 }

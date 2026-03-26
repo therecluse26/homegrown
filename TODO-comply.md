@@ -18,20 +18,20 @@ Reference files for patterns:
 
 Create all files so tests compile. No logic yet — just type definitions, interfaces, and stubs.
 
-- [ ] `internal/comply/domain/errors.go` — domain error sentinels
-- [ ] `internal/comply/errors.go` — top-level error sentinels + custom types
-- [ ] `internal/comply/domain/attendance.go` — pure attendance logic (stub signatures)
-- [ ] `internal/comply/domain/portfolio.go` — pure portfolio state machine (stub signatures)
-- [ ] `internal/comply/domain/gpa.go` — pure GPA calculation (stub signatures)
-- [ ] `internal/comply/domain/transcript.go` — transcript state machine (stub signatures)
-- [ ] `internal/comply/models.go` — all DTOs, request/response types, GORM models
-- [ ] `internal/comply/ports.go` — service + repository interfaces
-- [ ] `internal/comply/events.go` — domain events
-- [ ] `internal/comply/event_handlers.go` — event handler structs (stubs)
-- [ ] `internal/comply/mock_test.go` — function-pointer stubs for all repos + cross-domain mocks
-- [ ] `internal/comply/service.go` — ComplianceServiceImpl (constructor + empty methods)
-- [ ] `internal/comply/service_test.go` — test file with helper setup
-- [ ] Verify: `go build ./internal/comply/...` compiles with zero errors
+- [x] `internal/comply/domain/errors.go` — domain error sentinels
+- [x] `internal/comply/errors.go` — top-level error sentinels + custom types
+- [x] `internal/comply/domain/attendance.go` — pure attendance logic (stub signatures)
+- [x] `internal/comply/domain/portfolio.go` — pure portfolio state machine (stub signatures)
+- [x] `internal/comply/domain/gpa.go` — pure GPA calculation (stub signatures)
+- [x] `internal/comply/domain/transcript.go` — transcript state machine (stub signatures)
+- [x] `internal/comply/models.go` — all DTOs, request/response types, GORM models
+- [x] `internal/comply/ports.go` — service + repository interfaces
+- [x] `internal/comply/events.go` — domain events
+- [x] `internal/comply/event_handlers.go` — event handler structs (stubs)
+- [x] `internal/comply/mock_test.go` — function-pointer stubs for all repos + cross-domain mocks
+- [x] `internal/comply/service.go` — ComplianceServiceImpl (constructor + empty methods)
+- [x] `internal/comply/service_test.go` — test file with helper setup
+- [x] Verify: `go build ./internal/comply/...` compiles with zero errors
 
 ---
 
@@ -41,56 +41,56 @@ No mocks, no DB — pure functions only. Fastest TDD cycles.
 
 ### Attendance Validation (`domain/attendance.go`)
 
-- [ ] **A1.** ValidateAttendanceRecord rejects future dates → ErrFutureAttendanceDate
-- [ ] **A2.** ValidateAttendanceRecord rejects invalid status strings → ErrInvalidAttendanceStatus
-- [ ] **A3.** ValidateAttendanceRecord requires duration_minutes for present_partial → ErrDurationRequiredForPartial
-- [ ] **A4.** ValidateAttendanceRecord rejects negative duration → ErrNegativeDuration
-- [ ] **A5.** ValidateAttendanceRecord accepts valid records (all 4 statuses)
-- [ ] **A6.** ShouldOverride: manual entry overrides auto-generated
-- [ ] **A7.** ShouldOverride: auto entry does NOT override manual
+- [x] **A1.** ValidateAttendanceRecord rejects future dates → ErrFutureAttendanceDate
+- [x] **A2.** ValidateAttendanceRecord rejects invalid status strings → ErrInvalidAttendanceStatus
+- [x] **A3.** ValidateAttendanceRecord requires duration_minutes for present_partial → ErrDurationRequiredForPartial
+- [x] **A4.** ValidateAttendanceRecord rejects negative duration → ErrNegativeDuration
+- [x] **A5.** ValidateAttendanceRecord accepts valid records (all 4 statuses)
+- [x] **A6.** ShouldOverride: manual entry overrides auto-generated
+- [x] **A7.** ShouldOverride: auto entry does NOT override manual
 
 ### Pace Calculation (`domain/attendance.go`)
 
-- [ ] **A8.** CalculatePace returns not_applicable when stateRequiredDays is nil
-- [ ] **A9.** CalculatePace returns on_track when school year hasn't started (elapsedSchoolDays=0)
-- [ ] **A10.** CalculatePace returns on_track when projected total ≥ required
-- [ ] **A11.** CalculatePace returns at_risk when projected total is within 90–100% of required
-- [ ] **A12.** CalculatePace returns behind when projected total < 90% of required
+- [x] **A8.** CalculatePace returns not_applicable when stateRequiredDays is nil
+- [x] **A9.** CalculatePace returns on_track when school year hasn't started (elapsedSchoolDays=0)
+- [x] **A10.** CalculatePace returns on_track when projected total ≥ required
+- [x] **A11.** CalculatePace returns at_risk when projected total is within 90–100% of required
+- [x] **A12.** CalculatePace returns behind when projected total < 90% of required
 
 ### School Day Counting (`domain/attendance.go`)
 
-- [ ] **A13.** CountSchoolDays counts Mon–Fri correctly for standard schedule
-- [ ] **A14.** CountSchoolDays respects 4-day week schedule
-- [ ] **A15.** CountSchoolDays excludes exclusion periods (e.g., winter break)
-- [ ] **A16.** CountSchoolDays returns 0 for empty date range
+- [x] **A13.** CountSchoolDays counts Mon–Fri correctly for standard schedule
+- [x] **A14.** CountSchoolDays respects 4-day week schedule
+- [x] **A15.** CountSchoolDays excludes exclusion periods (e.g., winter break)
+- [x] **A16.** CountSchoolDays returns 0 for empty date range
 
 ### Portfolio State Machine (`domain/portfolio.go`)
 
-- [ ] **A17.** ValidatePortfolioTransition: configuring → generating is valid
-- [ ] **A18.** ValidatePortfolioTransition: generating → ready is valid
-- [ ] **A19.** ValidatePortfolioTransition: generating → failed is valid
-- [ ] **A20.** ValidatePortfolioTransition: failed → generating (retry) is valid
-- [ ] **A21.** ValidatePortfolioTransition: ready → expired is valid
-- [ ] **A22.** ValidatePortfolioTransition: configuring → ready is INVALID
-- [ ] **A23.** ValidatePortfolioTransition: ready → configuring is INVALID
-- [ ] **A24.** ValidatePortfolioGenerate: rejects empty portfolio (0 items) → ErrEmptyPortfolio
-- [ ] **A25.** ValidatePortfolioGenerate: rejects non-configuring status → ErrPortfolioNotConfiguring
-- [ ] **A26.** ValidatePortfolioGenerate: rejects exceeded retries → ErrMaxRetriesExceeded
-- [ ] **A27.** ValidatePortfolioGenerate: allows failed portfolio with retries remaining
+- [x] **A17.** ValidatePortfolioTransition: configuring → generating is valid
+- [x] **A18.** ValidatePortfolioTransition: generating → ready is valid
+- [x] **A19.** ValidatePortfolioTransition: generating → failed is valid
+- [x] **A20.** ValidatePortfolioTransition: failed → generating (retry) is valid
+- [x] **A21.** ValidatePortfolioTransition: ready → expired is valid
+- [x] **A22.** ValidatePortfolioTransition: configuring → ready is INVALID
+- [x] **A23.** ValidatePortfolioTransition: ready → configuring is INVALID
+- [x] **A24.** ValidatePortfolioGenerate: rejects empty portfolio (0 items) → ErrEmptyPortfolio
+- [x] **A25.** ValidatePortfolioGenerate: rejects non-configuring status → ErrPortfolioNotConfiguring
+- [x] **A26.** ValidatePortfolioGenerate: rejects exceeded retries → ErrMaxRetriesExceeded
+- [x] **A27.** ValidatePortfolioGenerate: allows failed portfolio with retries remaining
 
 ### GPA Calculation (`domain/gpa.go` — Phase 3)
 
-- [ ] **A28.** CalculateGPA: standard 4.0 unweighted with single course
-- [ ] **A29.** CalculateGPA: standard 4.0 unweighted with multiple courses + credits
-- [ ] **A30.** CalculateGPA: weighted GPA applies +0.5 for honors
-- [ ] **A31.** CalculateGPA: weighted GPA applies +1.0 for AP
-- [ ] **A32.** CalculateGPA: courses with nil grade_points are skipped
-- [ ] **A33.** CalculateGPA: zero courses returns 0.0 GPA
-- [ ] **A34.** CalculateGPA: mixed regular/honors/AP courses
+- [x] **A28.** CalculateGPA: standard 4.0 unweighted with single course
+- [x] **A29.** CalculateGPA: standard 4.0 unweighted with multiple courses + credits
+- [x] **A30.** CalculateGPA: weighted GPA applies +0.5 for honors
+- [x] **A31.** CalculateGPA: weighted GPA applies +1.0 for AP
+- [x] **A32.** CalculateGPA: courses with nil grade_points are skipped
+- [x] **A33.** CalculateGPA: zero courses returns 0.0 GPA
+- [x] **A34.** CalculateGPA: mixed regular/honors/AP courses
 
 ### Transcript State Machine (`domain/transcript.go` — Phase 3)
 
-- [ ] **A35.** ValidateTranscriptTransition delegates to ValidatePortfolioTransition (same rules)
+- [x] **A35.** ValidateTranscriptTransition delegates to ValidatePortfolioTransition (same rules)
 
 ---
 
@@ -100,26 +100,26 @@ Service-layer tests with mock repos.
 
 ### B: Family Config & State Config (10 cycles)
 
-- [ ] **B1.** UpsertFamilyConfig: creates new config with valid state code → returns FamilyConfigResponse
-- [ ] **B2.** UpsertFamilyConfig: rejects invalid state code → ErrInvalidStateCode
-- [ ] **B3.** UpsertFamilyConfig: rejects invalid school year range (end ≤ start) → ErrInvalidSchoolYearRange
-- [ ] **B4.** UpsertFamilyConfig: updates existing config (upsert behavior)
-- [ ] **B5.** UpsertFamilyConfig: validates custom_schedule_id belongs to family if provided → ErrScheduleNotFound
-- [ ] **B6.** GetFamilyConfig: returns nil for families without config
-- [ ] **B7.** GetFamilyConfig: returns existing config
-- [ ] **B8.** ListStateConfigs: returns all cached state configs
-- [ ] **B9.** GetStateConfig: returns config for valid state code
-- [ ] **B10.** GetStateConfig: returns ErrStateConfigNotFound for unknown state
+- [x] **B1.** UpsertFamilyConfig: creates new config with valid state code → returns FamilyConfigResponse
+- [x] **B2.** UpsertFamilyConfig: rejects invalid state code → ErrInvalidStateCode
+- [x] **B3.** UpsertFamilyConfig: rejects invalid school year range (end ≤ start) → ErrInvalidSchoolYearRange
+- [x] **B4.** UpsertFamilyConfig: updates existing config (upsert behavior)
+- [x] **B5.** UpsertFamilyConfig: validates custom_schedule_id belongs to family if provided → ErrScheduleNotFound
+- [x] **B6.** GetFamilyConfig: returns nil for families without config
+- [x] **B7.** GetFamilyConfig: returns existing config
+- [x] **B8.** ListStateConfigs: returns all cached state configs
+- [x] **B9.** GetStateConfig: returns config for valid state code
+- [x] **B10.** GetStateConfig: returns ErrStateConfigNotFound for unknown state
 
 ### C: Custom Schedules (7 cycles)
 
-- [ ] **C1.** CreateSchedule: creates schedule with valid 7-element school_days
-- [ ] **C2.** CreateSchedule: rejects school_days array with ≠ 7 elements → ErrInvalidSchoolDaysArray
-- [ ] **C3.** ListSchedules: returns family's schedules
-- [ ] **C4.** UpdateSchedule: updates existing schedule
-- [ ] **C5.** UpdateSchedule: returns ErrScheduleNotFound for non-existent or wrong family
-- [ ] **C6.** DeleteSchedule: deletes schedule not in use
-- [ ] **C7.** DeleteSchedule: rejects deletion of schedule in use by family config → ErrScheduleInUse
+- [x] **C1.** CreateSchedule: creates schedule with valid 7-element school_days
+- [x] **C2.** CreateSchedule: rejects school_days array with ≠ 7 elements → ErrInvalidSchoolDaysArray
+- [x] **C3.** ListSchedules: returns family's schedules
+- [x] **C4.** UpdateSchedule: updates existing schedule
+- [x] **C5.** UpdateSchedule: returns ErrScheduleNotFound for non-existent or wrong family
+- [x] **C6.** DeleteSchedule: deletes schedule not in use
+- [x] **C7.** DeleteSchedule: rejects deletion of schedule in use by family config → ErrScheduleInUse
 
 ---
 
