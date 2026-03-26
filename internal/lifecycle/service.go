@@ -80,6 +80,13 @@ func (s *LifecycleServiceImpl) RequestExport(ctx context.Context, auth *shared.A
 		return uuid.Nil, fmt.Errorf("lifecycle: enqueue export job: %w", err)
 	}
 
+	// Publish event so notify:: can send confirmation email. [15-data-lifecycle §15]
+	_ = s.events.Publish(ctx, DataExportRequested{
+		FamilyID: export.FamilyID,
+		ExportID: export.ID,
+		Format:   format,
+	})
+
 	return export.ID, nil
 }
 
@@ -109,7 +116,7 @@ func (s *LifecycleServiceImpl) GetExportStatus(ctx context.Context, scope *share
 
 // ListExports returns paginated export summaries for the family. [15-data-lifecycle §9]
 func (s *LifecycleServiceImpl) ListExports(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) (*PaginatedExports, error) {
-	exports, err := s.exportRepo.ListByFamily(ctx, scope, pagination)
+	exports, total, err := s.exportRepo.ListByFamily(ctx, scope, pagination)
 	if err != nil {
 		return nil, fmt.Errorf("lifecycle: list exports: %w", err)
 	}
@@ -127,7 +134,7 @@ func (s *LifecycleServiceImpl) ListExports(ctx context.Context, scope *shared.Fa
 
 	return &PaginatedExports{
 		Items: items,
-		Total: int64(len(items)),
+		Total: total,
 	}, nil
 }
 
@@ -143,7 +150,7 @@ func (s *LifecycleServiceImpl) ProcessExport(ctx context.Context, exportID uuid.
 	}
 
 	// Transition to processing.
-	if err := s.exportRepo.UpdateStatus(ctx, exportID, ExportStatusProcessing, nil, nil); err != nil {
+	if err := s.exportRepo.UpdateStatus(ctx, exportID, ExportStatusProcessing, nil, nil, nil); err != nil {
 		return fmt.Errorf("lifecycle: process export set processing: %w", err)
 	}
 
@@ -155,8 +162,9 @@ func (s *LifecycleServiceImpl) ProcessExport(ctx context.Context, exportID uuid.
 	for _, h := range handlers {
 		files, handlerErr := h.ExportFamilyData(ctx, familyID, export.Format)
 		if handlerErr != nil {
-			// Mark as failed.
-			_ = s.exportRepo.UpdateStatus(ctx, exportID, ExportStatusFailed, nil, nil)
+			// Mark as failed with error message for debugging.
+			errMsg := handlerErr.Error()
+			_ = s.exportRepo.UpdateStatus(ctx, exportID, ExportStatusFailed, nil, nil, &errMsg)
 			return fmt.Errorf("lifecycle: export handler %q failed: %w", h.DomainName(), handlerErr)
 		}
 		for _, f := range files {
@@ -168,14 +176,15 @@ func (s *LifecycleServiceImpl) ProcessExport(ctx context.Context, exportID uuid.
 	archiveKey := fmt.Sprintf("exports/%s/%s.zip", familyID, exportID)
 
 	// Transition to completed.
-	if err := s.exportRepo.UpdateStatus(ctx, exportID, ExportStatusCompleted, &archiveKey, &totalSize); err != nil {
+	if err := s.exportRepo.UpdateStatus(ctx, exportID, ExportStatusCompleted, &archiveKey, &totalSize, nil); err != nil {
 		return fmt.Errorf("lifecycle: process export set completed: %w", err)
 	}
 
 	// Publish completion event (errors logged, not propagated). [ARCH §11.3]
 	_ = s.events.Publish(ctx, DataExportCompleted{
-		FamilyID: familyID,
-		ExportID: exportID,
+		FamilyID:    familyID,
+		ExportID:    exportID,
+		DownloadURL: archiveKey,
 	})
 
 	return nil
@@ -301,7 +310,24 @@ func (s *LifecycleServiceImpl) CancelDeletion(ctx context.Context, scope *shared
 	return s.deletionRepo.Cancel(ctx, scope, deletion.ID)
 }
 
-// ProcessDeletion processes deletion requests whose grace period has expired. [15-data-lifecycle §10.1]
+// ProcessSingleDeletion processes a specific deletion request by ID. [15-data-lifecycle §10.3]
+// Called by the background job worker for COPPA immediate deletions.
+func (s *LifecycleServiceImpl) ProcessSingleDeletion(ctx context.Context, deletionID uuid.UUID, familyID uuid.UUID) error {
+	deletion, err := s.deletionRepo.FindByID(ctx, deletionID)
+	if err != nil {
+		return fmt.Errorf("lifecycle: find deletion by ID: %w", err)
+	}
+
+	if deletion.FamilyID != familyID {
+		return fmt.Errorf("lifecycle: deletion %s does not belong to family %s", deletionID, familyID)
+	}
+
+	s.processSingleDeletion(ctx, *deletion)
+	return nil
+}
+
+// ProcessDeletion processes deletion requests whose grace period has expired
+// or that are stuck in processing status (retry). [15-data-lifecycle §10.1]
 // Called by the recurring background job — not by HTTP handlers.
 func (s *LifecycleServiceImpl) ProcessDeletion(ctx context.Context) error {
 	requests, err := s.deletionRepo.FindReadyForDeletion(ctx)

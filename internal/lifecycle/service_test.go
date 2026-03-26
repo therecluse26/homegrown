@@ -354,11 +354,11 @@ func TestListExports_ReturnsSummaries(t *testing.T) {
 	now := time.Now().UTC()
 
 	svc := newTestService(
-		&stubExportRepo{listByFamilyFn: func(_ context.Context, _ *shared.FamilyScope, _ *PaginationParams) ([]ExportRequest, error) {
+		&stubExportRepo{listByFamilyFn: func(_ context.Context, _ *shared.FamilyScope, _ *PaginationParams) ([]ExportRequest, int64, error) {
 			return []ExportRequest{
 				{ID: uuid.Must(uuid.NewV7()), Status: ExportStatusCompleted, Format: ExportFormatJSON, CreatedAt: now},
 				{ID: uuid.Must(uuid.NewV7()), Status: ExportStatusPending, Format: ExportFormatCSV, CreatedAt: now},
-			}, nil
+			}, 5, nil
 		}},
 		nil, nil, &stubIamService{}, &stubBillingService{},
 		&stubJobEnqueuer{}, nil, nil,
@@ -378,8 +378,8 @@ func TestListExports_EmptyList(t *testing.T) {
 	scope := testScope()
 
 	svc := newTestService(
-		&stubExportRepo{listByFamilyFn: func(_ context.Context, _ *shared.FamilyScope, _ *PaginationParams) ([]ExportRequest, error) {
-			return []ExportRequest{}, nil
+		&stubExportRepo{listByFamilyFn: func(_ context.Context, _ *shared.FamilyScope, _ *PaginationParams) ([]ExportRequest, int64, error) {
+			return []ExportRequest{}, 0, nil
 		}},
 		nil, nil, &stubIamService{}, &stubBillingService{},
 		&stubJobEnqueuer{}, nil, nil,
@@ -400,9 +400,9 @@ func TestListExports_ForwardsPagination(t *testing.T) {
 	var capturedPagination *PaginationParams
 
 	svc := newTestService(
-		&stubExportRepo{listByFamilyFn: func(_ context.Context, _ *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, error) {
+		&stubExportRepo{listByFamilyFn: func(_ context.Context, _ *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, int64, error) {
 			capturedPagination = pagination
-			return []ExportRequest{}, nil
+			return []ExportRequest{}, 0, nil
 		}},
 		nil, nil, &stubIamService{}, &stubBillingService{},
 		&stubJobEnqueuer{}, nil, nil,
@@ -437,7 +437,7 @@ func TestProcessExport_CallsEachHandler(t *testing.T) {
 			findByIDFn: func(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*ExportRequest, error) {
 				return &ExportRequest{ID: exportID, FamilyID: familyID, Status: ExportStatusPending, Format: ExportFormatJSON}, nil
 			},
-			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64) error {
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64, _ *string) error {
 				return nil
 			},
 		},
@@ -477,7 +477,7 @@ func TestProcessExport_TransitionsToProcessing(t *testing.T) {
 			findByIDFn: func(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*ExportRequest, error) {
 				return &ExportRequest{ID: exportID, FamilyID: familyID, Status: ExportStatusPending, Format: ExportFormatJSON}, nil
 			},
-			updateStatusFn: func(_ context.Context, _ uuid.UUID, status ExportStatus, _ *string, _ *int64) error {
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, status ExportStatus, _ *string, _ *int64, _ *string) error {
 				statusUpdates = append(statusUpdates, status)
 				return nil
 			},
@@ -509,7 +509,7 @@ func TestProcessExport_TransitionsToCompletedOnSuccess(t *testing.T) {
 			findByIDFn: func(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*ExportRequest, error) {
 				return &ExportRequest{ID: exportID, FamilyID: familyID, Status: ExportStatusPending, Format: ExportFormatJSON}, nil
 			},
-			updateStatusFn: func(_ context.Context, _ uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64) error {
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64, _ *string) error {
 				finalStatus = status
 				finalArchiveKey = archiveKey
 				finalSizeBytes = sizeBytes
@@ -553,7 +553,7 @@ func TestProcessExport_TransitionsToFailedOnHandlerError(t *testing.T) {
 			findByIDFn: func(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*ExportRequest, error) {
 				return &ExportRequest{ID: exportID, FamilyID: familyID, Status: ExportStatusPending, Format: ExportFormatJSON}, nil
 			},
-			updateStatusFn: func(_ context.Context, _ uuid.UUID, status ExportStatus, _ *string, _ *int64) error {
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, status ExportStatus, _ *string, _ *int64, _ *string) error {
 				finalStatus = status
 				return nil
 			},
@@ -595,7 +595,7 @@ func TestProcessExport_FiltersHandlersByIncludeDomains(t *testing.T) {
 					IncludeDomains: []string{"social"},
 				}, nil
 			},
-			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64) error {
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64, _ *string) error {
 				return nil
 			},
 		},
@@ -641,7 +641,7 @@ func TestProcessExport_CallsAllHandlersWhenIncludeDomainsNil(t *testing.T) {
 					IncludeDomains: nil,
 				}, nil
 			},
-			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64) error {
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64, _ *string) error {
 				return nil
 			},
 		},
@@ -691,7 +691,7 @@ func TestProcessExport_PublishesCompletedEvent(t *testing.T) {
 			findByIDFn: func(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*ExportRequest, error) {
 				return &ExportRequest{ID: exportID, FamilyID: familyID, Status: ExportStatusPending, Format: ExportFormatJSON}, nil
 			},
-			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64) error {
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64, _ *string) error {
 				return nil
 			},
 		},
@@ -2293,6 +2293,306 @@ func TestGracePeriodFor_Student(t *testing.T) {
 func TestGracePeriodFor_Coppa(t *testing.T) {
 	if got := GracePeriodFor(DeletionTypeCoppa); got != 0 {
 		t.Errorf("GracePeriodFor(coppa) = %v, want 0", got)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// R. Bug-Fix Regression Tests (Reqs 79–82)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Req 79: RequestExport publishes DataExportRequested event after job enqueue.
+func TestRequestExport_PublishesDataExportRequestedEvent(t *testing.T) {
+	auth := testAuth()
+	scope := testScope()
+	exportID := uuid.Must(uuid.NewV7())
+	csv := ExportFormatCSV
+
+	bus := shared.NewEventBus()
+	var publishedEvent *DataExportRequested
+	bus.Subscribe(
+		eventType[DataExportRequested](),
+		handlerFunc(func(_ context.Context, event shared.DomainEvent) error {
+			e := event.(DataExportRequested)
+			publishedEvent = &e
+			return nil
+		}),
+	)
+
+	svc := NewLifecycleService(
+		&stubExportRepo{createFn: func(_ context.Context, _ *shared.FamilyScope, _ *CreateExportRequest) (*ExportRequest, error) {
+			return &ExportRequest{ID: exportID, FamilyID: scope.FamilyID(), Status: ExportStatusPending}, nil
+		}},
+		nil, nil, &stubIamService{}, &stubBillingService{},
+		bus, &stubJobEnqueuer{}, nil, nil,
+	)
+
+	_, err := svc.RequestExport(context.Background(), auth, scope, &RequestExportInput{Format: &csv})
+	if err != nil {
+		t.Fatalf("RequestExport error: %v", err)
+	}
+	if publishedEvent == nil {
+		t.Fatal("DataExportRequested event was not published")
+	}
+	if publishedEvent.ExportID != exportID {
+		t.Errorf("event.ExportID = %v, want %v", publishedEvent.ExportID, exportID)
+	}
+	if publishedEvent.Format != ExportFormatCSV {
+		t.Errorf("event.Format = %q, want %q", publishedEvent.Format, ExportFormatCSV)
+	}
+}
+
+// Req 80: ListExports Total reflects repo count, not page size.
+func TestListExports_TotalReflectsRepoCount(t *testing.T) {
+	scope := testScope()
+	now := time.Now().UTC()
+
+	svc := newTestService(
+		&stubExportRepo{listByFamilyFn: func(_ context.Context, _ *shared.FamilyScope, _ *PaginationParams) ([]ExportRequest, int64, error) {
+			// Return 2 items but a total of 42 (simulating page 1 of many).
+			return []ExportRequest{
+				{ID: uuid.Must(uuid.NewV7()), Status: ExportStatusCompleted, Format: ExportFormatJSON, CreatedAt: now},
+				{ID: uuid.Must(uuid.NewV7()), Status: ExportStatusPending, Format: ExportFormatCSV, CreatedAt: now},
+			}, 42, nil
+		}},
+		nil, nil, &stubIamService{}, &stubBillingService{},
+		&stubJobEnqueuer{}, nil, nil,
+	)
+
+	resp, err := svc.ListExports(context.Background(), scope, &PaginationParams{Limit: 2, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListExports error: %v", err)
+	}
+	if resp.Total != 42 {
+		t.Errorf("Total = %d, want 42 (repo total, not page size)", resp.Total)
+	}
+	if len(resp.Items) != 2 {
+		t.Errorf("Items len = %d, want 2", len(resp.Items))
+	}
+}
+
+// Req 81: ProcessExport publishes DataExportCompleted with non-empty DownloadURL.
+func TestProcessExport_PublishesCompletedEventWithDownloadURL(t *testing.T) {
+	scope := testScope()
+	exportID := uuid.Must(uuid.NewV7())
+	familyID := scope.FamilyID()
+
+	bus := shared.NewEventBus()
+	var publishedEvent *DataExportCompleted
+	bus.Subscribe(
+		eventType[DataExportCompleted](),
+		handlerFunc(func(_ context.Context, event shared.DomainEvent) error {
+			e := event.(DataExportCompleted)
+			publishedEvent = &e
+			return nil
+		}),
+	)
+
+	svc := NewLifecycleService(
+		&stubExportRepo{
+			findByIDFn: func(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*ExportRequest, error) {
+				return &ExportRequest{ID: exportID, FamilyID: familyID, Status: ExportStatusPending, Format: ExportFormatJSON}, nil
+			},
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, _ ExportStatus, _ *string, _ *int64, _ *string) error {
+				return nil
+			},
+		},
+		nil, nil, &stubIamService{}, &stubBillingService{},
+		bus, &stubJobEnqueuer{},
+		[]ExportHandler{
+			&stubExportHandler{domainName: "learning", exportFamilyData: func(_ context.Context, _ uuid.UUID, _ ExportFormat) ([]ExportFile, error) {
+				return []ExportFile{{Filename: "data.json", Content: []byte(`[]`)}}, nil
+			}},
+		},
+		nil,
+	)
+
+	err := svc.ProcessExport(context.Background(), exportID, familyID)
+	if err != nil {
+		t.Fatalf("ProcessExport error: %v", err)
+	}
+	if publishedEvent == nil {
+		t.Fatal("DataExportCompleted event was not published")
+	}
+	if publishedEvent.DownloadURL == "" {
+		t.Error("event.DownloadURL is empty, want non-empty archive key")
+	}
+}
+
+// Req 82: ProcessExport stores error message on failure via UpdateStatus.
+func TestProcessExport_StoresErrorMessageOnFailure(t *testing.T) {
+	scope := testScope()
+	exportID := uuid.Must(uuid.NewV7())
+	familyID := scope.FamilyID()
+	var capturedErrorMessage *string
+
+	svc := newTestService(
+		&stubExportRepo{
+			findByIDFn: func(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) (*ExportRequest, error) {
+				return &ExportRequest{ID: exportID, FamilyID: familyID, Status: ExportStatusPending, Format: ExportFormatJSON}, nil
+			},
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, status ExportStatus, _ *string, _ *int64, errorMessage *string) error {
+				if status == ExportStatusFailed {
+					capturedErrorMessage = errorMessage
+				}
+				return nil
+			},
+		},
+		nil, nil, &stubIamService{}, &stubBillingService{},
+		&stubJobEnqueuer{},
+		[]ExportHandler{
+			&stubExportHandler{domainName: "learning", exportFamilyData: func(_ context.Context, _ uuid.UUID, _ ExportFormat) ([]ExportFile, error) {
+				return nil, errors.New("disk full")
+			}},
+		},
+		nil,
+	)
+
+	err := svc.ProcessExport(context.Background(), exportID, familyID)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if capturedErrorMessage == nil {
+		t.Fatal("error message was not passed to UpdateStatus on failure")
+	}
+	if *capturedErrorMessage != "disk full" {
+		t.Errorf("error message = %q, want %q", *capturedErrorMessage, "disk full")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// S. Bug-Fix: COPPA Single Deletion + Retry (Reqs 83–86)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Req 83: ProcessSingleDeletion loads by ID and delegates to processSingleDeletion.
+func TestProcessSingleDeletion_Success(t *testing.T) {
+	deletionID := uuid.Must(uuid.NewV7())
+	familyID := uuid.Must(uuid.NewV7())
+	studentID := uuid.Must(uuid.NewV7())
+	var statusUpdates []DeletionStatus
+
+	svc := newTestService(
+		nil,
+		&stubDeletionRepo{
+			findByIDFn: func(_ context.Context, id uuid.UUID) (*DeletionRequest, error) {
+				return &DeletionRequest{
+					ID:           id,
+					FamilyID:     familyID,
+					DeletionType: DeletionTypeCoppa,
+					StudentID:    &studentID,
+					Status:       DeletionStatusProcessing,
+				}, nil
+			},
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, status DeletionStatus) error {
+				statusUpdates = append(statusUpdates, status)
+				return nil
+			},
+			updateDomainStatusFn: func(_ context.Context, _ uuid.UUID, _ string, _ bool) error {
+				return nil
+			},
+		},
+		nil, &stubIamService{}, &stubBillingService{},
+		&stubJobEnqueuer{}, nil,
+		[]DeletionHandler{&stubDeletionHandler{domainName: "learning"}},
+	)
+
+	err := svc.ProcessSingleDeletion(context.Background(), deletionID, familyID)
+	if err != nil {
+		t.Fatalf("ProcessSingleDeletion error: %v", err)
+	}
+	// Should transition through processing → completed.
+	if len(statusUpdates) < 1 {
+		t.Fatal("expected at least one status update")
+	}
+	if statusUpdates[len(statusUpdates)-1] != DeletionStatusCompleted {
+		t.Errorf("final status = %q, want %q", statusUpdates[len(statusUpdates)-1], DeletionStatusCompleted)
+	}
+}
+
+// Req 84: ProcessSingleDeletion returns error when familyID does not match.
+func TestProcessSingleDeletion_FamilyIDMismatch(t *testing.T) {
+	deletionID := uuid.Must(uuid.NewV7())
+	realFamilyID := uuid.Must(uuid.NewV7())
+	wrongFamilyID := uuid.Must(uuid.NewV7())
+
+	svc := newTestService(
+		nil,
+		&stubDeletionRepo{
+			findByIDFn: func(_ context.Context, _ uuid.UUID) (*DeletionRequest, error) {
+				return &DeletionRequest{
+					ID:           deletionID,
+					FamilyID:     realFamilyID,
+					DeletionType: DeletionTypeCoppa,
+					Status:       DeletionStatusProcessing,
+				}, nil
+			},
+		},
+		nil, &stubIamService{}, &stubBillingService{},
+		&stubJobEnqueuer{}, nil, nil,
+	)
+
+	err := svc.ProcessSingleDeletion(context.Background(), deletionID, wrongFamilyID)
+	if err == nil {
+		t.Fatal("expected family ID mismatch error, got nil")
+	}
+}
+
+// Req 85: ProcessSingleDeletion returns error when deletion not found.
+func TestProcessSingleDeletion_NotFound(t *testing.T) {
+	svc := newTestService(
+		nil,
+		&stubDeletionRepo{
+			findByIDFn: func(_ context.Context, _ uuid.UUID) (*DeletionRequest, error) {
+				return nil, ErrDeletionNotFound
+			},
+		},
+		nil, &stubIamService{}, &stubBillingService{},
+		&stubJobEnqueuer{}, nil, nil,
+	)
+
+	err := svc.ProcessSingleDeletion(context.Background(), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+	if err == nil {
+		t.Fatal("expected not-found error, got nil")
+	}
+}
+
+// Req 86: ProcessDeletion retries a stuck processing request to completion.
+func TestProcessDeletion_RetriesStuckProcessingRequest(t *testing.T) {
+	deletionID := uuid.Must(uuid.NewV7())
+	familyID := uuid.Must(uuid.NewV7())
+	var statusUpdates []DeletionStatus
+
+	svc := newTestService(
+		nil,
+		&stubDeletionRepo{
+			findReadyForDeletionFn: func(_ context.Context) ([]DeletionRequest, error) {
+				// Return a request already in processing status (stuck from a prior failure).
+				return []DeletionRequest{
+					{ID: deletionID, FamilyID: familyID, DeletionType: DeletionTypeFamily, Status: DeletionStatusProcessing},
+				}, nil
+			},
+			updateStatusFn: func(_ context.Context, _ uuid.UUID, status DeletionStatus) error {
+				statusUpdates = append(statusUpdates, status)
+				return nil
+			},
+			updateDomainStatusFn: func(_ context.Context, _ uuid.UUID, _ string, _ bool) error {
+				return nil
+			},
+		},
+		nil, &stubIamService{}, &stubBillingService{},
+		&stubJobEnqueuer{}, nil,
+		[]DeletionHandler{&stubDeletionHandler{domainName: "learning"}},
+	)
+
+	err := svc.ProcessDeletion(context.Background())
+	if err != nil {
+		t.Fatalf("ProcessDeletion error: %v", err)
+	}
+	// The sweep should pick up the stuck request and complete it.
+	if len(statusUpdates) == 0 {
+		t.Fatal("expected status updates for stuck processing request")
+	}
+	if statusUpdates[len(statusUpdates)-1] != DeletionStatusCompleted {
+		t.Errorf("final status = %q, want %q", statusUpdates[len(statusUpdates)-1], DeletionStatusCompleted)
 	}
 }
 

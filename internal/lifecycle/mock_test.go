@@ -17,8 +17,8 @@ import (
 type stubExportRepo struct {
 	createFn       func(ctx context.Context, scope *shared.FamilyScope, input *CreateExportRequest) (*ExportRequest, error)
 	findByIDFn     func(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*ExportRequest, error)
-	listByFamilyFn func(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, error)
-	updateStatusFn func(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64) error
+	listByFamilyFn func(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, int64, error)
+	updateStatusFn func(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64, errorMessage *string) error
 }
 
 func (s *stubExportRepo) Create(ctx context.Context, scope *shared.FamilyScope, input *CreateExportRequest) (*ExportRequest, error) {
@@ -35,16 +35,16 @@ func (s *stubExportRepo) FindByID(ctx context.Context, scope *shared.FamilyScope
 	panic("stubExportRepo.FindByID not stubbed")
 }
 
-func (s *stubExportRepo) ListByFamily(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, error) {
+func (s *stubExportRepo) ListByFamily(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, int64, error) {
 	if s.listByFamilyFn != nil {
 		return s.listByFamilyFn(ctx, scope, pagination)
 	}
 	panic("stubExportRepo.ListByFamily not stubbed")
 }
 
-func (s *stubExportRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64) error {
+func (s *stubExportRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64, errorMessage *string) error {
 	if s.updateStatusFn != nil {
-		return s.updateStatusFn(ctx, id, status, archiveKey, sizeBytes)
+		return s.updateStatusFn(ctx, id, status, archiveKey, sizeBytes, errorMessage)
 	}
 	panic("stubExportRepo.UpdateStatus not stubbed")
 }
@@ -54,6 +54,7 @@ func (s *stubExportRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status 
 type stubDeletionRepo struct {
 	createFn               func(ctx context.Context, scope *shared.FamilyScope, input *CreateDeletionRequest) (*DeletionRequest, error)
 	findActiveByFamilyFn   func(ctx context.Context, scope *shared.FamilyScope) (*DeletionRequest, error)
+	findByIDFn             func(ctx context.Context, id uuid.UUID) (*DeletionRequest, error)
 	updateStatusFn         func(ctx context.Context, id uuid.UUID, status DeletionStatus) error
 	updateDomainStatusFn   func(ctx context.Context, id uuid.UUID, domain string, completed bool) error
 	cancelFn               func(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) error
@@ -72,6 +73,13 @@ func (s *stubDeletionRepo) FindActiveByFamily(ctx context.Context, scope *shared
 		return s.findActiveByFamilyFn(ctx, scope)
 	}
 	panic("stubDeletionRepo.FindActiveByFamily not stubbed")
+}
+
+func (s *stubDeletionRepo) FindByID(ctx context.Context, id uuid.UUID) (*DeletionRequest, error) {
+	if s.findByIDFn != nil {
+		return s.findByIDFn(ctx, id)
+	}
+	panic("stubDeletionRepo.FindByID not stubbed")
 }
 
 func (s *stubDeletionRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status DeletionStatus) error {
@@ -105,8 +113,9 @@ func (s *stubDeletionRepo) FindReadyForDeletion(ctx context.Context) ([]Deletion
 // ─── stubRecoveryRepo ────────────────────────────────────────────────────────
 
 type stubRecoveryRepo struct {
-	createFn   func(ctx context.Context, input *CreateRecoveryRequest) (*RecoveryRequest, error)
-	findByIDFn func(ctx context.Context, id uuid.UUID) (*RecoveryRequest, error)
+	createFn       func(ctx context.Context, input *CreateRecoveryRequest) (*RecoveryRequest, error)
+	findByIDFn     func(ctx context.Context, id uuid.UUID) (*RecoveryRequest, error)
+	updateStatusFn func(ctx context.Context, id uuid.UUID, status RecoveryStatus, resolvedParentID *uuid.UUID) error
 }
 
 func (s *stubRecoveryRepo) Create(ctx context.Context, input *CreateRecoveryRequest) (*RecoveryRequest, error) {
@@ -121,6 +130,13 @@ func (s *stubRecoveryRepo) FindByID(ctx context.Context, id uuid.UUID) (*Recover
 		return s.findByIDFn(ctx, id)
 	}
 	panic("stubRecoveryRepo.FindByID not stubbed")
+}
+
+func (s *stubRecoveryRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status RecoveryStatus, resolvedParentID *uuid.UUID) error {
+	if s.updateStatusFn != nil {
+		return s.updateStatusFn(ctx, id, status, resolvedParentID)
+	}
+	panic("stubRecoveryRepo.UpdateStatus not stubbed")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

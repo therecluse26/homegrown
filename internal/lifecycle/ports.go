@@ -71,9 +71,14 @@ type LifecycleService interface {
 	// CancelDeletion cancels a pending deletion during the grace period.
 	CancelDeletion(ctx context.Context, scope *shared.FamilyScope) error
 
-	// ProcessDeletion processes deletion requests whose grace period has expired.
-	// Called by the background job worker.
+	// ProcessDeletion processes deletion requests whose grace period has expired
+	// or that are stuck in processing status (retry). Called by the recurring background job.
 	ProcessDeletion(ctx context.Context) error
+
+	// ProcessSingleDeletion processes a specific deletion request by ID.
+	// Called by the background job worker for COPPA immediate deletions.
+	// Verifies familyID matches the deletion request as a safety check.
+	ProcessSingleDeletion(ctx context.Context, deletionID uuid.UUID, familyID uuid.UUID) error
 
 	// === Account Recovery ===
 
@@ -104,17 +109,21 @@ type LifecycleService interface {
 type ExportRequestRepository interface {
 	Create(ctx context.Context, scope *shared.FamilyScope, input *CreateExportRequest) (*ExportRequest, error)
 	FindByID(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*ExportRequest, error)
-	ListByFamily(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, error)
-	UpdateStatus(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64) error
+	ListByFamily(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, int64, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64, errorMessage *string) error
 }
 
 // DeletionRequestRepository defines persistence for lifecycle_deletion_requests.
 type DeletionRequestRepository interface {
 	Create(ctx context.Context, scope *shared.FamilyScope, input *CreateDeletionRequest) (*DeletionRequest, error)
 	FindActiveByFamily(ctx context.Context, scope *shared.FamilyScope) (*DeletionRequest, error)
+	// FindByID loads a deletion request by primary key (no FamilyScope — background job context).
+	FindByID(ctx context.Context, id uuid.UUID) (*DeletionRequest, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status DeletionStatus) error
 	UpdateDomainStatus(ctx context.Context, id uuid.UUID, domain string, completed bool) error
 	Cancel(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) error
+	// FindReadyForDeletion returns deletion requests in grace_period status whose grace
+	// period has expired, plus requests stuck in processing status (for retry).
 	FindReadyForDeletion(ctx context.Context) ([]DeletionRequest, error)
 }
 
@@ -122,6 +131,7 @@ type DeletionRequestRepository interface {
 type RecoveryRequestRepository interface {
 	Create(ctx context.Context, input *CreateRecoveryRequest) (*RecoveryRequest, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*RecoveryRequest, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status RecoveryStatus, resolvedParentID *uuid.UUID) error
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

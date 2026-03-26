@@ -81,9 +81,11 @@ type ExportRequest struct {
 	Status         ExportStatus
 	Format         ExportFormat
 	IncludeDomains []string
-	ArchiveKey     *string
-	DownloadURL    *string
-	SizeBytes      *int64
+	ArchiveKey        *string
+	DownloadURL       *string
+	DownloadExpiresAt *time.Time
+	SizeBytes         *int64
+	ErrorMessage   *string
 	CreatedAt      time.Time
 	CompletedAt    *time.Time
 	ExpiresAt      time.Time
@@ -114,6 +116,7 @@ type RecoveryRequest struct {
 	VerificationMethod VerificationMethod
 	Status             RecoveryStatus
 	ResolvedParentID   *uuid.UUID
+	SupportTicketID    *string
 	CreatedAt          time.Time
 	ResolvedAt         *time.Time
 	ExpiresAt          time.Time

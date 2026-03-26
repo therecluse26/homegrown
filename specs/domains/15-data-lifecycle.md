@@ -236,25 +236,38 @@ type LifecycleService interface {
 
     // RequestExport requests a full data export for the family.
     // Enqueues a background job that calls each domain's ExportHandler.
-    RequestExport(ctx context.Context, auth *AuthContext, req *RequestExportInput) (uuid.UUID, error)
+    RequestExport(ctx context.Context, auth *shared.AuthContext, scope *shared.FamilyScope, req *RequestExportInput) (uuid.UUID, error)
 
     // GetExportStatus returns export request status. Returns download URL if completed.
-    GetExportStatus(ctx context.Context, auth *AuthContext, scope *FamilyScope, exportID uuid.UUID) (*ExportStatusResponse, error)
+    GetExportStatus(ctx context.Context, scope *shared.FamilyScope, exportID uuid.UUID) (*ExportStatusResponse, error)
 
     // ListExports lists past export requests for the family.
-    ListExports(ctx context.Context, auth *AuthContext, scope *FamilyScope, pagination *PaginationParams) (*PaginatedResponse[ExportSummary], error)
+    ListExports(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) (*PaginatedExports, error)
+
+    // ProcessExport executes the cross-domain data export for a given export request.
+    // Called by the background job worker.
+    ProcessExport(ctx context.Context, exportID uuid.UUID, familyID uuid.UUID) error
 
     // === Account Deletion ===
 
     // RequestDeletion requests account deletion. Starts a grace period.
     // Sends confirmation email and offers data export.
-    RequestDeletion(ctx context.Context, auth *AuthContext, req *RequestDeletionInput) (uuid.UUID, error)
+    RequestDeletion(ctx context.Context, auth *shared.AuthContext, scope *shared.FamilyScope, req *RequestDeletionInput) (uuid.UUID, error)
 
     // GetDeletionStatus returns active deletion request status.
-    GetDeletionStatus(ctx context.Context, auth *AuthContext, scope *FamilyScope) (*DeletionStatusResponse, error)
+    GetDeletionStatus(ctx context.Context, scope *shared.FamilyScope) (*DeletionStatusResponse, error)
 
     // CancelDeletion cancels a pending deletion during the grace period.
-    CancelDeletion(ctx context.Context, auth *AuthContext, scope *FamilyScope) error
+    CancelDeletion(ctx context.Context, scope *shared.FamilyScope) error
+
+    // ProcessDeletion processes deletion requests whose grace period has expired
+    // or that are stuck in processing status (retry). Called by the recurring background job.
+    ProcessDeletion(ctx context.Context) error
+
+    // ProcessSingleDeletion processes a specific deletion request by ID.
+    // Called by the background job worker for COPPA immediate deletions.
+    // Verifies familyID matches the deletion request as a safety check.
+    ProcessSingleDeletion(ctx context.Context, deletionID uuid.UUID, familyID uuid.UUID) error
 
     // === Account Recovery ===
 
@@ -267,14 +280,14 @@ type LifecycleService interface {
     // === Session Management ===
 
     // ListSessions lists active sessions for the current user.
-    ListSessions(ctx context.Context, auth *AuthContext) ([]SessionInfo, error)
+    ListSessions(ctx context.Context, auth *shared.AuthContext) ([]SessionInfo, error)
 
     // RevokeSession revokes a specific session.
-    RevokeSession(ctx context.Context, auth *AuthContext, sessionID string) error
+    RevokeSession(ctx context.Context, auth *shared.AuthContext, sessionID string) error
 
     // RevokeAllSessions revokes all sessions except the current one ("sign out everywhere").
     // Returns count of revoked sessions.
-    RevokeAllSessions(ctx context.Context, auth *AuthContext) (uint32, error)
+    RevokeAllSessions(ctx context.Context, auth *shared.AuthContext) (uint32, error)
 }
 ```
 
@@ -287,28 +300,32 @@ type LifecycleService interface {
 
 // ExportRequestRepository defines persistence operations for lifecycle_export_requests.
 type ExportRequestRepository interface {
-    Create(ctx context.Context, scope *FamilyScope, input *CreateExportRequest) (*ExportRequest, error)
+    Create(ctx context.Context, scope *shared.FamilyScope, input *CreateExportRequest) (*ExportRequest, error)
 
-    FindByID(ctx context.Context, scope *FamilyScope, id uuid.UUID) (*ExportRequest, error)
+    FindByID(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*ExportRequest, error)
 
-    ListByFamily(ctx context.Context, scope *FamilyScope, pagination *PaginationParams) ([]ExportRequest, error)
+    ListByFamily(ctx context.Context, scope *shared.FamilyScope, pagination *PaginationParams) ([]ExportRequest, int64, error)
 
-    UpdateStatus(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64) error
+    UpdateStatus(ctx context.Context, id uuid.UUID, status ExportStatus, archiveKey *string, sizeBytes *int64, errorMessage *string) error
 }
 
 // DeletionRequestRepository defines persistence operations for lifecycle_deletion_requests.
 type DeletionRequestRepository interface {
-    Create(ctx context.Context, scope *FamilyScope, input *CreateDeletionRequest) (*DeletionRequest, error)
+    Create(ctx context.Context, scope *shared.FamilyScope, input *CreateDeletionRequest) (*DeletionRequest, error)
 
-    FindActiveByFamily(ctx context.Context, scope *FamilyScope) (*DeletionRequest, error)
+    FindActiveByFamily(ctx context.Context, scope *shared.FamilyScope) (*DeletionRequest, error)
+
+    // FindByID loads a deletion request by primary key (no FamilyScope — background job context).
+    FindByID(ctx context.Context, id uuid.UUID) (*DeletionRequest, error)
 
     UpdateStatus(ctx context.Context, id uuid.UUID, status DeletionStatus) error
 
     UpdateDomainStatus(ctx context.Context, id uuid.UUID, domain string, completed bool) error
 
-    Cancel(ctx context.Context, scope *FamilyScope, id uuid.UUID) error
+    Cancel(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) error
 
-    // FindReadyForDeletion finds all deletion requests whose grace period has expired.
+    // FindReadyForDeletion returns deletion requests in grace_period status whose grace
+    // period has expired, plus requests stuck in processing status (for retry).
     FindReadyForDeletion(ctx context.Context) ([]DeletionRequest, error)
 }
 
