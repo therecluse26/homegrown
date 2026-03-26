@@ -34,6 +34,13 @@ func NewFamilyScopeFromAuth(auth *AuthContext) FamilyScope {
 	return newFamilyScope(auth.FamilyID)
 }
 
+// NewFamilyScopeFromID creates a FamilyScope from a raw family_id.
+// Use this in event handlers and background jobs where AuthContext is not available
+// but the family_id is known from the domain event payload. [CODING §2.4]
+func NewFamilyScopeFromID(familyID uuid.UUID) FamilyScope {
+	return newFamilyScope(familyID)
+}
+
 // GetFamilyScope extracts a FamilyScope from the Echo context's AuthContext.
 // Returns an error if AuthContext is not present (i.e. handler is not behind auth middleware).
 func GetFamilyScope(c echo.Context) (FamilyScope, error) {

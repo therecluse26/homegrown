@@ -1393,6 +1393,354 @@ definitions:
     - StepChildren
     - StepMethodology
     - StepRoadmapReview
+  plan.ActivitySummary:
+    properties:
+      date:
+        type: string
+      id:
+        type: string
+      student_id:
+        type: string
+      subject:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  plan.ApplyTemplateInput:
+    properties:
+      end_date:
+        type: string
+      start_date:
+        type: string
+    required:
+    - end_date
+    - start_date
+    type: object
+  plan.AttendanceSummary:
+    properties:
+      date:
+        type: string
+      status:
+        type: string
+      student_id:
+        type: string
+    type: object
+  plan.CalendarDay:
+    properties:
+      date:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/plan.CalendarItem'
+        type: array
+    type: object
+  plan.CalendarItem:
+    properties:
+      category:
+        type: string
+      color:
+        type: string
+      date:
+        type: string
+      end_time:
+        type: string
+      id:
+        type: string
+      is_completed:
+        type: boolean
+      source:
+        $ref: '#/definitions/plan.CalendarSource'
+      start_time:
+        type: string
+      student_id:
+        type: string
+      title:
+        type: string
+    type: object
+  plan.CalendarResponse:
+    properties:
+      days:
+        items:
+          $ref: '#/definitions/plan.CalendarDay'
+        type: array
+      end:
+        type: string
+      start:
+        type: string
+    type: object
+  plan.CalendarSource:
+    enum:
+    - schedule
+    - activities
+    - attendance
+    - events
+    type: string
+    x-enum-varnames:
+    - CalendarSourceSchedule
+    - CalendarSourceActivities
+    - CalendarSourceAttendance
+    - CalendarSourceEvents
+  plan.CreateScheduleItemInput:
+    properties:
+      category:
+        $ref: '#/definitions/plan.ScheduleCategory'
+      color:
+        type: string
+      description:
+        type: string
+      duration_minutes:
+        type: integer
+      end_time:
+        type: string
+      notes:
+        type: string
+      start_date:
+        type: string
+      start_time:
+        type: string
+      student_id:
+        type: string
+      subject_id:
+        type: string
+      title:
+        maxLength: 200
+        type: string
+    required:
+    - start_date
+    - title
+    type: object
+  plan.CreateTemplateInput:
+    properties:
+      description:
+        type: string
+      is_active:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/plan.TemplateItem'
+        minItems: 1
+        type: array
+      name:
+        maxLength: 100
+        type: string
+    required:
+    - items
+    - name
+    type: object
+  plan.DayViewResponse:
+    properties:
+      activities:
+        items:
+          $ref: '#/definitions/plan.ActivitySummary'
+        type: array
+      attendance:
+        $ref: '#/definitions/plan.AttendanceSummary'
+      date:
+        type: string
+      events:
+        items:
+          $ref: '#/definitions/plan.EventSummary'
+        type: array
+      schedule_items:
+        items:
+          $ref: '#/definitions/plan.ScheduleItemResponse'
+        type: array
+    type: object
+  plan.EventSummary:
+    properties:
+      date:
+        type: string
+      end_time:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: string
+      location:
+        type: string
+      start_time:
+        type: string
+      title:
+        type: string
+    type: object
+  plan.LogAsActivityInput:
+    properties:
+      description:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  plan.ScheduleCategory:
+    enum:
+    - lesson
+    - reading
+    - activity
+    - assessment
+    - field_trip
+    - co_op
+    - break
+    - custom
+    type: string
+    x-enum-varnames:
+    - ScheduleCategoryLesson
+    - ScheduleCategoryReading
+    - ScheduleCategoryActivity
+    - ScheduleCategoryAssessment
+    - ScheduleCategoryFieldTrip
+    - ScheduleCategoryCoOp
+    - ScheduleCategoryBreak
+    - ScheduleCategoryCustom
+  plan.ScheduleItemListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/plan.ScheduleItemResponse'
+        type: array
+      has_more:
+        type: boolean
+      next_cursor:
+        type: string
+    type: object
+  plan.ScheduleItemResponse:
+    properties:
+      category:
+        $ref: '#/definitions/plan.ScheduleCategory'
+      color:
+        type: string
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      duration_minutes:
+        type: integer
+      end_time:
+        type: string
+      id:
+        type: string
+      is_completed:
+        type: boolean
+      linked_activity_id:
+        type: string
+      notes:
+        type: string
+      start_date:
+        type: string
+      start_time:
+        type: string
+      student_id:
+        type: string
+      student_name:
+        type: string
+      subject_id:
+        type: string
+      title:
+        type: string
+    type: object
+  plan.TemplateItem:
+    properties:
+      category:
+        $ref: '#/definitions/plan.ScheduleCategory'
+      color:
+        type: string
+      day_of_week:
+        enum:
+        - monday
+        - tuesday
+        - wednesday
+        - thursday
+        - friday
+        - saturday
+        - sunday
+        type: string
+      end_time:
+        type: string
+      start_time:
+        type: string
+      subject_id:
+        type: string
+      title:
+        maxLength: 200
+        type: string
+    required:
+    - day_of_week
+    - title
+    type: object
+  plan.TemplateResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/plan.TemplateItem'
+        type: array
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  plan.UpdateScheduleItemInput:
+    properties:
+      category:
+        $ref: '#/definitions/plan.ScheduleCategory'
+      color:
+        type: string
+      description:
+        type: string
+      duration_minutes:
+        type: integer
+      end_time:
+        type: string
+      notes:
+        type: string
+      start_date:
+        type: string
+      start_time:
+        type: string
+      student_id:
+        type: string
+      subject_id:
+        type: string
+      title:
+        type: string
+    type: object
+  plan.UpdateTemplateInput:
+    properties:
+      description:
+        type: string
+      is_active:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/plan.TemplateItem'
+        type: array
+      name:
+        type: string
+    type: object
+  plan.WeekViewResponse:
+    properties:
+      days:
+        items:
+          $ref: '#/definitions/plan.CalendarDay'
+        type: array
+      week_end:
+        type: string
+      week_start:
+        type: string
+    type: object
   recs.RecommendationListResponse:
     properties:
       next_cursor:
@@ -4067,6 +4415,548 @@ paths:
       summary: Skip the onboarding wizard
       tags:
       - onboarding
+  /planning/calendar:
+    get:
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end
+        type: string
+      - description: Filter by student ID
+        in: query
+        name: student_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plan.CalendarResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get aggregated calendar
+      tags:
+      - planning
+  /planning/calendar/day/{date}:
+    get:
+      parameters:
+      - description: Date (YYYY-MM-DD)
+        in: path
+        name: date
+        required: true
+        type: string
+      - description: Filter by student ID
+        in: query
+        name: student_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plan.DayViewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get day view
+      tags:
+      - planning
+  /planning/calendar/print:
+    get:
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end
+        required: true
+        type: string
+      - description: Filter by student ID
+        in: query
+        name: student_id
+        type: string
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML content
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get print-friendly calendar
+      tags:
+      - planning
+  /planning/calendar/week/{date}:
+    get:
+      parameters:
+      - description: Any date within the week (YYYY-MM-DD)
+        in: path
+        name: date
+        required: true
+        type: string
+      - description: Filter by student ID
+        in: query
+        name: student_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plan.WeekViewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get week view
+      tags:
+      - planning
+  /planning/schedule-items:
+    get:
+      parameters:
+      - description: Start date filter (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: End date filter (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      - description: Filter by student ID
+        in: query
+        name: student_id
+        type: string
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      - description: Filter by completion status
+        in: query
+        name: is_completed
+        type: boolean
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plan.ScheduleItemListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List schedule items
+      tags:
+      - planning
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Schedule item details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/plan.CreateScheduleItemInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create a schedule item
+      tags:
+      - planning
+  /planning/schedule-items/{id}:
+    delete:
+      parameters:
+      - description: Schedule item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete a schedule item
+      tags:
+      - planning
+    get:
+      parameters:
+      - description: Schedule item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plan.ScheduleItemResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get a schedule item
+      tags:
+      - planning
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Schedule item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/plan.UpdateScheduleItemInput'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update a schedule item
+      tags:
+      - planning
+  /planning/schedule-items/{id}/complete:
+    patch:
+      parameters:
+      - description: Schedule item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Mark a schedule item as completed
+      tags:
+      - planning
+  /planning/schedule-items/{id}/log:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Schedule item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Activity details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/plan.LogAsActivityInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Log a completed schedule item as a learning activity
+      tags:
+      - planning
+  /planning/templates:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/plan.TemplateResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List schedule templates
+      tags:
+      - planning
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/plan.CreateTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create a schedule template
+      tags:
+      - planning
+  /planning/templates/{id}:
+    delete:
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Delete a schedule template
+      tags:
+      - planning
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/plan.UpdateTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update a schedule template
+      tags:
+      - planning
+  /planning/templates/{id}/apply:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Date range to apply
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/plan.ApplyTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Apply a template to create schedule items for a date range
+      tags:
+      - planning
   /recommendations:
     get:
       parameters:

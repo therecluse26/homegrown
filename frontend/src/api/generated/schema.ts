@@ -4368,6 +4368,937 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/planning/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get aggregated calendar */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Start date (YYYY-MM-DD) */
+                    start?: string;
+                    /** @description End date (YYYY-MM-DD) */
+                    end?: string;
+                    /** @description Filter by student ID */
+                    student_id?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["plan.CalendarResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/calendar/day/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get day view */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by student ID */
+                    student_id?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Date (YYYY-MM-DD) */
+                    date: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["plan.DayViewResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/calendar/print": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get print-friendly calendar */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Start date (YYYY-MM-DD) */
+                    start: string;
+                    /** @description End date (YYYY-MM-DD) */
+                    end: string;
+                    /** @description Filter by student ID */
+                    student_id?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description HTML content */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/html": string;
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/html": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/html": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/calendar/week/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get week view */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by student ID */
+                    student_id?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Any date within the week (YYYY-MM-DD) */
+                    date: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["plan.WeekViewResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/schedule-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List schedule items */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Start date filter (YYYY-MM-DD) */
+                    start_date?: string;
+                    /** @description End date filter (YYYY-MM-DD) */
+                    end_date?: string;
+                    /** @description Filter by student ID */
+                    student_id?: string;
+                    /** @description Filter by category */
+                    category?: string;
+                    /** @description Filter by completion status */
+                    is_completed?: boolean;
+                    /** @description Pagination cursor */
+                    cursor?: string;
+                    /** @description Results per page (default 20, max 100) */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["plan.ScheduleItemListResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a schedule item */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Schedule item details */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["plan.CreateScheduleItemInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/schedule-items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a schedule item */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule item ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["plan.ScheduleItemResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Delete a schedule item */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule item ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update a schedule item */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule item ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Fields to update */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["plan.UpdateScheduleItemInput"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/planning/schedule-items/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark a schedule item as completed */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule item ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/planning/schedule-items/{id}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Log a completed schedule item as a learning activity */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule item ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Activity details */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["plan.LogAsActivityInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List schedule templates */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["plan.TemplateResponse"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a schedule template */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Template details */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["plan.CreateTemplateInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a schedule template */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Template ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update a schedule template */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Template ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Fields to update */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["plan.UpdateTemplateInput"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/planning/templates/{id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a template to create schedule items for a date range */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Template ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Date range to apply */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["plan.ApplyTemplateInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string[];
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recommendations": {
         parameters: {
             query?: never;
@@ -5636,6 +6567,154 @@ export interface components {
         "onboard.WizardStatus": "in_progress" | "completed" | "skipped";
         /** @enum {string} */
         "onboard.WizardStep": "family_profile" | "children" | "methodology" | "roadmap_review";
+        "plan.ActivitySummary": {
+            date?: string;
+            id?: string;
+            student_id?: string;
+            subject?: string;
+            tags?: string[];
+            title?: string;
+        };
+        "plan.ApplyTemplateInput": {
+            end_date: string;
+            start_date: string;
+        };
+        "plan.AttendanceSummary": {
+            date?: string;
+            status?: string;
+            student_id?: string;
+        };
+        "plan.CalendarDay": {
+            date?: string;
+            items?: components["schemas"]["plan.CalendarItem"][];
+        };
+        "plan.CalendarItem": {
+            category?: string;
+            color?: string;
+            date?: string;
+            end_time?: string;
+            id?: string;
+            is_completed?: boolean;
+            source?: components["schemas"]["plan.CalendarSource"];
+            start_time?: string;
+            student_id?: string;
+            title?: string;
+        };
+        "plan.CalendarResponse": {
+            days?: components["schemas"]["plan.CalendarDay"][];
+            end?: string;
+            start?: string;
+        };
+        /** @enum {string} */
+        "plan.CalendarSource": "schedule" | "activities" | "attendance" | "events";
+        "plan.CreateScheduleItemInput": {
+            category?: components["schemas"]["plan.ScheduleCategory"];
+            color?: string;
+            description?: string;
+            duration_minutes?: number;
+            end_time?: string;
+            notes?: string;
+            start_date: string;
+            start_time?: string;
+            student_id?: string;
+            subject_id?: string;
+            title: string;
+        };
+        "plan.CreateTemplateInput": {
+            description?: string;
+            is_active?: boolean;
+            items: components["schemas"]["plan.TemplateItem"][];
+            name: string;
+        };
+        "plan.DayViewResponse": {
+            activities?: components["schemas"]["plan.ActivitySummary"][];
+            attendance?: components["schemas"]["plan.AttendanceSummary"];
+            date?: string;
+            events?: components["schemas"]["plan.EventSummary"][];
+            schedule_items?: components["schemas"]["plan.ScheduleItemResponse"][];
+        };
+        "plan.EventSummary": {
+            date?: string;
+            end_time?: string;
+            group_name?: string;
+            id?: string;
+            location?: string;
+            start_time?: string;
+            title?: string;
+        };
+        "plan.LogAsActivityInput": {
+            description?: string;
+            tags?: string[];
+        };
+        /** @enum {string} */
+        "plan.ScheduleCategory": "lesson" | "reading" | "activity" | "assessment" | "field_trip" | "co_op" | "break" | "custom";
+        "plan.ScheduleItemListResponse": {
+            data?: components["schemas"]["plan.ScheduleItemResponse"][];
+            has_more?: boolean;
+            next_cursor?: string;
+        };
+        "plan.ScheduleItemResponse": {
+            category?: components["schemas"]["plan.ScheduleCategory"];
+            color?: string;
+            completed_at?: string;
+            created_at?: string;
+            description?: string;
+            duration_minutes?: number;
+            end_time?: string;
+            id?: string;
+            is_completed?: boolean;
+            linked_activity_id?: string;
+            notes?: string;
+            start_date?: string;
+            start_time?: string;
+            student_id?: string;
+            student_name?: string;
+            subject_id?: string;
+            title?: string;
+        };
+        "plan.TemplateItem": {
+            category?: components["schemas"]["plan.ScheduleCategory"];
+            color?: string;
+            /** @enum {string} */
+            day_of_week: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+            end_time?: string;
+            start_time?: string;
+            subject_id?: string;
+            title: string;
+        };
+        "plan.TemplateResponse": {
+            created_at?: string;
+            description?: string;
+            id?: string;
+            is_active?: boolean;
+            items?: components["schemas"]["plan.TemplateItem"][];
+            name?: string;
+            updated_at?: string;
+        };
+        "plan.UpdateScheduleItemInput": {
+            category?: components["schemas"]["plan.ScheduleCategory"];
+            color?: string;
+            description?: string;
+            duration_minutes?: number;
+            end_time?: string;
+            notes?: string;
+            start_date?: string;
+            start_time?: string;
+            student_id?: string;
+            subject_id?: string;
+            title?: string;
+        };
+        "plan.UpdateTemplateInput": {
+            description?: string;
+            is_active?: boolean;
+            items?: components["schemas"]["plan.TemplateItem"][];
+            name?: string;
+        };
+        "plan.WeekViewResponse": {
+            days?: components["schemas"]["plan.CalendarDay"][];
+            week_end?: string;
+            week_start?: string;
+        };
         "recs.RecommendationListResponse": {
             next_cursor?: string;
             recommendations?: components["schemas"]["recs.RecommendationResponse"][];

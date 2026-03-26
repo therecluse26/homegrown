@@ -40,6 +40,7 @@ import (
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/comply"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
+	"github.com/homegrown-academy/homegrown-academy/internal/plan"
 	"github.com/homegrown-academy/homegrown-academy/internal/recs"
 	"github.com/homegrown-academy/homegrown-academy/internal/safety"
 	"github.com/homegrown-academy/homegrown-academy/internal/search"
@@ -1043,6 +1044,28 @@ func main() {
 		healthForAdmin, jobsForAdmin,
 	)
 
+	// ── Step 7o: Wire plan:: domain ────────────────────────────────────────────
+	// plan:: is the planning & scheduling domain. It aggregates schedule items,
+	// activities, attendance, and events into a unified calendar view. [17-planning §1]
+	// Cross-domain adapters are stubbed until learn::, comply::, and social::
+	// expose the required calendar-aggregation methods.
+	planRepo := plan.NewPgScheduleItemRepository(db)
+	planTemplateRepo := plan.NewPgScheduleTemplateRepository(db)
+
+	iamForPlan := &planIamStub{}
+	learnForPlan := &planLearnStub{}
+	complyForPlan := &planComplyStub{}
+	socialForPlan := &planSocialStub{}
+
+	planSvc := plan.NewPlanningService(
+		planRepo, planTemplateRepo,
+		iamForPlan, learnForPlan, complyForPlan, socialForPlan,
+	)
+
+	// Register plan:: event subscriptions [17-planning §16]
+	eventBus.Subscribe(reflect.TypeOf(social.EventCancelled{}), plan.NewEventCancelledHandler(planSvc))
+	eventBus.Subscribe(reflect.TypeOf(learn.ActivityLogged{}), plan.NewActivityLoggedHandler(planSvc))
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -1068,6 +1091,7 @@ func main() {
 		Recs:        recsSvc,
 		Comply:      complySvc,
 		Admin:       adminSvc,
+		Plan:        planSvc,
 		PubSub:      pubsub,
 	}
 
@@ -1228,6 +1252,41 @@ func (adminJobInspectorStub) GetDeadLetterJobs(_ context.Context, _ *shared.Pagi
 }
 func (adminJobInspectorStub) RetryDeadLetterJob(_ context.Context, _ string) error {
 	return admin.ErrDeadLetterNotFound
+}
+
+// ─── Plan Domain Adapter Stubs ──────────────────────────────────────────────
+// Stub implementations of plan:: consumer-defined interfaces. These delegate to
+// other domains' services but are initially stubbed until those domains expose the
+// required calendar-aggregation methods. [17-planning §8]
+
+type planIamStub struct{}
+
+func (planIamStub) StudentBelongsToFamily(_ context.Context, _ uuid.UUID, _ uuid.UUID) (bool, error) {
+	return true, nil // safe default — validation deferred
+}
+func (planIamStub) GetStudentName(_ context.Context, studentID uuid.UUID) (string, error) {
+	return studentID.String(), nil // graceful fallback to ID string
+}
+
+type planLearnStub struct{}
+
+func (planLearnStub) ListActivitiesForCalendar(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time, _ *uuid.UUID) ([]plan.ActivitySummary, error) {
+	return []plan.ActivitySummary{}, nil
+}
+func (planLearnStub) LogActivity(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ string, _ time.Time, _ *int, _ *uuid.UUID, _ *string, _ []string) (uuid.UUID, error) {
+	return uuid.Nil, fmt.Errorf("plan: learn adapter not yet implemented")
+}
+
+type planComplyStub struct{}
+
+func (planComplyStub) GetAttendanceRange(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time, _ *uuid.UUID) ([]plan.AttendanceSummary, error) {
+	return []plan.AttendanceSummary{}, nil
+}
+
+type planSocialStub struct{}
+
+func (planSocialStub) GetEventsForCalendar(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time) ([]plan.EventSummary, error) {
+	return []plan.EventSummary{}, nil
 }
 
 // gracefulShutdown listens for SIGINT/SIGTERM and shuts the server down cleanly.

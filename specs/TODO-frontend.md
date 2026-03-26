@@ -31,11 +31,24 @@ Phase 7 ─── Parent Dashboard & Family Management
    │
    ├──────────────────┬──────────────────┐
 Phase 8               Phase 9            Phase 10
-Learning Tools        Social, Mkt,       Compliance, Admin,
-& Progress            & Search           Polish & QA
+Learning Tools        Social, Mkt,       Compliance,
+& Progress            Search & Admin     Planning & QA
 ```
 
 Phases 8–10 may proceed in parallel once Phase 7 is complete.
+
+---
+
+## Backend Prerequisites
+
+These backend features are referenced by the TODO but do not yet have HTTP
+handlers. They MUST be implemented before the frontend phases that depend on them.
+
+| Backend Gap | Blocks Phase | Notes |
+|-------------|-------------|-------|
+| Data lifecycle handler (`internal/lifecycle/handler.go`) + route registration | Phase 7 (data export, account deletion) | Service layer + tests exist; needs handler + main.go wiring |
+| Planning domain (`internal/planning/`) | Phase 10 (calendar, schedules) | Domain spec complete (`17-planning.md`); no backend code exists |
+| Session list/revoke API in IAM | Phase 5 (session-management.tsx) | Kratos admin API could proxy this; needs IAM handler endpoints |
 
 ---
 
@@ -573,7 +586,7 @@ Depends on Phase 4 auth context and layout.
 > core infrastructure.
 
 - [ ] `lib/websocket.ts` — WebSocket connection manager: `[P1]`
-  - Connect to `wss://api.homegrown.academy/ws` (or dev proxy)
+  - Connect to `/v1/social/ws` (proxied via Vite in dev, full URL in production)
   - Message types: `new_message`, `notification`, `friend_request`
   - Auto-reconnect with exponential backoff
   - (ARCHITECTURE §11.5)
@@ -637,6 +650,7 @@ Tests the entire data flow: auth → API → TanStack Query → UI.
   - Step enum: `family_profile → children → methodology → roadmap_review`
 - [ ] `steps/family-profile-step.tsx` — family name, state selection, location region `[P1]`
   - Validate required fields before allowing next
+  - State selection in family-profile-step feeds into compliance domain — selected state is used by `GET /v1/compliance/state-requirements/:state_code` to surface relevant requirements later
 - [ ] `steps/children-step.tsx` — add student profiles: `[P1]`
   - Display name, birth year, grade level
   - Add/remove students dynamically
@@ -719,7 +733,8 @@ pages exercise CRUD patterns that all subsequent features follow.
   - "Opt out of all non-essential email" batch toggle
   - CAN-SPAM compliant unsubscribe mechanism
   - (SPEC §13.3, domain spec `specs/domains/08-notify.md`)
-- [ ] `subscription-manager.tsx` — subscription management: `[P2]`
+- [ ] `subscription-upgrade.tsx` — minimal upgrade flow: tier comparison, "Subscribe" CTA linking to checkout (Hyperswitch). Required for `<TierGate>` to have a working destination. `[P1]`
+- [ ] `subscription-manager.tsx` — full subscription management: `[P2]`
   - Current plan display
   - Upgrade/downgrade flow with downgrade consequence warning modal listing: "Learning data preserved", "Premium tools become read-only", "Compliance reports remain downloadable", "AI recommendations disabled". Explicit confirmation checkbox required.
   - Billing cycle info
@@ -757,7 +772,14 @@ pages exercise CRUD patterns that all subsequent features follow.
   - `useMarkRead(id)` — mark single notification read
   - `useMarkAllRead()` — mark all read
 - [ ] `components/layout/notification-bell.tsx` — bell icon in header with unread count badge `[P1]`
-- [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications; notification type icons per category (social, learning, system, marketplace); system-critical notifications show lock icon + non-toggleable indicator `[P1]`
+- [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications with type-specific rendering: `[P1]`
+  - Each notification type renders with: category icon (Lucide), action text, deep link to related content, timestamp
+  - `friend_request_received` → user avatar + "sent you a friend request" + Accept/Decline buttons
+  - `friend_request_accepted` → user avatar + "accepted your friend request" + View Profile link
+  - `message_received` → user avatar + message preview + link to conversation
+  - `content_flagged` → warning icon + "Your [post/comment] was flagged for review" + link to content
+  - `event_cancelled` → calendar icon + "Event [name] was cancelled" + link to events
+  - System notifications (ToS update, maintenance) → system icon + non-dismissable until acknowledged
 - [ ] `features/settings/notification-history.tsx` — full notification history page (`/settings/notifications/history`) with filters by type, date range, and read/unread status `[P1]`
 
 ### Notification Type → Phase Mapping
@@ -995,13 +1017,15 @@ These tools are methodology-specific extensions. Listed here as `[P3]` placehold
 
 ---
 
-## Phase 9: Social, Marketplace & Search
+## Phase 9: Social, Marketplace, Search & Admin
 
 **Goal**: Build the social feed, messaging, groups, events, marketplace browse/
-purchase flow, creator tools, and global search. These are the community features.
+purchase flow, creator tools, global search, and core admin/moderation. These are
+the community features plus the moderation tools needed to operate them safely.
 
 **Why here**: These are large feature surfaces that depend on the foundation
-from Phases 1–7 but are independent of Phase 8 (learning).
+from Phases 1–7 but are independent of Phase 8 (learning). Admin/moderation is
+co-located here because reporting without review is an incomplete workflow.
 
 ### Prerequisites
 
@@ -1132,6 +1156,7 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Listing form: title, description, price, category, content upload
   - Preview before publish
   - Listing lifecycle state transition buttons (draft → submitted → published → archived)
+  - Note: creators can create listings without identity verification in Phase 1. Verification (`creator-verification.tsx` [P2]) gates **payouts only**, not listing creation. Unverified creators see a persistent banner: "Complete verification to receive payouts."
 - [ ] `edit-listing.tsx` — edit existing listing (`/creator/listings/:id/edit`) `[P1]`
 - [ ] `listing-version-history.tsx` — version list with upload date, file size, "current" badge. View-only (no rollback in v1). (SPEC §9.2.3) `[P2]`
 - [ ] `creator-reviews.tsx` — view reviews on own listings, respond to reviews `[P2]`
@@ -1155,6 +1180,30 @@ from Phases 1–7 but are independent of Phase 8 (learning).
   - Navigates to `/search?q=...`
   - (SPEC §12, domain spec `specs/domains/12-search.md`)
 
+### Admin & Moderation (`features/admin/`) — Admin Only
+
+> Moved from Phase 10: reporting without review is an incomplete workflow.
+> Day-1 moderation capability is essential alongside social/marketplace launch.
+
+- [ ] `admin-dashboard.tsx` — system health overview (`/admin`): `[P1]`
+  - User counts, content stats, system metrics
+  - `<AdminGuard>` wrapper
+- [ ] `user-management.tsx` — user admin: `[P1]`
+  - Search users by email/name, filter by status
+  - View family details
+  - Account actions: suspend (with reason), ban (with reason), reactivate
+- [ ] `user-detail.tsx` — individual user detail view (`/admin/users/:id`) `[P1]`
+- [ ] `moderation-queue.tsx` — content moderation: `[P1]`
+  - Reported content queue (from safety domain reports)
+  - Content preview panel (shows reported content inline without navigating away)
+  - Review + action with reasons dropdown (approve, remove, warn) + action reason selection
+  - Bulk actions for multiple reports (select all, bulk approve/remove)
+  - Admin notes field per moderation action (internal, not visible to content owner)
+  - Moderation states visible to content owners
+  - **Appeals tab**: pending appeals with original action context, appeal text, Grant/Deny actions. Different admin than original action (enforced by backend, UI shows warning if same admin). (SPEC §12.2, 11-safety §12.4) `[P1]`
+- [ ] `audit-log.tsx` — admin audit log viewer: filterable by admin user, action type, target entity, date range `[P1]`
+- References: SPEC §16, domain spec `specs/domains/16-admin.md`
+
 ### Verification
 
 - [ ] Verify: social feed displays posts from friends only `[P1]`
@@ -1168,22 +1217,25 @@ from Phases 1–7 but are independent of Phase 8 (learning).
 - [ ] Verify: report buttons present on all user content `[P1]`
 - [ ] Verify: no public profiles — friends-only visibility enforced `[P1]`
 - [ ] Verify: RSVP state persists and updates event attendee count `[P1]`
+- [ ] Verify: moderation queue receives reports and admin actions persist `[P1]`
+- [ ] Verify: audit log records admin actions with correct metadata `[P1]`
 - [ ] Verify: `npm run type-check` passes `[P1]`
 
 ### References
-- SPEC §5 (social), §7 (marketplace), §12 (search)
-- Domain specs: `specs/domains/05-social.md`, `specs/domains/07-mkt.md`, `specs/domains/12-search.md`
+- SPEC §5 (social), §7 (marketplace), §12 (search), §16 (admin)
+- Domain specs: `specs/domains/05-social.md`, `specs/domains/07-mkt.md`, `specs/domains/12-search.md`, `specs/domains/16-admin.md`
 - ARCHITECTURE §11.3 (routes), §11.5 (WebSocket)
 
 ---
 
-## Phase 10: Compliance, Admin, Planning, Polish & Quality Gates
+## Phase 10: Compliance, Planning, Polish & Quality Gates
 
-**Goal**: Build premium compliance features, admin panel, calendar/planning,
-recommendations, and complete all cross-cutting polish work. Final quality verification.
+**Goal**: Build premium compliance features, calendar/planning, remaining admin
+config, recommendations, and complete all cross-cutting polish work. Final quality
+verification.
 
-**Why last**: These features are either premium-gated, admin-only, or polish
-tasks that should only happen after core features are stable.
+**Why last**: These features are either premium-gated or polish tasks that should
+only happen after core features are stable. Core admin/moderation moved to Phase 9.
 
 ### Compliance Features (`features/compliance/`) — Premium Only
 
@@ -1241,25 +1293,11 @@ tasks that should only happen after core features are stable.
 - [ ] Schedule sharing/export (CSV, iCal formats) `[P2]`
 - References: SPEC §17, domain spec `specs/domains/17-planning.md`
 
-### Admin Panel (`features/admin/`) — Admin Only
+### Admin Config (`features/admin/`) — Admin Only
 
-- [ ] `admin-dashboard.tsx` — system health overview (`/admin`): `[P1]`
-  - User counts, content stats, system metrics
-  - `<AdminGuard>` wrapper
-- [ ] `user-management.tsx` — user admin: `[P1]`
-  - Search users by email/name, filter by status
-  - View family details
-  - Account actions: suspend (with reason), ban (with reason), reactivate
-- [ ] `user-detail.tsx` — individual user detail view (`/admin/users/:id`) `[P1]`
-- [ ] `moderation-queue.tsx` — content moderation: `[P1]`
-  - Reported content queue (from safety domain reports)
-  - Content preview panel (shows reported content inline without navigating away)
-  - Review + action with reasons dropdown (approve, remove, warn) + action reason selection
-  - Bulk actions for multiple reports (select all, bulk approve/remove)
-  - Admin notes field per moderation action (internal, not visible to content owner)
-  - Moderation states visible to content owners
-  - **Appeals tab**: pending appeals with original action context, appeal text, Grant/Deny actions. Different admin than original action (enforced by backend, UI shows warning if same admin). (SPEC §12.2, 11-safety §12.4) `[P1]`
-- [ ] `audit-log.tsx` — admin audit log viewer: filterable by admin user, action type, target entity, date range `[P1]`
+> Core admin (dashboard, user management, moderation queue, audit log) moved to Phase 9.
+> These remaining items are P2 configuration features.
+
 - [ ] `feature-flags.tsx` — feature flag management: toggle, rollout percentage, family whitelist `[P2]`
 - [ ] `methodology-config.tsx` — methodology configuration editing (tool labels, descriptions, philosophy text) `[P2]`
 - References: SPEC §16, domain spec `specs/domains/16-admin.md`
@@ -1364,9 +1402,11 @@ Types currently in `schema.ts` (domains 01-04):
 | Notify | — | **Needs `generate-types` run** |
 | Media | — | **Needs `generate-types` run** |
 | Billing | — | **Needs `generate-types` run** |
-| Search | — | **Backend in progress** |
-| Compliance | — | **Backend not started** |
-| Planning | — | **Backend not started** |
+| Search | — | Ready (handler + routes wired) — **needs `generate-types` run** |
+| Compliance | — | Ready (30+ endpoints wired) — **needs `generate-types` run** |
+| Lifecycle | — | Service layer only — **needs handler + routes before Phase 7** |
+| Planning | — | Spec complete (`17-planning.md`) — **needs full backend before Phase 10 calendar** |
+| Sessions | — | **No list/revoke API** — needs IAM enhancement before Phase 5 `session-management.tsx` |
 
 Before starting any phase that consumes API types beyond domains 01-04, run:
 ```bash
