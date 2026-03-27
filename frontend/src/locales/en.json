@@ -1,0 +1,44 @@
+{
+  "app.name": "Homegrown Academy",
+
+  "nav.home": "Home",
+  "nav.learning": "Learning",
+  "nav.social": "Social",
+  "nav.marketplace": "Marketplace",
+  "nav.calendar": "Calendar",
+  "nav.settings": "Settings",
+  "nav.search": "Search",
+  "nav.admin": "Admin",
+  "nav.compliance": "Compliance",
+  "nav.planning": "Planning",
+
+  "auth.login": "Log In",
+  "auth.register": "Create Account",
+  "auth.logout": "Log Out",
+  "auth.recovery": "Forgot Password",
+  "auth.verification": "Verify Email",
+  "auth.sessionExpiring": "Your session is about to expire",
+  "auth.extendSession": "Extend Session",
+
+  "onboarding.title": "Welcome to Homegrown Academy",
+  "onboarding.subtitle": "Let's set up your family profile",
+
+  "error.generic": "Something went wrong",
+  "error.notFound": "Page not found",
+  "error.notFoundDescription": "The page you're looking for doesn't exist or has been moved.",
+  "error.goHome": "Go Home",
+  "error.tryAgain": "Try Again",
+  "error.offline": "You're offline",
+  "error.offlineDescription": "Check your internet connection and try again.",
+
+  "loading.default": "Loading...",
+
+  "common.save": "Save",
+  "common.cancel": "Cancel",
+  "common.delete": "Delete",
+  "common.edit": "Edit",
+  "common.back": "Back",
+  "common.next": "Next",
+  "common.search": "Search",
+  "common.close": "Close"
+}

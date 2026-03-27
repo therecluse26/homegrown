@@ -2,7 +2,7 @@ import "./styles/app.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./query-client";
+import { queryClient } from "./lib/query-client";
 import { App } from "./App";
 
 const rootElement = document.getElementById("root");

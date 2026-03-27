@@ -50,3 +50,5 @@ server
 /*.png
 
 *.log
+
+.playwright-mcp

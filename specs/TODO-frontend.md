@@ -1,11 +1,16 @@
 # TODO: Frontend Implementation Roadmap
 
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
-> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–3 complete
+> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–4 mostly complete
 > (Tailwind v4 CSS infrastructure, design tokens, self-hosted fonts, type scale,
-> full shared UI component library). No routes or features yet. `api/client.ts`,
-> `api/generated/schema.ts`, full `src/styles/`, `src/components/ui/` (35 components),
-> and `src/components/common/` (8 components) exist.
+> full shared UI component library, routing, layouts, auth context, i18n).
+> `api/client.ts`, `api/generated/schema.ts`, full `src/styles/`,
+> `src/components/ui/` (35 components), `src/components/common/` (8 components),
+> `src/components/layout/` (10 components), `src/hooks/` (3 hooks),
+> `src/features/auth/` (2 providers), `src/lib/` (2 modules),
+> `src/routes.tsx` (full route tree with placeholders) exist.
+> Remaining Phase 4 items: accept-invitation page, authenticated-state verifications
+> (require running backend).
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -338,41 +343,41 @@ a layout and depends on auth state. This is the app skeleton.
 
 ### Project Structure Refactor
 
-- [ ] Create `frontend/src/hooks/` directory `[P1]`
-- [ ] Create `frontend/src/lib/` directory `[P1]`
-- [ ] Move `src/query-client.ts` → `src/lib/query-client.ts` (update import in `main.tsx`) `[P1]`
-- [ ] Configure `lib/query-client.ts` — retry (3× exponential backoff), staleTime (5 min), gcTime (10 min) (CODING_STANDARDS §3.5) `[P1]`
-- [ ] Create `frontend/src/types/` directory with `index.ts` for shared frontend types `[P1]`
-- [ ] Create `frontend/src/components/layout/` directory `[P1]`
-- [ ] Create `frontend/src/features/` subdirectories matching all backend domains: `auth/`, `onboarding/`, `social/`, `learning/`, `marketplace/`, `settings/`, `billing/`, `compliance/`, `admin/`, `planning/`, `recommendations/`, `search/`, `legal/`, `student/` (ARCHITECTURE §11.1) `[P1]`
-- [ ] `hooks/use-focus-on-mount.ts` — reusable focus management hook for route transitions; accepts ref, focuses element on mount (CODING_STANDARDS §3.8) `[P1]`
+- [x] Create `frontend/src/hooks/` directory `[P1]`
+- [x] Create `frontend/src/lib/` directory `[P1]`
+- [x] Move `src/query-client.ts` → `src/lib/query-client.ts` (update import in `main.tsx`) `[P1]`
+- [x] Configure `lib/query-client.ts` — retry (3× exponential backoff), staleTime (5 min), gcTime (10 min) (CODING_STANDARDS §3.5) `[P1]`
+- [x] Create `frontend/src/types/` directory with `index.ts` for shared frontend types `[P1]`
+- [x] Create `frontend/src/components/layout/` directory `[P1]`
+- [x] Create `frontend/src/features/` subdirectories matching all backend domains: `auth/`, `onboarding/`, `social/`, `learning/`, `marketplace/`, `settings/`, `billing/`, `compliance/`, `admin/`, `planning/`, `recommendations/`, `search/`, `legal/`, `student/` (ARCHITECTURE §11.1) `[P1]`
+- [x] `hooks/use-focus-on-mount.ts` — reusable focus management hook for route transitions; accepts ref, focuses element on mount (CODING_STANDARDS §3.8) `[P1]`
 
 ### Auth Context & Hook
 
-- [ ] `hooks/use-auth.ts` — custom hook wrapping TanStack Query for `GET /auth/me`: `[P1]`
+- [x] `hooks/use-auth.ts` — custom hook wrapping TanStack Query for `GET /auth/me`: `[P1]`
   - Returns `{ user, isLoading, isAuthenticated, isParent, isPrimaryParent, tier, coppaStatus }`
   - Uses `CurrentUserResponse` from generated types
   - Handles 401 (not logged in) gracefully — sets `isAuthenticated: false`
   - Query key: `["auth", "me"]`
-- [ ] `features/auth/auth-provider.tsx` — `AuthContext` provider wrapping the app, uses `use-auth` internally (ARCHITECTURE §11.2) `[P1]`
+- [x] `features/auth/auth-provider.tsx` — `AuthContext` provider wrapping the app, uses `use-auth` internally (ARCHITECTURE §11.2) `[P1]`
 
 ### Methodology Context & Hook
 
-- [ ] `hooks/use-methodology.ts` — wraps TanStack Query for `GET /families/tools` and methodology config: `[P1]`
+- [x] `hooks/use-methodology.ts` — wraps TanStack Query for `GET /families/tools` and methodology config: `[P1]`
   - Returns tools, terminology labels, active methodology slug
   - Depends on auth (only fetches when authenticated)
   - Query key: `["family", "tools"]`
-- [ ] `features/auth/methodology-provider.tsx` — `MethodologyContext` provider (ARCHITECTURE §11.2) `[P1]`
+- [x] `features/auth/methodology-provider.tsx` — `MethodologyContext` provider (ARCHITECTURE §11.2) `[P1]`
 
 ### i18n Infrastructure
 
-- [ ] `lib/i18n.ts` — react-intl setup with lazy-loaded locale data `[P1]`
-- [ ] `locales/en.json` — initial English string catalog (all user-facing strings extracted here) `[P1]`
-- [ ] Wrap `App.tsx` with `<IntlProvider>` using locale from `lib/i18n.ts` `[P1]`
+- [x] `lib/i18n.ts` — react-intl setup with lazy-loaded locale data `[P1]`
+- [x] `locales/en.json` — initial English string catalog (all user-facing strings extracted here) `[P1]`
+- [x] Wrap `App.tsx` with `<IntlProvider>` using locale from `lib/i18n.ts` `[P1]`
 
 ### Layout Components (`components/layout/`)
 
-- [ ] `app-shell.tsx` — main authenticated layout: `[P1]`
+- [x] `app-shell.tsx` — main authenticated layout: `[P1]`
   - Sidebar navigation (desktop) / bottom nav (mobile)
   - Header with search bar, notification bell, user menu
   - `<main>` content area with `data-context="parent"` attribute
@@ -381,25 +386,25 @@ a layout and depends on auth state. This is the app skeleton.
   - Floating nav: `surface-container-low` at 80% opacity + `backdrop-blur: 20px` (DESIGN §4.4)
   - Note: `data-context="parent"` enables `parent:` Tailwind variant; `data-context="student"` enables `student:` variant
   - Intentional Asymmetry: hero sections support offset `display-lg` headline overlapping floating card at 4rem offset (DESIGN §1)
-- [ ] `student-shell.tsx` — supervised student layout: `[P1]`
+- [x] `student-shell.tsx` — supervised student layout: `[P1]`
   - Simplified nav (no social, no marketplace, no settings)
   - `data-context="student"` on `<main>` (enables `student:` variant)
   - Larger tap targets, more rounded corners (`radius-xl`)
   - Back-to-parent button always visible
-- [ ] `auth-layout.tsx` — unauthenticated layout for login/register/recovery pages (centered card, no sidebar) `[P1]`
-- [ ] `onboarding-layout.tsx` — minimal layout for the onboarding wizard (progress indicator, no full nav) `[P1]`
-- [ ] `admin-shell.tsx` — admin-specific layout with admin navigation sidebar, system health indicators, and admin-only actions `[P1]`
+- [x] `auth-layout.tsx` — unauthenticated layout for login/register/recovery pages (centered card, no sidebar) `[P1]`
+- [x] `onboarding-layout.tsx` — minimal layout for the onboarding wizard (progress indicator, no full nav) `[P1]`
+- [x] `admin-shell.tsx` — admin-specific layout with admin navigation sidebar, system health indicators, and admin-only actions `[P1]`
 
 ### Route Guards
 
-- [ ] `components/layout/protected-route.tsx` — redirects to `/auth/login` if not authenticated `[P1]`
-- [ ] `components/layout/onboarding-guard.tsx` — redirects to `/onboarding` if authenticated but onboarding not complete (check `WizardProgressResponse.status !== "completed"` and `!== "skipped"`) `[P1]`
-- [ ] `components/layout/admin-guard.tsx` — redirects to `/` if not `is_platform_admin` (SPEC §16) `[P1]`
-- [ ] `components/layout/student-guard.tsx` — validates active student session `[P1]`
+- [x] `components/layout/protected-route.tsx` — redirects to `/auth/login` if not authenticated `[P1]`
+- [x] `components/layout/onboarding-guard.tsx` — redirects to `/onboarding` if authenticated but onboarding not complete (check `WizardProgressResponse.status !== "completed"` and `!== "skipped"`) `[P1]`
+- [x] `components/layout/admin-guard.tsx` — redirects to `/` if not `is_platform_admin` (SPEC §16) `[P1]`
+- [x] `components/layout/student-guard.tsx` — validates active student session `[P1]`
 
 ### Router Setup
 
-- [ ] `src/routes.tsx` — full route tree using React Router v7 with lazy loading: `[P1]`
+- [x] `src/routes.tsx` — full route tree using React Router v7 with lazy loading: `[P1]`
   ```
   / (ProtectedRoute + OnboardingGuard + AppShell)
     index → Feed
@@ -484,33 +489,33 @@ a layout and depends on auth state. This is the app skeleton.
     * → NotFoundPage                                      [P1]
   ```
   (ARCHITECTURE §11.3)
-- [ ] Update `src/App.tsx` — replace stub with `RouterProvider` + providers (Auth → Methodology → IntlProvider → Router) `[P1]`
-- [ ] Update `src/main.tsx` — ensure provider ordering: `StrictMode → QueryClientProvider → App` `[P1]`
+- [x] Update `src/App.tsx` — replace stub with `RouterProvider` + providers (Auth → Methodology → IntlProvider → Router) `[P1]`
+- [x] Update `src/main.tsx` — ensure provider ordering: `StrictMode → QueryClientProvider → App` `[P1]`
 
 ### Error Boundaries
 
-- [ ] Wrap each top-level route segment in `<RouteErrorBoundary>` with friendly fallback UI + "Go home" CTA `[P1]`
+- [x] Wrap each top-level route segment in `<RouteErrorBoundary>` with friendly fallback UI + "Go home" CTA `[P1]`
   - Segments: auth, onboarding, learning, social, marketplace, creator, settings, compliance, admin, planning, student, legal, search
 - [ ] `features/auth/accept-invitation.tsx` — co-parent invitation acceptance: validates token, shows inviting family info, registration or account linking, join confirmation (SPEC §3.4, 01-iam) `[P1]`
 
 ### Route Transition Accessibility
 
-- [ ] On every route change, move focus to the page's `<h1>` or main content region (CODING_STANDARDS §3.8) `[P1]`
-- [ ] Announce page title changes to screen readers via `aria-live` or `document.title` update `[P1]`
+- [x] On every route change, move focus to the page's `<h1>` or main content region (CODING_STANDARDS §3.8) `[P1]`
+- [x] Announce page title changes to screen readers via `aria-live` or `document.title` update `[P1]`
 
 ### Verification
 
-- [ ] Verify: unauthenticated user sees `/auth/login` `[P1]`
+- [x] Verify: unauthenticated user sees `/auth/login` `[P1]`
 - [ ] Verify: authenticated user with incomplete onboarding redirects to `/onboarding` `[P1]`
 - [ ] Verify: authenticated user with complete onboarding sees AppShell at `/` `[P1]`
-- [ ] Verify: all routes lazy-load correctly (check network tab) `[P1]`
-- [ ] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: all routes lazy-load correctly (check network tab) `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
 - [ ] Verify: keyboard navigation through sidebar/nav links works `[P1]`
 - [ ] Verify: admin routes accessible only to `is_platform_admin` users `[P1]`
 - [ ] Verify: compliance routes show TierGate for free-tier families `[P2]`
-- [ ] Verify: route tree covers all 17 domains (IAM, method, discover-import, onboard, social, learn, mkt, notify, media, billing, safety, search, recs, comply, data-lifecycle, admin, planning) `[P1]`
-- [ ] Verify: skip link targets `#main-content` and is the first focusable element on every layout `[P1]`
-- [ ] Verify: `apiClient` is the sole fetch wrapper — no direct `fetch()` calls elsewhere in the codebase `[P1]`
+- [x] Verify: route tree covers all 17 domains (IAM, method, discover-import, onboard, social, learn, mkt, notify, media, billing, safety, search, recs, comply, data-lifecycle, admin, planning) `[P1]`
+- [x] Verify: skip link targets `#main-content` and is the first focusable element on every layout `[P1]`
+- [x] Verify: `apiClient` is the sole fetch wrapper — no direct `fetch()` calls elsewhere in the codebase `[P1]`
 
 ### References
 - ARCHITECTURE §11.1 (project structure), §11.2–§11.3 (auth strategy, route table)
