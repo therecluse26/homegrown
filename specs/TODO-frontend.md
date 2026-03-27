@@ -1,16 +1,15 @@
 # TODO: Frontend Implementation Roadmap
 
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
-> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–4 mostly complete
-> (Tailwind v4 CSS infrastructure, design tokens, self-hosted fonts, type scale,
-> full shared UI component library, routing, layouts, auth context, i18n).
-> `api/client.ts`, `api/generated/schema.ts`, full `src/styles/`,
-> `src/components/ui/` (35 components), `src/components/common/` (8 components),
-> `src/components/layout/` (10 components), `src/hooks/` (3 hooks),
-> `src/features/auth/` (2 providers), `src/lib/` (2 modules),
-> `src/routes.tsx` (full route tree with placeholders) exist.
-> Remaining Phase 4 items: accept-invitation page, authenticated-state verifications
-> (require running backend).
+> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–5 mostly complete.
+> Phase 5 (Auth Flows + WebSocket Foundation) implemented:
+> `src/lib/kratos.ts`, `src/lib/websocket.ts`, full `src/features/auth/` (Login,
+> Register, AccountRecovery, EmailVerification, AcceptInvitation, CoppaConsent,
+> SessionTimeoutWarning, OAuthButton), `src/features/legal/` (ToS, Privacy, Guidelines),
+> `src/hooks/use-consent.ts`, `src/hooks/use-websocket.ts`.
+> Remaining Phase 5 items: CAPTCHA, session-management, mfa-setup, terms versioning,
+> COPPA re-verification, end-to-end verification with running Kratos/backend.
+> Next: Phase 6 (Onboarding Wizard).
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -496,7 +495,7 @@ a layout and depends on auth state. This is the app skeleton.
 
 - [x] Wrap each top-level route segment in `<RouteErrorBoundary>` with friendly fallback UI + "Go home" CTA `[P1]`
   - Segments: auth, onboarding, learning, social, marketplace, creator, settings, compliance, admin, planning, student, legal, search
-- [ ] `features/auth/accept-invitation.tsx` — co-parent invitation acceptance: validates token, shows inviting family info, registration or account linking, join confirmation (SPEC §3.4, 01-iam) `[P1]`
+- [x] `features/auth/accept-invitation.tsx` — co-parent invitation acceptance: validates token, accept/decline buttons, join confirmation (SPEC §3.4, 01-iam) `[P1]` (simplified: `InvitationInfoResponse` not in schema; shows generic invite UI)
 
 ### Route Transition Accessibility
 
@@ -535,45 +534,45 @@ Depends on Phase 4 auth context and layout.
 
 ### Kratos Integration Utilities
 
-- [ ] `lib/kratos.ts` — helper functions for Kratos Browser API: `[P1]`
+- [x] `lib/kratos.ts` — helper functions for Kratos Browser API: `[P1]`
   - `initLoginFlow()` — fetches login flow from Kratos
   - `initRegistrationFlow()` — fetches registration flow
   - `initRecoveryFlow()` — fetches recovery flow
   - `initVerificationFlow()` — fetches verification flow
-  - `submitFlow(flowId, body)` — submits a flow to Kratos
+  - `submitFlow(flowId, body)` — submits a flow to Kratos (returns `FlowResult` discriminated union)
   - Error mapping: Kratos validation errors → form field errors
   - CSRF token handling
   - (ARCHITECTURE §11.2)
 
 ### Auth Pages (`features/auth/`)
 
-- [ ] `login.tsx` — email/password form + OAuth buttons (Google, Facebook, Apple). Error display for invalid credentials. Link to register + recovery. (SPEC §1, ARCHITECTURE §11.2) `[P1]`
-- [ ] `register.tsx` — email/password + optional OAuth. On success: Kratos webhook triggers `POST /hooks/kratos/post-registration` → family+parent created automatically. Redirect to `/onboarding`. (SPEC §1, ARCHITECTURE §11.2) `[P1]`
-- [ ] `account-recovery.tsx` — email input for password reset link. Success confirmation message. `[P1]`
-- [ ] `email-verification.tsx` — handles verification token from URL. Shows success/error state. `[P1]`
-- [ ] `oauth-button.tsx` — reusable OAuth button component with provider-specific icons (Google, Facebook, Apple) + Kratos OAuth redirect initiation `[P1]`
-- [ ] Terms of service / privacy policy acceptance checkbox on registration form (must accept before submit) `[P1]`
+- [x] `login.tsx` — email/password form + OAuth buttons (Google, Facebook, Apple). Error display for invalid credentials. Link to register + recovery. (SPEC §1, ARCHITECTURE §11.2) `[P1]`
+- [x] `register.tsx` — email/password + optional OAuth. On success: Kratos webhook triggers `POST /hooks/kratos/post-registration` → family+parent created automatically. Redirect to `/onboarding`. (SPEC §1, ARCHITECTURE §11.2) `[P1]`
+- [x] `account-recovery.tsx` — email input for password reset link. Success confirmation message. `[P1]`
+- [x] `email-verification.tsx` — handles `?flow=xxx` re-entry from URL. Shows success/error state. `[P1]`
+- [x] `oauth-button.tsx` — reusable OAuth button component with provider-specific icons (Google, Facebook, Apple) + Kratos OAuth redirect initiation `[P1]`
+- [x] Terms of service / privacy policy acceptance checkbox on registration form (must accept before submit) `[P1]`
 - [ ] CAPTCHA integration on registration (hCaptcha or Turnstile) to prevent automated signups `[P1]`
 
 ### Session & MFA Management
 
 - [ ] `features/settings/session-management.tsx` — list active sessions, revoke individual sessions, "log out all devices" button `[P1]`
 - [ ] `features/settings/mfa-setup.tsx` — TOTP MFA setup: QR code display, verification input, recovery codes display + download `[P2]`
-- [ ] `features/auth/session-timeout-warning.tsx` — overlay 5min before session expiry: countdown timer, "Extend Session" button, auto-redirect to `/auth/login` on timeout, `aria-live="assertive"` for countdown announcements (SPEC §17.1) `[P1]`
+- [x] `features/auth/session-timeout-warning.tsx` — overlay 5min before session expiry: countdown timer, "Extend Session" button, auto-redirect to `/auth/login` on timeout, `aria-live="assertive"` for countdown announcements (SPEC §17.1) `[P1]`
 
 ### Legal Pages (`features/legal/`)
 
-- [ ] `terms-of-service.tsx` — `/legal/terms` — rendered ToS content `[P1]`
-- [ ] `privacy-policy.tsx` — `/legal/privacy` — rendered privacy policy `[P1]`
-- [ ] `community-guidelines.tsx` — `/legal/guidelines` — community guidelines linked from report dialog `[P1]`
+- [x] `terms-of-service.tsx` — `/legal/terms` — rendered ToS content `[P1]`
+- [x] `privacy-policy.tsx` — `/legal/privacy` — rendered privacy policy `[P1]`
+- [x] `community-guidelines.tsx` — `/legal/guidelines` — community guidelines linked from report dialog `[P1]`
 - [ ] Terms versioning: re-acceptance prompt banner when policy version changes; dismissable only by accepting new terms. COPPA re-verification trigger for families with students when ToS version changes (SPEC §7.3) `[P2]`
 
 ### COPPA Consent Flow
 
-- [ ] `hooks/use-consent.ts` — wraps `GET /families/consent` + `POST /families/consent`: `[P1]`
+- [x] `hooks/use-consent.ts` — wraps `GET /families/consent` + `POST /families/consent`: `[P1]`
   - Returns `{ consentStatus, acknowledge, provideConsent }`
   - Query key: `["family", "consent"]`
-- [ ] `features/auth/coppa-consent.tsx` — consent gate component: `[P1]`
+- [x] `features/auth/coppa-consent.tsx` — consent gate component: `[P1]`
   - Shown after registration before adding students
   - Status flow: `registered → noticed → consented` (SPEC §7.3)
   - Must be completed before any student can be created
@@ -581,9 +580,9 @@ Depends on Phase 4 auth context and layout.
 
 ### Auth UX Enhancements
 
-- [ ] Password strength indicator on registration form — visual meter (colored bar) + descriptive text label (weak/fair/strong), colors use token feedback palette (SPEC §1) `[P1]`
-- [ ] Rate limiting feedback on login — `429` response → friendly "Too many attempts" message + retry countdown timer (SPEC §1.2) `[P1]`
-- [ ] Email verification resend button with 60-second cooldown timer — disabled state + countdown during cooldown (SPEC §1.3) `[P1]`
+- [x] Password strength indicator on registration form — visual meter (colored bar) + descriptive text label (weak/fair/strong), colors use token feedback palette (SPEC §1) `[P1]`
+- [x] Rate limiting feedback on login — `429` response → friendly "Too many attempts" message + retry countdown timer (SPEC §1.2) `[P1]`
+- [x] Email verification resend button with 60-second cooldown timer — disabled state + countdown during cooldown (SPEC §1.3) `[P1]`
 - [ ] COPPA consent re-verification prompt when ToS version changes for families with students already added (SPEC §7.3) `[P1]`
 - [ ] `features/auth/coppa-micro-charge.tsx` — COPPA micro-charge verification: micro-charge explanation, amount verification input, retry on mismatch (10-billing §13) `[P2]`
 
@@ -593,12 +592,12 @@ Depends on Phase 4 auth context and layout.
 > (Phase 7) and social/messaging (Phase 9). ARCHITECTURE §11.4 places it alongside
 > core infrastructure.
 
-- [ ] `lib/websocket.ts` — WebSocket connection manager: `[P1]`
+- [x] `lib/websocket.ts` — WebSocket connection manager: `[P1]`
   - Connect to `/v1/social/ws` (proxied via Vite in dev, full URL in production)
   - Message types: `new_message`, `notification`, `friend_request`
   - Auto-reconnect with exponential backoff
   - (ARCHITECTURE §11.5)
-- [ ] `hooks/use-websocket.ts` — hook that connects on mount, dispatches to TanStack Query invalidation: `[P1]`
+- [x] `hooks/use-websocket.ts` — hook that connects on mount, dispatches to TanStack Query invalidation: `[P1]`
   - `new_message` → invalidate `["messages", conversationId]`
   - `notification` → invalidate `["notifications"]`
   - `friend_request` → invalidate `["friends", "requests"]`

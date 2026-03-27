@@ -25,6 +25,15 @@ export default defineConfig({
         target: "http://localhost:3500",
         changeOrigin: true,
       },
+      // Kratos self-service routes (browser flows, SPA AJAX)
+      "/self-service": {
+        target: "http://localhost:4933",
+        changeOrigin: true,
+      },
+      "/sessions": {
+        target: "http://localhost:4933",
+        changeOrigin: true,
+      },
     },
   },
 });

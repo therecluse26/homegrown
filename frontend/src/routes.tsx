@@ -12,6 +12,18 @@ import { RouteErrorBoundary } from "@/components/layout/route-error-boundary";
 import { NotFoundPage } from "@/components/layout/not-found-page";
 import { PlaceholderPage } from "@/components/layout/placeholder-page";
 
+// ─── Phase 5: Auth pages ───────────────────────────────────────────────────────
+import { Login } from "@/features/auth/login";
+import { Register } from "@/features/auth/register";
+import { AccountRecovery } from "@/features/auth/account-recovery";
+import { EmailVerification } from "@/features/auth/email-verification";
+import { AcceptInvitation } from "@/features/auth/accept-invitation";
+
+// ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
+import { TermsOfService } from "@/features/legal/terms-of-service";
+import { PrivacyPolicy } from "@/features/legal/privacy-policy";
+import { CommunityGuidelines } from "@/features/legal/community-guidelines";
+
 // ─── Lazy placeholder factory ────────────────────────────────────────────────
 // Each domain page will be replaced with a real lazy(() => import(...)) as it's built.
 // For now, every route gets a lightweight placeholder with the correct page title.
@@ -95,10 +107,8 @@ const routes: RouteObject[] = [
               { path: "calendar/week/:date", ...p("Week View") },
               { path: "planning/templates", ...p("Schedule Templates") },
 
-              // Legal
-              { path: "legal/terms", ...p("Terms of Service"), errorElement: <RouteErrorBoundary /> },
-              { path: "legal/privacy", ...p("Privacy Policy") },
-              { path: "legal/guidelines", ...p("Community Guidelines") },
+
+
 
               // Notifications (not in route spec but needed for bell icon link)
               { path: "notifications", ...p("Notifications") },
@@ -126,11 +136,15 @@ const routes: RouteObject[] = [
     element: <AuthLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { path: "login", ...p("Log In") },
-      { path: "register", ...p("Create Account") },
-      { path: "recovery", ...p("Account Recovery") },
-      { path: "verification", ...p("Email Verification") },
-      { path: "accept-invite/:token", ...p("Accept Invitation") },
+      { path: "login", element: <Login />, errorElement: <RouteErrorBoundary /> },
+      { path: "register", element: <Register />, errorElement: <RouteErrorBoundary /> },
+      { path: "recovery", element: <AccountRecovery />, errorElement: <RouteErrorBoundary /> },
+      { path: "verification", element: <EmailVerification />, errorElement: <RouteErrorBoundary /> },
+      {
+        path: "accept-invite/:token",
+        element: <AcceptInvitation />,
+        errorElement: <RouteErrorBoundary />,
+      },
     ],
   },
 
@@ -206,6 +220,16 @@ const routes: RouteObject[] = [
           { path: "transcripts/:id", ...p("Transcript Builder") },
         ],
       },
+    ],
+  },
+  // ─── Public legal routes (no auth required — linked from register, reports) ──
+  {
+    path: "legal",
+    errorElement: <RouteErrorBoundary />,
+    children: [
+      { path: "terms", element: <TermsOfService /> },
+      { path: "privacy", element: <PrivacyPolicy /> },
+      { path: "guidelines", element: <CommunityGuidelines /> },
     ],
   },
 ];
