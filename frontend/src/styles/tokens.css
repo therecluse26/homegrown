@@ -1,0 +1,233 @@
+/* tokens.css — Homegrown Academy Design Tokens */
+/* Source of truth: specs/DESIGN_TOKENS.md */
+/* DO NOT edit values here without updating the spec. */
+
+/* ─── Custom Variants ──────────────────────────────────────────────── */
+@custom-variant parent (:where([data-context="parent"]) &);
+@custom-variant student (:where([data-context="student"]) &);
+
+/* ─── Theme Tokens ─────────────────────────────────────────────────── */
+@theme {
+
+  /* ── Colors: Surface ─────────────────────────────────────────────── */
+  --color-surface:                    #faf9f5;
+  --color-surface-dim:                #dddcd8;
+  --color-surface-container-lowest:   #ffffff;
+  --color-surface-container-low:      #f5f4f0;
+  --color-surface-container:          #efeeea;
+  --color-surface-container-high:     #e9e8e5;
+  --color-surface-container-highest:  #e3e2df;
+
+  /* ── Colors: Primary ─────────────────────────────────────────────── */
+  --color-primary:                    #0c5252;
+  --color-on-primary:                 #ffffff;
+  --color-primary-container:          #2d6a6a;
+  --color-on-primary-container:       #ffffff;
+
+  /* ── Colors: Secondary ───────────────────────────────────────────── */
+  --color-secondary:                  #7a4f1e;
+  --color-on-secondary:               #ffffff;
+  --color-secondary-container:        #fdd6b4;
+  --color-on-secondary-container:     #2d1600;
+
+  /* ── Colors: Tertiary ────────────────────────────────────────────── */
+  --color-tertiary:                   #6d5e00;
+  --color-on-tertiary:                #ffffff;
+  --color-tertiary-fixed:             #ffdf96;
+  --color-on-tertiary-fixed:          #221b00;
+
+  /* ── Colors: Error ───────────────────────────────────────────────── */
+  --color-error:                      #ba1a1a;
+  --color-on-error:                   #ffffff;
+  --color-error-container:            #ffdad6;
+  --color-on-error-container:         #410002;
+
+  /* ── Colors: Success ─────────────────────────────────────────────── */
+  --color-success:                    #386a1f;
+  --color-on-success:                 #ffffff;
+  --color-success-container:          #d4f5c0;
+  --color-on-success-container:       #0a2000;
+
+  /* ── Colors: Warning ─────────────────────────────────────────────── */
+  --color-warning:                    #7a5900;
+  --color-on-warning:                 #ffffff;
+  --color-warning-container:          #ffdea3;
+  --color-on-warning-container:       #261a00;
+
+  /* ── Colors: Outline & On-Surface ────────────────────────────────── */
+  --color-on-surface:                 #1b1c1a;
+  --color-on-surface-variant:         #636968;
+  --color-outline:                    #737978;
+  --color-outline-variant:            #bfc8c8;
+
+  /* ── Colors: Inverse & Scrim ─────────────────────────────────────── */
+  --color-inverse-surface:            #303030;
+  --color-inverse-on-surface:         #f1f0ec;
+  --color-inverse-primary:            #84d4d4;
+  --color-scrim:                      #000000;
+
+  /* ── Colors: Focus Ring ──────────────────────────────────────────── */
+  --color-focus-ring:                 #0c5252;
+
+  /* ── Font Families ───────────────────────────────────────────────── */
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-body:    "Manrope", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  /* ── Font Weights ────────────────────────────────────────────────── */
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* ── Font Sizes (Type Scale) ─────────────────────────────────────── */
+  /* Display — Plus Jakarta Sans */
+  --text-display-lg: 3.5rem;
+  --text-display-lg--line-height: 1.12;
+  --text-display-lg--letter-spacing: -0.02em;
+
+  --text-display-md: 2.8125rem;
+  --text-display-md--line-height: 1.16;
+  --text-display-md--letter-spacing: -0.015em;
+
+  --text-display-sm: 2.25rem;
+  --text-display-sm--line-height: 1.2;
+  --text-display-sm--letter-spacing: -0.01em;
+
+  /* Headline — Plus Jakarta Sans */
+  --text-headline-lg: 2rem;
+  --text-headline-lg--line-height: 1.25;
+  --text-headline-lg--letter-spacing: -0.005em;
+
+  --text-headline-md: 1.75rem;
+  --text-headline-md--line-height: 1.29;
+
+  --text-headline-sm: 1.5rem;
+  --text-headline-sm--line-height: 1.33;
+
+  /* Title — Plus Jakarta Sans */
+  --text-title-lg: 1.375rem;
+  --text-title-lg--line-height: 1.27;
+
+  --text-title-md: 1rem;
+  --text-title-md--line-height: 1.5;
+  --text-title-md--letter-spacing: 0.009em;
+
+  --text-title-sm: 0.875rem;
+  --text-title-sm--line-height: 1.43;
+  --text-title-sm--letter-spacing: 0.007em;
+
+  /* Body — Manrope */
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.6;
+
+  --text-body-md: 0.875rem;
+  --text-body-md--line-height: 1.5;
+  --text-body-md--letter-spacing: 0.01em;
+
+  --text-body-sm: 0.75rem;
+  --text-body-sm--line-height: 1.4;
+  --text-body-sm--letter-spacing: 0.02em;
+
+  /* Label — Manrope */
+  --text-label-lg: 0.875rem;
+  --text-label-lg--line-height: 1.43;
+  --text-label-lg--letter-spacing: 0.02em;
+
+  --text-label-md: 0.75rem;
+  --text-label-md--line-height: 1.33;
+  --text-label-md--letter-spacing: 0.03em;
+
+  --text-label-sm: 0.6875rem;
+  --text-label-sm--line-height: 1.45;
+  --text-label-sm--letter-spacing: 0.04em;
+
+  /* ── Letter Spacing ──────────────────────────────────────────────── */
+  --tracking-tighter: -0.02em;
+  --tracking-tight:   -0.01em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.02em;
+  --tracking-wider:   0.04em;
+
+  /* ── Spacing (Semantic Aliases) ──────────────────────────────────── */
+  --spacing-list-gap:          1.4rem;
+  --spacing-card-padding:      1.5rem;
+  --spacing-section-gap:       3rem;
+  --spacing-page-x:            1.5rem;
+  --spacing-page-x-lg:         3rem;
+  --spacing-asymmetric-offset: 4rem;
+
+  /* ── Border Radius ───────────────────────────────────────────────── */
+  --radius-sm:     0.25rem;
+  --radius-md:     0.5rem;
+  --radius-button: 0.75rem;
+  --radius-lg:     1rem;
+  --radius-xl:     1.5rem;
+  --radius-2xl:    2rem;
+  --radius-full:   9999px;
+
+  /* ── Shadows ─────────────────────────────────────────────────────── */
+  --shadow-ambient-sm: 0 2px 8px oklch(0.17 0.005 163 / 0.03);
+  --shadow-ambient-md: 0 4px 16px oklch(0.17 0.005 163 / 0.04);
+  --shadow-ambient-lg: 0 8px 32px oklch(0.17 0.005 163 / 0.04);
+  --shadow-ambient-xl: 0 12px 48px oklch(0.17 0.005 163 / 0.05);
+
+  /* ── Easing Curves ───────────────────────────────────────────────── */
+  --ease-standard:   cubic-bezier(0.2, 0.0, 0, 1.0);
+  --ease-decelerate: cubic-bezier(0.0, 0.0, 0, 1.0);
+  --ease-accelerate: cubic-bezier(0.3, 0.0, 1, 1.0);
+  --ease-spring:     cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  /* ── Breakpoints (custom addition only) ──────────────────────────── */
+  --breakpoint-3xl: 1920px;
+}
+
+/* ─── Non-@theme Tokens (no Tailwind utility generation needed) ─── */
+:root {
+  /* Ghost Border */
+  --shadow-ghost-border: inset 0 0 0 1px oklch(0.81 0.015 180 / 0.2);
+
+  /* Z-Index Scale */
+  --z-base:         0;
+  --z-raised:       100;
+  --z-sticky:       200;
+  --z-overlay:      300;
+  --z-modal:        400;
+  --z-notification: 500;
+  --z-popover:      600;
+  --z-tooltip:      700;
+
+  /* Opacity Scale */
+  --opacity-disabled:     0.38;
+  --opacity-hover:        0.08;
+  --opacity-pressed:      0.12;
+  --opacity-focus:        0.12;
+  --opacity-dragged:      0.16;
+  --opacity-glass:        0.8;
+  --opacity-ghost-border: 0.2;
+  --opacity-scrim:        0.32;
+
+  /* Durations */
+  --duration-fast:   100ms;
+  --duration-normal: 200ms;
+  --duration-slow:   300ms;
+  --duration-slower: 500ms;
+
+  /* Container Widths */
+  --width-content:            72rem;
+  --width-content-narrow:     48rem;
+  --width-sidebar:            16rem;
+  --width-sidebar-collapsed:  4rem;
+
+  /* Icon Sizes */
+  --icon-xs:  0.75rem;
+  --icon-sm:  1rem;
+  --icon-md:  1.25rem;
+  --icon-lg:  1.5rem;
+  --icon-xl:  2rem;
+  --icon-2xl: 3rem;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
+  --gradient-surface: linear-gradient(180deg, var(--color-surface), var(--color-surface-container-low));
+}

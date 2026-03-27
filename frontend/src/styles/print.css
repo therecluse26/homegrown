@@ -1,0 +1,38 @@
+/* print.css — Print token overrides and structural hide rules */
+/* Source of truth: specs/DESIGN_TOKENS.md §15 */
+
+@media print {
+  :root {
+    /* Flatten to pure black and white */
+    --color-surface: #ffffff;
+    --color-surface-container-lowest: #ffffff;
+    --color-surface-container-low: #ffffff;
+    --color-surface-container: #f5f5f5;
+    --color-surface-container-high: #eeeeee;
+    --color-surface-container-highest: #e0e0e0;
+    --color-on-surface: #000000;
+    --color-primary: #000000;
+    --color-on-primary: #ffffff;
+
+    /* Remove decorative shadows */
+    --shadow-ambient-sm: none;
+    --shadow-ambient-md: none;
+    --shadow-ambient-lg: none;
+    --shadow-ambient-xl: none;
+    --shadow-ghost-border: none;
+
+    /* Disable animations */
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+    --duration-slower: 0ms;
+  }
+
+  /* Structural hide rules */
+  nav,
+  aside,
+  [data-print-hide],
+  .no-print {
+    display: none !important;
+  }
+}

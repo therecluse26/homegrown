@@ -1,0 +1,79 @@
+/* utilities.css — Custom utility classes */
+/* Source of truth: specs/DESIGN_TOKENS.md §10, §14.3, §15.3 */
+
+/* ─── Z-Index Utilities ────────────────────────────────────────────── */
+@utility z-base { z-index: var(--z-base); }
+@utility z-raised { z-index: var(--z-raised); }
+@utility z-sticky { z-index: var(--z-sticky); }
+@utility z-overlay { z-index: var(--z-overlay); }
+@utility z-modal { z-index: var(--z-modal); }
+@utility z-notification { z-index: var(--z-notification); }
+@utility z-popover { z-index: var(--z-popover); }
+@utility z-tooltip { z-index: var(--z-tooltip); }
+
+/* ─── Touch Target ─────────────────────────────────────────────────── */
+@utility touch-target {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ─── MD3 State Layer Utilities ────────────────────────────────────── */
+@utility state-hover {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: var(--opacity-hover);
+    pointer-events: none;
+  }
+}
+
+@utility state-pressed {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: var(--opacity-pressed);
+    pointer-events: none;
+  }
+}
+
+@utility state-focus {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: var(--opacity-focus);
+    pointer-events: none;
+  }
+}
+
+@utility state-dragged {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: var(--opacity-dragged);
+    pointer-events: none;
+  }
+}
+
+/* ─── Print Break Utilities ────────────────────────────────────────── */
+@utility print-break-before { @media print { break-before: page; } }
+@utility print-break-after { @media print { break-after: page; } }
+@utility print-avoid-break { @media print { break-inside: avoid; } }

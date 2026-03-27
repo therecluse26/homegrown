@@ -1,0 +1,125 @@
+/* components.css — Type scale composite classes */
+/* Source of truth: specs/DESIGN_TOKENS.md §3.4–§3.5 */
+
+@layer components {
+  /* ── Display Scale (Plus Jakarta Sans) ───────────────────────────── */
+  .type-display-lg {
+    font-family: var(--font-display);
+    font-size: var(--text-display-lg);
+    line-height: 1.12;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .type-display-md {
+    font-family: var(--font-display);
+    font-size: var(--text-display-md);
+    line-height: 1.16;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .type-display-sm {
+    font-family: var(--font-display);
+    font-size: var(--text-display-sm);
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Headline Scale (Plus Jakarta Sans) ──────────────────────────── */
+  .type-headline-lg {
+    font-family: var(--font-display);
+    font-size: var(--text-headline-lg);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+  .type-headline-md {
+    font-family: var(--font-display);
+    font-size: var(--text-headline-md);
+    line-height: 1.29;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .type-headline-sm {
+    font-family: var(--font-display);
+    font-size: var(--text-headline-sm);
+    line-height: 1.33;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  /* ── Title Scale (Plus Jakarta Sans) ─────────────────────────────── */
+  .type-title-lg {
+    font-family: var(--font-display);
+    font-size: var(--text-title-lg);
+    line-height: 1.27;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .type-title-md {
+    font-family: var(--font-display);
+    font-size: var(--text-title-md);
+    line-height: 1.5;
+    font-weight: 600;
+    letter-spacing: 0.009em;
+  }
+  .type-title-sm {
+    font-family: var(--font-display);
+    font-size: var(--text-title-sm);
+    line-height: 1.43;
+    font-weight: 500;
+    letter-spacing: 0.007em;
+  }
+
+  /* ── Body Scale (Manrope) ────────────────────────────────────────── */
+  .type-body-lg {
+    font-family: var(--font-body);
+    font-size: var(--text-body-lg);
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .type-body-md {
+    font-family: var(--font-body);
+    font-size: var(--text-body-md);
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+  .type-body-sm {
+    font-family: var(--font-body);
+    font-size: var(--text-body-sm);
+    line-height: 1.4;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Label Scale (Manrope) ───────────────────────────────────────── */
+  .type-label-lg {
+    font-family: var(--font-body);
+    font-size: var(--text-label-lg);
+    line-height: 1.43;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .type-label-md {
+    font-family: var(--font-body);
+    font-size: var(--text-label-md);
+    line-height: 1.33;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+  .type-label-sm {
+    font-family: var(--font-body);
+    font-size: var(--text-label-sm);
+    line-height: 1.45;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Input Focus Variant ─────────────────────────────────────────── */
+  .input-focus {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--color-primary);
+  }
+}
