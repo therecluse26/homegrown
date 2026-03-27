@@ -23,9 +23,9 @@
 | 08-notify | Phase 1 complete | 4 billing event handlers completely missing |
 | 09-media | Phase 1 complete | 3 endpoints missing (delete, list, reprocess) |
 | 10-billing | Phase 1 complete | No handler tests; pause/resume subscription missing |
-| 11-safety | Phase 1 complete | **NCMEC noop adapter — federal legal obligation**; Phase 2 not started |
+| 11-safety | Phase 1 complete | **NCMEC noop adapter — federal legal obligation**; Phase 2 not started; `CheckHashUpdate` noop means hash DB never refreshed |
 | 12-search | Phase 1 complete | Typesense adapter missing; `/suggestions` returns 501 |
-| 13-recs | Phase 1+2 complete | Phase 3 notification dispatch not implemented |
+| 13-recs | Phase 1+2 complete | Phase 3 notification dispatch not implemented; coding-standards violation (methodology slug branching) |
 | 14-comply | Phase 1 complete | learn adapter stub + media adapter stub return errors |
 | 15-lifecycle | **NOT WIRED** | **No handler, no repository, no migration, not in AppState — ~4K lines of dead code** |
 | 16-admin | Phase 1+2 complete | All 7 cross-domain adapters are stubs (several wireable today) |
@@ -148,6 +148,20 @@ session cookie. The server accepts it unconditionally.
 **Impact:** Cross-Site WebSocket Hijacking (CSWSH). An attacker's page can open an
 authenticated WebSocket as the victim, inject real-time messages, or extract conversation
 data without the victim's knowledge. **Priority: P1.**
+
+---
+
+### CRIT-9 · Kratos HTTP client has no timeout
+
+`internal/iam/adapters/kratos.go:35` — `httpClient: &http.Client{}` (no `Timeout` field set).
+
+Every authenticated request passes through `ValidateSession()` via this client. If Kratos
+hangs or becomes unresponsive, the goroutine blocks forever — no context cancellation, no
+deadline. Under sustained Kratos unavailability, the server exhausts its goroutine pool and
+effectively deadlocks. The Hyperswitch adapters in billing and mkt both set
+`Timeout: 30 * time.Second`; the Kratos adapter was missed.
+
+**Priority: P1.**
 
 ---
 
@@ -311,6 +325,14 @@ any of these four events.
 
 **Critical:** See CRIT-2 above (NoopThornAdapter).
 
+`NoopThornAdapter{}` stubs three methods:
+
+- `ScanCsam` — always returns `&CsamScanResult{IsCSAM: false}`; no content ever flagged.
+- `SubmitNcmecReport` — returns `nil, nil`; no report ever filed.
+- `CheckHashUpdate` — always returns `false, nil`; the Thorn hash database is never
+  refreshed. Even when a real adapter is eventually wired, hash databases may be stale from
+  day one if this noop is not replaced simultaneously.
+
 **Phase 2 not started:**
 - ML grooming detection
 - Parental controls
@@ -336,6 +358,19 @@ moderation wiring.
 Phase 1+2 complete (23 unit tests, migration 20).
 
 **Phase 3:** Notification dispatch for new recommendations not implemented.
+
+**Coding standards violation (CODING-1):** Two private functions in `internal/recs/tasks.go`
+violate `CODING_STANDARDS.md §2.7` (no branching on methodology name):
+
+- `methodologyBaselineSubjects(slug string)` (lines 775–791) — switch on
+  `"charlotte-mason"`, `"classical"`, `"unschooling"`, `"montessori"`, `"waldorf"` to return
+  hardcoded subject lists.
+- `methodologyTransitionAges(slug string)` (lines 880–906) — switch on `"classical"`,
+  `"charlotte-mason"`, `"montessori"`, `"waldorf"` to return hardcoded stage transition ages.
+
+Both functions contain `// TODO: load from method_definitions.philosophy JSONB` comments.
+Adding a new methodology (or renaming an existing slug) silently produces generic/empty
+recommendations with no compile-time or runtime error. **Priority: P2.**
 
 ---
 
@@ -520,6 +555,19 @@ storing children's educational records, `Strict` is required to prevent CSRF via
 cross-origin navigation. `Lax` permits session cookies to be sent on top-level cross-site
 GET navigations, broadening the CSRF attack surface.
 
+### 3.7 · Missing Security Headers
+
+`internal/middleware/security_headers.go` sets four response headers (`X-Content-Type-Options`,
+`X-Frame-Options`, `Referrer-Policy`, `X-XSS-Protection`) but omits:
+
+- **`Content-Security-Policy`** — no XSS/script-injection defense for the API and web
+  layer. For a platform whose SPA is served from the same origin as the API, the absence of
+  CSP is a meaningful defense-in-depth gap. **Priority: P2.**
+- **`Strict-Transport-Security`** — no HSTS enforcement. Browsers may fall back to HTTP on
+  first contact, exposing session cookies in transit.
+- **`X-Permitted-Cross-Domain-Policies`** — Adobe Flash/PDF cross-domain policy header
+  absent (low impact but trivial to add).
+
 ---
 
 ## 4 · Priority-Ranked Remediation
@@ -550,48 +598,59 @@ GET navigations, broadening the CSRF attack surface.
 7. **Fix WebSocket CSWSH** — replace unconditional `CheckOrigin: true` in
    `internal/social/websocket.go` with origin validation against an explicit allowed-origin
    list derived from `cfg.AppURL` (CRIT-8).
-8. **Fix planLearnStub.LogActivity** — the stub returns `fmt.Errorf("not yet implemented")`,
+8. **Set Kratos HTTP client timeout** — add `Timeout: 30 * time.Second` to the `http.Client`
+   in `internal/iam/adapters/kratos.go:35` to match Hyperswitch adapter precedent and prevent
+   goroutine exhaustion under Kratos unavailability (CRIT-9).
+9. **Fix planLearnStub.LogActivity** — the stub returns `fmt.Errorf("not yet implemented")`,
    making `POST /planning/schedule-items/:id/log` always return a 500 error.
-9. **Fix adminBillingStub** — return a zero-value struct instead of `nil, nil` to prevent
-   nil pointer panics.
-10. **Wire adminHealthStub** to real health checks (database ping, Redis ping, R2
+10. **Fix adminBillingStub** — return a zero-value struct instead of `nil, nil` to prevent
+    nil pointer panics.
+11. **Wire adminHealthStub** to real health checks (database ping, Redis ping, R2
     connectivity, Kratos readiness).
-11. **Wire the 8 non-blocked deferred event subscriptions** — especially
+12. **Wire the 8 non-blocked deferred event subscriptions** — especially
     `FamilyDeletionScheduled` for social/mkt/learn/billing (data retention issue).
-12. **Wire admin cross-domain adapters** that have real implementations ready: adminIamStub,
+13. **Wire admin cross-domain adapters** that have real implementations ready: adminIamStub,
     adminSafetyStub, adminMethodStub.
-13. **Fix GetStudentName cross-domain wiring** — add `GetStudentName` to IAM service
+14. **Fix GetStudentName cross-domain wiring** — add `GetStudentName` to IAM service
     interface and replace the anonymous DB-closure in `main.go` (§3.5).
 
 ### P2 — Feature Completeness
 
-14. **Fix `RequireCreator` middleware** — wire mkt_creators table lookup in
+15. **Fix `RequireCreator` middleware** — wire mkt_creators table lookup in
     `internal/middleware/extractors.go` so the creator-facing mkt API is accessible (07-mkt,
     §2).
-15. **Implement gofpdf rendering** in comply PDF jobs — replace the literal placeholder bytes
+16. **Implement gofpdf rendering** in comply PDF jobs — replace the literal placeholder bytes
     with real PDF generation for portfolio and transcript downloads
     (`internal/comply/jobs.go:217`, `internal/comply/jobs.go:333`, §2 14-comply).
-16. **Wire COPPA credit card micro-charge** — implement the Stripe micro-charge call in
+17. **Wire COPPA credit card micro-charge** — implement the Stripe micro-charge call in
     `SubmitCoppaConsent` so credit card verification is genuine and not bypassed by any
     non-empty string (`internal/iam/service.go:299-301`, §2 01-iam).
-17. **Harden production config defaults** — require `OBJECT_STORAGE_PUBLIC_URL` to be set
+18. **Harden production config defaults** — require `OBJECT_STORAGE_PUBLIC_URL` to be set
     explicitly; externalize kratos.yml webhook secrets via env substitution; set session
     `same_site: Strict` in kratos.yml (§3.6).
-18. **07-mkt: Add test files** — only domain with zero tests.
-19. **Add handler tests** for 10-billing, 13-recs, 14-comply, 16-admin, 17-plan, 05-social
+19. **Add Content-Security-Policy and HSTS headers** — add `Content-Security-Policy`,
+    `Strict-Transport-Security`, and `X-Permitted-Cross-Domain-Policies` to
+    `internal/middleware/security_headers.go` (§3.7).
+20. **Refactor recs slug-branching functions** — replace `methodologyBaselineSubjects` and
+    `methodologyTransitionAges` in `internal/recs/tasks.go` with JSONB lookups from
+    `method_definitions.philosophy` to comply with `CODING_STANDARDS.md §2.7` (CODING-1).
+21. **07-mkt: Add test files** — only domain with zero tests.
+22. **Add handler tests** for 10-billing, 13-recs, 14-comply, 16-admin, 17-plan, 05-social
     (all missing `handler_test.go`).
-20. **Implement missing Phase 2 endpoints** per domain (01-iam co-parent flow is highest
+23. **Implement missing Phase 2 endpoints** per domain (01-iam co-parent flow is highest
     value).
-21. **Implement all 4 missing event handlers** in 08-notify (SubscriptionCreatedHandler,
+24. **Implement all 4 missing event handlers** in 08-notify (SubscriptionCreatedHandler,
     SubscriptionChangedHandler, SubscriptionCancelledHandler, PayoutCompletedHandler).
-22. **Define missing event types** (iam.CoParentRemoved, iam.PrimaryParentTransferred,
+25. **Define missing event types** (iam.CoParentRemoved, iam.PrimaryParentTransferred,
     safety.ContentFlagged) to unblock 3 deferred subscriptions.
 
 ### P3 — Polish / Phase 2+
 
-23. Fix spec-vs-code inconsistencies (§3.4 above).
-24. Implement 09-media missing endpoints (delete, list, reprocess).
-25. Implement 12-search Typesense adapter and suggestions endpoint.
-26. Implement 06-learn progress snapshot background job.
-27. Begin frontend feature development (`features/` directory).
-28. Implement 17-plan calendar PDF export.
+26. Fix spec-vs-code inconsistencies (§3.4 above).
+27. Implement 09-media missing endpoints (delete, list, reprocess).
+28. Implement 12-search Typesense adapter and suggestions endpoint.
+29. Implement 06-learn progress snapshot background job.
+30. Begin frontend feature development (`features/` directory).
+31. Implement 17-plan calendar PDF export.
+32. Replace `NoopThornAdapter.CheckHashUpdate` alongside the `ScanCsam`/`SubmitNcmecReport`
+    replacement so the hash database refresh path is also live (§2 11-safety).
