@@ -13,13 +13,13 @@
 | Domain | Status | Key Gap |
 |--------|--------|---------|
 | 00-core | Phase 1 complete | Shared utilities only; no gaps |
-| 01-iam | Phase 1 complete | 8 co-parent/deletion endpoints + 4 student session endpoints not started |
+| 01-iam | Phase 1 complete | 8 co-parent/deletion endpoints + 4 student session endpoints not started; COPPA micro-charge stub accepts any token |
 | 02-method | Phase 1 complete | 2 Phase 2 endpoints missing (methodology context + student methodology patch) |
 | 03-discover | Phase 1 complete | Content detail endpoint missing (`GET /v1/discovery/content/:slug`) |
 | 04-onboard | Phase 1 complete | 2 Phase 2 endpoints missing (complete roadmap item, restart onboarding) |
 | 05-social | Phase 1 complete | Blocked by 3 deferred event subscriptions |
 | 06-learn | Phase 1 complete | Progress snapshot job missing; Phase 2 tables exist but no models/handlers |
-| 07-mkt | Phase 1 complete | **Zero test files**; background job + event wiring missing |
+| 07-mkt | Phase 1 complete | **Zero test files**; creator API inaccessible (`RequireCreator` stub); background job + event wiring missing |
 | 08-notify | Phase 1 complete | 4 billing event handlers completely missing |
 | 09-media | Phase 1 complete | 3 endpoints missing (delete, list, reprocess) |
 | 10-billing | Phase 1 complete | No handler tests; pause/resume subscription missing |
@@ -122,6 +122,35 @@ when the result is unusable.
 
 ---
 
+### CRIT-7 · `UNSUBSCRIBE_SECRET` defaults to known public string
+
+`internal/config/config.go:237` — `envOrDefault("UNSUBSCRIBE_SECRET", "notify-dev-secret")`
+
+This secret signs email unsubscribe tokens via HMAC. If `UNSUBSCRIBE_SECRET` is not set in
+production, the signing key is `"notify-dev-secret"` — a string visible in this repository.
+Anyone who reads the source can forge valid unsubscribe tokens for any user, silently
+removing them from all notification lists without their knowledge.
+
+**Impact:** Forged unsubscribe tokens allow an attacker to suppress email notifications for
+any user account — including password-reset and safety-alert emails. **Priority: P1.**
+
+---
+
+### CRIT-8 · WebSocket CSWSH — `CheckOrigin` unconditionally returns `true`
+
+`internal/social/websocket.go:22-26` — `CheckOrigin` always returns `true` with the comment
+"Origin check delegated to CORS middleware." However, for WebSocket upgrade requests (HTTP
+`GET` with `Upgrade: websocket`), browsers do not send CORS preflights. CORS headers are
+informational only and do not block the WebSocket upgrade itself. A malicious page can open
+a WebSocket connection to the server, and the browser will automatically attach the victim's
+session cookie. The server accepts it unconditionally.
+
+**Impact:** Cross-Site WebSocket Hijacking (CSWSH). An attacker's page can open an
+authenticated WebSocket as the victim, inject real-time messages, or extract conversation
+data without the victim's knowledge. **Priority: P1.**
+
+---
+
 ## 2 · Per-Domain Detailed Findings
 
 ### 00-core (Shared Utilities)
@@ -155,6 +184,13 @@ Student sessions (4):
 - `CoParentRemoved` — blocks social domain event subscription
 - `PrimaryParentTransferred` — blocks billing domain event subscription
 - `CoParentAdded`
+
+**COPPA credit card verification stub:**
+`internal/iam/service.go:299-301` — `SubmitCoppaConsent` validates that `method` and
+`token` are non-empty but performs no actual Stripe micro-charge. A `TODO(billing::)` marks
+the unimplemented call. Any non-empty string passes the verification check — a fabricated
+token is indistinguishable from a real one. Credit card micro-charge is an FTC-recognized
+COPPA parental consent method; the current stub accepts any input.
 
 ---
 
@@ -221,6 +257,12 @@ No additional endpoint gaps identified.
 - `RefreshAutoSection` background job — completely unimplemented
 - `mkt.PurchaseCompleted → learn` event not wired — purchased marketplace content doesn't
   unlock in the learn domain
+
+**`RequireCreator` middleware always returns 403:**
+`internal/middleware/extractors.go:63-72` — `RequireCreator` always returns `ErrForbidden`
+(`return nil, shared.ErrForbidden()`) with no mkt_creators table lookup wired. Every
+creator-facing mkt endpoint (upload curriculum resources, publish listings, etc.) returns
+403 for all users. The creator API is entirely inaccessible at runtime.
 
 **Response contract deviations:**
 - Response uses `onboarding_url` key where spec says `url`
@@ -303,6 +345,15 @@ Phase 1+2 complete (23 unit tests, migration 20).
 - `learnForComply` adapter is a stub — portfolio item data loading from learn domain returns
   errors
 - `mediaForComply` adapter is a stub — PDF upload for portfolios/transcripts returns errors
+
+**Portfolio and transcript PDFs contain literal placeholder bytes:**
+- `internal/comply/jobs.go:217` — `pdfBytes := []byte("placeholder PDF — gofpdf integration pending")`
+- `internal/comply/jobs.go:333` — same for transcript PDF jobs
+
+Both jobs call `mediaSvc.RequestUpload` with a literal ASCII string as the "PDF" content.
+Families who download their portfolio or transcript receive a corrupt/garbage file. The
+comply domain's primary deliverable — compliance documentation — is broken at runtime, not
+merely feature-incomplete.
 
 Note: `RequirePremium` is enforced via `middleware.RequirePremium(c)` in every endpoint
 handler in `internal/comply/handler.go` (43 call sites). The premium check IS present at
@@ -449,6 +500,28 @@ the IAM service, and update the wiring.
 
 ---
 
+### 3.6 · Config / Deployment Safety
+
+**`OBJECT_STORAGE_PUBLIC_URL` defaults to `"https://media.localhost"`** (`internal/config/config.go:233`).
+If omitted in a production environment, every generated media URL (images, attachments,
+upload links) resolves to a non-existent hostname. All media references silently break with
+no runtime error or warning.
+
+**`kratos/kratos.yml` hardcodes webhook secrets** at lines 46 and 63
+(`value: dev-webhook-secret-change-in-production`). These are the Kratos-side auth headers
+for post-registration and post-login webhooks. The application validates against the
+`AUTH_WEBHOOK_SECRET` env var, but the Kratos config must be updated to match at deploy
+time. There is no documented mechanism (template variable, env substitution) for
+externalizing these values. If the dev config is used in production unchanged, Kratos
+webhooks can be spoofed from any origin.
+
+**`kratos/kratos.yml:90` sets `same_site: Lax`** for session cookies. For a platform
+storing children's educational records, `Strict` is required to prevent CSRF via
+cross-origin navigation. `Lax` permits session cookies to be sent on top-level cross-site
+GET navigations, broadening the CSRF attack surface.
+
+---
+
 ## 4 · Priority-Ranked Remediation
 
 ### P0 — Legal / Compliance (do before any public beta)
@@ -471,36 +544,54 @@ the IAM service, and update the wiring.
 5. **Wire RevokeSessions for safety suspensions** — expose `RevokeSessions` on the IAM
    service interface and wire it into the safety domain so suspended users lose access
    immediately.
-6. **Fix planLearnStub.LogActivity** — the stub returns `fmt.Errorf("not yet implemented")`,
+6. **Rotate `UNSUBSCRIBE_SECRET`** — change the default from the hardcoded
+   `"notify-dev-secret"` to a required env var with no fallback; email unsubscribe tokens
+   are forgeable with the current default (CRIT-7).
+7. **Fix WebSocket CSWSH** — replace unconditional `CheckOrigin: true` in
+   `internal/social/websocket.go` with origin validation against an explicit allowed-origin
+   list derived from `cfg.AppURL` (CRIT-8).
+8. **Fix planLearnStub.LogActivity** — the stub returns `fmt.Errorf("not yet implemented")`,
    making `POST /planning/schedule-items/:id/log` always return a 500 error.
-7. **Fix adminBillingStub** — return a zero-value struct instead of `nil, nil` to prevent
+9. **Fix adminBillingStub** — return a zero-value struct instead of `nil, nil` to prevent
    nil pointer panics.
-8. **Wire adminHealthStub** to real health checks (database ping, Redis ping, R2
-   connectivity, Kratos readiness).
-9. **Wire the 8 non-blocked deferred event subscriptions** — especially
-   `FamilyDeletionScheduled` for social/mkt/learn/billing (data retention issue).
-10. **Wire admin cross-domain adapters** that have real implementations ready: adminIamStub,
+10. **Wire adminHealthStub** to real health checks (database ping, Redis ping, R2
+    connectivity, Kratos readiness).
+11. **Wire the 8 non-blocked deferred event subscriptions** — especially
+    `FamilyDeletionScheduled` for social/mkt/learn/billing (data retention issue).
+12. **Wire admin cross-domain adapters** that have real implementations ready: adminIamStub,
     adminSafetyStub, adminMethodStub.
-11. **Fix GetStudentName cross-domain wiring** — add `GetStudentName` to IAM service
+13. **Fix GetStudentName cross-domain wiring** — add `GetStudentName` to IAM service
     interface and replace the anonymous DB-closure in `main.go` (§3.5).
 
 ### P2 — Feature Completeness
 
-12. **07-mkt: Add test files** — only domain with zero tests.
-13. **Add handler tests** for 10-billing, 13-recs, 14-comply, 16-admin, 17-plan, 05-social
+14. **Fix `RequireCreator` middleware** — wire mkt_creators table lookup in
+    `internal/middleware/extractors.go` so the creator-facing mkt API is accessible (07-mkt,
+    §2).
+15. **Implement gofpdf rendering** in comply PDF jobs — replace the literal placeholder bytes
+    with real PDF generation for portfolio and transcript downloads
+    (`internal/comply/jobs.go:217`, `internal/comply/jobs.go:333`, §2 14-comply).
+16. **Wire COPPA credit card micro-charge** — implement the Stripe micro-charge call in
+    `SubmitCoppaConsent` so credit card verification is genuine and not bypassed by any
+    non-empty string (`internal/iam/service.go:299-301`, §2 01-iam).
+17. **Harden production config defaults** — require `OBJECT_STORAGE_PUBLIC_URL` to be set
+    explicitly; externalize kratos.yml webhook secrets via env substitution; set session
+    `same_site: Strict` in kratos.yml (§3.6).
+18. **07-mkt: Add test files** — only domain with zero tests.
+19. **Add handler tests** for 10-billing, 13-recs, 14-comply, 16-admin, 17-plan, 05-social
     (all missing `handler_test.go`).
-14. **Implement missing Phase 2 endpoints** per domain (01-iam co-parent flow is highest
+20. **Implement missing Phase 2 endpoints** per domain (01-iam co-parent flow is highest
     value).
-15. **Implement all 4 missing event handlers** in 08-notify (SubscriptionCreatedHandler,
+21. **Implement all 4 missing event handlers** in 08-notify (SubscriptionCreatedHandler,
     SubscriptionChangedHandler, SubscriptionCancelledHandler, PayoutCompletedHandler).
-16. **Define missing event types** (iam.CoParentRemoved, iam.PrimaryParentTransferred,
+22. **Define missing event types** (iam.CoParentRemoved, iam.PrimaryParentTransferred,
     safety.ContentFlagged) to unblock 3 deferred subscriptions.
 
 ### P3 — Polish / Phase 2+
 
-17. Fix spec-vs-code inconsistencies (§3.4 above).
-18. Implement 09-media missing endpoints (delete, list, reprocess).
-19. Implement 12-search Typesense adapter and suggestions endpoint.
-20. Implement 06-learn progress snapshot background job.
-21. Begin frontend feature development (`features/` directory).
-22. Implement 17-plan calendar PDF export.
+23. Fix spec-vs-code inconsistencies (§3.4 above).
+24. Implement 09-media missing endpoints (delete, list, reprocess).
+25. Implement 12-search Typesense adapter and suggestions endpoint.
+26. Implement 06-learn progress snapshot background job.
+27. Begin frontend feature development (`features/` directory).
+28. Implement 17-plan calendar PDF export.
