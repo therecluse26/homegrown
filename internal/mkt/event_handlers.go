@@ -5,10 +5,19 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
+
+// contentFlaggedData is a consumer-defined interface for safety.ContentFlagged events.
+// Direct import of safety:: would create a cycle (safety:: imports mkt::). [ARCH §4.4]
+type contentFlaggedData interface {
+	GetContentKey() string
+	GetFamilyID() uuid.UUID
+	GetFlagType() string
+}
 
 // ─── MethodologyConfigUpdatedHandler ─────────────────────────────────────────
 
@@ -52,9 +61,16 @@ func NewContentFlaggedHandler(svc MarketplaceService) *ContentFlaggedHandler {
 }
 
 func (h *ContentFlaggedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
-	// When safety:: is implemented, cast event to safety.ContentFlagged
-	// and call h.svc.HandleContentFlagged(ctx, event.ListingID, event.Reason).
-	slog.Warn("mkt.ContentFlaggedHandler: safety:: domain not yet implemented, event ignored")
+	e, ok := event.(contentFlaggedData)
+	if !ok {
+		return fmt.Errorf("mkt.ContentFlaggedHandler: unexpected event type %T", event)
+	}
+	slog.Info("mkt: content flagged — listing review pending",
+		"content_key", e.GetContentKey(),
+		"flag_type", e.GetFlagType(),
+		"family_id", e.GetFamilyID(),
+	)
+	// TODO(safety): wire h.svc.ArchiveListingByContentKey when service method is added
 	return nil
 }
 

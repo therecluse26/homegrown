@@ -14,6 +14,7 @@ var (
 	ErrSubscriptionAlreadyExists = errors.New("subscription already exists for this family")
 	ErrCannotReactivate          = errors.New("cannot reactivate subscription in current state")
 	ErrSubscriptionNotActive     = errors.New("subscription is not active")
+	ErrSubscriptionNotPaused     = errors.New("subscription is not paused")
 	ErrInvalidBillingInterval    = errors.New("invalid billing interval")
 
 	// ─── Payment Method Errors ──────────────────────────────────────────
@@ -53,6 +54,8 @@ func (e *BillingError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "cannot_reactivate", Message: "Subscription cannot be reactivated in its current state", StatusCode: http.StatusConflict}
 	case errors.Is(e.Err, ErrSubscriptionNotActive):
 		return &shared.AppError{Code: "subscription_not_active", Message: "Subscription is not currently active", StatusCode: http.StatusConflict}
+	case errors.Is(e.Err, ErrSubscriptionNotPaused):
+		return &shared.AppError{Code: "subscription_not_paused", Message: "Subscription is not currently paused", StatusCode: http.StatusConflict}
 	case errors.Is(e.Err, ErrInvalidBillingInterval):
 		return &shared.AppError{Code: "invalid_billing_interval", Message: "Invalid billing interval — must be 'monthly' or 'annual'", StatusCode: http.StatusUnprocessableEntity}
 	case errors.Is(e.Err, ErrPaymentMethodNotFound):

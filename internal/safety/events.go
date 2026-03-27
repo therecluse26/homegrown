@@ -82,4 +82,7 @@ type ContentFlagged struct {
 	FlagType   string    `json:"flag_type"` // "csam" | "text_violation" | "manual_review"
 }
 
-func (ContentFlagged) EventName() string { return "safety.ContentFlagged" }
+func (ContentFlagged) EventName() string          { return "safety.ContentFlagged" }
+func (e ContentFlagged) GetContentKey() string    { return e.ContentKey }
+func (e ContentFlagged) GetFamilyID() uuid.UUID   { return e.FamilyID }
+func (e ContentFlagged) GetFlagType() string      { return e.FlagType }

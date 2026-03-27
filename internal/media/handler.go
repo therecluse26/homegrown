@@ -26,6 +26,7 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	g := authGroup.Group("/media")
 	g.POST("/uploads", h.requestUpload)
 	g.POST("/uploads/:upload_id/confirm", h.confirmUpload)
+	g.POST("/uploads/:upload_id/reprocess", h.reprocessUpload)
 	g.GET("/uploads/:upload_id", h.getUpload)
 	g.DELETE("/uploads/:upload_id", h.deleteUpload)
 	g.GET("/uploads", h.listUploads)
@@ -151,6 +152,26 @@ func (h *Handler) listUploads(c echo.Context) error {
 		return mapMediaError(err)
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+// ─── POST /v1/media/uploads/:upload_id/reprocess ──────────────────────────────
+
+func (h *Handler) reprocessUpload(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return shared.ErrUnauthorized()
+	}
+
+	uploadID, err := uuid.Parse(c.Param("upload_id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid upload ID")
+	}
+
+	scope := shared.NewFamilyScopeFromAuth(auth)
+	if err := h.svc.ReprocessUpload(c.Request().Context(), scope, uploadID); err != nil {
+		return mapMediaError(err)
+	}
+	return c.NoContent(http.StatusAccepted)
 }
 
 // ─── Error Mapping ────────────────────────────────────────────────────────────

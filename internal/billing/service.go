@@ -380,6 +380,58 @@ func (s *BillingServiceImpl) ReactivateSubscription(ctx context.Context, scope s
 	return subscriptionToResponse(updated), nil
 }
 
+func (s *BillingServiceImpl) PauseSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error) {
+	sub, err := s.subscriptionRepo.FindByFamily(ctx, scope)
+	if err != nil {
+		return nil, &BillingError{Err: fmt.Errorf("pause subscription: %w", err)}
+	}
+	if sub == nil {
+		return nil, &BillingError{Err: ErrSubscriptionNotFound}
+	}
+	if sub.Status != SubscriptionStatusActive {
+		return nil, &BillingError{Err: ErrSubscriptionNotActive}
+	}
+
+	_, err = s.adapter.PauseSubscription(ctx, sub.HyperswitchSubscriptionID)
+	if err != nil {
+		return nil, &BillingError{Err: fmt.Errorf("pause subscription in adapter: %w", err)}
+	}
+
+	paused := SubscriptionStatusPaused
+	updated, err := s.subscriptionRepo.Update(ctx, sub.ID, SubscriptionUpdate{Status: &paused})
+	if err != nil {
+		return nil, &BillingError{Err: fmt.Errorf("update subscription for pause: %w", err)}
+	}
+
+	return subscriptionToResponse(updated), nil
+}
+
+func (s *BillingServiceImpl) ResumeSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error) {
+	sub, err := s.subscriptionRepo.FindByFamily(ctx, scope)
+	if err != nil {
+		return nil, &BillingError{Err: fmt.Errorf("resume subscription: %w", err)}
+	}
+	if sub == nil {
+		return nil, &BillingError{Err: ErrSubscriptionNotFound}
+	}
+	if sub.Status != SubscriptionStatusPaused {
+		return nil, &BillingError{Err: ErrSubscriptionNotPaused}
+	}
+
+	_, err = s.adapter.ResumeSubscription(ctx, sub.HyperswitchSubscriptionID)
+	if err != nil {
+		return nil, &BillingError{Err: fmt.Errorf("resume subscription in adapter: %w", err)}
+	}
+
+	active := SubscriptionStatusActive
+	updated, err := s.subscriptionRepo.Update(ctx, sub.ID, SubscriptionUpdate{Status: &active})
+	if err != nil {
+		return nil, &BillingError{Err: fmt.Errorf("update subscription for resume: %w", err)}
+	}
+
+	return subscriptionToResponse(updated), nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Payment Methods (Phase 2) [10-billing §5]
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -767,8 +819,16 @@ func (s *BillingServiceImpl) HandlePrimaryParentTransferred(ctx context.Context,
 		return nil // no Hyperswitch customer — nothing to update
 	}
 
-	if err := s.adapter.UpdateCustomer(ctx, customer.HyperswitchCustomerID, event.NewEmail, ""); err != nil {
-		slog.Error("failed to update Hyperswitch customer email", "family_id", event.FamilyID, "error", err)
+	// Look up the new primary's email directly from IAM (authoritative source).
+	// The event fires after the transfer is committed, so GetFamilyPrimaryEmail returns the new primary's email.
+	email, _, err := s.iamService.GetFamilyPrimaryEmail(ctx, event.FamilyID)
+	if err != nil {
+		slog.Error("billing: failed to look up new primary email after transfer", "family_id", event.FamilyID, "error", err)
+		return nil
+	}
+
+	if err := s.adapter.UpdateCustomer(ctx, customer.HyperswitchCustomerID, email, ""); err != nil {
+		slog.Error("billing: failed to update Hyperswitch customer email after transfer", "family_id", event.FamilyID, "error", err)
 	}
 	return nil
 }

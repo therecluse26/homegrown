@@ -47,6 +47,12 @@ type BillingService interface {
 	// ReactivateSubscription reverses a pending cancellation. (Phase 2)
 	ReactivateSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error)
 
+	// PauseSubscription pauses an active subscription. (Phase 2)
+	PauseSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error)
+
+	// ResumeSubscription resumes a paused subscription. (Phase 2)
+	ResumeSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error)
+
 	// AttachPaymentMethod attaches a payment method via Hyperswitch SetupIntent. (Phase 2)
 	AttachPaymentMethod(ctx context.Context, cmd AttachPaymentMethodCommand, scope shared.FamilyScope) (*PaymentMethodResponse, error)
 

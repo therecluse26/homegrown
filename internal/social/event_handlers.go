@@ -74,9 +74,19 @@ func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event share
 	return h.svc.HandleFamilyDeletionScheduled(ctx, e.FamilyID)
 }
 
-// ─── Deferred Handlers ──────────────────────────────────────────────────────
+// ─── CoParentRemovedHandler ──────────────────────────────────────────────────
 
-// CoParentRemovedHandler would handle iam.CoParentRemoved by disassociating posts.
-// DEFERRED: iam.CoParentRemoved event does not exist yet. [05-social §17.4]
-// When activated, register in main.go:
-//   eventBus.Subscribe(reflect.TypeOf(iam.CoParentRemoved{}), social.NewCoParentRemovedHandler(socialSvc))
+// CoParentRemovedHandler handles iam.CoParentRemoved by disassociating posts from the removed co-parent. [05-social §17.4]
+type CoParentRemovedHandler struct{ svc SocialService }
+
+func NewCoParentRemovedHandler(svc SocialService) *CoParentRemovedHandler {
+	return &CoParentRemovedHandler{svc: svc}
+}
+
+func (h *CoParentRemovedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(iam.CoParentRemoved)
+	if !ok {
+		return fmt.Errorf("social.CoParentRemovedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleCoParentRemoved(ctx, e.FamilyID, e.CoParentID)
+}

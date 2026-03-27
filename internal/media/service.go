@@ -257,6 +257,22 @@ func (s *mediaServiceImpl) ValidateAttachment(_ context.Context, uploadCtx Uploa
 	return validateAttachmentRules(uploadCtx, contentType, sizeBytes)
 }
 
+// ─── ReprocessUpload ──────────────────────────────────────────────────────────
+
+func (s *mediaServiceImpl) ReprocessUpload(ctx context.Context, scope shared.FamilyScope, id uuid.UUID) error {
+	// 1. Find upload scoped to family (returns ErrNotFound if wrong family or missing)
+	if _, err := s.uploads.FindByID(ctx, scope, id); err != nil {
+		return err
+	}
+
+	// 2. Re-enqueue the processing job
+	if err := s.jobs.Enqueue(ctx, &ProcessUploadPayload{UploadID: id}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // uploadToInfo converts an Upload model to an UploadInfo DTO.

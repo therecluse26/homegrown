@@ -59,6 +59,12 @@ func (m *mockBillingService) CancelSubscription(_ context.Context, _ shared.Fami
 func (m *mockBillingService) ReactivateSubscription(_ context.Context, _ shared.FamilyScope) (*SubscriptionResponse, error) {
 	return &SubscriptionResponse{}, nil
 }
+func (m *mockBillingService) PauseSubscription(_ context.Context, _ shared.FamilyScope) (*SubscriptionResponse, error) {
+	return &SubscriptionResponse{}, nil
+}
+func (m *mockBillingService) ResumeSubscription(_ context.Context, _ shared.FamilyScope) (*SubscriptionResponse, error) {
+	return &SubscriptionResponse{}, nil
+}
 func (m *mockBillingService) AttachPaymentMethod(_ context.Context, _ AttachPaymentMethodCommand, _ shared.FamilyScope) (*PaymentMethodResponse, error) {
 	return &PaymentMethodResponse{}, nil
 }

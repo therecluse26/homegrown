@@ -468,7 +468,7 @@ func main() {
 
 	// Register social:: event subscriptions
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), social.NewFamilyCreatedHandler(socialSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.CoParentRemoved{}), social.NewCoParentRemovedHandler(socialSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.CoParentRemoved{}), social.NewCoParentRemovedHandler(socialSvc))
 	eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
 
@@ -538,8 +538,7 @@ func main() {
 
 	// Register mkt:: event subscriptions
 	eventBus.Subscribe(reflect.TypeOf(method.MethodologyConfigUpdated{}), mkt.NewMethodologyConfigUpdatedHandler(cache))
-	// Handler structs exist; subscriptions deferred until source event types are defined:
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), mkt.NewContentFlaggedHandler(mktSvc))
+	eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), mkt.NewContentFlaggedHandler(mktSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), mkt.NewFamilyDeletionScheduledHandler(mktSvc))
 
 	// ── Step 7g: Wire learn:: domain ───────────────────────────────────────────
@@ -802,7 +801,7 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), billing.NewPurchaseCompletedHandler(billingSvc))
 	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseRefunded{}), billing.NewPurchaseRefundedHandler(billingSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), billing.NewFamilyDeletionScheduledHandler(billingSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.PrimaryParentTransferred{}), billing.NewPrimaryParentTransferredHandler(billingSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.PrimaryParentTransferred{}), billing.NewPrimaryParentTransferredHandler(billingSvc))
 
 	// Now that billing:: is wired, register billing event handlers in notify::
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCreated{}), notify.NewSubscriptionCreatedHandler(notifySvc))
@@ -1130,7 +1129,12 @@ func main() {
 	billingForAdmin := &adminBillingAdapter{svc: billingSvc}
 	methodForAdmin := &adminMethodAdapter{db: db}
 	lifecycleForAdmin := &adminLifecycleAdapter{db: db}
-	healthForAdmin := &adminHealthStub{}
+	healthForAdmin := &appHealthChecker{
+		db:                    db,
+		cache:                 cache,
+		kratosPublicURL:       cfg.AuthPublicURL,
+		objectStorageEndpoint: cfg.ObjectStorageEndpoint,
+	}
 	jobsForAdmin := &adminJobInspectorStub{}
 
 	adminSvc := admin.NewAdminService(
@@ -1804,15 +1808,90 @@ func (a *adminLifecycleAdapter) ResolveRecoveryRequest(ctx context.Context, requ
 	})
 }
 
-type adminHealthStub struct{}
+// appHealthChecker implements admin.HealthChecker by probing each critical dependency. [16-admin §11.1]
+type appHealthChecker struct {
+	db                    *gorm.DB
+	cache                 shared.Cache
+	kratosPublicURL       string
+	objectStorageEndpoint string
+}
 
-func (adminHealthStub) CheckAll(_ context.Context) []admin.ComponentHealth {
-	return []admin.ComponentHealth{
-		{Name: "database", Status: "healthy"},
-		{Name: "redis", Status: "healthy"},
-		{Name: "r2", Status: "healthy"},
-		{Name: "kratos", Status: "healthy"},
+func (h *appHealthChecker) CheckAll(ctx context.Context) []admin.ComponentHealth {
+	results := make([]admin.ComponentHealth, 0, 4)
+	results = append(results, pingDatabase(ctx, h.db))
+	results = append(results, pingCache(ctx, h.cache))
+	results = append(results, pingKratos(ctx, h.kratosPublicURL))
+	if h.objectStorageEndpoint != "" {
+		results = append(results, pingObjectStorage(ctx, h.objectStorageEndpoint))
 	}
+	return results
+}
+
+func pingDatabase(ctx context.Context, db *gorm.DB) admin.ComponentHealth {
+	start := time.Now()
+	err := db.WithContext(ctx).Exec("SELECT 1").Error
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		msg := err.Error()
+		return admin.ComponentHealth{Name: "database", Status: "unhealthy", LatencyMs: &latency, Details: &msg}
+	}
+	return admin.ComponentHealth{Name: "database", Status: "healthy", LatencyMs: &latency}
+}
+
+func pingCache(ctx context.Context, c shared.Cache) admin.ComponentHealth {
+	start := time.Now()
+	_, err := c.Get(ctx, "__hc__")
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		msg := err.Error()
+		return admin.ComponentHealth{Name: "redis", Status: "unhealthy", LatencyMs: &latency, Details: &msg}
+	}
+	return admin.ComponentHealth{Name: "redis", Status: "healthy", LatencyMs: &latency}
+}
+
+func pingKratos(ctx context.Context, baseURL string) admin.ComponentHealth {
+	start := time.Now()
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, baseURL+"/health/ready", nil)
+	if err != nil {
+		msg := err.Error()
+		latency := time.Since(start).Milliseconds()
+		return admin.ComponentHealth{Name: "kratos", Status: "unhealthy", LatencyMs: &latency, Details: &msg}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		msg := err.Error()
+		return admin.ComponentHealth{Name: "kratos", Status: "unhealthy", LatencyMs: &latency, Details: &msg}
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return admin.ComponentHealth{Name: "kratos", Status: "healthy", LatencyMs: &latency}
+	}
+	msg := fmt.Sprintf("unexpected status %d", resp.StatusCode)
+	return admin.ComponentHealth{Name: "kratos", Status: "degraded", LatencyMs: &latency, Details: &msg}
+}
+
+func pingObjectStorage(ctx context.Context, endpoint string) admin.ComponentHealth {
+	start := time.Now()
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodHead, endpoint, nil)
+	if err != nil {
+		msg := err.Error()
+		latency := time.Since(start).Milliseconds()
+		return admin.ComponentHealth{Name: "r2", Status: "unhealthy", LatencyMs: &latency, Details: &msg}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		msg := err.Error()
+		return admin.ComponentHealth{Name: "r2", Status: "unhealthy", LatencyMs: &latency, Details: &msg}
+	}
+	_ = resp.Body.Close()
+	// Any HTTP response means the endpoint is reachable (even 4xx/5xx from auth/routing)
+	return admin.ComponentHealth{Name: "r2", Status: "healthy", LatencyMs: &latency}
 }
 
 type adminJobInspectorStub struct{}

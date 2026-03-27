@@ -40,6 +40,10 @@ type MediaService interface {
 
 	// ValidateAttachment validates attachment metadata against context-based rules.
 	ValidateAttachment(ctx context.Context, uploadCtx UploadContext, contentType string, sizeBytes uint64) error
+
+	// ReprocessUpload re-enqueues an existing upload for processing. (Phase 2)
+	// Returns ErrNotFound if the upload does not belong to the family.
+	ReprocessUpload(ctx context.Context, scope shared.FamilyScope, id uuid.UUID) error
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────

@@ -19,6 +19,7 @@ type mockMediaService struct {
 	getUploadFn          func(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) (*UploadInfo, error)
 	presignedGetFn       func(ctx context.Context, storageKey string, expiresSeconds uint32) (string, error)
 	validateAttachmentFn func(ctx context.Context, uploadCtx UploadContext, contentType string, sizeBytes uint64) error
+	reprocessUploadFn    func(ctx context.Context, scope shared.FamilyScope, id uuid.UUID) error
 }
 
 func newMockMediaService() *mockMediaService {
@@ -72,6 +73,13 @@ func (m *mockMediaService) ValidateAttachment(ctx context.Context, uploadCtx Upl
 		return m.validateAttachmentFn(ctx, uploadCtx, contentType, sizeBytes)
 	}
 	panic("ValidateAttachment not mocked")
+}
+
+func (m *mockMediaService) ReprocessUpload(ctx context.Context, scope shared.FamilyScope, id uuid.UUID) error {
+	if m.reprocessUploadFn != nil {
+		return m.reprocessUploadFn(ctx, scope, id)
+	}
+	panic("ReprocessUpload not mocked")
 }
 
 // ─── Mock UploadRepository ────────────────────────────────────────────────────

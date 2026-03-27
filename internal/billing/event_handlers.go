@@ -47,10 +47,14 @@ func NewPrimaryParentTransferredHandler(svc BillingService) *PrimaryParentTransf
 }
 
 func (h *PrimaryParentTransferredHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
-	// DEFERRED: When iam:: defines PrimaryParentTransferred, type-assert directly.
-	_ = ctx
-	_ = event
-	return fmt.Errorf("billing.PrimaryParentTransferredHandler: iam::PrimaryParentTransferred event not yet wired")
+	e, ok := event.(iam.PrimaryParentTransferred)
+	if !ok {
+		return fmt.Errorf("billing.PrimaryParentTransferredHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandlePrimaryParentTransferred(ctx, PrimaryParentTransferredEvent{
+		FamilyID:     e.FamilyID,
+		NewPrimaryID: e.NewPrimaryID,
+	})
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

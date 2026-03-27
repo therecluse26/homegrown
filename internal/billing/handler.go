@@ -39,6 +39,8 @@ func (h *Handler) Register(authGroup *echo.Group, hooksGroup *echo.Group) {
 	b.PATCH("/subscription", h.updateSubscription)
 	b.DELETE("/subscription", h.cancelSubscription)
 	b.POST("/subscription/reactivate", h.reactivateSubscription)
+	b.POST("/subscription/pause", h.pauseSubscription)
+	b.POST("/subscription/resume", h.resumeSubscription)
 	b.POST("/subscription/estimate", h.estimateSubscription)
 
 	// Phase 2 — Payment Methods
@@ -199,6 +201,36 @@ func (h *Handler) reactivateSubscription(c echo.Context) error {
 	scope := shared.NewFamilyScopeFromAuth(auth)
 
 	resp, err := h.svc.ReactivateSubscription(c.Request().Context(), scope)
+	if err != nil {
+		return mapBillingError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// pauseSubscription handles POST /v1/billing/subscription/pause. [10-billing §4.2]
+func (h *Handler) pauseSubscription(c echo.Context) error {
+	auth, err := middleware.RequirePrimaryParent(c)
+	if err != nil {
+		return err
+	}
+	scope := shared.NewFamilyScopeFromAuth(auth)
+
+	resp, err := h.svc.PauseSubscription(c.Request().Context(), scope)
+	if err != nil {
+		return mapBillingError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// resumeSubscription handles POST /v1/billing/subscription/resume. [10-billing §4.2]
+func (h *Handler) resumeSubscription(c echo.Context) error {
+	auth, err := middleware.RequirePrimaryParent(c)
+	if err != nil {
+		return err
+	}
+	scope := shared.NewFamilyScopeFromAuth(auth)
+
+	resp, err := h.svc.ResumeSubscription(c.Request().Context(), scope)
 	if err != nil {
 		return mapBillingError(err)
 	}

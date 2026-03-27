@@ -1260,13 +1260,15 @@ func TestHandleFamilyDeletionScheduled_CancelsAndDeletes(t *testing.T) {
 func TestHandlePrimaryParentTransferred_UpdatesCustomerEmail(t *testing.T) {
 	custRepo := new(mockCustomerRepo)
 	adapter := new(mockAdapter)
-	svc := newTestService(new(mockSubscriptionRepo), new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, new(mockIamService))
+	iamSvc := new(mockIamService)
+	svc := newTestService(new(mockSubscriptionRepo), new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, iamSvc)
 
 	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(testCustomer(), nil)
+	iamSvc.On("GetFamilyPrimaryEmail", mock.Anything, testFamilyID()).Return("new@example.com", "Test Family", nil)
 	adapter.On("UpdateCustomer", mock.Anything, "cus_test_123", "new@example.com", "").Return(nil)
 
 	err := svc.HandlePrimaryParentTransferred(context.Background(), PrimaryParentTransferredEvent{
-		FamilyID: testFamilyID(), NewEmail: "new@example.com",
+		FamilyID: testFamilyID(), NewPrimaryID: uuid.Must(uuid.NewV7()),
 	})
 	require.NoError(t, err)
 	adapter.AssertCalled(t, "UpdateCustomer", mock.Anything, "cus_test_123", "new@example.com", "")
