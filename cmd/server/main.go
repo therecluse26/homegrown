@@ -138,8 +138,10 @@ func main() {
 	familyRepo := iam.NewPgFamilyRepository(db)
 	parentRepo := iam.NewPgParentRepository(db)
 	studentRepo := iam.NewPgStudentRepository(db)
+	inviteRepo := iam.NewPgCoParentInviteRepository(db)
+	sessionRepo := iam.NewPgStudentSessionRepository(db)
 
-	iamSvc := iam.NewIamService(familyRepo, parentRepo, studentRepo, kratosAdapter, eventBus, db)
+	iamSvc := iam.NewIamService(familyRepo, parentRepo, studentRepo, inviteRepo, sessionRepo, kratosAdapter, eventBus, db)
 
 	// ── Step 7b: Wire method:: domain ────────────────────────────────────────────
 	// method:: is constructed after iam:: because iam:: is a dependency of method::.
@@ -468,6 +470,7 @@ func main() {
 
 	// Register social:: event subscriptions
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), social.NewFamilyCreatedHandler(socialSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.CoParentAdded{}), social.NewCoParentAddedHandler(socialSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.CoParentRemoved{}), social.NewCoParentRemovedHandler(socialSvc))
 	eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
@@ -739,7 +742,8 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseRefunded{}), notify.NewPurchaseRefundedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(mkt.CreatorOnboarded{}), notify.NewCreatorOnboardedHandler(notifySvc))
 	// DEFERRED: safety::ContentFlagged — safety:: domain not implemented
-	// DEFERRED: iam::CoParentAdded, iam::FamilyDeletionScheduled — events not defined yet
+	eventBus.Subscribe(reflect.TypeOf(iam.CoParentAdded{}), notify.NewCoParentAddedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), notify.NewFamilyDeletionScheduledHandler(notifySvc))
 
 	// ── Step 7i: Wire billing:: domain ──────────────────────────────────────────
 	// billing:: is the subscription lifecycle and tier-gating engine. Hyperswitch is

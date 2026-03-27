@@ -690,12 +690,19 @@ func (s *NotificationServiceImpl) HandleContentFlagged(ctx context.Context, even
 	})
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Phase 2 Stubs (return nil)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── iam:: Event Handlers ─────────────────────────────────────────────────────
 
-func (s *NotificationServiceImpl) HandleCoParentAdded(_ context.Context, _ CoParentAddedEvent) error {
-	return nil
+func (s *NotificationServiceImpl) HandleCoParentAdded(ctx context.Context, event CoParentAddedEvent) error {
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         event.FamilyID,
+		NotificationType: TypeCoParentAdded,
+		Title:            TypeToTitleTemplate[TypeCoParentAdded],
+		Body:             fmt.Sprintf("%s has been added to your family account", event.CoParentName),
+		ActionURL:        strPtr("/settings/family"),
+		Metadata: map[string]any{
+			"co_parent_id": event.CoParentID.String(),
+		},
+	})
 }
 
 func (s *NotificationServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ FamilyDeletionScheduledEvent) error {

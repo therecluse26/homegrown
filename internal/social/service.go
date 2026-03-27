@@ -2032,7 +2032,11 @@ func (s *socialServiceImpl) HandleFamilyCreated(ctx context.Context, familyID uu
 	return s.CreateProfile(ctx, familyID)
 }
 
-// Deferred handler stubs — upstream events not yet defined. [05-social §5] (M3)
+// Event handler stubs — full implementation deferred to M3. [05-social §5]
+func (s *socialServiceImpl) HandleCoParentAdded(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
 func (s *socialServiceImpl) HandleCoParentRemoved(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return nil
 }

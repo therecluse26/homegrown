@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/billing"
+	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
@@ -280,18 +281,54 @@ func (h *CreatorOnboardedHandler) Handle(ctx context.Context, event shared.Domai
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Deferred Handlers (Phase 2 / Missing Domains)
+// Deferred Handlers (Missing Domains)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ContentFlaggedHandler handles safety.ContentFlagged events.
 // DEFERRED: safety:: domain not implemented. When activated, register in main.go:
-//   eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), notify.NewContentFlaggedHandler(notifySvc))
+//
+//	eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), notify.NewContentFlaggedHandler(notifySvc))
+
+// ─── iam:: Event Handlers ─────────────────────────────────────────────────────
 
 // CoParentAddedHandler handles iam.CoParentAdded events.
-// DEFERRED: iam.CoParentAdded event does not exist yet. [08-notify §17.1]
+// Sends a welcome notification to the new co-parent. [08-notify §17.1]
+type CoParentAddedHandler struct{ svc NotificationService }
+
+func NewCoParentAddedHandler(svc NotificationService) *CoParentAddedHandler {
+	return &CoParentAddedHandler{svc: svc}
+}
+
+func (h *CoParentAddedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(iam.CoParentAdded)
+	if !ok {
+		return fmt.Errorf("notify.CoParentAddedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleCoParentAdded(ctx, CoParentAddedEvent{
+		FamilyID:     e.FamilyID,
+		CoParentID:   e.CoParentID,
+		CoParentName: e.CoParentName,
+	})
+}
 
 // FamilyDeletionScheduledHandler handles iam.FamilyDeletionScheduled events.
-// DEFERRED: iam.FamilyDeletionScheduled event does not exist yet. [08-notify §17.1]
+// Removes notification preferences and history. [08-notify §17.1]
+type FamilyDeletionScheduledHandler struct{ svc NotificationService }
+
+func NewFamilyDeletionScheduledHandler(svc NotificationService) *FamilyDeletionScheduledHandler {
+	return &FamilyDeletionScheduledHandler{svc: svc}
+}
+
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(iam.FamilyDeletionScheduled)
+	if !ok {
+		return fmt.Errorf("notify.FamilyDeletionScheduledHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFamilyDeletionScheduled(ctx, FamilyDeletionScheduledEvent{
+		FamilyID:        e.FamilyID,
+		DeleteAfterDate: e.DeleteAfter,
+	})
+}
 
 // ─── Billing Event Handlers ──────────────────────────────────────────────────
 

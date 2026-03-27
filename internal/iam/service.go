@@ -2,12 +2,15 @@ package iam
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +29,8 @@ type IamServiceImpl struct {
 	familyRepo                 FamilyRepository
 	parentRepo                 ParentRepository
 	studentRepo                StudentRepository
+	inviteRepo                 CoParentInviteRepository
+	sessionRepo                StudentSessionRepository
 	kratosAdapter              KratosAdapter
 	eventBus                   *shared.EventBus
 	db                         *gorm.DB // for transaction management
@@ -38,6 +43,8 @@ func NewIamService(
 	familyRepo FamilyRepository,
 	parentRepo ParentRepository,
 	studentRepo StudentRepository,
+	inviteRepo CoParentInviteRepository,
+	sessionRepo StudentSessionRepository,
 	kratosAdapter KratosAdapter,
 	eventBus *shared.EventBus,
 	db *gorm.DB,
@@ -46,6 +53,8 @@ func NewIamService(
 		familyRepo:    familyRepo,
 		parentRepo:    parentRepo,
 		studentRepo:   studentRepo,
+		inviteRepo:    inviteRepo,
+		sessionRepo:   sessionRepo,
 		kratosAdapter: kratosAdapter,
 		eventBus:      eventBus,
 		db:            db,
@@ -525,4 +534,404 @@ func displayNameFromTraits(traits KratosTraits) string {
 		return traits.Name + " Family"
 	}
 	return "My Family"
+}
+
+// ─── Phase 2: Co-parent Management ───────────────────────────────────────────
+
+func (s *IamServiceImpl) InviteCoParent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, cmd InviteCoParentCommand) (*CoParentInviteResponse, error) {
+	if !auth.IsPrimaryParent {
+		return nil, ErrNotPrimaryParent
+	}
+
+	plaintext, tokenHash, err := generateToken(rand.Read)
+	if err != nil {
+		return nil, fmt.Errorf("iam: generate invite token: %w", err)
+	}
+
+	expiresAt := time.Now().Add(72 * time.Hour)
+
+	var invite *CoParentInvite
+	err = shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		var txErr error
+		invite, txErr = NewPgCoParentInviteRepository(tx).Create(ctx, scope.FamilyID(), cmd.Email, tokenHash, expiresAt)
+		return txErr
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Notify domain sends the invite email via InviteCreated event.
+	// Token included in event so notify can build the accept URL. [§5]
+	if pubErr := s.eventBus.Publish(ctx, InviteCreated{
+		FamilyID:  scope.FamilyID(),
+		InviteID:  invite.ID,
+		Email:     cmd.Email,
+		Token:     plaintext, // plaintext — notify builds link; not stored in DB [CODING §5.2]
+		ExpiresAt: expiresAt,
+	}); pubErr != nil {
+		slog.Error("failed to publish InviteCreated", "invite_id", invite.ID, "error", pubErr)
+	}
+
+	return &CoParentInviteResponse{
+		ID:        invite.ID,
+		Email:     invite.Email,
+		Status:    invite.Status,
+		ExpiresAt: invite.ExpiresAt,
+		CreatedAt: invite.CreatedAt,
+	}, nil
+}
+
+func (s *IamServiceImpl) CancelInvite(ctx context.Context, scope *shared.FamilyScope, inviteID uuid.UUID) error {
+	return shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		repo := NewPgCoParentInviteRepository(tx)
+		invite, err := repo.FindByID(ctx, scope, inviteID)
+		if err != nil {
+			return err
+		}
+		if invite.Status != "pending" {
+			return ErrInviteAlreadyAccepted
+		}
+		return repo.UpdateStatus(ctx, scope, inviteID, "cancelled")
+	})
+}
+
+func (s *IamServiceImpl) AcceptInvite(ctx context.Context, auth *shared.AuthContext, token string) error {
+	// Hash the token to look up the invite row.
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(token), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("iam: hash accept token: %w", err)
+	}
+	tokenHash := string(hashBytes)
+	_ = tokenHash // We actually need to find by the stored hash — use bcrypt.CompareHashAndPassword below.
+
+	// BypassRLS: requester is not yet a member of the invite's family. [§6]
+	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		inviteRepo := NewPgCoParentInviteRepository(tx)
+		parentRepo := NewPgParentRepository(tx)
+
+		// Scan all pending, non-expired invites and compare with bcrypt.
+		// This is a linear scan over the invite table — acceptable for low-volume operation.
+		var models []CoParentInviteModel
+		if err := tx.WithContext(ctx).
+			Where("status = 'pending' AND expires_at > NOW()").
+			Find(&models).Error; err != nil {
+			return shared.ErrDatabase(err)
+		}
+
+		var matched *CoParentInviteModel
+		for i := range models {
+			if err := bcrypt.CompareHashAndPassword([]byte(models[i].TokenHash), []byte(token)); err == nil {
+				matched = &models[i]
+				break
+			}
+		}
+		if matched == nil {
+			return ErrInviteNotFound
+		}
+
+		// Check invite is still valid.
+		if matched.Status != "pending" {
+			return ErrInviteAlreadyAccepted
+		}
+		if time.Now().After(matched.ExpiresAt) {
+			return ErrInviteExpired
+		}
+
+		// Check requester is not already in the family.
+		var count int64
+		if err := tx.WithContext(ctx).Model(&ParentModel{}).
+			Where("family_id = ? AND kratos_identity_id = ?", matched.FamilyID, auth.IdentityID).
+			Count(&count).Error; err != nil {
+			return shared.ErrDatabase(err)
+		}
+		if count > 0 {
+			return ErrParentAlreadyInFamily
+		}
+
+		// Create parent row.
+		scope := shared.NewFamilyScopeFromID(matched.FamilyID)
+		if _, err := parentRepo.Create(ctx, CreateParent{
+			FamilyID:    matched.FamilyID,
+			IdentityID:  auth.IdentityID,
+			DisplayName: auth.DisplayName,
+			Email:       auth.Email,
+			IsPrimary:   false,
+		}); err != nil {
+			return err
+		}
+
+		// Mark invite accepted.
+		if err := inviteRepo.UpdateStatus(ctx, &scope, matched.ID, "accepted"); err != nil {
+			return err
+		}
+
+		// Publish event after all DB work succeeds.
+		// Event is published inside the transaction closure; bus.Publish logs on error. [shared.EventBus]
+		if pubErr := s.eventBus.Publish(ctx, CoParentAdded{
+			FamilyID:     matched.FamilyID,
+			CoParentID:   auth.ParentID,
+			CoParentEmail: auth.Email,
+			CoParentName:  auth.DisplayName,
+		}); pubErr != nil {
+			slog.Error("failed to publish CoParentAdded", "family_id", matched.FamilyID, "error", pubErr)
+		}
+		return nil
+	})
+}
+
+func (s *IamServiceImpl) RemoveCoParent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, parentID uuid.UUID) error {
+	if !auth.IsPrimaryParent {
+		return ErrNotPrimaryParent
+	}
+
+	var identityID uuid.UUID
+	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		repo := NewPgParentRepository(tx)
+		parent, err := repo.FindByID(ctx, scope, parentID)
+		if err != nil {
+			return err
+		}
+		if parent.IsPrimary {
+			return ErrCannotRemovePrimaryParent
+		}
+		identityID = parent.IdentityID
+		return repo.Delete(ctx, scope, parentID)
+	})
+	if err != nil {
+		return err
+	}
+
+	// Revoke Kratos sessions after DB delete commits.
+	if err := s.kratosAdapter.RevokeSessions(ctx, identityID); err != nil {
+		slog.Error("iam: revoke sessions on co-parent removal", "identity_id", identityID, "error", err)
+	}
+
+	if pubErr := s.eventBus.Publish(ctx, CoParentRemoved{FamilyID: scope.FamilyID(), CoParentID: parentID}); pubErr != nil {
+		slog.Error("failed to publish CoParentRemoved", "family_id", scope.FamilyID(), "error", pubErr)
+	}
+	return nil
+}
+
+func (s *IamServiceImpl) TransferPrimaryParent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, cmd TransferPrimaryCommand) error {
+	if !auth.IsPrimaryParent {
+		return ErrNotPrimaryParent
+	}
+	if cmd.NewPrimaryParentID == auth.ParentID {
+		return ErrCannotTransferToSelf
+	}
+
+	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		repo := NewPgParentRepository(tx)
+		// Verify target parent is in the family.
+		if _, err := repo.FindByID(ctx, scope, cmd.NewPrimaryParentID); err != nil {
+			return err
+		}
+		// Atomic swap: clear current primary, set new primary.
+		if err := repo.SetPrimary(ctx, scope, auth.ParentID, false); err != nil {
+			return err
+		}
+		return repo.SetPrimary(ctx, scope, cmd.NewPrimaryParentID, true)
+	})
+	if err != nil {
+		return err
+	}
+
+	if pubErr := s.eventBus.Publish(ctx, PrimaryParentTransferred{
+		FamilyID:      scope.FamilyID(),
+		NewPrimaryID:  cmd.NewPrimaryParentID,
+		PrevPrimaryID: auth.ParentID,
+	}); pubErr != nil {
+		slog.Error("failed to publish PrimaryParentTransferred", "family_id", scope.FamilyID(), "error", pubErr)
+	}
+	return nil
+}
+
+// ─── Phase 2: COPPA / Family Lifecycle ───────────────────────────────────────
+
+func (s *IamServiceImpl) WithdrawCoppaConsent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext) error {
+	if !auth.IsPrimaryParent {
+		return ErrNotPrimaryParent
+	}
+	current := CoppaConsentStatus(auth.CoppaConsentStatus)
+	if current != CoppaConsentConsented && current != CoppaConsentReVerified {
+		return &InvalidConsentTransitionError{From: string(current), To: string(CoppaConsentWithdrawn)}
+	}
+
+	return shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		familyRepo := NewPgFamilyRepository(tx)
+		method := "withdrawn_by_parent"
+		if _, err := familyRepo.UpdateConsentStatus(ctx, scope, CoppaConsentWithdrawn, &method); err != nil {
+			return err
+		}
+		return tx.Create(&CoppaAuditLogModel{
+			FamilyID:       scope.FamilyID(),
+			Action:         "consent_withdrawn",
+			Method:         &method,
+			PreviousStatus: string(current),
+			NewStatus:      string(CoppaConsentWithdrawn),
+			PerformedBy:    auth.ParentID,
+		}).Error
+	})
+}
+
+func (s *IamServiceImpl) RequestFamilyDeletion(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext) error {
+	if !auth.IsPrimaryParent {
+		return ErrNotPrimaryParent
+	}
+
+	var deleteAfter time.Time
+	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		family, err := NewPgFamilyRepository(tx).FindByID(ctx, scope.FamilyID())
+		if err != nil {
+			return err
+		}
+		if family.DeletionRequestedAt != nil {
+			return ErrDeletionAlreadyRequested
+		}
+		now := time.Now()
+		deleteAfter = now.Add(30 * 24 * time.Hour)
+		return NewPgFamilyRepository(tx).SetDeletionRequested(ctx, scope, &now)
+	})
+	if err != nil {
+		return err
+	}
+
+	if pubErr := s.eventBus.Publish(ctx, FamilyDeletionScheduled{
+		FamilyID:    scope.FamilyID(),
+		DeleteAfter: deleteAfter,
+	}); pubErr != nil {
+		slog.Error("failed to publish FamilyDeletionScheduled", "family_id", scope.FamilyID(), "error", pubErr)
+	}
+	return nil
+}
+
+func (s *IamServiceImpl) CancelFamilyDeletion(ctx context.Context, scope *shared.FamilyScope) error {
+	return shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		family, err := NewPgFamilyRepository(tx).FindByID(ctx, scope.FamilyID())
+		if err != nil {
+			return err
+		}
+		if family.DeletionRequestedAt == nil {
+			return ErrNoPendingDeletion
+		}
+		return NewPgFamilyRepository(tx).SetDeletionRequested(ctx, scope, nil)
+	})
+}
+
+// ─── Phase 2: Student Sessions ────────────────────────────────────────────────
+
+func (s *IamServiceImpl) CreateStudentSession(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, studentID uuid.UUID, cmd CreateStudentSessionCommand) (*StudentSessionResponse, error) {
+	// Verify student belongs to this family.
+	if _, err := s.GetStudent(ctx, scope, studentID); err != nil {
+		return nil, err
+	}
+
+	plaintext, tokenHash, err := generateToken(rand.Read)
+	if err != nil {
+		return nil, fmt.Errorf("iam: generate session token: %w", err)
+	}
+
+	expiresAt := time.Now().Add(time.Duration(cmd.ExpiresInHours) * time.Hour)
+
+	var session *StudentSession
+	err = shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		var txErr error
+		session, txErr = NewPgStudentSessionRepository(tx).Create(ctx, scope, studentID, auth.ParentID, tokenHash, expiresAt, cmd.AllowedToolSlugs)
+		return txErr
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &StudentSessionResponse{
+		ID:          session.ID,
+		StudentID:   session.StudentID,
+		Token:       plaintext, // returned once only [CODING §5.2]
+		ExpiresAt:   session.ExpiresAt,
+		Permissions: session.Permissions,
+		CreatedAt:   session.CreatedAt,
+	}, nil
+}
+
+func (s *IamServiceImpl) ListStudentSessions(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) ([]StudentSessionSummaryResponse, error) {
+	var sessions []StudentSession
+	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		var txErr error
+		sessions, txErr = NewPgStudentSessionRepository(tx).ListActiveByStudent(ctx, scope, studentID)
+		return txErr
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]StudentSessionSummaryResponse, len(sessions))
+	for i, ss := range sessions {
+		result[i] = StudentSessionSummaryResponse{
+			ID:          ss.ID,
+			StudentID:   ss.StudentID,
+			ExpiresAt:   ss.ExpiresAt,
+			IsActive:    ss.IsActive,
+			Permissions: ss.Permissions,
+			CreatedAt:   ss.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+func (s *IamServiceImpl) RevokeStudentSession(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, sessionID uuid.UUID) error {
+	return shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		repo := NewPgStudentSessionRepository(tx)
+		session, err := repo.FindByID(ctx, scope, sessionID)
+		if err != nil {
+			return err
+		}
+		// Ensure session belongs to the specified student.
+		if session.StudentID != studentID {
+			return ErrStudentSessionNotFound
+		}
+		return repo.Revoke(ctx, scope, sessionID)
+	})
+}
+
+func (s *IamServiceImpl) GetStudentSessionMe(ctx context.Context, token string) (*StudentSessionIdentityResponse, error) {
+	// BypassRLS: no family scope available — auth via student bearer token. [§6]
+	var result *StudentSessionIdentityResponse
+	err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		repo := NewPgStudentSessionRepository(tx)
+		// Scan active, non-expired sessions and compare token with bcrypt.
+		var models []StudentSessionModel
+		if err := tx.WithContext(ctx).
+			Where("is_active = true AND expires_at > NOW()").
+			Find(&models).Error; err != nil {
+			return shared.ErrDatabase(err)
+		}
+
+		var matched *StudentSessionModel
+		for i := range models {
+			if err := bcrypt.CompareHashAndPassword([]byte(models[i].TokenHash), []byte(token)); err == nil {
+				matched = &models[i]
+				break
+			}
+		}
+		if matched == nil {
+			return ErrStudentSessionExpired
+		}
+		_ = repo
+
+		var perms []string
+		if matched.Permissions != nil {
+			perms = []string(matched.Permissions)
+		}
+		result = &StudentSessionIdentityResponse{
+			StudentID:        matched.StudentID,
+			FamilyID:         matched.FamilyID,
+			AllowedToolSlugs: perms,
+			ExpiresAt:        matched.ExpiresAt,
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }

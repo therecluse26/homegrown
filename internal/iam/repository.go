@@ -2,11 +2,13 @@ package iam
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -341,4 +343,175 @@ func (r *PgStudentRepository) Delete(ctx context.Context, scope *shared.FamilySc
 		return ErrStudentNotFound
 	}
 	return nil
+}
+
+// ─── Co-Parent Invite Repository ─────────────────────────────────────────────
+
+// PgCoParentInviteRepository implements CoParentInviteRepository using PostgreSQL via GORM.
+type PgCoParentInviteRepository struct {
+	db *gorm.DB
+}
+
+// NewPgCoParentInviteRepository creates a new PgCoParentInviteRepository.
+func NewPgCoParentInviteRepository(db *gorm.DB) *PgCoParentInviteRepository {
+	return &PgCoParentInviteRepository{db: db}
+}
+
+func (r *PgCoParentInviteRepository) Create(ctx context.Context, familyID uuid.UUID, email, tokenHash string, expiresAt time.Time) (*CoParentInvite, error) {
+	model := &CoParentInviteModel{
+		FamilyID:  familyID,
+		Email:     email,
+		TokenHash: tokenHash,
+		Status:    "pending",
+		ExpiresAt: expiresAt,
+	}
+	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return model.toDomain(), nil
+}
+
+func (r *PgCoParentInviteRepository) FindByID(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*CoParentInvite, error) {
+	var model CoParentInviteModel
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND family_id = ?", id, scope.FamilyID()).
+		First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInviteNotFound
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return model.toDomain(), nil
+}
+
+func (r *PgCoParentInviteRepository) FindByToken(ctx context.Context, tokenHash string) (*CoParentInvite, error) {
+	// NOT family-scoped — called in AcceptInvite before requester has a family scope.
+	// Caller MUST run inside BypassRLSTransaction. [§6]
+	var model CoParentInviteModel
+	err := r.db.WithContext(ctx).
+		Where("token_hash = ?", tokenHash).
+		First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInviteNotFound
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return model.toDomain(), nil
+}
+
+func (r *PgCoParentInviteRepository) UpdateStatus(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID, status string) error {
+	if err := r.db.WithContext(ctx).Model(&CoParentInviteModel{}).
+		Where("id = ? AND family_id = ?", id, scope.FamilyID()).
+		Updates(map[string]interface{}{
+			"status":     status,
+			"updated_at": time.Now(),
+		}).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+// ─── Student Session Repository ───────────────────────────────────────────────
+
+// PgStudentSessionRepository implements StudentSessionRepository using PostgreSQL via GORM.
+type PgStudentSessionRepository struct {
+	db *gorm.DB
+}
+
+// NewPgStudentSessionRepository creates a new PgStudentSessionRepository.
+func NewPgStudentSessionRepository(db *gorm.DB) *PgStudentSessionRepository {
+	return &PgStudentSessionRepository{db: db}
+}
+
+func (r *PgStudentSessionRepository) Create(ctx context.Context, scope *shared.FamilyScope, studentID, createdBy uuid.UUID, tokenHash string, expiresAt time.Time, permissions []string) (*StudentSession, error) {
+	model := &StudentSessionModel{
+		FamilyID:    scope.FamilyID(),
+		StudentID:   studentID,
+		CreatedBy:   createdBy,
+		TokenHash:   tokenHash,
+		IsActive:    true,
+		ExpiresAt:   expiresAt,
+		Permissions: SlugArray(permissions),
+	}
+	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return model.toDomain(), nil
+}
+
+func (r *PgStudentSessionRepository) FindByID(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*StudentSession, error) {
+	var model StudentSessionModel
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND family_id = ?", id, scope.FamilyID()).
+		First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrStudentSessionNotFound
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return model.toDomain(), nil
+}
+
+func (r *PgStudentSessionRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*StudentSession, error) {
+	// NOT family-scoped — called in GetStudentSessionMe before family scope is available.
+	// Caller MUST run inside BypassRLSTransaction. [§6]
+	var model StudentSessionModel
+	err := r.db.WithContext(ctx).
+		Where("token_hash = ?", tokenHash).
+		First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrStudentSessionNotFound
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return model.toDomain(), nil
+}
+
+func (r *PgStudentSessionRepository) ListActiveByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) ([]StudentSession, error) {
+	var models []StudentSessionModel
+	if err := r.db.WithContext(ctx).
+		Where("family_id = ? AND student_id = ? AND is_active = true AND expires_at > NOW()", scope.FamilyID(), studentID).
+		Find(&models).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	result := make([]StudentSession, len(models))
+	for i, m := range models {
+		result[i] = *m.toDomain()
+	}
+	return result, nil
+}
+
+func (r *PgStudentSessionRepository) Revoke(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) error {
+	result := r.db.WithContext(ctx).Model(&StudentSessionModel{}).
+		Where("id = ? AND family_id = ?", id, scope.FamilyID()).
+		Updates(map[string]interface{}{
+			"is_active":  false,
+			"updated_at": time.Now(),
+		})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrStudentSessionNotFound
+	}
+	return nil
+}
+
+// generateToken creates a 32-byte cryptographically random token and returns
+// the hex-encoded plaintext and its bcrypt hash. [§5, CODING §5.2]
+func generateToken(randReader func([]byte) (int, error)) (plaintext, hash string, err error) {
+	raw := make([]byte, 32)
+	if _, err = randReader(raw); err != nil {
+		return "", "", err
+	}
+	plaintext = hex.EncodeToString(raw)
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(plaintext), bcrypt.DefaultCost)
+	if err != nil {
+		return "", "", err
+	}
+	return plaintext, string(hashBytes), nil
 }

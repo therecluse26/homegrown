@@ -953,6 +953,19 @@ definitions:
     required:
     - answers
     type: object
+  iam.CoParentInviteResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      status:
+        type: string
+    type: object
   iam.ConsentStatusResponse:
     properties:
       can_create_students:
@@ -994,6 +1007,21 @@ definitions:
         type: string
     required:
     - display_name
+    type: object
+  iam.CreateStudentSessionCommand:
+    properties:
+      allowed_tool_slugs:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      expires_in_hours:
+        maximum: 720
+        minimum: 1
+        type: integer
+    required:
+    - allowed_tool_slugs
+    - expires_in_hours
     type: object
   iam.CurrentUserResponse:
     properties:
@@ -1043,6 +1071,13 @@ definitions:
       subscription_tier:
         type: string
     type: object
+  iam.InviteCoParentCommand:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
   iam.ParentSummary:
     properties:
       display_name:
@@ -1068,6 +1103,61 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  iam.StudentSessionIdentityResponse:
+    properties:
+      allowed_tool_slugs:
+        items:
+          type: string
+        type: array
+      expires_at:
+        type: string
+      family_id:
+        type: string
+      student_id:
+        type: string
+    type: object
+  iam.StudentSessionResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      student_id:
+        type: string
+      token:
+        description: plaintext — returned once only [CODING §5.2]
+        type: string
+    type: object
+  iam.StudentSessionSummaryResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      permissions:
+        items:
+          type: string
+        type: array
+      student_id:
+        type: string
+    type: object
+  iam.TransferPrimaryCommand:
+    properties:
+      new_primary_parent_id:
+        type: string
+    required:
+    - new_primary_parent_id
     type: object
   iam.UpdateFamilyCommand:
     properties:
@@ -3871,6 +3961,25 @@ paths:
       tags:
       - discovery
   /families/consent:
+    delete:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Withdraw COPPA parental consent
+      tags:
+      - families
     get:
       produces:
       - application/json
@@ -3912,6 +4021,130 @@ paths:
           schema:
             $ref: '#/definitions/shared.ErrorResponse'
       summary: Submit COPPA consent
+      tags:
+      - families
+  /families/deletion-request:
+    delete:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Cancel pending family deletion request
+      tags:
+      - families
+    post:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Request family account deletion
+      tags:
+      - families
+  /families/invites:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Invite details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/iam.InviteCoParentCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/iam.CoParentInviteResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Invite a co-parent
+      tags:
+      - families
+  /families/invites/{id}:
+    delete:
+      parameters:
+      - description: Invite ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Cancel a co-parent invite
+      tags:
+      - families
+  /families/invites/{token}/accept:
+    post:
+      parameters:
+      - description: Invite token
+        in: path
+        name: token
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "410":
+          description: Gone
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Accept a co-parent invite
       tags:
       - families
   /families/methodology:
@@ -3959,6 +4192,69 @@ paths:
       security:
       - BearerAuth: []
       summary: Get full methodology context for the family dashboard
+      tags:
+      - families
+  /families/parents/{id}:
+    delete:
+      parameters:
+      - description: Parent ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Remove a co-parent
+      tags:
+      - families
+  /families/primary-parent:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: New primary parent ID
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/iam.TransferPrimaryCommand'
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Transfer primary parent role
       tags:
       - families
   /families/profile:
@@ -4182,6 +4478,98 @@ paths:
       summary: Get student's resolved tool set
       tags:
       - families
+  /families/students/{student_id}/sessions:
+    get:
+      parameters:
+      - description: Student ID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/iam.StudentSessionSummaryResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: List active student sessions
+      tags:
+      - students
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student ID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Session details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/iam.CreateStudentSessionCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/iam.StudentSessionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Create a student session token
+      tags:
+      - students
+  /families/students/{student_id}/sessions/{id}:
+    delete:
+      parameters:
+      - description: Student ID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Revoke a student session
+      tags:
+      - students
   /families/tools:
     get:
       produces:
@@ -5540,4 +5928,20 @@ paths:
       summary: AI-powered search suggestions (Phase 3 — not yet available)
       tags:
       - search
+  /student-session/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/iam.StudentSessionIdentityResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Get student session identity
+      tags:
+      - student-session
 swagger: "2.0"

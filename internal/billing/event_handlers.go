@@ -11,9 +11,6 @@ import (
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // iam:: Event Handlers [10-billing §16.4]
-// DEFERRED: FamilyDeletionScheduled and PrimaryParentTransferred events are
-// not yet defined in iam::events.go. Handlers exist with mirror types;
-// wiring in main.go is deferred until iam:: publishes these events.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // FamilyDeletionScheduledHandler handles iam::FamilyDeletionScheduled events.

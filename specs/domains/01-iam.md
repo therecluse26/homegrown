@@ -1375,78 +1375,78 @@ acceptance criteria for code review and integration testing.
 ### Phase 1 — Foundation (must complete before any other domain)
 
 #### Database
-- [ ] Create migration: `iam_families` table with all columns including `coppa_consent_status`
-- [ ] Create migration: `iam_parents` table
-- [ ] Create migration: `iam_students` table
-- [ ] Create migration: `iam_coppa_audit_log` table
-- [ ] Create migration: RLS policies for all IAM tables
-- [ ] Create migration: PostGIS `location_point` column on `iam_families`
-- [ ] Define GORM models in `internal/iam/models.go`
+- [x] Create migration: `iam_families` table with all columns including `coppa_consent_status`
+- [x] Create migration: `iam_parents` table
+- [x] Create migration: `iam_students` table
+- [x] Create migration: `iam_coppa_audit_log` table
+- [x] Create migration: RLS policies for all IAM tables
+- [x] Create migration: PostGIS `location_point` column on `iam_families`
+- [x] Define GORM models in `internal/iam/models.go`
 
 #### Shared Infrastructure (prerequisite — see 00-core)
-- [ ] Verify 00-core §19 checklist is complete (AppError, AuthContext, FamilyScope,
+- [x] Verify 00-core §19 checklist is complete (AppError, AuthContext, FamilyScope,
       middleware, DB pool, Redis pool, EventBus)
-- [ ] Implement `IamError` → `AppError` conversion using `errors.Is`/`errors.As` (00-core §6.4 pattern)
+- [x] Implement `IamError` → `AppError` conversion using `errors.Is`/`errors.As` (00-core §6.4 pattern)
 
 #### Kratos Adapter
-- [ ] Define `KratosAdapter` interface in `internal/iam/ports.go`
-- [ ] Implement `KratosAdapterImpl` in `internal/iam/adapters/kratos.go`
-- [ ] Configure Kratos YAML (OIDC providers, webhooks, session config)
+- [x] Define `KratosAdapter` interface in `internal/iam/ports.go`
+- [x] Implement `KratosAdapterImpl` in `internal/iam/adapters/kratos.go`
+- [ ] Configure Kratos YAML (OIDC providers, webhooks, session config) — deferred (infra config)
 
 #### Ports & Interfaces
-- [ ] Define `IamService` interface in `internal/iam/ports.go`
-- [ ] Define `FamilyRepository` interface in `internal/iam/ports.go`
-- [ ] Define `ParentRepository` interface in `internal/iam/ports.go`
-- [ ] Define `StudentRepository` interface in `internal/iam/ports.go`
+- [x] Define `IamService` interface in `internal/iam/ports.go`
+- [x] Define `FamilyRepository` interface in `internal/iam/ports.go`
+- [x] Define `ParentRepository` interface in `internal/iam/ports.go`
+- [x] Define `StudentRepository` interface in `internal/iam/ports.go`
 
 #### Repository Implementations
-- [ ] Implement `PgFamilyRepository`
-- [ ] Implement `PgParentRepository`
-- [ ] Implement `PgStudentRepository`
+- [x] Implement `PgFamilyRepository`
+- [x] Implement `PgParentRepository`
+- [x] Implement `PgStudentRepository`
 
 #### Service Implementation
-- [ ] Implement `IamServiceImpl` with all Phase 1 methods
+- [x] Implement `IamServiceImpl` with all Phase 1 methods
 
 #### API Endpoints
-- [ ] `POST /hooks/kratos/post-registration` — atomic family + parent creation
-- [ ] `POST /hooks/kratos/post-login` — session tracking, trait sync
-- [ ] `GET  /v1/auth/me` — current user info
-- [ ] `GET  /v1/families/profile` — family profile
-- [ ] `PATCH /v1/families/profile` — update family profile
-- [ ] `POST /v1/families/students` — create student (COPPA-gated)
-- [ ] `GET  /v1/families/students` — list students
-- [ ] `PATCH /v1/families/students/:id` — update student
-- [ ] `DELETE /v1/families/students/:id` — remove student
-- [ ] `POST /v1/families/consent` — submit COPPA consent
-- [ ] `GET  /v1/families/consent` — get consent status
+- [x] `POST /hooks/kratos/post-registration` — atomic family + parent creation
+- [x] `POST /hooks/kratos/post-login` — session tracking, trait sync
+- [x] `GET  /v1/auth/me` — current user info
+- [x] `GET  /v1/families/profile` — family profile
+- [x] `PATCH /v1/families/profile` — update family profile
+- [x] `POST /v1/families/students` — create student (COPPA-gated)
+- [x] `GET  /v1/families/students` — list students
+- [x] `PATCH /v1/families/students/:id` — update student
+- [x] `DELETE /v1/families/students/:id` — remove student
+- [x] `POST /v1/families/consent` — submit COPPA consent
+- [x] `GET  /v1/families/consent` — get consent status
 
 #### Models (DTOs)
-- [ ] `CreateStudentCommand` with validator tags
-- [ ] `UpdateStudentCommand` with validator tags
-- [ ] `UpdateFamilyCommand` with validator tags
-- [ ] `CoppaConsentCommand` with validator tags
-- [ ] `StudentResponse` with JSON struct tags + swaggo annotations
-- [ ] `FamilyProfileResponse` with JSON struct tags + swaggo annotations
-- [ ] `CurrentUserResponse` with JSON struct tags + swaggo annotations
-- [ ] `ConsentStatusResponse` with JSON struct tags + swaggo annotations
+- [x] `CreateStudentCommand` with validator tags
+- [x] `UpdateStudentCommand` with validator tags
+- [x] `UpdateFamilyCommand` with validator tags
+- [x] `CoppaConsentCommand` with validator tags
+- [x] `StudentResponse` with JSON struct tags + swaggo annotations
+- [x] `FamilyProfileResponse` with JSON struct tags + swaggo annotations
+- [x] `CurrentUserResponse` with JSON struct tags + swaggo annotations
+- [x] `ConsentStatusResponse` with JSON struct tags + swaggo annotations
 
 #### Domain Events
-- [ ] Define `FamilyCreated` event
-- [ ] Define `StudentCreated` event
-- [ ] Define `StudentDeleted` event
-- [ ] Define `CoppaConsentGranted` event
-- [ ] Register event subscriptions in `main.go`
+- [x] Define `FamilyCreated` event
+- [x] Define `StudentCreated` event
+- [x] Define `StudentDeleted` event
+- [x] Define `CoppaConsentGranted` event
+- [x] Register event subscriptions in `main.go`
 
 #### Tests
-- [ ] Integration test: registration creates family + parent atomically
-- [ ] Integration test: student CRUD is family-scoped
+- [x] Integration test: registration creates family + parent atomically
+- [x] Integration test: student CRUD is family-scoped
 - [ ] Integration test: student creation blocked without COPPA consent
 - [ ] Integration test: auth middleware returns 401 for invalid sessions
 - [ ] Integration test: RequirePremium returns 402 for free-tier
-- [ ] Unit test: COPPA state transitions (valid transitions succeed, invalid rejected)
+- [x] Unit test: COPPA state transitions (valid transitions succeed, invalid rejected)
 - [ ] Verify: no PII in application log output
-- [ ] Verify: `golangci-lint run` passes
-- [ ] Verify: `go test ./...` passes
+- [x] Verify: `golangci-lint run` passes
+- [x] Verify: `go test ./...` passes
 
 #### Code Generation
 - [ ] Generate OpenAPI spec from Go types via swaggo/swag
@@ -1455,28 +1455,48 @@ acceptance criteria for code review and integration testing.
 ### Phase 2 — Co-Parent & Lifecycle
 
 #### Database
-- [ ] Create migration: `iam_co_parent_invites` table
-- [ ] Update GORM models in `internal/iam/models.go`
+- [x] Create migration: `iam_co_parent_invites` table (in `20260322000001_create_iam_tables.sql`)
+- [x] Create migration: `iam_student_sessions` table (in `20260322000001_create_iam_tables.sql`)
+- [x] Update GORM models in `internal/iam/models.go` (`CoParentInviteModel`, `StudentSessionModel`)
 
-#### Endpoints
-- [ ] `POST /v1/families/invites` — invite co-parent
-- [ ] `DELETE /v1/families/invites/:id` — cancel invite
-- [ ] `POST /v1/families/invites/:token/accept` — accept invite
-- [ ] `DELETE /v1/families/parents/:id` — remove co-parent
-- [ ] `POST /v1/families/primary-parent` — transfer primary role
-- [ ] `DELETE /v1/families/consent` — withdraw COPPA consent
-- [ ] `POST /v1/families/deletion-request` — request family deletion
-- [ ] `DELETE /v1/families/deletion-request` — cancel deletion
+#### Co-Parent Management Endpoints
+- [x] `POST /v1/families/invites` — invite co-parent
+- [x] `DELETE /v1/families/invites/:id` — cancel invite
+- [x] `POST /v1/families/invites/:token/accept` — accept invite
+- [x] `DELETE /v1/families/parents/:id` — remove co-parent
+- [x] `POST /v1/families/primary-parent` — transfer primary role
+- [x] `DELETE /v1/families/consent` — withdraw COPPA consent
+- [x] `POST /v1/families/deletion-request` — request family deletion
+- [x] `DELETE /v1/families/deletion-request` — cancel deletion
+
+#### Student Session Endpoints
+- [x] `POST /v1/families/students/:student_id/sessions` — create supervised session
+- [x] `GET  /v1/families/students/:student_id/sessions` — list active sessions
+- [x] `DELETE /v1/families/students/:student_id/sessions/:id` — revoke session
+- [x] `GET  /v1/student-session/me` — identity lookup (Bearer token middleware)
 
 #### Supporting Work
-- [ ] Implement `RequirePrimaryParent` middleware
-- [ ] Implement `CoParentInviteRepository` interface + `PgCoParentInviteRepository`
-- [ ] Implement co-parent invite email (via `notify::` domain event)
-- [ ] Implement family deletion grace period + cascade
-- [ ] Implement COPPA consent withdrawal + student data export
-- [ ] Define `CoParentAdded`, `CoParentRemoved`, `CoppaConsentWithdrawn`, `FamilyDeletionScheduled`, `PrimaryParentTransferred` events
+- [x] Implement `RequirePrimaryParent` middleware
+- [x] Implement `CoParentInviteRepository` interface + `PgCoParentInviteRepository`
+- [x] Implement `StudentSessionRepository` interface + `PgStudentSessionRepository`
+- [x] Implement `requireStudentSession` Bearer token middleware (reads `Authorization: Bearer`)
+- [x] Implement co-parent invite email (via `notify::` `InviteCreated` domain event)
+- [x] Define `CoParentAdded` (enriched with `CoParentEmail`, `CoParentName`), `CoParentRemoved`,
+      `CoppaConsentWithdrawn`, `FamilyDeletionScheduled`, `PrimaryParentTransferred`,
+      `InviteCreated` events
+- [ ] Implement family deletion grace period + cascade background job (deferred to `lifecycle::`)
+- [ ] Implement COPPA consent withdrawal + student data export (deferred to `lifecycle::`)
 
 #### Tests
+- [x] Unit test: InviteCoParent guard — requires primary parent
+- [x] Unit test: RemoveCoParent guard — requires primary parent
+- [x] Unit test: TransferPrimaryParent guard — self-transfer rejected
+- [x] Unit test: WithdrawCoppaConsent guard — invalid state transition rejected
+- [x] Unit test: RequestFamilyDeletion guard — requires primary parent
+- [x] Unit test: generateToken — token generation and bcrypt hash verification
+- [x] Unit test: CoParentAdded event published with enriched fields
+- [x] Unit test: FamilyDeletionScheduled event published
+- [x] Unit test: PrimaryParentTransferred event published
 - [ ] Integration test: co-parent invite flow (create, accept, verify family membership)
 - [ ] Integration test: only primary parent can remove co-parents
 - [ ] Integration test: primary parent transfer

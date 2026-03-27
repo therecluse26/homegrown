@@ -555,6 +555,10 @@ func (m *mockSocialService) HandleFamilyCreated(ctx context.Context, familyID uu
 	panic("unexpected call to HandleFamilyCreated")
 }
 
+func (m *mockSocialService) HandleCoParentAdded(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
 func (m *mockSocialService) HandleCoParentRemoved(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error {
 	if m.handleCoParentRemovedFn != nil {
 		return m.handleCoParentRemovedFn(ctx, familyID, parentID)

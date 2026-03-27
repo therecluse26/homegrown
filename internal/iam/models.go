@@ -446,3 +446,165 @@ type ConsentStatusResponse struct {
 	ConsentMethod     *string    `json:"consent_method,omitempty"`
 	CanCreateStudents bool       `json:"can_create_students"`
 }
+
+// ─── Phase 2 GORM Models ──────────────────────────────────────────────────────
+
+// CoParentInviteModel is the GORM model for the iam_co_parent_invites table. [§5]
+type CoParentInviteModel struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FamilyID  uuid.UUID `gorm:"type:uuid;not null"`
+	Email     string    `gorm:"not null"`
+	TokenHash string    `gorm:"not null"`
+	Status    string    `gorm:"not null;default:pending"`
+	ExpiresAt time.Time `gorm:"not null"`
+	CreatedAt time.Time `gorm:"not null"`
+	UpdatedAt time.Time `gorm:"not null"`
+}
+
+func (CoParentInviteModel) TableName() string { return "iam_co_parent_invites" }
+
+func (m *CoParentInviteModel) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
+func (m *CoParentInviteModel) toDomain() *CoParentInvite {
+	return &CoParentInvite{
+		ID:        m.ID,
+		FamilyID:  m.FamilyID,
+		Email:     m.Email,
+		Status:    m.Status,
+		ExpiresAt: m.ExpiresAt,
+		CreatedAt: m.CreatedAt,
+	}
+}
+
+// StudentSessionModel is the GORM model for the iam_student_sessions table. [§5]
+type StudentSessionModel struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FamilyID    uuid.UUID `gorm:"type:uuid;not null"`
+	StudentID   uuid.UUID `gorm:"type:uuid;not null"`
+	CreatedBy   uuid.UUID `gorm:"type:uuid;not null"`
+	TokenHash   string    `gorm:"not null"`
+	IsActive    bool      `gorm:"not null;default:true"`
+	ExpiresAt   time.Time `gorm:"not null"`
+	Permissions SlugArray `gorm:"type:text[]"`
+	CreatedAt   time.Time `gorm:"not null"`
+	UpdatedAt   time.Time `gorm:"not null"`
+}
+
+func (StudentSessionModel) TableName() string { return "iam_student_sessions" }
+
+func (m *StudentSessionModel) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
+func (m *StudentSessionModel) toDomain() *StudentSession {
+	var perms []string
+	if m.Permissions != nil {
+		perms = []string(m.Permissions)
+	}
+	return &StudentSession{
+		ID:          m.ID,
+		FamilyID:    m.FamilyID,
+		StudentID:   m.StudentID,
+		CreatedBy:   m.CreatedBy,
+		IsActive:    m.IsActive,
+		ExpiresAt:   m.ExpiresAt,
+		Permissions: perms,
+		CreatedAt:   m.CreatedAt,
+	}
+}
+
+// ─── Phase 2 Domain Types ─────────────────────────────────────────────────────
+
+// CoParentInvite is the internal domain type for a co-parent invite. [§5]
+type CoParentInvite struct {
+	ID        uuid.UUID
+	FamilyID  uuid.UUID
+	Email     string // PII — never log [CODING §5.2]
+	Status    string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
+// StudentSession is the internal domain type for a student session token. [§5]
+type StudentSession struct {
+	ID          uuid.UUID
+	FamilyID    uuid.UUID
+	StudentID   uuid.UUID
+	CreatedBy   uuid.UUID
+	IsActive    bool
+	ExpiresAt   time.Time
+	Permissions []string
+	CreatedAt   time.Time
+}
+
+// ─── Phase 2 API Request/Response Types ──────────────────────────────────────
+
+// InviteCoParentCommand is the request body for POST /v1/families/invites. [§5]
+type InviteCoParentCommand struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// CoParentInviteResponse is returned by invite endpoints. [§5]
+type CoParentInviteResponse struct {
+	ID        uuid.UUID `json:"id"`
+	Email     string    `json:"email"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// CreateStudentSessionCommand is the request body for POST /v1/families/students/:id/sessions. [§5]
+type CreateStudentSessionCommand struct {
+	ExpiresInHours   int      `json:"expires_in_hours"    validate:"required,min=1,max=720"`
+	AllowedToolSlugs []string `json:"allowed_tool_slugs"  validate:"required,min=1"`
+}
+
+// StudentSessionResponse is returned after session creation (includes plaintext token). [§5]
+// Token is returned once only; not stored.
+type StudentSessionResponse struct {
+	ID          uuid.UUID `json:"id"`
+	StudentID   uuid.UUID `json:"student_id"`
+	Token       string    `json:"token"` // plaintext — returned once only [CODING §5.2]
+	ExpiresAt   time.Time `json:"expires_at"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// StudentSessionSummaryResponse is returned by list/revoke session endpoints. [§5]
+type StudentSessionSummaryResponse struct {
+	ID          uuid.UUID `json:"id"`
+	StudentID   uuid.UUID `json:"student_id"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	IsActive    bool      `json:"is_active"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// StudentSessionIdentityResponse is returned by GET /v1/student-session/me. [§5]
+type StudentSessionIdentityResponse struct {
+	StudentID        uuid.UUID `json:"student_id"`
+	FamilyID         uuid.UUID `json:"family_id"`
+	AllowedToolSlugs []string  `json:"allowed_tool_slugs"`
+	ExpiresAt        time.Time `json:"expires_at"`
+}
+
+// TransferPrimaryCommand is the request body for POST /v1/families/primary-parent. [§5]
+type TransferPrimaryCommand struct {
+	NewPrimaryParentID uuid.UUID `json:"new_primary_parent_id" validate:"required"`
+}

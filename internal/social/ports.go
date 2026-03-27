@@ -101,8 +101,9 @@ type SocialService interface {
 	// ─── Event Handlers (no auth context) ───────────────────────────────
 	HandleFamilyCreated(ctx context.Context, familyID uuid.UUID) error
 
-	// ─── Deferred Event Handlers (upstream events not yet defined) ──────
-	// Interface signatures present per spec §5; implementations return nil.
+	// ─── Event Handlers (implementations return nil; full impl deferred to M3) ──
+	// Interface signatures present per spec §5. [05-social §5]
+	HandleCoParentAdded(ctx context.Context, familyID uuid.UUID, coParentID uuid.UUID) error
 	HandleCoParentRemoved(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error
 	HandleMilestoneAchieved(ctx context.Context, familyID uuid.UUID, milestone MilestoneData) error
 	HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error

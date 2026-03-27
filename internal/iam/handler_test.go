@@ -154,3 +154,41 @@ func (m *mockIamService) RevokeFamilySessions(_ context.Context, _ uuid.UUID) er
 func (m *mockIamService) GetStudentName(_ context.Context, _ uuid.UUID) (string, error) {
 	panic("not implemented")
 }
+
+// Phase 2 stubs.
+func (m *mockIamService) InviteCoParent(_ context.Context, _ *shared.FamilyScope, _ *shared.AuthContext, _ InviteCoParentCommand) (*CoParentInviteResponse, error) {
+	panic("not implemented")
+}
+func (m *mockIamService) CancelInvite(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) error {
+	panic("not implemented")
+}
+func (m *mockIamService) AcceptInvite(_ context.Context, _ *shared.AuthContext, _ string) error {
+	panic("not implemented")
+}
+func (m *mockIamService) RemoveCoParent(_ context.Context, _ *shared.FamilyScope, _ *shared.AuthContext, _ uuid.UUID) error {
+	panic("not implemented")
+}
+func (m *mockIamService) TransferPrimaryParent(_ context.Context, _ *shared.FamilyScope, _ *shared.AuthContext, _ TransferPrimaryCommand) error {
+	panic("not implemented")
+}
+func (m *mockIamService) WithdrawCoppaConsent(_ context.Context, _ *shared.FamilyScope, _ *shared.AuthContext) error {
+	panic("not implemented")
+}
+func (m *mockIamService) RequestFamilyDeletion(_ context.Context, _ *shared.FamilyScope, _ *shared.AuthContext) error {
+	panic("not implemented")
+}
+func (m *mockIamService) CancelFamilyDeletion(_ context.Context, _ *shared.FamilyScope) error {
+	panic("not implemented")
+}
+func (m *mockIamService) CreateStudentSession(_ context.Context, _ *shared.FamilyScope, _ *shared.AuthContext, _ uuid.UUID, _ CreateStudentSessionCommand) (*StudentSessionResponse, error) {
+	panic("not implemented")
+}
+func (m *mockIamService) ListStudentSessions(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) ([]StudentSessionSummaryResponse, error) {
+	panic("not implemented")
+}
+func (m *mockIamService) RevokeStudentSession(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID, _ uuid.UUID) error {
+	panic("not implemented")
+}
+func (m *mockIamService) GetStudentSessionMe(_ context.Context, _ string) (*StudentSessionIdentityResponse, error) {
+	panic("not implemented")
+}

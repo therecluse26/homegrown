@@ -144,6 +144,8 @@ func newTestService(t *testing.T) *IamServiceImpl {
 		NewPgFamilyRepository(testDB),
 		NewPgParentRepository(testDB),
 		NewPgStudentRepository(testDB),
+		NewPgCoParentInviteRepository(testDB),
+		NewPgStudentSessionRepository(testDB),
 		nil, // KratosAdapter — not exercised by Phase 1 registration/student tests
 		shared.NewEventBus(),
 		testDB,

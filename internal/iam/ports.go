@@ -10,7 +10,7 @@ import (
 
 // ─── Service Interface ────────────────────────────────────────────────────────
 
-// IamService defines all Phase 1 use cases exposed to handlers and other domains.
+// IamService defines all use cases exposed to handlers and other domains.
 // Defined here per [CODING §8.2]. Implementation: IamServiceImpl in service.go.
 type IamService interface {
 	// ─── Queries ──────────────────────────────────────────────────────────────
@@ -83,6 +83,49 @@ type IamService interface {
 	// GetStudentName returns the display_name for a student by ID.
 	// Bypasses RLS — used by background jobs (comply PDF, plan calendar) that have no family scope.
 	GetStudentName(ctx context.Context, studentID uuid.UUID) (string, error)
+
+	// ─── Phase 2: Co-parent Management ───────────────────────────────────────
+
+	// InviteCoParent sends a co-parent invite email. Requires primary parent. [§5]
+	InviteCoParent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, cmd InviteCoParentCommand) (*CoParentInviteResponse, error)
+
+	// CancelInvite cancels a pending invite. Requires primary parent. [§5]
+	CancelInvite(ctx context.Context, scope *shared.FamilyScope, inviteID uuid.UUID) error
+
+	// AcceptInvite accepts a co-parent invite by token. Requires auth (no family scope yet). [§5]
+	AcceptInvite(ctx context.Context, auth *shared.AuthContext, token string) error
+
+	// RemoveCoParent removes a co-parent from the family. Requires primary parent. [§5]
+	RemoveCoParent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, parentID uuid.UUID) error
+
+	// TransferPrimaryParent atomically transfers primary ownership. Requires primary parent. [§5]
+	TransferPrimaryParent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, cmd TransferPrimaryCommand) error
+
+	// ─── Phase 2: COPPA / Family Lifecycle ───────────────────────────────────
+
+	// WithdrawCoppaConsent transitions consent status to "withdrawn". Requires primary. [§5, §9.2]
+	WithdrawCoppaConsent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext) error
+
+	// RequestFamilyDeletion schedules family deletion. Requires primary parent. [§5]
+	RequestFamilyDeletion(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext) error
+
+	// CancelFamilyDeletion cancels a pending deletion request. Requires primary parent. [§5]
+	CancelFamilyDeletion(ctx context.Context, scope *shared.FamilyScope) error
+
+	// ─── Phase 2: Student Sessions ────────────────────────────────────────────
+
+	// CreateStudentSession creates a time-limited student session token. [§5]
+	CreateStudentSession(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, studentID uuid.UUID, cmd CreateStudentSessionCommand) (*StudentSessionResponse, error)
+
+	// ListStudentSessions lists active sessions for a student. [§5]
+	ListStudentSessions(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) ([]StudentSessionSummaryResponse, error)
+
+	// RevokeStudentSession revokes a student session by ID. [§5]
+	RevokeStudentSession(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, sessionID uuid.UUID) error
+
+	// GetStudentSessionMe validates a student bearer token and returns the session identity. [§5]
+	// Used by the student-session middleware — no family scope available.
+	GetStudentSessionMe(ctx context.Context, token string) (*StudentSessionIdentityResponse, error)
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────
@@ -158,6 +201,41 @@ type StudentRepository interface {
 
 	// Delete deletes a student profile. Family-scoped.
 	Delete(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error
+}
+
+// CoParentInviteRepository defines persistence for co-parent invites. [CODING §8.2]
+type CoParentInviteRepository interface {
+	// Create inserts a new invite record. NOT family-scoped (token generated server-side). [§5]
+	Create(ctx context.Context, familyID uuid.UUID, email, tokenHash string, expiresAt time.Time) (*CoParentInvite, error)
+
+	// FindByID finds an invite by ID. Family-scoped.
+	FindByID(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*CoParentInvite, error)
+
+	// FindByToken finds an invite by token hash. NOT family-scoped — used in AcceptInvite
+	// before the requester has a family scope. Caller MUST use BypassRLSTransaction. [§5, §6]
+	FindByToken(ctx context.Context, tokenHash string) (*CoParentInvite, error)
+
+	// UpdateStatus updates the invite status (pending → accepted|cancelled). Family-scoped.
+	UpdateStatus(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID, status string) error
+}
+
+// StudentSessionRepository defines persistence for student session tokens. [CODING §8.2]
+type StudentSessionRepository interface {
+	// Create inserts a new session. Family-scoped.
+	Create(ctx context.Context, scope *shared.FamilyScope, studentID, createdBy uuid.UUID, tokenHash string, expiresAt time.Time, permissions []string) (*StudentSession, error)
+
+	// FindByID finds a session by ID. Family-scoped.
+	FindByID(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*StudentSession, error)
+
+	// FindByTokenHash finds a session by token hash. NOT family-scoped — used in
+	// student session auth before family scope is available. Caller MUST use BypassRLSTransaction. [§5, §6]
+	FindByTokenHash(ctx context.Context, tokenHash string) (*StudentSession, error)
+
+	// ListActiveByStudent lists active, non-expired sessions for a student. Family-scoped.
+	ListActiveByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) ([]StudentSession, error)
+
+	// Revoke marks a session as inactive. Family-scoped.
+	Revoke(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) error
 }
 
 // ─── Kratos Adapter Interface ─────────────────────────────────────────────────

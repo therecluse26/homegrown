@@ -77,11 +77,7 @@ func (h *ContentFlaggedHandler) Handle(ctx context.Context, event shared.DomainE
 // ─── FamilyDeletionScheduledHandler ─────────────────────────────────────────
 
 // FamilyDeletionScheduledHandler handles iam.FamilyDeletionScheduled by
-// anonymizing reviews and cleaning up cart data.
-// DEFERRED: iam.FamilyDeletionScheduled event does not exist yet. [07-mkt §17.4]
-// When activated, register in main.go:
-//
-//	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), mkt.NewFamilyDeletionScheduledHandler(mktSvc))
+// anonymizing reviews and cleaning up cart data. [07-mkt §17.4]
 type FamilyDeletionScheduledHandler struct {
 	svc MarketplaceService
 }

@@ -19,6 +19,10 @@ var (
 	ErrInviteExpired         = errors.New("invite expired")
 	ErrInviteAlreadyAccepted = errors.New("invite already accepted")
 
+	// ─── Student Session (Phase 2) ────────────────────────────────────────────
+	ErrStudentSessionNotFound = errors.New("student session not found")
+	ErrStudentSessionExpired  = errors.New("student session expired or inactive")
+
 	// ─── COPPA ────────────────────────────────────────────────────────────────
 	ErrCoppaConsentRequired      = errors.New("COPPA consent required")
 	ErrConsentVerificationFailed = errors.New("consent verification failed")

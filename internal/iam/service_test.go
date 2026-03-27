@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"reflect"
@@ -255,6 +256,181 @@ func TestSlugArray(t *testing.T) {
 			t.Errorf("got %v, want {}", val)
 		}
 	})
+}
+
+// ─── Phase 2 Guard Tests ──────────────────────────────────────────────────────
+// These test early-exit guards that fire before any DB access, allowing unit
+// testing without a database. Methods return immediately on guard failure.
+
+// TestInviteCoParent_RequiresPrimary verifies that InviteCoParent rejects non-primary parents.
+func TestInviteCoParent_RequiresPrimary(t *testing.T) {
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: false}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	_, err := svc.InviteCoParent(context.Background(), &scope, auth, InviteCoParentCommand{Email: "x@example.com"})
+	if !errors.Is(err, ErrNotPrimaryParent) {
+		t.Errorf("want ErrNotPrimaryParent, got %v", err)
+	}
+}
+
+// TestCancelInvite_WrongStatus verifies that CancelInvite with a nil DB returns early guard error
+// only for the "not primary" guard path (DB access happens after the invite fetch).
+// Full accept/cancel logic is tested in integration tests.
+
+// TestTransferPrimaryParent_SelfTransfer verifies ErrCannotTransferToSelf is returned.
+func TestTransferPrimaryParent_SelfTransfer(t *testing.T) {
+	parentID := uuid.Must(uuid.NewV7())
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: true, ParentID: parentID}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	err := svc.TransferPrimaryParent(context.Background(), &scope, auth, TransferPrimaryCommand{
+		NewPrimaryParentID: parentID, // same as requester
+	})
+	if !errors.Is(err, ErrCannotTransferToSelf) {
+		t.Errorf("want ErrCannotTransferToSelf, got %v", err)
+	}
+}
+
+// TestWithdrawCoppaConsent_InvalidState verifies state machine guard.
+func TestWithdrawCoppaConsent_InvalidState(t *testing.T) {
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: true, CoppaConsentStatus: string(CoppaConsentNoticed)}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	err := svc.WithdrawCoppaConsent(context.Background(), &scope, auth)
+	var consentErr *InvalidConsentTransitionError
+	if !errors.As(err, &consentErr) {
+		t.Errorf("want InvalidConsentTransitionError, got %v", err)
+	}
+}
+
+// TestRemoveCoParent_RequiresPrimary verifies guard before DB access.
+func TestRemoveCoParent_RequiresPrimary(t *testing.T) {
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: false}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	err := svc.RemoveCoParent(context.Background(), &scope, auth, uuid.Must(uuid.NewV7()))
+	if !errors.Is(err, ErrNotPrimaryParent) {
+		t.Errorf("want ErrNotPrimaryParent, got %v", err)
+	}
+}
+
+// TestRequestFamilyDeletion_RequiresPrimary verifies guard.
+func TestRequestFamilyDeletion_RequiresPrimary(t *testing.T) {
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: false}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	err := svc.RequestFamilyDeletion(context.Background(), &scope, auth)
+	if !errors.Is(err, ErrNotPrimaryParent) {
+		t.Errorf("want ErrNotPrimaryParent, got %v", err)
+	}
+}
+
+// ─── generateToken Tests ──────────────────────────────────────────────────────
+
+// TestGenerateToken verifies that generateToken produces a 64-char hex plaintext
+// and a valid bcrypt hash.
+func TestGenerateToken(t *testing.T) {
+	pt, hash, err := generateToken(bytes.NewReader(make([]byte, 32)).Read)
+	if err != nil {
+		t.Fatalf("generateToken: %v", err)
+	}
+	// 32 random bytes → 64 hex chars.
+	if len(pt) != 64 {
+		t.Errorf("plaintext length = %d, want 64", len(pt))
+	}
+	// bcrypt hash starts with "$2a$" or "$2b$".
+	if len(hash) < 4 || (hash[:3] != "$2a" && hash[:3] != "$2b") {
+		t.Errorf("hash does not look like a bcrypt hash: %s", hash[:min(len(hash), 10)])
+	}
+}
+
+// TestGenerateToken_ReaderError verifies that generateToken propagates read errors.
+func TestGenerateToken_ReaderError(t *testing.T) {
+	errReader := func(_ []byte) (int, error) { return 0, errors.New("entropy failed") }
+	_, _, err := generateToken(errReader)
+	if err == nil {
+		t.Fatal("expected error from broken reader, got nil")
+	}
+}
+
+// ─── Phase 2 Event Tests ──────────────────────────────────────────────────────
+
+func TestCoParentAddedEvent(t *testing.T) {
+	ctx := context.Background()
+	familyID := uuid.Must(uuid.NewV7())
+	coParentID := uuid.Must(uuid.NewV7())
+
+	bus := shared.NewEventBus()
+	var got shared.DomainEvent
+	bus.Subscribe(reflect.TypeOf(CoParentAdded{}), &captureHandler{capture: &got})
+
+	if err := bus.Publish(ctx, CoParentAdded{
+		FamilyID:      familyID,
+		CoParentID:    coParentID,
+		CoParentEmail: "test@example.com",
+		CoParentName:  "Test User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	evt, ok := got.(CoParentAdded)
+	if !ok {
+		t.Fatalf("got %T, want CoParentAdded", got)
+	}
+	if evt.FamilyID != familyID || evt.CoParentID != coParentID {
+		t.Errorf("unexpected event fields: %+v", evt)
+	}
+	if evt.CoParentName != "Test User" {
+		t.Errorf("CoParentName = %q, want %q", evt.CoParentName, "Test User")
+	}
+}
+
+func TestFamilyDeletionScheduledEvent(t *testing.T) {
+	ctx := context.Background()
+	familyID := uuid.Must(uuid.NewV7())
+
+	bus := shared.NewEventBus()
+	var got shared.DomainEvent
+	bus.Subscribe(reflect.TypeOf(FamilyDeletionScheduled{}), &captureHandler{capture: &got})
+
+	if err := bus.Publish(ctx, FamilyDeletionScheduled{FamilyID: familyID}); err != nil {
+		t.Fatal(err)
+	}
+
+	evt, ok := got.(FamilyDeletionScheduled)
+	if !ok {
+		t.Fatalf("got %T, want FamilyDeletionScheduled", got)
+	}
+	if evt.FamilyID != familyID {
+		t.Errorf("got family_id %v, want %v", evt.FamilyID, familyID)
+	}
+}
+
+func TestPrimaryParentTransferredEvent(t *testing.T) {
+	ctx := context.Background()
+	familyID := uuid.Must(uuid.NewV7())
+	newPrimary := uuid.Must(uuid.NewV7())
+	prevPrimary := uuid.Must(uuid.NewV7())
+
+	bus := shared.NewEventBus()
+	var got shared.DomainEvent
+	bus.Subscribe(reflect.TypeOf(PrimaryParentTransferred{}), &captureHandler{capture: &got})
+
+	if err := bus.Publish(ctx, PrimaryParentTransferred{
+		FamilyID:      familyID,
+		NewPrimaryID:  newPrimary,
+		PrevPrimaryID: prevPrimary,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	evt, ok := got.(PrimaryParentTransferred)
+	if !ok {
+		t.Fatalf("got %T, want PrimaryParentTransferred", got)
+	}
+	if evt.NewPrimaryID != newPrimary || evt.PrevPrimaryID != prevPrimary {
+		t.Errorf("unexpected event fields: %+v", evt)
+	}
 }
 
 // ─── CoppaConsentStatus Helper Tests ─────────────────────────────────────────

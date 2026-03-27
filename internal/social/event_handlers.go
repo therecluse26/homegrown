@@ -74,6 +74,24 @@ func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event share
 	return h.svc.HandleFamilyDeletionScheduled(ctx, e.FamilyID)
 }
 
+// ─── CoParentAddedHandler ────────────────────────────────────────────────────
+
+// CoParentAddedHandler handles iam.CoParentAdded events.
+// Full implementation deferred to M3; currently a stub. [05-social §17.4]
+type CoParentAddedHandler struct{ svc SocialService }
+
+func NewCoParentAddedHandler(svc SocialService) *CoParentAddedHandler {
+	return &CoParentAddedHandler{svc: svc}
+}
+
+func (h *CoParentAddedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(iam.CoParentAdded)
+	if !ok {
+		return fmt.Errorf("social.CoParentAddedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleCoParentAdded(ctx, e.FamilyID, e.CoParentID)
+}
+
 // ─── CoParentRemovedHandler ──────────────────────────────────────────────────
 
 // CoParentRemovedHandler handles iam.CoParentRemoved by disassociating posts from the removed co-parent. [05-social §17.4]

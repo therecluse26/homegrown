@@ -68,13 +68,28 @@ type FamilyDeletionScheduled struct {
 
 func (FamilyDeletionScheduled) EventName() string { return "iam.FamilyDeletionScheduled" }
 
+// InviteCreated is published when a co-parent invite is generated. [§5]
+// Subscribers:
+//   - notify:: sends the invite email with the accept link
+type InviteCreated struct {
+	FamilyID  uuid.UUID
+	InviteID  uuid.UUID
+	Email     string    // PII — never log [CODING §5.2]
+	Token     string    // plaintext token for accept URL; never stored in DB [CODING §5.2]
+	ExpiresAt time.Time
+}
+
+func (InviteCreated) EventName() string { return "iam.InviteCreated" }
+
 // CoParentAdded is published when a co-parent is added to an existing family. [§4.3]
 // Subscribers:
 //   - social:: shares family posts with new co-parent
 //   - notify:: welcomes new co-parent
 type CoParentAdded struct {
-	FamilyID   uuid.UUID
-	CoParentID uuid.UUID
+	FamilyID     uuid.UUID
+	CoParentID   uuid.UUID
+	CoParentEmail string // PII — used by notify:: for welcome email; never log [CODING §5.2]
+	CoParentName  string
 }
 
 func (CoParentAdded) EventName() string { return "iam.CoParentAdded" }

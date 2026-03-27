@@ -445,16 +445,16 @@ type ContentFlaggedEvent struct {
 
 func (ContentFlaggedEvent) EventName() string { return "safety.ContentFlagged" }
 
-// CoParentAddedEvent is a stub for iam::CoParentAdded (Phase 2).
+// CoParentAddedEvent mirrors iam::CoParentAdded. [08-notify §17.1]
 type CoParentAddedEvent struct {
-	FamilyID      uuid.UUID `json:"family_id"`
-	CoParentID    uuid.UUID `json:"co_parent_id"`
-	CoParentName  string    `json:"co_parent_name"`
+	FamilyID     uuid.UUID `json:"family_id"`
+	CoParentID   uuid.UUID `json:"co_parent_id"`
+	CoParentName string    `json:"co_parent_name"`
 }
 
 func (CoParentAddedEvent) EventName() string { return "iam.CoParentAdded" }
 
-// FamilyDeletionScheduledEvent is a stub for iam::FamilyDeletionScheduled (Phase 2).
+// FamilyDeletionScheduledEvent mirrors iam::FamilyDeletionScheduled. [08-notify §17.1]
 type FamilyDeletionScheduledEvent struct {
 	FamilyID       uuid.UUID `json:"family_id"`
 	DeleteAfterDate time.Time `json:"delete_after_date"`
