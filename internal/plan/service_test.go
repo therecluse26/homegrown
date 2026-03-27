@@ -464,11 +464,18 @@ func TestGetCalendar_E19_AggregatesScheduleItems(t *testing.T) {
 	auth := testAuth()
 	scope := testScopeFromAuth(auth)
 	now := time.Date(2026, 3, 23, 0, 0, 0, 0, time.UTC)
+	desc := "Morning math practice"
+	dur := 45
+	sid := uuid.Must(uuid.NewV7())
 
 	repo := &stubScheduleItemRepo{
 		listByDateRangeFn: func(_ context.Context, _ *shared.FamilyScope, _, _ time.Time, _ *uuid.UUID) ([]ScheduleItem, error) {
 			return []ScheduleItem{
-				{ID: uuid.Must(uuid.NewV7()), Title: "Math", StartDate: now, Category: ScheduleCategoryLesson},
+				{
+					ID: uuid.Must(uuid.NewV7()), Title: "Math", StartDate: now,
+					Category: ScheduleCategoryLesson, Description: &desc,
+					DurationMinutes: &dur, StudentID: &sid,
+				},
 			}, nil
 		},
 	}
@@ -481,17 +488,28 @@ func TestGetCalendar_E19_AggregatesScheduleItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Should have at least one day with items
-	found := false
+	var found *CalendarItem
 	for _, day := range result.Days {
-		for _, item := range day.Items {
+		for i, item := range day.Items {
 			if item.Source == CalendarSourceSchedule && item.Title == "Math" {
-				found = true
+				found = &day.Items[i]
 			}
 		}
 	}
-	if !found {
-		t.Error("expected schedule item 'Math' in calendar days")
+	if found == nil {
+		t.Fatal("expected schedule item 'Math' in calendar days")
+	}
+	if found.Details.Type != "schedule" {
+		t.Errorf("expected Details.Type 'schedule', got %q", found.Details.Type)
+	}
+	if found.Details.Description == nil || *found.Details.Description != desc {
+		t.Errorf("expected Details.Description %q, got %v", desc, found.Details.Description)
+	}
+	if found.DurationMinutes == nil || *found.DurationMinutes != dur {
+		t.Errorf("expected DurationMinutes %d, got %v", dur, found.DurationMinutes)
+	}
+	if found.StudentName == nil || *found.StudentName == "" {
+		t.Error("expected StudentName to be populated from iamSvc.GetStudentName")
 	}
 }
 
@@ -499,11 +517,12 @@ func TestGetCalendar_E20_AggregatesActivities(t *testing.T) {
 	auth := testAuth()
 	scope := testScopeFromAuth(auth)
 	now := time.Date(2026, 3, 23, 0, 0, 0, 0, time.UTC)
+	subj := "Science"
 
 	learnSvc := &stubLearningService{
 		listActivitiesForCalendarFn: func(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time, _ *uuid.UUID) ([]ActivitySummary, error) {
 			return []ActivitySummary{
-				{ID: uuid.Must(uuid.NewV7()), Title: "Reading Log", Date: now},
+				{ID: uuid.Must(uuid.NewV7()), Title: "Reading Log", Date: now, Subject: &subj, Tags: []string{"lab", "experiment"}},
 			}, nil
 		},
 	}
@@ -518,16 +537,25 @@ func TestGetCalendar_E20_AggregatesActivities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
+	var found *CalendarItem
 	for _, day := range result.Days {
-		for _, item := range day.Items {
+		for i, item := range day.Items {
 			if item.Source == CalendarSourceActivities && item.Title == "Reading Log" {
-				found = true
+				found = &day.Items[i]
 			}
 		}
 	}
-	if !found {
-		t.Error("expected activity 'Reading Log' in calendar days")
+	if found == nil {
+		t.Fatal("expected activity 'Reading Log' in calendar days")
+	}
+	if found.Details.Type != "activity" {
+		t.Errorf("expected Details.Type 'activity', got %q", found.Details.Type)
+	}
+	if found.Details.Subject == nil || *found.Details.Subject != subj {
+		t.Errorf("expected Details.Subject %q, got %v", subj, found.Details.Subject)
+	}
+	if len(found.Details.Tags) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(found.Details.Tags))
 	}
 }
 
@@ -535,11 +563,12 @@ func TestGetCalendar_E21_AggregatesAttendance(t *testing.T) {
 	auth := testAuth()
 	scope := testScopeFromAuth(auth)
 	now := time.Date(2026, 3, 23, 0, 0, 0, 0, time.UTC)
+	attID := uuid.Must(uuid.NewV7())
 
 	complySvc := &stubComplianceService{
 		getAttendanceRangeFn: func(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time, _ *uuid.UUID) ([]AttendanceSummary, error) {
 			return []AttendanceSummary{
-				{Date: now, Status: "present"},
+				{ID: attID, Date: now, Status: "present"},
 			}, nil
 		},
 	}
@@ -554,16 +583,25 @@ func TestGetCalendar_E21_AggregatesAttendance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
+	var found *CalendarItem
 	for _, day := range result.Days {
-		for _, item := range day.Items {
+		for i, item := range day.Items {
 			if item.Source == CalendarSourceAttendance {
-				found = true
+				found = &day.Items[i]
 			}
 		}
 	}
-	if !found {
-		t.Error("expected attendance record in calendar days")
+	if found == nil {
+		t.Fatal("expected attendance record in calendar days")
+	}
+	if found.ID != attID {
+		t.Errorf("expected ID %v, got %v", attID, found.ID)
+	}
+	if found.Details.Type != "attendance" {
+		t.Errorf("expected Details.Type 'attendance', got %q", found.Details.Type)
+	}
+	if found.Details.Status == nil || *found.Details.Status != "present" {
+		t.Errorf("expected Details.Status 'present', got %v", found.Details.Status)
 	}
 }
 
@@ -571,11 +609,13 @@ func TestGetCalendar_E22_AggregatesEvents(t *testing.T) {
 	auth := testAuth()
 	scope := testScopeFromAuth(auth)
 	now := time.Date(2026, 3, 23, 0, 0, 0, 0, time.UTC)
+	loc := "Community Center"
+	rsvp := "accepted"
 
 	socialSvc := &stubSocialService{
 		getEventsForCalendarFn: func(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time) ([]EventSummary, error) {
 			return []EventSummary{
-				{ID: uuid.Must(uuid.NewV7()), Title: "Co-op Day", Date: now},
+				{ID: uuid.Must(uuid.NewV7()), Title: "Co-op Day", Date: now, Location: &loc, RSVPStatus: &rsvp},
 			}, nil
 		},
 	}
@@ -590,16 +630,25 @@ func TestGetCalendar_E22_AggregatesEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
+	var found *CalendarItem
 	for _, day := range result.Days {
-		for _, item := range day.Items {
+		for i, item := range day.Items {
 			if item.Source == CalendarSourceEvents && item.Title == "Co-op Day" {
-				found = true
+				found = &day.Items[i]
 			}
 		}
 	}
-	if !found {
-		t.Error("expected event 'Co-op Day' in calendar days")
+	if found == nil {
+		t.Fatal("expected event 'Co-op Day' in calendar days")
+	}
+	if found.Details.Type != "event" {
+		t.Errorf("expected Details.Type 'event', got %q", found.Details.Type)
+	}
+	if found.Details.Location == nil || *found.Details.Location != loc {
+		t.Errorf("expected Details.Location %q, got %v", loc, found.Details.Location)
+	}
+	if found.Details.RSVPStatus == nil || *found.Details.RSVPStatus != rsvp {
+		t.Errorf("expected Details.RSVPStatus %q, got %v", rsvp, found.Details.RSVPStatus)
 	}
 }
 
@@ -634,6 +683,21 @@ func TestGetCalendar_E23_MergesSourcesIntoCalendarDays(t *testing.T) {
 	}
 	if len(result.Days) < 2 {
 		t.Fatalf("expected at least 2 days, got %d", len(result.Days))
+	}
+	// Verify Details.Type is correctly set for each source.
+	for _, day := range result.Days {
+		for _, item := range day.Items {
+			switch item.Source {
+			case CalendarSourceSchedule:
+				if item.Details.Type != "schedule" {
+					t.Errorf("schedule item has wrong Details.Type: %q", item.Details.Type)
+				}
+			case CalendarSourceActivities:
+				if item.Details.Type != "activity" {
+					t.Errorf("activity item has wrong Details.Type: %q", item.Details.Type)
+				}
+			}
+		}
 	}
 }
 

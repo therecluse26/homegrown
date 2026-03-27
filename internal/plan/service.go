@@ -341,7 +341,8 @@ func (s *PlanningServiceImpl) GetCalendar(
 		return CalendarResponse{}, err
 	}
 
-	days := mergeIntoCalendarDays(params.Start, params.End, scheduleItems, activities, attendance, events)
+	studentNames := s.resolveStudentNames(ctx, scheduleItems, activities)
+	days := mergeIntoCalendarDays(params.Start, params.End, scheduleItems, activities, attendance, events, studentNames)
 
 	return CalendarResponse{
 		Start: params.Start,
@@ -756,6 +757,34 @@ func toTemplateResponse(tmpl ScheduleTemplate) TemplateResponse {
 	}
 }
 
+// resolveStudentNames collects unique student IDs from schedule items and activities,
+// calls iamSvc.GetStudentName for each, and returns a lookup map. Errors are silently
+// ignored — a missing name is non-fatal for calendar display. [17-planning §9.2]
+func (s *PlanningServiceImpl) resolveStudentNames(
+	ctx context.Context,
+	scheduleItems []ScheduleItem,
+	activities []ActivitySummary,
+) map[uuid.UUID]string {
+	seen := make(map[uuid.UUID]struct{})
+	for _, item := range scheduleItems {
+		if item.StudentID != nil {
+			seen[*item.StudentID] = struct{}{}
+		}
+	}
+	for _, a := range activities {
+		if a.StudentID != nil {
+			seen[*a.StudentID] = struct{}{}
+		}
+	}
+	names := make(map[uuid.UUID]string, len(seen))
+	for id := range seen {
+		if name, err := s.iamSvc.GetStudentName(ctx, id); err == nil {
+			names[id] = name
+		}
+	}
+	return names
+}
+
 // mergeIntoCalendarDays merges all calendar sources into CalendarDay slices.
 // Creates empty days for dates with no items. [17-planning §9.2]
 func mergeIntoCalendarDays(
@@ -764,6 +793,7 @@ func mergeIntoCalendarDays(
 	activities []ActivitySummary,
 	attendance []AttendanceSummary,
 	events []EventSummary,
+	studentNames map[uuid.UUID]string,
 ) []CalendarDay {
 	// Build a map of date → items.
 	dayMap := make(map[string]*CalendarDay)
@@ -787,17 +817,31 @@ func mergeIntoCalendarDays(
 		}
 		cat := string(item.Category)
 		completed := item.IsCompleted
+		var studentName *string
+		if item.StudentID != nil {
+			if name, ok2 := studentNames[*item.StudentID]; ok2 {
+				studentName = &name
+			}
+		}
 		day.Items = append(day.Items, CalendarItem{
-			ID:          item.ID,
-			Source:      CalendarSourceSchedule,
-			Title:       item.Title,
-			StartTime:   item.StartTime,
-			EndTime:     item.EndTime,
-			Category:    &cat,
-			Color:       item.Color,
-			StudentID:   item.StudentID,
-			IsCompleted: &completed,
-			Date:        truncateToDate(item.StartDate),
+			ID:              item.ID,
+			Source:          CalendarSourceSchedule,
+			Title:           item.Title,
+			StartTime:       item.StartTime,
+			EndTime:         item.EndTime,
+			DurationMinutes: item.DurationMinutes,
+			Category:        &cat,
+			Color:           item.Color,
+			StudentID:       item.StudentID,
+			StudentName:     studentName,
+			IsCompleted:     &completed,
+			Date:            truncateToDate(item.StartDate),
+			Details: CalendarItemDetails{
+				Type:             "schedule",
+				Description:      item.Description,
+				Notes:            item.Notes,
+				LinkedActivityID: item.LinkedActivityID,
+			},
 		})
 	}
 
@@ -810,13 +854,25 @@ func mergeIntoCalendarDays(
 			day = &CalendarDay{Date: d, Items: []CalendarItem{}}
 			dayMap[key] = day
 		}
+		var studentName *string
+		if a.StudentID != nil {
+			if name, ok2 := studentNames[*a.StudentID]; ok2 {
+				studentName = &name
+			}
+		}
 		day.Items = append(day.Items, CalendarItem{
-			ID:        a.ID,
-			Source:    CalendarSourceActivities,
-			Title:     a.Title,
-			StudentID: a.StudentID,
-			Category:  a.Subject,
-			Date:      truncateToDate(a.Date),
+			ID:          a.ID,
+			Source:      CalendarSourceActivities,
+			Title:       a.Title,
+			StudentID:   a.StudentID,
+			StudentName: studentName,
+			Category:    a.Subject,
+			Date:        truncateToDate(a.Date),
+			Details: CalendarItemDetails{
+				Type:    "activity",
+				Subject: a.Subject,
+				Tags:    a.Tags,
+			},
 		})
 	}
 
@@ -831,11 +887,15 @@ func mergeIntoCalendarDays(
 		}
 		title := "Attendance: " + att.Status
 		day.Items = append(day.Items, CalendarItem{
-			ID:        uuid.Nil,
+			ID:        att.ID,
 			Source:    CalendarSourceAttendance,
 			Title:     title,
 			StudentID: att.StudentID,
 			Date:      truncateToDate(att.Date),
+			Details: CalendarItemDetails{
+				Type:   "attendance",
+				Status: &att.Status,
+			},
 		})
 	}
 
@@ -855,6 +915,12 @@ func mergeIntoCalendarDays(
 			StartTime: e.StartTime,
 			EndTime:   e.EndTime,
 			Date:      truncateToDate(e.Date),
+			Details: CalendarItemDetails{
+				Type:       "event",
+				GroupName:  e.GroupName,
+				Location:   e.Location,
+				RSVPStatus: e.RSVPStatus,
+			},
 		})
 	}
 

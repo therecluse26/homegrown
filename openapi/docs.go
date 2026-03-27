@@ -7243,6 +7243,9 @@ const docTemplate = `{
                 "date": {
                     "type": "string"
                 },
+                "id": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -7277,6 +7280,12 @@ const docTemplate = `{
                 "date": {
                     "type": "string"
                 },
+                "details": {
+                    "$ref": "#/definitions/plan.CalendarItemDetails"
+                },
+                "duration_minutes": {
+                    "type": "integer"
+                },
                 "end_time": {
                     "type": "string"
                 },
@@ -7295,7 +7304,53 @@ const docTemplate = `{
                 "student_id": {
                     "type": "string"
                 },
+                "student_name": {
+                    "type": "string"
+                },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "plan.CalendarItemDetails": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Schedule fields (Type == \"schedule\")",
+                    "type": "string"
+                },
+                "group_name": {
+                    "description": "Event fields (Type == \"event\")",
+                    "type": "string"
+                },
+                "linked_activity_id": {
+                    "type": "string"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "rsvp_status": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Attendance fields (Type == \"attendance\")",
+                    "type": "string"
+                },
+                "subject": {
+                    "description": "Activity fields (Type == \"activity\")",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "description": "\"schedule\" | \"activity\" | \"attendance\" | \"event\"",
                     "type": "string"
                 }
             }
@@ -7446,6 +7501,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "location": {
+                    "type": "string"
+                },
+                "rsvp_status": {
                     "type": "string"
                 },
                 "start_time": {

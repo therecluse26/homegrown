@@ -142,16 +142,42 @@ type CalendarDay struct {
 
 // CalendarItem represents a single entry on the calendar from any source.
 type CalendarItem struct {
-	ID          uuid.UUID      `json:"id"`
-	Source      CalendarSource `json:"source"`
-	Title       string         `json:"title"`
-	StartTime   *string        `json:"start_time"`
-	EndTime     *string        `json:"end_time"`
-	Category    *string        `json:"category"`
-	Color       *string        `json:"color"`
-	StudentID   *uuid.UUID     `json:"student_id"`
-	IsCompleted *bool          `json:"is_completed"`
-	Date        time.Time      `json:"date"`
+	ID              uuid.UUID           `json:"id"`
+	Source          CalendarSource      `json:"source"`
+	Title           string              `json:"title"`
+	StartTime       *string             `json:"start_time"`
+	EndTime         *string             `json:"end_time"`
+	DurationMinutes *int                `json:"duration_minutes,omitempty"`
+	Category        *string             `json:"category"`
+	Color           *string             `json:"color"`
+	StudentID       *uuid.UUID          `json:"student_id"`
+	StudentName     *string             `json:"student_name,omitempty"`
+	IsCompleted     *bool               `json:"is_completed"`
+	Date            time.Time           `json:"date"`
+	Details         CalendarItemDetails `json:"details"`
+}
+
+// CalendarItemDetails holds source-specific detail fields for a CalendarItem.
+// The Type field acts as a discriminator. [17-planning §7]
+type CalendarItemDetails struct {
+	Type string `json:"type"` // "schedule" | "activity" | "attendance" | "event"
+
+	// Schedule fields (Type == "schedule")
+	Description      *string    `json:"description,omitempty"`
+	Notes            *string    `json:"notes,omitempty"`
+	LinkedActivityID *uuid.UUID `json:"linked_activity_id,omitempty"`
+
+	// Activity fields (Type == "activity")
+	Subject *string  `json:"subject,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+
+	// Attendance fields (Type == "attendance")
+	Status *string `json:"status,omitempty"` // "present", "absent", "holiday"
+
+	// Event fields (Type == "event")
+	GroupName  *string `json:"group_name,omitempty"`
+	Location   *string `json:"location,omitempty"`
+	RSVPStatus *string `json:"rsvp_status,omitempty"`
 }
 
 // ScheduleItemResponse is the response representation of a schedule item.
@@ -196,6 +222,7 @@ type ActivitySummary struct {
 
 // AttendanceSummary is a read-only DTO for attendance records from comply::. [17-planning §9.1]
 type AttendanceSummary struct {
+	ID        uuid.UUID  `json:"id"`
 	Date      time.Time  `json:"date"`
 	StudentID *uuid.UUID `json:"student_id"`
 	Status    string     `json:"status"`
@@ -203,13 +230,14 @@ type AttendanceSummary struct {
 
 // EventSummary is a read-only DTO for social events from social::. [17-planning §9.1]
 type EventSummary struct {
-	ID        uuid.UUID `json:"id"`
-	Title     string    `json:"title"`
-	Date      time.Time `json:"date"`
-	StartTime *string   `json:"start_time"`
-	EndTime   *string   `json:"end_time"`
-	GroupName *string   `json:"group_name"`
-	Location  *string   `json:"location"`
+	ID         uuid.UUID `json:"id"`
+	Title      string    `json:"title"`
+	Date       time.Time `json:"date"`
+	StartTime  *string   `json:"start_time"`
+	EndTime    *string   `json:"end_time"`
+	GroupName  *string   `json:"group_name"`
+	Location   *string   `json:"location"`
+	RSVPStatus *string   `json:"rsvp_status,omitempty"`
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -6581,6 +6581,7 @@ export interface components {
         };
         "plan.AttendanceSummary": {
             date?: string;
+            id?: string;
             status?: string;
             student_id?: string;
         };
@@ -6592,13 +6593,33 @@ export interface components {
             category?: string;
             color?: string;
             date?: string;
+            details?: components["schemas"]["plan.CalendarItemDetails"];
+            duration_minutes?: number;
             end_time?: string;
             id?: string;
             is_completed?: boolean;
             source?: components["schemas"]["plan.CalendarSource"];
             start_time?: string;
             student_id?: string;
+            student_name?: string;
             title?: string;
+        };
+        "plan.CalendarItemDetails": {
+            /** @description Schedule fields (Type == "schedule") */
+            description?: string;
+            /** @description Event fields (Type == "event") */
+            group_name?: string;
+            linked_activity_id?: string;
+            location?: string;
+            notes?: string;
+            rsvp_status?: string;
+            /** @description Attendance fields (Type == "attendance") */
+            status?: string;
+            /** @description Activity fields (Type == "activity") */
+            subject?: string;
+            tags?: string[];
+            /** @description "schedule" | "activity" | "attendance" | "event" */
+            type?: string;
         };
         "plan.CalendarResponse": {
             days?: components["schemas"]["plan.CalendarDay"][];
@@ -6639,6 +6660,7 @@ export interface components {
             group_name?: string;
             id?: string;
             location?: string;
+            rsvp_status?: string;
             start_time?: string;
             title?: string;
         };

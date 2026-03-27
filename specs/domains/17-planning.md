@@ -192,6 +192,14 @@ type PlanningService interface {
         studentID *uuid.UUID,
     ) (DayViewResponse, error)
 
+    // GetScheduleItem returns a single schedule item by ID with student name enriched.
+    GetScheduleItem(
+        ctx context.Context,
+        auth *AuthContext,
+        scope *FamilyScope,
+        itemID uuid.UUID,
+    ) (ScheduleItemResponse, error)
+
     // === Schedule Items (Write) ===
 
     // CreateScheduleItem creates a new schedule item.
@@ -272,8 +280,8 @@ type ScheduleItemRepository interface {
     Create(
         ctx context.Context,
         scope *FamilyScope,
-        input *CreateScheduleItem,
-    ) (ScheduleItem, error)
+        item *ScheduleItem,
+    ) error
 
     FindByID(
         ctx context.Context,
@@ -296,17 +304,23 @@ type ScheduleItemRepository interface {
         pagination *PaginationParams,
     ) ([]ScheduleItem, error)
 
+    ListAllByFamily(
+        ctx context.Context,
+        scope *FamilyScope,
+    ) ([]ScheduleItem, error)
+
     Update(
         ctx context.Context,
         scope *FamilyScope,
         id uuid.UUID,
-        input *UpdateScheduleItem,
+        input *UpdateScheduleItemInput,
     ) error
 
     MarkCompleted(
         ctx context.Context,
         scope *FamilyScope,
         id uuid.UUID,
+        completedAt time.Time,
     ) error
 
     SetLinkedActivity(
@@ -316,10 +330,27 @@ type ScheduleItemRepository interface {
         activityID uuid.UUID,
     ) error
 
+    FindByLinkedEventID(
+        ctx context.Context,
+        eventID uuid.UUID,
+    ) ([]ScheduleItem, error)
+
+    FindByStudentAndDate(
+        ctx context.Context,
+        scope *FamilyScope,
+        studentID uuid.UUID,
+        date time.Time,
+    ) ([]ScheduleItem, error)
+
     Delete(
         ctx context.Context,
         scope *FamilyScope,
         id uuid.UUID,
+    ) error
+
+    DeleteAllByFamily(
+        ctx context.Context,
+        scope *FamilyScope,
     ) error
 }
 
@@ -328,8 +359,8 @@ type ScheduleTemplateRepository interface {
     Create(
         ctx context.Context,
         scope *FamilyScope,
-        input *CreateScheduleTemplate,
-    ) (ScheduleTemplate, error)
+        tmpl *ScheduleTemplate,
+    ) error
 
     ListByFamily(
         ctx context.Context,
@@ -346,13 +377,19 @@ type ScheduleTemplateRepository interface {
         ctx context.Context,
         scope *FamilyScope,
         id uuid.UUID,
-        input *UpdateScheduleTemplate,
+        input *UpdateTemplateInput,
+        itemsJSON []byte,
     ) error
 
     Delete(
         ctx context.Context,
         scope *FamilyScope,
         id uuid.UUID,
+    ) error
+
+    DeleteAllByFamily(
+        ctx context.Context,
+        scope *FamilyScope,
     ) error
 }
 ```
@@ -453,12 +490,13 @@ type CalendarItem struct {
     Title           string              `json:"title"`
     StartTime       *string             `json:"start_time"`
     EndTime         *string             `json:"end_time"`
-    DurationMinutes *int                `json:"duration_minutes"`
+    DurationMinutes *int                `json:"duration_minutes,omitempty"`
     Category        *string             `json:"category"`
     Color           *string             `json:"color"`
     StudentID       *uuid.UUID          `json:"student_id"`
-    StudentName     *string             `json:"student_name"`
+    StudentName     *string             `json:"student_name,omitempty"`
     IsCompleted     *bool               `json:"is_completed"`
+    Date            time.Time           `json:"date"`
     // Source-specific details
     Details         CalendarItemDetails `json:"details"`
 }
@@ -515,6 +553,87 @@ type ScheduleItemResponse struct {
     LinkedActivityID *uuid.UUID       `json:"linked_activity_id"`
     Notes            *string          `json:"notes"`
     CreatedAt        time.Time        `json:"created_at"`
+}
+
+// AttendanceSummary is a read-only DTO for attendance records from comply::. [§9.1]
+type AttendanceSummary struct {
+    ID        uuid.UUID  `json:"id"`
+    Date      time.Time  `json:"date"`
+    StudentID *uuid.UUID `json:"student_id"`
+    Status    string     `json:"status"` // "present", "absent", "holiday"
+}
+
+// EventSummary is a read-only DTO for social events from social::. [§9.1]
+type EventSummary struct {
+    ID         uuid.UUID `json:"id"`
+    Title      string    `json:"title"`
+    Date       time.Time `json:"date"`
+    StartTime  *string   `json:"start_time"`
+    EndTime    *string   `json:"end_time"`
+    GroupName  *string   `json:"group_name"`
+    Location   *string   `json:"location"`
+    RSVPStatus *string   `json:"rsvp_status,omitempty"`
+}
+
+// ActivitySummary is a read-only DTO for learning activities from learn::. [§9.1]
+type ActivitySummary struct {
+    ID        uuid.UUID  `json:"id"`
+    Title     string     `json:"title"`
+    Date      time.Time  `json:"date"`
+    StudentID *uuid.UUID `json:"student_id"`
+    Subject   *string    `json:"subject"`
+    Tags      []string   `json:"tags"`
+}
+
+// WeekViewResponse contains all items for a 7-day week, structured by day.
+type WeekViewResponse struct {
+    WeekStart time.Time     `json:"week_start"`
+    WeekEnd   time.Time     `json:"week_end"`
+    Days      []CalendarDay `json:"days"`
+}
+
+// TemplateItem is a single item within a schedule template's Items JSONB. [§11.3]
+type TemplateItem struct {
+    DayOfWeek string           `json:"day_of_week" validate:"required,oneof=monday tuesday wednesday thursday friday saturday sunday"`
+    StartTime *string          `json:"start_time"`
+    EndTime   *string          `json:"end_time"`
+    Title     string           `json:"title"      validate:"required,max=200"`
+    Category  ScheduleCategory `json:"category"`
+    SubjectID *uuid.UUID       `json:"subject_id,omitempty"`
+    Color     *string          `json:"color,omitempty"`
+}
+
+// CreateTemplateInput is the input for creating a schedule template. [§11.3]
+type CreateTemplateInput struct {
+    Name        string         `json:"name"        validate:"required,max=100"`
+    Description *string        `json:"description"`
+    Items       []TemplateItem `json:"items"       validate:"required,min=1"`
+    IsActive    bool           `json:"is_active"`
+}
+
+// UpdateTemplateInput is the input for updating a schedule template (partial update). [§11.3]
+type UpdateTemplateInput struct {
+    Name        *string         `json:"name"`
+    Description *string         `json:"description"`
+    Items       *[]TemplateItem `json:"items"`
+    IsActive    *bool           `json:"is_active"`
+}
+
+// ApplyTemplateInput defines the date range for applying a template. [§11.3]
+type ApplyTemplateInput struct {
+    StartDate time.Time `json:"start_date" validate:"required"`
+    EndDate   time.Time `json:"end_date"   validate:"required"`
+}
+
+// TemplateResponse is the response representation of a schedule template.
+type TemplateResponse struct {
+    ID          uuid.UUID      `json:"id"`
+    Name        string         `json:"name"`
+    Description *string        `json:"description"`
+    Items       []TemplateItem `json:"items"`
+    IsActive    bool           `json:"is_active"`
+    CreatedAt   time.Time      `json:"created_at"`
+    UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // --- Enums ---
@@ -795,12 +914,12 @@ Linked activity IDs in `learn::` are NOT deleted (learn:: owns those records).
 
 ## §16 Events plan:: Consumes
 
-| Event | Source | Handler |
-|-------|--------|---------|
-| `EventCreated` | social:: | Create linked schedule item if family has auto-add enabled |
-| `EventUpdated` | social:: | Update linked schedule item (time, location changes) |
-| `EventCancelled` | social:: | Mark linked schedule item as cancelled |
-| `ActivityLogged` | learn:: | Optional: mark corresponding schedule item as completed |
+| Event | Source | Handler | Phase |
+|-------|--------|---------|-------|
+| `EventCreated` | social:: | Create linked schedule item if family has auto-add enabled | Phase 2 (co-op coordination) |
+| `EventUpdated` | social:: | Update linked schedule item (time, location changes) | Phase 2 (co-op coordination) |
+| `EventCancelled` | social:: | Delete linked schedule items | Phase 1 |
+| `ActivityLogged` | learn:: | Mark corresponding schedule item as completed and link activity | Phase 1 |
 
 ---
 
@@ -828,6 +947,9 @@ var (
     // ErrAlreadyLogged indicates the schedule item is already logged as an activity.
     ErrAlreadyLogged = errors.New("schedule item already logged as activity")
 
+    // ErrNotCompleted indicates the schedule item must be completed before logging.
+    ErrNotCompleted = errors.New("schedule item must be completed before logging as activity")
+
     // ErrInvalidRecurrenceRule indicates the RRULE string is invalid.
     ErrInvalidRecurrenceRule = errors.New("invalid recurrence rule")
 
@@ -846,6 +968,7 @@ var (
 | `ErrDateRangeTooLarge` | 400 |
 | `ErrAlreadyCompleted` | 409 Conflict |
 | `ErrAlreadyLogged` | 409 Conflict |
+| `ErrNotCompleted` | 409 Conflict |
 | `ErrInvalidRecurrenceRule` | 400 |
 | `ErrStudentNotInFamily` | 404 |
 
@@ -880,7 +1003,7 @@ var (
 ### Phase 2
 
 - Recurring schedule items (RRULE)
-- Schedule templates (save and apply weekly patterns)
+- Schedule templates (save and apply weekly patterns) — **implemented ahead of schedule in Phase 1**
 - PDF export of calendar/schedule
 - Co-op day coordination (linked social events)
 - Schedule sharing with friends (read-only)
