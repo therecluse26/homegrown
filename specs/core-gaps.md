@@ -20,19 +20,19 @@
 | 05-social | Phase 1 complete | Blocked by 3 deferred event subscriptions |
 | 06-learn | Phase 1 complete | Progress snapshot job missing; Phase 2 tables exist but no models/handlers |
 | 07-mkt | Phase 1 complete | **Zero test files**; background job + event wiring missing |
-| 08-notify | Phase 1 complete | 2 billing event handlers completely missing |
+| 08-notify | Phase 1 complete | 4 billing event handlers completely missing |
 | 09-media | Phase 1 complete | 3 endpoints missing (delete, list, reprocess) |
 | 10-billing | Phase 1 complete | No handler tests; pause/resume subscription missing |
 | 11-safety | Phase 1 complete | **NCMEC noop adapter — federal legal obligation**; Phase 2 not started |
 | 12-search | Phase 1 complete | Typesense adapter missing; `/suggestions` returns 501 |
 | 13-recs | Phase 1+2 complete | Phase 3 notification dispatch not implemented |
-| 14-comply | Phase 1 complete | `RequirePremium` not enforced at HTTP layer; learn adapter stub |
-| 15-lifecycle | **NOT WIRED** | **No handler, no repository, not in AppState — ~4K lines of dead code** |
+| 14-comply | Phase 1 complete | learn adapter stub + media adapter stub return errors |
+| 15-lifecycle | **NOT WIRED** | **No handler, no repository, no migration, not in AppState — ~4K lines of dead code** |
 | 16-admin | Phase 1+2 complete | All 7 cross-domain adapters are stubs (several wireable today) |
 | 17-plan | Phase 1+2 complete | IAM stub bypasses family ownership; calendar shows only schedule items |
 
 **Domains with zero test files:** 07-mkt
-**Domains with no handler tests:** 10-billing
+**Domains with no handler tests:** 07-mkt, 10-billing, 13-recs, 14-comply, 16-admin, 17-plan, 05-social
 
 ---
 
@@ -44,6 +44,12 @@
 `service.go`, `service_test.go`, and `mock_test.go` — but **no `handler.go`** and **no
 `repository.go`**. The domain is not instantiated in `main.go`; the only reference is
 through `adminLifecycleStub{}`.
+
+Additionally, there is **no database migration** for the lifecycle domain. The migration
+sequence jumps from migration 24 (17-plan) directly with nothing for lifecycle. Even after
+writing `handler.go` and `repository.go`, every database operation will fail until a
+migration creates the required tables (e.g., `data_export_requests`, `deletion_requests`,
+`recovery_requests`). See also CRIT-6.
 
 **Impact:** GDPR Article 17 (right to erasure), COPPA §312.10 (parental deletion rights),
 and data export (GDPR Article 20) are entirely unreachable. Families cannot request
@@ -87,6 +93,20 @@ func (adminHealthStub) CheckAll(_ context.Context) []admin.ComponentHealth {
 
 **Impact:** Admin health dashboard permanently shows all-green. Operators cannot detect
 outages, degraded services, or connection failures through the admin interface.
+
+### CRIT-6 · 15-lifecycle: No database migration
+
+The lifecycle domain has no migration file. The sequence goes: migration 24 (17-plan tables)
+→ nothing. Even if `handler.go` and `repository.go` are implemented (CRIT-1), they will
+immediately fail on any database operation because the backing tables don't exist.
+
+Required tables (at minimum): `data_export_requests`, `deletion_requests`,
+`recovery_requests`. The migration must also add foreign key relationships to the `families`
+table and appropriate indexes for status/expiry lookups.
+
+**Impact:** Blocks any functional test or deployment of the lifecycle domain.
+
+---
 
 ### CRIT-5 · adminBillingStub returns nil pointer
 
@@ -157,8 +177,14 @@ Student sessions (4):
 ### 04-onboard (Onboarding)
 
 **Phase 2 endpoints missing (2):**
-- `PATCH /v1/onboarding/roadmap/:item_id/complete` — mark a roadmap item as completed
-- `POST /v1/onboarding/restart` — restart the onboarding flow
+- `PATCH /v1/onboarding/roadmap/:item_id/complete` — mark a specific roadmap item as
+  completed (distinct from the existing `/complete` route)
+- `POST /v1/onboarding/restart` — restart the onboarding flow (distinct from the existing
+  `/skip` route)
+
+Note: `POST /v1/onboarding/complete` (completeWizard) and `POST /v1/onboarding/skip`
+(skipWizard) **are implemented**. The two missing endpoints are for per-item progress and
+flow restart — different operations with different semantics.
 
 ---
 
@@ -204,13 +230,16 @@ No additional endpoint gaps identified.
 
 ### 08-notify (Notifications)
 
-**Missing event handlers (2):**
-- `SubscriptionChangedHandler` — not present in `event_handlers.go`
-- `PayoutCompletedHandler` — not present in `event_handlers.go`
+**Missing event handlers (4):**
+- `SubscriptionCreatedHandler` — not implemented (deferred in main.go at `billing.SubscriptionCreated`)
+- `SubscriptionChangedHandler` — not implemented
+- `SubscriptionCancelledHandler` — not implemented (deferred in main.go at `billing.SubscriptionCancelled`)
+- `PayoutCompletedHandler` — not implemented
 
-These handlers are referenced in deferred comments in `main.go` (as
-`billing.SubscriptionCreated` and `billing.SubscriptionCancelled` subscriptions) but the
-handler implementations don't exist.
+All four billing-event handler *functions* are absent from `event_handlers.go`. The
+deferred subscriptions in `main.go` reference `billing.SubscriptionCreated` and
+`billing.SubscriptionCancelled` by name but there are no implementing handler functions for
+any of these four events.
 
 **Spec gap:** `email_status` table is used in implementation but undocumented in the
 08-notify spec.
@@ -271,23 +300,25 @@ Phase 1+2 complete (23 unit tests, migration 20).
 ### 14-comply (Compliance / Portfolio)
 
 **Gaps:**
-- `RequirePremium` enforcement not visible at HTTP middleware layer — premium-gated
-  endpoints may not actually check subscription status
 - `learnForComply` adapter is a stub — portfolio item data loading from learn domain returns
   errors
 - `mediaForComply` adapter is a stub — PDF upload for portfolios/transcripts returns errors
+
+Note: `RequirePremium` is enforced via `middleware.RequirePremium(c)` in every endpoint
+handler in `internal/comply/handler.go` (43 call sites). The premium check IS present at
+the HTTP layer.
 
 ---
 
 ### 15-lifecycle (Data Lifecycle / GDPR)
 
-**Critical:** See CRIT-1 above. Entire domain unreachable.
+**Critical:** See CRIT-1 and CRIT-6 above. Entire domain unreachable.
 
 Files present: `errors.go`, `events.go`, `models.go`, `ports.go`, `service.go`,
 `service_test.go`, `mock_test.go`
 
-Missing: `handler.go`, `repository.go`, AppState registration, route group, event
-subscriptions.
+Missing: `handler.go`, `repository.go`, **database migration** (no lifecycle tables exist),
+AppState registration, route group, event subscriptions.
 
 ---
 
@@ -316,7 +347,9 @@ Phase 1+2 complete (47 unit tests, migration 24).
 **Security:** See CRIT-3 above (planIamStub).
 
 **Stub-limited features:**
-- `planLearnStub` returns empty — unified calendar omits learning activities
+- `planLearnStub.LogActivity` **returns an error** (`fmt.Errorf("not yet implemented")`) —
+  `POST /planning/schedule-items/:id/log` is visibly broken (always 500), not merely empty
+- `planLearnStub` returns empty for calendar queries — unified calendar omits learning activities
 - `planComplyStub` returns empty — unified calendar omits compliance deadlines
 - `planSocialStub` returns empty — unified calendar omits social events
 - `GET /planning/calendar/pdf` — not implemented
@@ -351,12 +384,31 @@ Phase 1+2 complete (47 unit tests, migration 24).
 Note: `iam.FamilyDeletionScheduled` is already wired for comply, recs, and search — but
 deferred for social, mkt, learn, and billing.
 
+**Additional runtime wiring gaps:**
+
+- **PostmarkEmailAdapter not wired** (`main.go` line ~676 has a `// TODO: Wire
+  PostmarkEmailAdapter when cfg.PostmarkServerToken != ""`). The notify domain runs with a
+  noop/stub email sender. All notification handlers fire and templates render, but **no
+  emails are ever delivered**. This is a silent data-loss issue affecting password reset,
+  onboarding complete, milestone achieved, purchase confirmed, and every other notification.
+  **Priority: P1.**
+
+- **RevokeSessions not wired for safety** (`main.go` line ~815 has `// FUTURE: wire real
+  IamServiceForSafety when iam:: exposes RevokeSessions`). When an account is suspended or
+  banned via the safety moderation flow, active sessions are **not revoked**. The suspended
+  user remains authenticated until their session naturally expires. **Priority: P1.**
+
 ### 3.2 · Test Coverage Gaps
 
 | Domain | Service Tests | Handler Tests | Notes |
 |--------|:------------:|:-------------:|-------|
 | 07-mkt | None | None | **Zero test files** |
 | 10-billing | Yes | None | Missing `handler_test.go` |
+| 13-recs | Yes | None | Missing `handler_test.go` |
+| 14-comply | Yes (6 files) | None | Missing `handler_test.go` |
+| 16-admin | Yes | None | Missing `handler_test.go` |
+| 17-plan | Yes | None | Missing `handler_test.go` |
+| 05-social | Yes (5 files) | None | Missing `handler_test.go` |
 | 15-lifecycle | Yes | N/A | No handler exists to test |
 
 ### 3.3 · Frontend
@@ -377,15 +429,34 @@ deferred for social, mkt, learn, and billing.
 | 08-notify | (not documented) | `email_status` table in use |
 | 06-learn repo | `AssignmentModel` | `StudentAssignmentModel` |
 
+### 3.5 · Cross-Domain Interface Violations
+
+**`GetStudentName` not in any published IAM interface:**
+
+`internal/comply/ports.go` declares `IamServiceForComply.GetStudentName(...)`. However,
+`internal/iam/ports.go` has no `GetStudentName` method on any exported interface. Instead,
+`cmd/server/main.go` wires an anonymous closure that performs a raw DB lookup via
+`BypassRLSTransaction`.
+
+This is:
+- Not part of any published IAM service contract
+- Not covered by any test
+- A maintenance trap — if the IAM schema changes (e.g., student name column renamed), this
+  anonymous closure silently breaks with no compile-time error
+
+The correct fix is to add `GetStudentName` to the IAM service interface, implement it in
+the IAM service, and update the wiring.
+
 ---
 
 ## 4 · Priority-Ranked Remediation
 
 ### P0 — Legal / Compliance (do before any public beta)
 
-1. **Wire 15-lifecycle domain** — implement `handler.go` + `repository.go`, register in
-   `main.go`, connect event subscriptions. GDPR/COPPA deletion and export must be
-   functional.
+1. **Wire 15-lifecycle domain** — implement `handler.go` + `repository.go`, **write
+   database migration** (CRIT-6, tables: `data_export_requests`, `deletion_requests`,
+   `recovery_requests`), register in `main.go`, connect event subscriptions. GDPR/COPPA
+   deletion and export must be functional.
 2. **Replace NoopThornAdapter** with real Thorn/PhotoDNA integration (or at minimum, a
    logging adapter that queues manual review). NCMEC reporting under 18 U.S.C. § 2258A is
    a federal obligation.
@@ -394,31 +465,42 @@ deferred for social, mkt, learn, and billing.
 
 ### P1 — Runtime Correctness
 
-4. **Fix adminBillingStub** — return a zero-value struct instead of `nil, nil` to prevent
+4. **Wire PostmarkEmailAdapter** — replace noop email sender so notifications are actually
+   delivered. All user-facing notification flows (password reset, onboarding complete, etc.)
+   are silently broken today.
+5. **Wire RevokeSessions for safety suspensions** — expose `RevokeSessions` on the IAM
+   service interface and wire it into the safety domain so suspended users lose access
+   immediately.
+6. **Fix planLearnStub.LogActivity** — the stub returns `fmt.Errorf("not yet implemented")`,
+   making `POST /planning/schedule-items/:id/log` always return a 500 error.
+7. **Fix adminBillingStub** — return a zero-value struct instead of `nil, nil` to prevent
    nil pointer panics.
-5. **Wire adminHealthStub** to real health checks (database ping, Redis ping, R2
+8. **Wire adminHealthStub** to real health checks (database ping, Redis ping, R2
    connectivity, Kratos readiness).
-6. **Wire the 8 non-blocked deferred event subscriptions** — especially
+9. **Wire the 8 non-blocked deferred event subscriptions** — especially
    `FamilyDeletionScheduled` for social/mkt/learn/billing (data retention issue).
-7. **Wire admin cross-domain adapters** that have real implementations ready: adminIamStub,
-   adminSafetyStub, adminMethodStub.
+10. **Wire admin cross-domain adapters** that have real implementations ready: adminIamStub,
+    adminSafetyStub, adminMethodStub.
+11. **Fix GetStudentName cross-domain wiring** — add `GetStudentName` to IAM service
+    interface and replace the anonymous DB-closure in `main.go` (§3.5).
 
 ### P2 — Feature Completeness
 
-8. **07-mkt: Add test files** — only domain with zero tests.
-9. **10-billing: Add handler tests.**
-10. **Implement missing Phase 2 endpoints** per domain (01-iam co-parent flow is highest
+12. **07-mkt: Add test files** — only domain with zero tests.
+13. **Add handler tests** for 10-billing, 13-recs, 14-comply, 16-admin, 17-plan, 05-social
+    (all missing `handler_test.go`).
+14. **Implement missing Phase 2 endpoints** per domain (01-iam co-parent flow is highest
     value).
-11. **Implement missing event handlers** in 08-notify (SubscriptionChangedHandler,
-    PayoutCompletedHandler).
-12. **Define missing event types** (iam.CoParentRemoved, iam.PrimaryParentTransferred,
+15. **Implement all 4 missing event handlers** in 08-notify (SubscriptionCreatedHandler,
+    SubscriptionChangedHandler, SubscriptionCancelledHandler, PayoutCompletedHandler).
+16. **Define missing event types** (iam.CoParentRemoved, iam.PrimaryParentTransferred,
     safety.ContentFlagged) to unblock 3 deferred subscriptions.
 
 ### P3 — Polish / Phase 2+
 
-13. Fix spec-vs-code inconsistencies (§3.4 above).
-14. Implement 09-media missing endpoints (delete, list, reprocess).
-15. Implement 12-search Typesense adapter and suggestions endpoint.
-16. Implement 06-learn progress snapshot background job.
-17. Begin frontend feature development (`features/` directory).
-18. Implement 17-plan calendar PDF export.
+17. Fix spec-vs-code inconsistencies (§3.4 above).
+18. Implement 09-media missing endpoints (delete, list, reprocess).
+19. Implement 12-search Typesense adapter and suggestions endpoint.
+20. Implement 06-learn progress snapshot background job.
+21. Begin frontend feature development (`features/` directory).
+22. Implement 17-plan calendar PDF export.
