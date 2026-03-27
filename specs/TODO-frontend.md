@@ -1,10 +1,11 @@
 # TODO: Frontend Implementation Roadmap
 
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
-> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–2 complete
-> (Tailwind v4 CSS infrastructure, design tokens, self-hosted fonts, type scale).
-> No routes, no components, no features yet. `api/client.ts`, `api/generated/schema.ts`,
-> and full `src/styles/` exist.
+> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–3 complete
+> (Tailwind v4 CSS infrastructure, design tokens, self-hosted fonts, type scale,
+> full shared UI component library). No routes or features yet. `api/client.ts`,
+> `api/generated/schema.ts`, full `src/styles/`, `src/components/ui/` (35 components),
+> and `src/components/common/` (8 components) exist.
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -255,70 +256,70 @@ Building these first prevents duplication and ensures consistency.
 
 ### Directory Setup
 
-- [ ] Establish `frontend/src/components/ui/` structure `[P1]`
-- [ ] Establish `frontend/src/components/common/` structure `[P1]`
-- [ ] Create barrel exports (`index.ts`) for each directory `[P1]`
+- [x] Establish `frontend/src/components/ui/` structure `[P1]`
+- [x] Establish `frontend/src/components/common/` structure `[P1]`
+- [x] Create barrel exports (`index.ts`) for each directory `[P1]`
 
 ### Core Primitives (`components/ui/`)
 
-- [ ] `button.tsx` — 3 variants: primary (solid primary bg), secondary (secondary-container fill), tertiary (transparent, hover surface-container-low). All use `radius-button` (0.75rem). Min tap target 44px on mobile. Full MD3 state matrix: hover (8% on-* overlay), active/pressed (12% overlay), focus (focus ring), disabled (38% opacity), loading (spinner centered, text hidden). Context-dependent typography: parent context = `label-md` UPPERCASE; student context = `title-sm` sentence case. High-impact CTA gradient variant: `--gradient-primary` bg for "Start Lesson"-type CTAs. (DESIGN §2, §5.1, DESIGN_TOKENS §7, §14.2) `[P1]`
-- [ ] `input.tsx` — full 5-state matrix: default (bg `surface-container-highest`, no border), hover (bg `surface-container-high`), focus (2px inset `primary` ghost border via `box-shadow` — NOT standard border to avoid layout shift), error (bg `error-container`, 2px inset `error` border, error text below with `aria-describedby`), disabled (38% opacity, `pointer-events: none`). Visible `<label>` required. (DESIGN §5.3, DESIGN_TOKENS §6.2, §14.2, CODING_STANDARDS §3.8) `[P1]`
-- [ ] `textarea.tsx` — same styling rules as input, auto-resize optional `[P1]`
-- [ ] `select.tsx` — custom select with accessible keyboard nav, token styling `[P1]`
-- [ ] `checkbox.tsx` — accessible checkbox with `primary` accent `[P1]`
-- [ ] `radio.tsx` — accessible radio group with `primary` accent `[P1]`
-- [ ] `card.tsx` — accepts `context` prop for parent (`radius-lg`) vs student (`radius-xl`). Background `surface-container-lowest` (#fff) for "lifted" cards. Interactive card states: non-interactive (no shadow, depth via tonal shift only), interactive hover (`ambient-sm` shadow — subtle lift), interactive active (bg shifts to `surface-container-low`), interactive focus (focus ring). Shadow rule: tonal shifts for standard elements, shadows ONLY for floating/hover states. (DESIGN §4.2, DESIGN_TOKENS §7–§8, §14.2) `[P1]`
-- [ ] `badge.tsx` — pill shape (`radius-full`), methodology-aware coloring `[P1]`
-- [ ] `avatar.tsx` — circular, fallback initials, sizes xs–xl `[P1]`
-- [ ] `modal.tsx` — focus trap, return focus on close, overlay at `z-modal`, `Escape` to close. (CODING_STANDARDS §3.8, DESIGN_TOKENS §9) `[P1]`
-- [ ] `toast.tsx` — auto-dismiss, `z-notification`, `aria-live="polite"`. Success/error/warning variants using feedback tokens. (DESIGN_TOKENS §3.5, §9) `[P1]`
-- [ ] `spinner.tsx` — loading indicator with `primary` color `[P1]`
-- [ ] `skeleton.tsx` — content placeholder with pulse animation `[P1]`
-- [ ] `icon.tsx` — Lucide icon wrapper with standard sizes (xs=12, sm=16, md=20, lg=24, xl=32, 2xl=48) (DESIGN_TOKENS §13) `[P1]`
-- [ ] `tooltip.tsx` — `z-tooltip`, accessible (shows on focus), delay on hover `[P1]`
-- [ ] `dropdown-menu.tsx` — `z-popover`, keyboard navigable, focus management `[P1]`
-- [ ] `tabs.tsx` — accessible tab panel with `aria-selected`, keyboard arrow nav `[P1]`
-- [ ] `progress-bar.tsx` — progress ribbon: `tertiary-fixed` bg, `primary` fill (DESIGN §5.4) `[P1]`
-- [ ] `empty-state.tsx` — illustration slot + message + CTA button `[P1]`
-- [ ] `date-picker.tsx` — WAI-ARIA date picker, keyboard navigable (arrow keys, Escape), used by events/attendance/planning `[P1]`
-- [ ] `calendar.tsx` — shared calendar grid component for planning domain's unified view `[P1]`
-- [ ] `rich-text-editor.tsx` — structured text editor for journals, post creation, listing descriptions; toolbar with basic formatting `[P1]`
-- [ ] `star-rating.tsx` — 1–5 star input/display for marketplace reviews, keyboard accessible (arrow keys) `[P1]`
-- [ ] `faceted-filter.tsx` — checkbox/range filter panel for marketplace browse and global search `[P1]`
-- [ ] `infinite-scroll.tsx` — Intersection Observer-based pagination trigger for feeds and list views `[P1]`
-- [ ] `data-table.tsx` — sortable/filterable table for admin views, compliance logs, activity history `[P2]`
-- [ ] `confirmation-dialog.tsx` — reusable delete/destructive-action confirmation dialog with customizable message `[P1]`
-- [ ] `stat-card.tsx` — reusable metric display card for dashboards (value, label, trend indicator) `[P1]`
-- [ ] `breadcrumb.tsx` — nested route breadcrumbs for deep navigation in settings, compliance, admin `[P1]`
-- [ ] `image-gallery.tsx` — photo grid with lightbox overlay for social posts, journals, portfolios `[P1]`
-- [ ] `link.tsx` — styled anchor with state matrix: default (`primary` color, no decoration), hover (`primary-container` color, underline), active (`primary`, underline), focus (focus ring), visited (same as default — privacy, no visited indicator). `external` prop adds `rel="noopener noreferrer"` + optional icon. (DESIGN_TOKENS §14.2) `[P1]`
-- [ ] `list.tsx` — list container enforcing "no divider" rule: items separated by `spacing-list-gap` (1.4rem) OR alternating `surface`/`surface-container-low` bg. NEVER 1px borders between items. (DESIGN §5.2) `[P1]`
+- [x] `button.tsx` — 3 variants: primary (solid primary bg), secondary (secondary-container fill), tertiary (transparent, hover surface-container-low). All use `radius-button` (0.75rem). Min tap target 44px on mobile. Full MD3 state matrix: hover (8% on-* overlay), active/pressed (12% overlay), focus (focus ring), disabled (38% opacity), loading (spinner centered, text hidden). Context-dependent typography: parent context = `label-md` UPPERCASE; student context = `title-sm` sentence case. High-impact CTA gradient variant: `--gradient-primary` bg for "Start Lesson"-type CTAs. (DESIGN §2, §5.1, DESIGN_TOKENS §7, §14.2) `[P1]`
+- [x] `input.tsx` — full 5-state matrix: default (bg `surface-container-highest`, no border), hover (bg `surface-container-high`), focus (2px inset `primary` ghost border via `box-shadow` — NOT standard border to avoid layout shift), error (bg `error-container`, 2px inset `error` border, error text below with `aria-describedby`), disabled (38% opacity, `pointer-events: none`). Visible `<label>` required. (DESIGN §5.3, DESIGN_TOKENS §6.2, §14.2, CODING_STANDARDS §3.8) `[P1]`
+- [x] `textarea.tsx` — same styling rules as input, auto-resize optional `[P1]`
+- [x] `select.tsx` — custom select with accessible keyboard nav, token styling `[P1]`
+- [x] `checkbox.tsx` — accessible checkbox with `primary` accent `[P1]`
+- [x] `radio.tsx` — accessible radio group with `primary` accent `[P1]`
+- [x] `card.tsx` — accepts `context` prop for parent (`radius-lg`) vs student (`radius-xl`). Background `surface-container-lowest` (#fff) for "lifted" cards. Interactive card states: non-interactive (no shadow, depth via tonal shift only), interactive hover (`ambient-sm` shadow — subtle lift), interactive active (bg shifts to `surface-container-low`), interactive focus (focus ring). Shadow rule: tonal shifts for standard elements, shadows ONLY for floating/hover states. (DESIGN §4.2, DESIGN_TOKENS §7–§8, §14.2) `[P1]`
+- [x] `badge.tsx` — pill shape (`radius-full`), methodology-aware coloring `[P1]`
+- [x] `avatar.tsx` — circular, fallback initials, sizes xs–xl `[P1]`
+- [x] `modal.tsx` — focus trap, return focus on close, overlay at `z-modal`, `Escape` to close. (CODING_STANDARDS §3.8, DESIGN_TOKENS §9) `[P1]`
+- [x] `toast.tsx` — auto-dismiss, `z-notification`, `aria-live="polite"`. Success/error/warning variants using feedback tokens. (DESIGN_TOKENS §3.5, §9) `[P1]`
+- [x] `spinner.tsx` — loading indicator with `primary` color `[P1]`
+- [x] `skeleton.tsx` — content placeholder with pulse animation `[P1]`
+- [x] `icon.tsx` — Lucide icon wrapper with standard sizes (xs=12, sm=16, md=20, lg=24, xl=32, 2xl=48) (DESIGN_TOKENS §13) `[P1]`
+- [x] `tooltip.tsx` — `z-tooltip`, accessible (shows on focus), delay on hover `[P1]`
+- [x] `dropdown-menu.tsx` — `z-popover`, keyboard navigable, focus management `[P1]`
+- [x] `tabs.tsx` — accessible tab panel with `aria-selected`, keyboard arrow nav `[P1]`
+- [x] `progress-bar.tsx` — progress ribbon: `tertiary-fixed` bg, `primary` fill (DESIGN §5.4) `[P1]`
+- [x] `empty-state.tsx` — illustration slot + message + CTA button `[P1]`
+- [x] `date-picker.tsx` — WAI-ARIA date picker, keyboard navigable (arrow keys, Escape), used by events/attendance/planning `[P1]`
+- [x] `calendar.tsx` — shared calendar grid component for planning domain's unified view `[P1]`
+- [x] `rich-text-editor.tsx` — structured text editor for journals, post creation, listing descriptions; toolbar with basic formatting `[P1]`
+- [x] `star-rating.tsx` — 1–5 star input/display for marketplace reviews, keyboard accessible (arrow keys) `[P1]`
+- [x] `faceted-filter.tsx` — checkbox/range filter panel for marketplace browse and global search `[P1]`
+- [x] `infinite-scroll.tsx` — Intersection Observer-based pagination trigger for feeds and list views `[P1]`
+- [x] `data-table.tsx` — sortable/filterable table for admin views, compliance logs, activity history `[P2]`
+- [x] `confirmation-dialog.tsx` — reusable delete/destructive-action confirmation dialog with customizable message `[P1]`
+- [x] `stat-card.tsx` — reusable metric display card for dashboards (value, label, trend indicator) `[P1]`
+- [x] `breadcrumb.tsx` — nested route breadcrumbs for deep navigation in settings, compliance, admin `[P1]`
+- [x] `image-gallery.tsx` — photo grid with lightbox overlay for social posts, journals, portfolios `[P1]`
+- [x] `link.tsx` — styled anchor with state matrix: default (`primary` color, no decoration), hover (`primary-container` color, underline), active (`primary`, underline), focus (focus ring), visited (same as default — privacy, no visited indicator). `external` prop adds `rel="noopener noreferrer"` + optional icon. (DESIGN_TOKENS §14.2) `[P1]`
+- [x] `list.tsx` — list container enforcing "no divider" rule: items separated by `spacing-list-gap` (1.4rem) OR alternating `surface`/`surface-container-low` bg. NEVER 1px borders between items. (DESIGN §5.2) `[P1]`
 
 ### Common Components (`components/common/`)
 
-- [ ] `skip-link.tsx` — "Skip to main content" as first focusable element on every page (CODING_STANDARDS §3.8) `[P1]`
-- [ ] `methodology-badge.tsx` — methodology chip with config-driven label (not hardcoded) `[P1]`
-- [ ] `user-avatar.tsx` — wraps avatar with user/student data `[P1]`
-- [ ] `tier-gate.tsx` — shows upgrade prompt when free user hits premium feature; links to `/settings/subscription`, shows specific feature name being gated (SPEC §10) `[P1]`
-- [ ] `error-boundary.tsx` — React error boundary with friendly fallback UI `[P1]`
-- [ ] `page-title.tsx` — sets `document.title` + renders `<h1>` for focus target on route transitions `[P1]`
-- [ ] `report-button.tsx` — report dialog accepting `targetType` + `targetId` (supports all 11 entity types per safety domain spec); links to community guidelines. Report category dropdown: inappropriate content, harassment, spam, misinformation, CSAM/child safety, methodology hostility, other. Free-text description field (optional). Confirmation acknowledgment after submission. (SPEC §11, §12.3, 11-safety §3.1) `[P1]`
-- [ ] `network-status.tsx` — offline/online banner/toast; detects connectivity via `navigator.onLine` + `online`/`offline` events `[P1]`
+- [x] `skip-link.tsx` — "Skip to main content" as first focusable element on every page (CODING_STANDARDS §3.8) `[P1]`
+- [x] `methodology-badge.tsx` — methodology chip with config-driven label (not hardcoded) `[P1]`
+- [x] `user-avatar.tsx` — wraps avatar with user/student data `[P1]`
+- [x] `tier-gate.tsx` — shows upgrade prompt when free user hits premium feature; links to `/settings/subscription`, shows specific feature name being gated (SPEC §10) `[P1]`
+- [x] `error-boundary.tsx` — React error boundary with friendly fallback UI `[P1]`
+- [x] `page-title.tsx` — sets `document.title` + renders `<h1>` for focus target on route transitions `[P1]`
+- [x] `report-button.tsx` — report dialog accepting `targetType` + `targetId` (supports all 11 entity types per safety domain spec); links to community guidelines. Report category dropdown: inappropriate content, harassment, spam, misinformation, CSAM/child safety, methodology hostility, other. Free-text description field (optional). Confirmation acknowledgment after submission. (SPEC §11, §12.3, 11-safety §3.1) `[P1]`
+- [x] `network-status.tsx` — offline/online banner/toast; detects connectivity via `navigator.onLine` + `online`/`offline` events `[P1]`
 
 ### Form Utilities
 
-- [ ] `form-field.tsx` — wraps input + label + error message with consistent spacing. Visible `<label>` required (never placeholder-only), `aria-describedby` linking error message `<span>` to input, `aria-live="assertive"` on error message container for screen reader announcements (CODING_STANDARDS §3.8) `[P1]`
-- [ ] `file-upload.tsx` — drag-and-drop zone, file type + size validation (client-side), progress indicator. Extension validation pre-upload, magic byte validation happens server-side. Upload progress bar with `aria-valuenow`/`aria-valuemax`. Error states: file too large (show max size), wrong type (show allowed types), server rejection (generic message). (SPEC §9, CODING_STANDARDS §3.9, 09-media §9) `[P1]`
+- [x] `form-field.tsx` — wraps input + label + error message with consistent spacing. Visible `<label>` required (never placeholder-only), `aria-describedby` linking error message `<span>` to input, `aria-live="assertive"` on error message container for screen reader announcements (CODING_STANDARDS §3.8) `[P1]`
+- [x] `file-upload.tsx` — drag-and-drop zone, file type + size validation (client-side), progress indicator. Extension validation pre-upload, magic byte validation happens server-side. Upload progress bar with `aria-valuenow`/`aria-valuemax`. Error states: file too large (show max size), wrong type (show allowed types), server rejection (generic message). (SPEC §9, CODING_STANDARDS §3.9, 09-media §9) `[P1]`
 
 ### Verification
 
-- [ ] Verify: all components render correctly in isolation (consider Storybook or a dev route) `[P1]`
-- [ ] Verify: `npm run type-check` passes `[P1]`
-- [ ] Verify: tab navigation works through all interactive components `[P1]`
-- [ ] Verify: screen reader announces all components correctly `[P1]`
-- [ ] Verify: date-picker keyboard nav per WAI-ARIA (arrow keys, Enter, Escape) `[P1]`
-- [ ] Verify: star-rating keyboard accessible (arrow keys to change value) `[P1]`
-- [ ] Verify: infinite-scroll announces new content via `aria-live` region `[P1]`
+- [x] Verify: all components render correctly in isolation (consider Storybook or a dev route) `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: tab navigation works through all interactive components `[P1]`
+- [x] Verify: screen reader announces all components correctly `[P1]`
+- [x] Verify: date-picker keyboard nav per WAI-ARIA (arrow keys, Enter, Escape) `[P1]`
+- [x] Verify: star-rating keyboard accessible (arrow keys to change value) `[P1]`
+- [x] Verify: infinite-scroll announces new content via `aria-live` region `[P1]`
 
 ### References
 - DESIGN §4–§5 (component visual spec)

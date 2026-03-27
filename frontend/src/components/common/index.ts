@@ -1,0 +1,9 @@
+// Common components — barrel export
+export { ErrorBoundary } from "./error-boundary";
+export { MethodologyBadge } from "./methodology-badge";
+export { NetworkStatus } from "./network-status";
+export { PageTitle } from "./page-title";
+export { ReportButton } from "./report-button";
+export { SkipLink } from "./skip-link";
+export { TierGate } from "./tier-gate";
+export { UserAvatar } from "./user-avatar";

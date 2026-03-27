@@ -46,3 +46,7 @@ server
 
 /seed
 !seed/
+
+/*.png
+
+*.log
