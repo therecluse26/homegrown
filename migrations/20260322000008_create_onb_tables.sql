@@ -132,8 +132,8 @@ UPDATE method_definitions SET onboarding_config = '{
     {"type": "task", "title": "Create your first Book of Centuries", "description": "A timeline notebook that grows with your child — the heart of a Charlotte Mason education.", "link_url": "/app/tools/book-of-centuries", "age_group": "9-12", "sort_order": 1},
     {"type": "resource", "title": "Read: Charlotte Mason Philosophy Introduction", "description": "Understand the principles of living books, narration, and nature study.", "link_url": "/discover/content/cm-philosophy", "sort_order": 2},
     {"type": "task", "title": "Set up your first nature journal", "description": "Outdoor observation is central to CM — start with 15 minutes of nature study.", "link_url": "/app/tools/nature-journal", "sort_order": 3},
-    {"type": "task", "title": "Choose your first living book", "description": "Select an engaging, literary-quality book for your child'\''s reading level.", "link_url": "/app/marketplace?method=charlotte-mason&type=books", "sort_order": 4},
-    {"type": "feature_tour", "title": "Explore narration tools", "description": "Learn how to use the platform'\''s narration recording and tracking features.", "link_url": "/app/tour/narration", "sort_order": 5}
+    {"type": "task", "title": "Choose your first living book", "description": "Select an engaging, literary-quality book for your child''s reading level.", "link_url": "/app/marketplace?method=charlotte-mason&type=books", "sort_order": 4},
+    {"type": "feature_tour", "title": "Explore narration tools", "description": "Learn how to use the platform''s narration recording and tracking features.", "link_url": "/app/tour/narration", "sort_order": 5}
   ],
   "starter_recs": [
     {"title": "Ambleside Online Year 1", "description": "Free Charlotte Mason curriculum with carefully chosen living books.", "link_url": "/marketplace/ambleside-y1", "price_type": "free", "age_group": "6-8", "sort_order": 1},
@@ -152,7 +152,7 @@ UPDATE method_definitions SET onboarding_config = '{
     {"type": "task", "title": "Set up your daily schedule", "description": "Traditional homeschooling thrives on consistent routines — map out your school day.", "link_url": "/app/tools/scheduler", "sort_order": 1},
     {"type": "resource", "title": "Read: Getting Started with Traditional Homeschooling", "description": "An overview of textbook-based learning at home.", "link_url": "/discover/content/traditional-intro", "sort_order": 2},
     {"type": "task", "title": "Choose your core curriculum", "description": "Select textbooks and workbooks for your main subjects.", "link_url": "/app/marketplace?method=traditional&type=curriculum", "sort_order": 3},
-    {"type": "feature_tour", "title": "Explore grade tracking", "description": "Learn to use the platform'\''s assignment and grade tracking tools.", "link_url": "/app/tour/grades", "sort_order": 4}
+    {"type": "feature_tour", "title": "Explore grade tracking", "description": "Learn to use the platform''s assignment and grade tracking tools.", "link_url": "/app/tour/grades", "sort_order": 4}
   ],
   "starter_recs": [
     {"title": "Saxon Math", "description": "Structured, incremental math curriculum used in many traditional programs.", "link_url": "/marketplace/saxon-math", "price_type": "paid", "age_group": "6-8", "sort_order": 1},
@@ -168,7 +168,7 @@ UPDATE method_definitions SET onboarding_config = '{
 UPDATE method_definitions SET onboarding_config = '{
   "roadmap_steps": [
     {"type": "resource", "title": "Read: The Trivium Explained", "description": "Understand the Grammar, Logic, and Rhetoric stages of classical education.", "link_url": "/discover/content/trivium-explained", "sort_order": 1},
-    {"type": "task", "title": "Identify your child'\''s Trivium stage", "description": "Determine whether your child is in the Grammar, Logic, or Rhetoric stage based on age and development.", "link_url": "/app/tools/trivium-assessment", "sort_order": 2},
+    {"type": "task", "title": "Identify your child''s Trivium stage", "description": "Determine whether your child is in the Grammar, Logic, or Rhetoric stage based on age and development.", "link_url": "/app/tools/trivium-assessment", "sort_order": 2},
     {"type": "task", "title": "Start memory work", "description": "Classical education emphasizes memorization — begin with timeline facts or Latin vocabulary.", "link_url": "/app/tools/memory-work", "age_group": "6-8", "sort_order": 3},
     {"type": "feature_tour", "title": "Explore Socratic discussion tools", "description": "Learn how to use guided discussion prompts for Logic-stage students.", "link_url": "/app/tour/socratic", "age_group": "13-15", "sort_order": 4}
   ],
@@ -186,7 +186,7 @@ UPDATE method_definitions SET onboarding_config = '{
 UPDATE method_definitions SET onboarding_config = '{
   "roadmap_steps": [
     {"type": "resource", "title": "Read: Waldorf Education at Home", "description": "Understand rhythm, imagination, and handwork in Waldorf-inspired homeschooling.", "link_url": "/discover/content/waldorf-home", "sort_order": 1},
-    {"type": "task", "title": "Create a daily rhythm chart", "description": "Waldorf emphasizes rhythm over rigid schedules — map your family'\''s natural flow.", "link_url": "/app/tools/rhythm-chart", "sort_order": 2},
+    {"type": "task", "title": "Create a daily rhythm chart", "description": "Waldorf emphasizes rhythm over rigid schedules — map your family''s natural flow.", "link_url": "/app/tools/rhythm-chart", "sort_order": 2},
     {"type": "task", "title": "Set up a handwork station", "description": "Knitting, painting, and crafts are integral to Waldorf — prepare a creative space.", "link_url": "/app/tools/handwork", "sort_order": 3},
     {"type": "task", "title": "Plan your first main lesson block", "description": "Waldorf uses 3-4 week focused blocks on one subject.", "link_url": "/app/tools/main-lesson", "age_group": "6-8", "sort_order": 4}
   ],
@@ -205,8 +205,8 @@ UPDATE method_definitions SET onboarding_config = '{
   "roadmap_steps": [
     {"type": "resource", "title": "Read: Montessori at Home Guide", "description": "Understand the prepared environment, sensitive periods, and self-directed learning.", "link_url": "/discover/content/montessori-home", "sort_order": 1},
     {"type": "task", "title": "Prepare your learning environment", "description": "Montessori requires accessible, organized materials at child height.", "link_url": "/app/tools/environment-setup", "sort_order": 2},
-    {"type": "task", "title": "Observe your child'\''s interests", "description": "Spend a week observing what draws your child'\''s attention — this guides material selection.", "link_url": "/app/tools/observation-log", "sort_order": 3},
-    {"type": "task", "title": "Choose your first practical life activities", "description": "Start with pouring, sorting, or food preparation appropriate to your child'\''s age.", "link_url": "/app/marketplace?method=montessori&type=practical-life", "age_group": "3-5", "sort_order": 4}
+    {"type": "task", "title": "Observe your child''s interests", "description": "Spend a week observing what draws your child''s attention — this guides material selection.", "link_url": "/app/tools/observation-log", "sort_order": 3},
+    {"type": "task", "title": "Choose your first practical life activities", "description": "Start with pouring, sorting, or food preparation appropriate to your child''s age.", "link_url": "/app/marketplace?method=montessori&type=practical-life", "age_group": "3-5", "sort_order": 4}
   ],
   "starter_recs": [
     {"title": "Montessori Primary Guide", "description": "Free album pages covering practical life, sensorial, and math.", "link_url": "/marketplace/montessori-primary", "price_type": "free", "age_group": "3-5", "sort_order": 1},

@@ -12,12 +12,12 @@
 -- Activity/lesson definitions [S§8.1.1]
 CREATE TABLE learn_activity_defs (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     title                 TEXT NOT NULL,
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
-    methodology_id        UUID REFERENCES method_definitions(id),
-    tool_id               UUID REFERENCES method_tools(id),
+    methodology_id        UUID, -- FK to method_definitions deferred (method PK is slug, not UUID)
+    tool_id               UUID, -- FK to method_tools deferred (method PK is slug, not UUID)
     est_duration_minutes  SMALLINT,
     attachments           JSONB NOT NULL DEFAULT '[]',
     is_active             BOOLEAN NOT NULL DEFAULT true,
@@ -39,7 +39,7 @@ CREATE INDEX idx_learn_activity_defs_search ON learn_activity_defs USING GIN(sea
 -- Assessment/test definitions [S§8.1.2] (Phase 2 CRUD, DDL now)
 CREATE TABLE learn_assessment_defs (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     title                 TEXT NOT NULL,
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
@@ -56,7 +56,7 @@ CREATE INDEX idx_learn_assessment_defs_publisher ON learn_assessment_defs(publis
 -- Reading item definitions [S§8.1.3]
 CREATE TABLE learn_reading_items (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     title                 TEXT NOT NULL,
     author                TEXT,
     isbn                  TEXT,
@@ -82,7 +82,7 @@ CREATE INDEX idx_learn_reading_items_search ON learn_reading_items USING GIN(sea
 -- Project definitions [S§8.1.5] (Phase 2 CRUD, DDL now)
 CREATE TABLE learn_project_defs (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     title                 TEXT NOT NULL,
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
@@ -97,11 +97,11 @@ CREATE INDEX idx_learn_project_defs_publisher ON learn_project_defs(publisher_id
 -- Video lesson definitions [S§8.1.6, S§8.1.11]
 CREATE TABLE learn_video_defs (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     title                 TEXT NOT NULL,
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
-    methodology_id        UUID REFERENCES method_definitions(id),
+    methodology_id        UUID, -- FK to method_definitions deferred (method PK is slug, not UUID)
     duration_seconds      INTEGER,
     thumbnail_url         TEXT,
     video_url             TEXT NOT NULL,
@@ -121,7 +121,7 @@ CREATE INDEX idx_learn_video_defs_methodology ON learn_video_defs(methodology_id
 -- Question bank [S§8.1.9]
 CREATE TABLE learn_questions (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     question_type         TEXT NOT NULL
                           CHECK (question_type IN (
                               'multiple_choice', 'fill_in_blank', 'true_false',
@@ -131,7 +131,7 @@ CREATE TABLE learn_questions (
     media_attachments     JSONB NOT NULL DEFAULT '[]',
     answer_data           JSONB NOT NULL,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
-    methodology_id        UUID REFERENCES method_definitions(id),
+    methodology_id        UUID, -- FK to method_definitions deferred (method PK is slug, not UUID)
     difficulty_level      SMALLINT CHECK (difficulty_level BETWEEN 1 AND 5),
     auto_scorable         BOOLEAN NOT NULL DEFAULT true,
     points                NUMERIC NOT NULL DEFAULT 1,
@@ -155,11 +155,11 @@ CREATE INDEX idx_learn_questions_search ON learn_questions USING GIN(search_vect
 -- Quiz definitions [S§8.1.9]
 CREATE TABLE learn_quiz_defs (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     title                 TEXT NOT NULL,
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
-    methodology_id        UUID REFERENCES method_definitions(id),
+    methodology_id        UUID, -- FK to method_definitions deferred (method PK is slug, not UUID)
     time_limit_minutes    SMALLINT,
     passing_score_percent SMALLINT NOT NULL DEFAULT 70,
     shuffle_questions     BOOLEAN NOT NULL DEFAULT false,
@@ -195,11 +195,11 @@ CREATE INDEX idx_learn_quiz_questions_question ON learn_quiz_questions(question_
 -- Sequence definitions [S§8.1.12]
 CREATE TABLE learn_sequence_defs (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
-    publisher_id          UUID NOT NULL REFERENCES mkt_publishers(id),
+    publisher_id          UUID NOT NULL, -- FK to mkt_publishers(id) added post-mkt migration
     title                 TEXT NOT NULL,
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
-    methodology_id        UUID REFERENCES method_definitions(id),
+    methodology_id        UUID, -- FK to method_definitions deferred (method PK is slug, not UUID)
     is_linear             BOOLEAN NOT NULL DEFAULT true,
     is_active             BOOLEAN NOT NULL DEFAULT true,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -274,8 +274,8 @@ CREATE TABLE learn_activity_logs (
     description           TEXT,
     subject_tags          TEXT[] NOT NULL DEFAULT '{}',
     content_id            UUID REFERENCES learn_activity_defs(id) ON DELETE SET NULL,
-    methodology_id        UUID REFERENCES method_definitions(id),
-    tool_id               UUID REFERENCES method_tools(id),
+    methodology_id        UUID, -- FK to method_definitions deferred (method PK is slug, not UUID)
+    tool_id               UUID, -- FK to method_tools deferred (method PK is slug, not UUID)
     duration_minutes      SMALLINT,
     attachments           JSONB NOT NULL DEFAULT '[]',
     activity_date         DATE NOT NULL DEFAULT CURRENT_DATE,

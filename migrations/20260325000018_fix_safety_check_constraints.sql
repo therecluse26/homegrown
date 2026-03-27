@@ -76,6 +76,7 @@ ALTER TABLE safety_appeals ADD CONSTRAINT safety_appeals_status_check
 
 -- C2: Remove FK on family_id — legal evidence must persist even if family is deleted
 -- The constraint name is auto-generated; drop by looking it up.
+-- +goose StatementBegin
 DO $$
 DECLARE
     fk_name TEXT;
@@ -93,6 +94,7 @@ BEGIN
         EXECUTE 'ALTER TABLE safety_ncmec_reports DROP CONSTRAINT ' || fk_name;
     END IF;
 END $$;
+-- +goose StatementEnd
 
 -- H7: status missing 'confirmed'
 ALTER TABLE safety_ncmec_reports DROP CONSTRAINT IF EXISTS safety_ncmec_reports_status_check;

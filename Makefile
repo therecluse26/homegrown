@@ -10,7 +10,8 @@ GOBIN := $(or $(shell $(GO) env GOBIN),$(shell $(GO) env GOPATH)/bin)
 SWAG := $(GOBIN)/swag
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check lint test type-check \
-        migrate db-reset openapi generate-types full-generate audit install-tools install-hooks
+        migrate db-reset seed agent-db-reset agent-server \
+        openapi generate-types full-generate audit install-tools install-hooks
 
 # Default: run all quality gates
 default: check
@@ -93,6 +94,27 @@ generate-types:
 full-generate:
 	$(MAKE) openapi
 	$(MAKE) generate-types
+
+# ─── Agent Database ───────────────────────────────────────────────────────────
+
+# Seed the agent database (creates it if absent, runs migrations, seeds data).
+# Override target DB: make seed DB=homegrown  (to seed your dev database)
+DB ?= homegrown_agent
+seed:
+	$(GO) run ./cmd/seed/ --db $(DB)
+
+# Full agent database reset: drop → recreate → migrate → seed
+agent-db-reset:
+	docker compose exec postgres psql -U homegrown -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'homegrown_agent' AND pid <> pg_backend_pid();"
+	docker compose exec postgres psql -U homegrown -c "DROP DATABASE IF EXISTS homegrown_agent;"
+	docker compose exec postgres psql -U homegrown -c "CREATE DATABASE homegrown_agent;"
+	$(MAKE) seed
+
+# Start the API server on port 15180 pointed at the agent database.
+agent-server:
+	DATABASE_URL=postgres://homegrown:homegrown@localhost:5932/homegrown_agent \
+	SERVER_PORT=15180 \
+	$(GO) run ./cmd/server/
 
 # ─── Security ─────────────────────────────────────────────────────────
 
