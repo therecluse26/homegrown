@@ -13,6 +13,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/discover"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
+	"github.com/homegrown-academy/homegrown-academy/internal/lifecycle"
 	"github.com/homegrown-academy/homegrown-academy/internal/media"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
@@ -59,6 +60,7 @@ type AppState struct {
 	Search      search.SearchService
 	Recs        recs.RecsService
 	Comply      comply.ComplianceService
+	Lifecycle   lifecycle.LifecycleService
 	Admin       admin.AdminService
 	Plan        plan.PlanningService
 	PubSub      shared.PubSub // needed by social handler for WebSocket
@@ -157,7 +159,7 @@ func NewApp(state *AppState) *echo.Echo {
 		onboard.NewHandler(state.Onboard).Register(auth)
 	}
 	if state.Social != nil {
-		social.NewHandler(state.Social, state.PubSub).Register(auth)
+		social.NewHandler(state.Social, state.PubSub, state.Config.CORSAllowedOrigins).Register(auth)
 	}
 	if state.Learn != nil {
 		learn.NewHandler(state.Learn).Register(auth)
@@ -172,7 +174,7 @@ func NewApp(state *AppState) *echo.Echo {
 		notify.NewHandler(state.Notify, state.Config.UnsubscribeSecret).Register(auth, pub)
 	}
 	if state.Billing != nil {
-		billing.NewHandler(state.Billing, state.Config.BillingWebhookSecret).Register(auth, hooks)
+		billing.NewHandler(state.Billing, state.Config.BillingWebhookSecret, state.DB).Register(auth, hooks)
 	}
 	// Shared admin group — used by both safety and admin domains.
 	adminGroup := auth.Group("/admin")
@@ -187,6 +189,9 @@ func NewApp(state *AppState) *echo.Echo {
 	}
 	if state.Comply != nil {
 		comply.NewHandler(state.Comply).Register(auth)
+	}
+	if state.Lifecycle != nil {
+		lifecycle.NewHandler(state.Lifecycle).Register(auth, pub)
 	}
 	if state.Admin != nil {
 		admin.NewHandler(state.Admin).Register(auth, adminGroup)

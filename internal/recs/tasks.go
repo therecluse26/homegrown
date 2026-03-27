@@ -717,15 +717,19 @@ func generateCommunityCandidates(
 // engagement gaps — subjects the family's methodology emphasizes but that have low or no
 // recent signal activity. [13-recs §10.2, §10.3]
 func generateActivityIdeaCandidates(
-	_ context.Context,
-	_ *gorm.DB,
+	ctx context.Context,
+	db *gorm.DB,
 	primarySlug string,
 	signals []Signal,
 	now time.Time,
 ) []candidate {
-	// Baseline subjects expected for common methodologies.
-	// TODO: enrich from method_definitions config when expected_subjects field is added.
-	baselineSubjects := methodologyBaselineSubjects(primarySlug)
+	// Baseline subjects from method_definitions.baseline_subjects column. [13-recs §10.2]
+	var baselineSubjects []string
+	if err := db.WithContext(ctx).Raw(
+		`SELECT baseline_subjects FROM method_definitions WHERE slug = ?`, primarySlug,
+	).Scan(&baselineSubjects).Error; err != nil {
+		slog.Error("recs: load baseline subjects", "slug", primarySlug, "error", err)
+	}
 	if len(baselineSubjects) == 0 {
 		return nil
 	}
@@ -770,25 +774,6 @@ func generateActivityIdeaCandidates(
 	return candidates
 }
 
-// methodologyBaselineSubjects returns a starter set of expected subjects for a methodology.
-// TODO: load from method_definitions.philosophy JSONB once expected_subjects field is added.
-func methodologyBaselineSubjects(slug string) []string {
-	common := []string{"reading", "mathematics", "writing", "science", "history", "art"}
-	switch slug {
-	case "charlotte-mason":
-		return append(common, "nature_study", "music", "handicrafts", "narration")
-	case "classical":
-		return append(common, "latin", "logic", "rhetoric", "grammar")
-	case "unschooling":
-		return common // minimal expectations — unschooling is child-led
-	case "montessori":
-		return append(common, "practical_life", "sensorial", "geography")
-	case "waldorf":
-		return append(common, "handwork", "music", "eurythmy", "painting")
-	default:
-		return common
-	}
-}
 
 // generateExplorationCandidates produces candidates from methodologies the family does NOT
 // use, filtered to high-popularity items. These fill the exploration slots to prevent
@@ -875,35 +860,6 @@ type transitionAge struct {
 	Age       int    // approximate age at which transition occurs
 }
 
-// methodologyTransitionAges returns the stage transition ages for a methodology.
-// TODO: load from method_definitions.philosophy JSONB once transition_ages field is added.
-func methodologyTransitionAges(slug string) []transitionAge {
-	switch slug {
-	case "classical":
-		return []transitionAge{
-			{"Logic", 10},    // Grammar → Logic
-			{"Rhetoric", 14}, // Logic → Rhetoric
-		}
-	case "charlotte-mason":
-		return []transitionAge{
-			{"Form II", 9},   // Form I → II
-			{"Form III", 12}, // Form II → III
-			{"Form IV", 15},  // Form III → IV
-		}
-	case "montessori":
-		return []transitionAge{
-			{"2nd Plane", 6},  // 1st → 2nd Plane
-			{"3rd Plane", 12}, // 2nd → 3rd Plane
-		}
-	case "waldorf":
-		return []transitionAge{
-			{"Grade School", 7},  // Early Childhood → Grade School
-			{"High School", 14},  // Grade School → High School
-		}
-	default:
-		return nil
-	}
-}
 
 // generateAgeTransitionCandidates produces candidates for students approaching a
 // methodology-specific stage transition. [13-recs §10.6]
@@ -915,7 +871,19 @@ func generateAgeTransitionCandidates(
 	blockedSet map[uuid.UUID]struct{},
 	now time.Time,
 ) []candidate {
-	transitions := methodologyTransitionAges(primarySlug)
+	// Stage transition ages from method_definitions.transition_ages column. [13-recs §10.6]
+	var transitionsJSON []byte
+	if err := db.WithContext(ctx).Raw(
+		`SELECT transition_ages FROM method_definitions WHERE slug = ?`, primarySlug,
+	).Scan(&transitionsJSON).Error; err != nil {
+		slog.Error("recs: load transition ages", "slug", primarySlug, "error", err)
+		return nil
+	}
+	var transitions []transitionAge
+	if err := json.Unmarshal(transitionsJSON, &transitions); err != nil {
+		slog.Error("recs: unmarshal transition ages", "slug", primarySlug, "error", err)
+		return nil
+	}
 	if len(transitions) == 0 {
 		return nil
 	}

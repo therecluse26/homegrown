@@ -29,6 +29,7 @@ func (h *DiscoverHandler) Register(publicGroup, authGroup *echo.Group) {
 	disc.GET("/quiz/results/:share_id", h.getQuizResult)
 	disc.GET("/state-guides", h.listStateGuides)
 	disc.GET("/state-guides/:state_code", h.getStateGuide)
+	disc.GET("/content/:slug", h.getContentBySlug)
 
 	// Authenticated routes — require FamilyScope. [03-discover §4.2]
 	authDisc := authGroup.Group("/discovery")
@@ -156,6 +157,24 @@ func (h *DiscoverHandler) claimQuizResult(c echo.Context) error {
 // ─── Error Mapping ────────────────────────────────────────────────────────────
 
 // mapDiscoverError converts discover domain errors to shared.AppError HTTP responses.
+// getContentBySlug handles GET /v1/discovery/content/:slug.
+//
+// @Summary     Get a published content page by slug
+// @Tags        discovery
+// @Produce     json
+// @Param       slug  path     string  true  "Content page slug"
+// @Success     200   {object} ContentPage
+// @Failure     404   {object} shared.AppError
+// @Router      /discovery/content/{slug} [get]
+func (h *DiscoverHandler) getContentBySlug(c echo.Context) error {
+	slug := c.Param("slug")
+	page, err := h.svc.GetContentBySlug(c.Request().Context(), slug)
+	if err != nil {
+		return mapDiscoverError(err)
+	}
+	return c.JSON(http.StatusOK, page)
+}
+
 // Internal error details are never exposed to the client. [CODING §2.2]
 func mapDiscoverError(err error) error {
 	if err == nil {

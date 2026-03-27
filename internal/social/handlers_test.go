@@ -46,7 +46,7 @@ func setupSocialRoutes(e *echo.Echo, svc SocialService) {
 			return next(c)
 		}
 	})
-	NewHandler(svc, shared.NoopPubSub{}).Register(auth)
+	NewHandler(svc, shared.NoopPubSub{}, []string{"http://localhost:5673"}).Register(auth)
 }
 
 // ─── Mock SocialService ──────────────────────────────────────────────────────

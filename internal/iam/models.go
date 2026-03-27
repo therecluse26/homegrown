@@ -284,6 +284,15 @@ type KratosSession struct {
 	AuthenticatedAt time.Time
 }
 
+// KratosAdminSession holds session data returned by the Kratos admin API.
+// Used by the lifecycle domain for session listing. [15-data-lifecycle §12]
+type KratosAdminSession struct {
+	SessionID  string
+	UserAgent  *string
+	IPAddress  *string
+	LastActive time.Time
+}
+
 // KratosIdentity holds identity traits returned by the Kratos admin API.
 type KratosIdentity struct {
 	ID    uuid.UUID

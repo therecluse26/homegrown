@@ -152,3 +152,58 @@ func marshalTask(payload JobPayload) (*asynq.Task, error) {
 	}
 	return asynq.NewTask(payload.TaskType(), data), nil
 }
+
+// ─── JobScheduler ─────────────────────────────────────────────────────────────
+
+// JobScheduler registers periodic tasks using cron expressions.
+// The concrete implementation wraps asynq.Scheduler — all asynq imports remain
+// isolated in this file per [ARCH §4.3].
+type JobScheduler interface {
+	// Register schedules a job to run on the given cron spec (standard 5-field cron).
+	// Enqueues a zero-payload job of the given task type on each trigger.
+	Register(cronSpec string, payload JobPayload) error
+
+	// Start launches the scheduler loop. Non-blocking.
+	Start() error
+
+	// Stop gracefully shuts down the scheduler.
+	Stop()
+}
+
+type asynqJobScheduler struct {
+	scheduler *asynq.Scheduler
+}
+
+// CreateJobScheduler creates a JobScheduler backed by asynq (Redis-based).
+func CreateJobScheduler(cfg *config.AppConfig) (JobScheduler, error) {
+	redisOpt, err := asynq.ParseRedisURI(cfg.RedisURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid redis URL for job scheduler: %w", err)
+	}
+	s := asynq.NewScheduler(redisOpt, nil)
+	return &asynqJobScheduler{scheduler: s}, nil
+}
+
+func (s *asynqJobScheduler) Register(cronSpec string, payload JobPayload) error {
+	task, err := marshalTask(payload)
+	if err != nil {
+		return err
+	}
+	_, err = s.scheduler.Register(cronSpec, task)
+	return err
+}
+
+func (s *asynqJobScheduler) Start() error {
+	return s.scheduler.Start()
+}
+
+func (s *asynqJobScheduler) Stop() {
+	s.scheduler.Shutdown()
+}
+
+// NoopJobScheduler satisfies JobScheduler for tests and environments without Redis.
+type NoopJobScheduler struct{}
+
+func (NoopJobScheduler) Register(_ string, _ JobPayload) error { return nil }
+func (NoopJobScheduler) Start() error                          { return nil }
+func (NoopJobScheduler) Stop()                                 {}

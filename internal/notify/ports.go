@@ -141,6 +141,9 @@ type BatchEmailMessage struct {
 type IamServiceForNotify interface {
 	GetFamilyPrimaryEmail(ctx context.Context, familyID uuid.UUID) (email string, displayName string, err error)
 	GetFamilyIDForParent(ctx context.Context, parentID uuid.UUID) (uuid.UUID, error)
+	// GetFamilyIDForCreator resolves a creator's family ID via mkt_creators → iam_parents.
+	// Required for billing::PayoutCompleted handler which only carries CreatorID.
+	GetFamilyIDForCreator(ctx context.Context, creatorID uuid.UUID) (uuid.UUID, error)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -11,6 +11,7 @@ import (
 type iamAdapter struct {
 	getFamilyPrimaryEmail func(ctx context.Context, familyID uuid.UUID) (string, string, error)
 	getFamilyIDForParent  func(ctx context.Context, parentID uuid.UUID) (uuid.UUID, error)
+	getFamilyIDForCreator func(ctx context.Context, creatorID uuid.UUID) (uuid.UUID, error)
 }
 
 func (a *iamAdapter) GetFamilyPrimaryEmail(ctx context.Context, familyID uuid.UUID) (string, string, error) {
@@ -21,13 +22,19 @@ func (a *iamAdapter) GetFamilyIDForParent(ctx context.Context, parentID uuid.UUI
 	return a.getFamilyIDForParent(ctx, parentID)
 }
 
+func (a *iamAdapter) GetFamilyIDForCreator(ctx context.Context, creatorID uuid.UUID) (uuid.UUID, error) {
+	return a.getFamilyIDForCreator(ctx, creatorID)
+}
+
 // NewIamAdapter creates an IamServiceForNotify adapter from raw functions.
 func NewIamAdapter(
 	getFamilyPrimaryEmail func(ctx context.Context, familyID uuid.UUID) (string, string, error),
 	getFamilyIDForParent func(ctx context.Context, parentID uuid.UUID) (uuid.UUID, error),
+	getFamilyIDForCreator func(ctx context.Context, creatorID uuid.UUID) (uuid.UUID, error),
 ) IamServiceForNotify {
 	return &iamAdapter{
 		getFamilyPrimaryEmail: getFamilyPrimaryEmail,
 		getFamilyIDForParent:  getFamilyIDForParent,
+		getFamilyIDForCreator: getFamilyIDForCreator,
 	}
 }

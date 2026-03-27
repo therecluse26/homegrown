@@ -15,6 +15,7 @@ type mockMediaService struct {
 	requestUploadFn      func(ctx context.Context, input *RequestUploadInput) (*UploadResponse, error)
 	confirmUploadFn      func(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) (*UploadInfo, error)
 	deleteUploadFn       func(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) error
+	listUploadsFn        func(ctx context.Context, familyID uuid.UUID, limit uint32, afterID *uuid.UUID) (*UploadListResponse, error)
 	getUploadFn          func(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) (*UploadInfo, error)
 	presignedGetFn       func(ctx context.Context, storageKey string, expiresSeconds uint32) (string, error)
 	validateAttachmentFn func(ctx context.Context, uploadCtx UploadContext, contentType string, sizeBytes uint64) error
@@ -43,6 +44,13 @@ func (m *mockMediaService) DeleteUpload(ctx context.Context, uploadID uuid.UUID,
 		return m.deleteUploadFn(ctx, uploadID, familyID)
 	}
 	panic("DeleteUpload not mocked")
+}
+
+func (m *mockMediaService) ListUploads(ctx context.Context, familyID uuid.UUID, limit uint32, afterID *uuid.UUID) (*UploadListResponse, error) {
+	if m.listUploadsFn != nil {
+		return m.listUploadsFn(ctx, familyID, limit, afterID)
+	}
+	panic("ListUploads not mocked")
 }
 
 func (m *mockMediaService) GetUpload(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) (*UploadInfo, error) {
@@ -78,6 +86,7 @@ type mockUploadRepository struct {
 	setModerationLabelsFn func(ctx context.Context, uploadID uuid.UUID, labels json.RawMessage) error
 	setCSAMScannedAtFn    func(ctx context.Context, uploadID uuid.UUID) error
 	findExpiredPendingFn  func(ctx context.Context, before time.Time, limit uint32) ([]Upload, error)
+	listByFamilyFn        func(ctx context.Context, scope shared.FamilyScope, limit uint32, afterID *uuid.UUID) ([]Upload, error)
 }
 
 func newMockUploadRepository() *mockUploadRepository {
@@ -145,6 +154,13 @@ func (m *mockUploadRepository) FindExpiredPending(ctx context.Context, before ti
 		return m.findExpiredPendingFn(ctx, before, limit)
 	}
 	panic("FindExpiredPending not mocked")
+}
+
+func (m *mockUploadRepository) ListByFamily(ctx context.Context, scope shared.FamilyScope, limit uint32, afterID *uuid.UUID) ([]Upload, error) {
+	if m.listByFamilyFn != nil {
+		return m.listByFamilyFn(ctx, scope, limit, afterID)
+	}
+	return nil, nil // non-critical default for tests
 }
 
 // ─── Mock ProcessingJobRepository ─────────────────────────────────────────────

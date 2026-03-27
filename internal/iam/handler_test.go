@@ -147,3 +147,10 @@ func (m *mockIamService) GetStudent(_ context.Context, _ *shared.FamilyScope, _ 
 func (m *mockIamService) SetFamilyMethodology(_ context.Context, _ *shared.FamilyScope, _ string, _ []string) error {
 	panic("not implemented")
 }
+func (m *mockIamService) RevokeFamilySessions(_ context.Context, _ uuid.UUID) error {
+	panic("not implemented")
+}
+
+func (m *mockIamService) GetStudentName(_ context.Context, _ uuid.UUID) (string, error) {
+	panic("not implemented")
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,11 +20,23 @@ const (
 	wsPongTimeout  = 10 * time.Second
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(_ *http.Request) bool {
-		// Origin check delegated to CORS middleware. [05-social §12]
-		return true
-	},
+// newUpgrader builds a gorilla/websocket Upgrader that validates the Origin
+// header against the configured allowed origins list. [05-social §12, CRIT-8]
+func newUpgrader(allowedOrigins []string) websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return false
+			}
+			for _, allowed := range allowedOrigins {
+				if strings.EqualFold(origin, allowed) {
+					return true
+				}
+			}
+			return false
+		},
+	}
 }
 
 // WebSocketMessage is the JSON envelope for WebSocket messages. [05-social §12]
@@ -34,7 +47,8 @@ type WebSocketMessage struct {
 
 // handleWebSocket upgrades an HTTP connection to WebSocket and subscribes to
 // Redis pub/sub for real-time delivery. [05-social §12]
-func handleWebSocket(pubsub shared.PubSub) echo.HandlerFunc {
+func handleWebSocket(pubsub shared.PubSub, allowedOrigins []string) echo.HandlerFunc {
+	upgrader := newUpgrader(allowedOrigins)
 	return func(c echo.Context) error {
 		auth, err := shared.GetAuthContext(c)
 		if err != nil {

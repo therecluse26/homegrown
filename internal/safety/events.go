@@ -73,3 +73,13 @@ type UploadAutoRejectedNotification struct {
 }
 
 func (UploadAutoRejectedNotification) EventName() string { return "safety.UploadAutoRejected" }
+
+// ContentFlagged is published when content is flagged by automated scanning or manual review.
+// Consumed by mkt:: (archive flagged listing), notify:: (creator notification). [11-safety §16.3]
+type ContentFlagged struct {
+	ContentKey string    `json:"content_key"`
+	FamilyID   uuid.UUID `json:"family_id"`
+	FlagType   string    `json:"flag_type"` // "csam" | "text_violation" | "manual_review"
+}
+
+func (ContentFlagged) EventName() string { return "safety.ContentFlagged" }

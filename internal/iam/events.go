@@ -67,3 +67,35 @@ type FamilyDeletionScheduled struct {
 }
 
 func (FamilyDeletionScheduled) EventName() string { return "iam.FamilyDeletionScheduled" }
+
+// CoParentAdded is published when a co-parent is added to an existing family. [§4.3]
+// Subscribers:
+//   - social:: shares family posts with new co-parent
+//   - notify:: welcomes new co-parent
+type CoParentAdded struct {
+	FamilyID   uuid.UUID
+	CoParentID uuid.UUID
+}
+
+func (CoParentAdded) EventName() string { return "iam.CoParentAdded" }
+
+// CoParentRemoved is published when a co-parent is removed from a family. [§4.3]
+// Subscribers:
+//   - social:: disassociates posts from removed co-parent
+type CoParentRemoved struct {
+	FamilyID   uuid.UUID
+	CoParentID uuid.UUID
+}
+
+func (CoParentRemoved) EventName() string { return "iam.CoParentRemoved" }
+
+// PrimaryParentTransferred is published when primary ownership is transferred to another parent. [§4.3]
+// Subscribers:
+//   - billing:: updates Hyperswitch customer email to new primary
+type PrimaryParentTransferred struct {
+	FamilyID      uuid.UUID
+	NewPrimaryID  uuid.UUID
+	PrevPrimaryID uuid.UUID
+}
+
+func (PrimaryParentTransferred) EventName() string { return "iam.PrimaryParentTransferred" }

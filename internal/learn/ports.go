@@ -209,6 +209,11 @@ type LearningService interface {
 	HandlePurchaseCompleted(ctx context.Context, familyID uuid.UUID, purchaseMetadata PurchaseMetadata) error
 	// HandleMethodologyConfigUpdated handles MethodologyConfigUpdated — invalidate tool cache.
 	HandleMethodologyConfigUpdated(ctx context.Context) error
+
+	// ─── Background Jobs ──────────────────────────────────────────────────
+	// SnapshotProgress computes and stores weekly progress snapshots for all active students.
+	// Runs as a scheduled background job (weekly, Sunday midnight UTC). [06-learn §12.3]
+	SnapshotProgress(ctx context.Context) error
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

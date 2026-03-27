@@ -86,6 +86,20 @@ func (r *PgRoadmapItemRepository) BatchCreate(ctx context.Context, items []Roadm
 	return nil
 }
 
+func (r *PgRoadmapItemRepository) MarkComplete(ctx context.Context, itemID, familyID uuid.UUID) error {
+	result := r.db.WithContext(ctx).
+		Model(&RoadmapItem{}).
+		Where("id = ? AND family_id = ?", itemID, familyID).
+		Update("is_completed", true)
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return &OnboardError{Err: ErrRoadmapItemNotFound}
+	}
+	return nil
+}
+
 // ─── Starter Recommendation Repository ───────────────────────────────────────
 
 // PgStarterRecommendationRepository implements StarterRecommendationRepository.

@@ -450,6 +450,62 @@ func (s *onboardingServiceImpl) SkipWizard(ctx context.Context, scope *shared.Fa
 	return toProgressResponse(progress), nil
 }
 
+// ─── CompleteRoadmapItem ──────────────────────────────────────────────────────
+
+// CompleteRoadmapItem marks a roadmap item as completed. [04-onboard Phase 2]
+func (s *onboardingServiceImpl) CompleteRoadmapItem(ctx context.Context, scope *shared.FamilyScope, itemID uuid.UUID) error {
+	return shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		repo := &PgRoadmapItemRepository{db: tx}
+		return repo.MarkComplete(ctx, itemID, scope.FamilyID())
+	})
+}
+
+// ─── RestartOnboarding ───────────────────────────────────────────────────────
+
+// RestartOnboarding resets the wizard to in-progress state and clears all materialized guidance. [04-onboard Phase 2]
+// Completed steps, methodology path, and quiz share ID are all cleared.
+func (s *onboardingServiceImpl) RestartOnboarding(ctx context.Context, scope *shared.FamilyScope) (*WizardProgressResponse, error) {
+	var progress *WizardProgress
+	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+		wizardRepo := &PgWizardProgressRepository{db: tx}
+		roadmapRepo := &PgRoadmapItemRepository{db: tx}
+		recRepo := &PgStarterRecommendationRepository{db: tx}
+		commRepo := &PgCommunitySuggestionRepository{db: tx}
+
+		var findErr error
+		progress, findErr = wizardRepo.FindByFamilyID(ctx, scope.FamilyID())
+		if findErr != nil {
+			return findErr
+		}
+
+		// Reset wizard to initial state.
+		now := time.Now()
+		progress.Status = StatusInProgress
+		progress.CurrentStep = wizardStepOrder[0]
+		progress.CompletedSteps = WizardStepArray{}
+		progress.CompletedAt = nil
+		progress.MethodologyPath = nil
+		progress.QuizShareID = nil
+		progress.UpdatedAt = now
+		if err := wizardRepo.Update(ctx, progress); err != nil {
+			return err
+		}
+
+		// Delete materialized guidance — will be regenerated when methodology is re-selected.
+		if err := roadmapRepo.DeleteByFamilyID(ctx, scope.FamilyID()); err != nil {
+			return err
+		}
+		if err := recRepo.DeleteByFamilyID(ctx, scope.FamilyID()); err != nil {
+			return err
+		}
+		return commRepo.DeleteByFamilyID(ctx, scope.FamilyID())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return toProgressResponse(progress), nil
+}
+
 // ─── InitializeWizard (Event-Driven) ─────────────────────────────────────────
 
 func (s *onboardingServiceImpl) InitializeWizard(ctx context.Context, familyID uuid.UUID) error {

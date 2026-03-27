@@ -7,17 +7,19 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 // Handler holds the billing HTTP handler dependencies.
 type Handler struct {
 	svc           BillingService
 	webhookSecret string
+	db            *gorm.DB
 }
 
 // NewHandler creates a new billing Handler.
-func NewHandler(svc BillingService, webhookSecret string) *Handler {
-	return &Handler{svc: svc, webhookSecret: webhookSecret}
+func NewHandler(svc BillingService, webhookSecret string, db *gorm.DB) *Handler {
+	return &Handler{svc: svc, webhookSecret: webhookSecret, db: db}
 }
 
 // Register registers all billing routes.
@@ -302,7 +304,7 @@ func (h *Handler) listInvoices(c echo.Context) error {
 
 // listPayouts handles GET /v1/billing/payouts. [10-billing §4.2]
 func (h *Handler) listPayouts(c echo.Context) error {
-	creator, err := middleware.RequireCreator(c)
+	creator, err := middleware.RequireCreator(c, h.db)
 	if err != nil {
 		return err
 	}

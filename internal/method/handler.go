@@ -34,6 +34,8 @@ func (h *Handler) Register(publicGroup, authGroup *echo.Group) {
 	authGroup.GET("/families/tools", h.getFamilyTools)
 	authGroup.GET("/families/students/:id/tools", h.getStudentTools)
 	authGroup.PATCH("/families/methodology", h.updateFamilyMethodology)
+	authGroup.GET("/families/methodology-context", h.getMethodologyContext)
+	authGroup.PATCH("/families/students/:id/methodology", h.updateStudentMethodology)
 }
 
 // ─── Public Handlers ─────────────────────────────────────────────────────────
@@ -161,6 +163,61 @@ func (h *Handler) updateFamilyMethodology(c echo.Context) error {
 		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.UpdateFamilyMethodology(c.Request().Context(), &scope, cmd)
+	if err != nil {
+		return mapMethodError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// getMethodologyContext handles GET /v1/families/methodology-context.
+//
+// @Summary     Get full methodology context for the family dashboard
+// @Tags        families
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} MethodologyContext
+// @Failure     401 {object} shared.AppError
+// @Router      /families/methodology-context [get]
+func (h *Handler) getMethodologyContext(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	resp, err := h.svc.GetMethodologyContext(c.Request().Context(), &scope)
+	if err != nil {
+		return mapMethodError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// updateStudentMethodology handles PATCH /v1/families/students/:id/methodology.
+//
+// @Summary     Set or clear a student's methodology override
+// @Tags        families
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id   path     string                       true  "Student ID"
+// @Param       body body     UpdateStudentMethodologyCommand true "Methodology override"
+// @Success     200  {object} MethodologySelectionResponse
+// @Failure     400  {object} shared.AppError
+// @Failure     401  {object} shared.AppError
+// @Failure     404  {object} shared.AppError
+// @Router      /families/students/{id}/methodology [patch]
+func (h *Handler) updateStudentMethodology(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	studentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid student ID")
+	}
+	var cmd UpdateStudentMethodologyCommand
+	if err := c.Bind(&cmd); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	resp, err := h.svc.UpdateStudentMethodology(c.Request().Context(), &scope, studentID, cmd)
 	if err != nil {
 		return mapMethodError(err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
@@ -75,8 +76,9 @@ func NewFamilyDeletionScheduledHandler(svc MarketplaceService) *FamilyDeletionSc
 }
 
 func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
-	// When iam.FamilyDeletionScheduled is defined, cast event and call
-	// h.svc.HandleFamilyDeletionScheduled(ctx, event.FamilyID).
-	slog.Warn("mkt.FamilyDeletionScheduledHandler: iam.FamilyDeletionScheduled event not yet defined, event ignored")
-	return nil
+	e, ok := event.(iam.FamilyDeletionScheduled)
+	if !ok {
+		return fmt.Errorf("mkt.FamilyDeletionScheduledHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFamilyDeletionScheduled(ctx, e.FamilyID)
 }

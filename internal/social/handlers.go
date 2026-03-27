@@ -13,13 +13,14 @@ import (
 
 // Handler holds the social HTTP handler dependencies.
 type Handler struct {
-	svc    SocialService
-	pubsub shared.PubSub
+	svc            SocialService
+	pubsub         shared.PubSub
+	allowedOrigins []string
 }
 
 // NewHandler creates a new social Handler.
-func NewHandler(svc SocialService, pubsub shared.PubSub) *Handler {
-	return &Handler{svc: svc, pubsub: pubsub}
+func NewHandler(svc SocialService, pubsub shared.PubSub, allowedOrigins []string) *Handler {
+	return &Handler{svc: svc, pubsub: pubsub, allowedOrigins: allowedOrigins}
 }
 
 // Register registers all social routes on the authenticated route group.
@@ -103,7 +104,7 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	soc.GET("/discover/groups",   h.discoverGroups)
 
 	// WebSocket
-	soc.GET("/ws", handleWebSocket(h.pubsub))
+	soc.GET("/ws", handleWebSocket(h.pubsub, h.allowedOrigins))
 }
 
 // ─── Profile Handlers ───────────────────────────────────────────────────────

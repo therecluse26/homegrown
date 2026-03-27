@@ -209,12 +209,11 @@ func handleGeneratePortfolioTask(
 			studentName = "Student"
 		}
 
-		// TODO: Render PDF via gofpdf (cover page, TOC, body sections, summaries).
-		// For now, generate a placeholder.
-		_ = items
-		_ = attendanceSummary
-		_ = studentName
-		pdfBytes := []byte("placeholder PDF — gofpdf integration pending")
+		// Render PDF.
+		pdfBytes, err := renderPortfolioPDF(&portfolio, items, studentName, attendanceSummary)
+		if err != nil {
+			return markPortfolioFailed(portfolioRepo, ctx, task.PortfolioID, portfolio.RetryCount, err)
+		}
 
 		// Upload PDF to media::.
 		filename := fmt.Sprintf("portfolio_%s.pdf", task.PortfolioID)
@@ -327,10 +326,11 @@ func handleGenerateTranscriptTask(
 			studentName = transcript.StudentName
 		}
 
-		// TODO: Render PDF via gofpdf (standard transcript format).
-		_ = studentName
-		_ = courses
-		pdfBytes := []byte("placeholder PDF — gofpdf integration pending")
+		// Render PDF.
+		pdfBytes, err := renderTranscriptPDF(&transcript, courses, studentName, unweightedGPA, weightedGPA)
+		if err != nil {
+			return fmt.Errorf("comply: generate_transcript render PDF: %w", err)
+		}
 
 		// Upload PDF to media::.
 		filename := fmt.Sprintf("transcript_%s.pdf", task.TranscriptID)

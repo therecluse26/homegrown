@@ -623,13 +623,17 @@ func TestWizardStepArray_ScanNil(t *testing.T) {
 // InitializeWizard uses BypassRLSTransaction (requires real DB).
 // This test verifies the initial WizardProgress struct construction.
 func TestInitializeWizard_DefaultState(t *testing.T) {
+	fid := testFamilyID()
 	p := &WizardProgress{
-		FamilyID:       testFamilyID(),
+		FamilyID:       fid,
 		Status:         StatusInProgress,
 		CurrentStep:    StepFamilyProfile,
 		CompletedSteps: WizardStepArray{},
 	}
 
+	if p.FamilyID != fid {
+		t.Errorf("want family_id=%s, got %s", fid, p.FamilyID)
+	}
 	if p.Status != StatusInProgress {
 		t.Errorf("want status=in_progress, got %s", p.Status)
 	}

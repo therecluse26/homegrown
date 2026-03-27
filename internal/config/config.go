@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -230,11 +231,18 @@ func LoadConfig() (*AppConfig, error) {
 	objectStorageBucket := envOrDefault("OBJECT_STORAGE_BUCKET", "")
 	objectStorageAccessKeyID := envOrDefault("OBJECT_STORAGE_ACCESS_KEY_ID", "")
 	objectStorageSecretAccessKey := envOrDefault("OBJECT_STORAGE_SECRET_ACCESS_KEY", "")
-	objectStoragePublicURL := envOrDefault("OBJECT_STORAGE_PUBLIC_URL", "https://media.localhost")
+	objectStoragePublicURL := os.Getenv("OBJECT_STORAGE_PUBLIC_URL")
+	if objectStoragePublicURL == "" {
+		slog.Warn("OBJECT_STORAGE_PUBLIC_URL not set; media URLs will be relative — set this env var in production")
+		objectStoragePublicURL = "https://media.localhost"
+	}
 
 	// Optional Postmark config (omit to disable email)
 	postmarkServerToken := envOrDefault("POSTMARK_SERVER_TOKEN", "")
-	unsubscribeSecret := envOrDefault("UNSUBSCRIBE_SECRET", "notify-dev-secret")
+	unsubscribeSecret := os.Getenv("UNSUBSCRIBE_SECRET")
+	if unsubscribeSecret == "" {
+		slog.Warn("UNSUBSCRIBE_SECRET not set; email unsubscribe tokens will fail — set this env var in production")
+	}
 
 	// Optional recs anonymization secret (omit to disable anonymization task)
 	recsAnonymizationSecret := envOrDefault("RECS_ANONYMIZATION_SECRET", "")

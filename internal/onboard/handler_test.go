@@ -91,6 +91,12 @@ func (m *mockOnboardingService) CompleteWizard(ctx context.Context, scope *share
 func (m *mockOnboardingService) SkipWizard(ctx context.Context, scope *shared.FamilyScope) (*WizardProgressResponse, error) {
 	return m.skipWizardFn(ctx, scope)
 }
+func (m *mockOnboardingService) CompleteRoadmapItem(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) error {
+	return nil
+}
+func (m *mockOnboardingService) RestartOnboarding(_ context.Context, _ *shared.FamilyScope) (*WizardProgressResponse, error) {
+	return &WizardProgressResponse{Status: StatusInProgress, CompletedSteps: []WizardStep{}}, nil
+}
 func (m *mockOnboardingService) InitializeWizard(_ context.Context, _ uuid.UUID) error { return nil }
 func (m *mockOnboardingService) HandleMethodologyChanged(_ context.Context, _ uuid.UUID, _ string, _ []string) error {
 	return nil

@@ -74,6 +74,15 @@ type IamService interface {
 	// Validates consent method. Publishes CoppaConsentGranted on Consented/ReVerified transition.
 	// Phase 1: credit card micro-charge verification is stubbed (no Stripe call). [§9.3]
 	SubmitCoppaConsent(ctx context.Context, scope *shared.FamilyScope, auth *shared.AuthContext, cmd CoppaConsentCommand) (*ConsentStatusResponse, error)
+
+	// RevokeFamilySessions revokes all Kratos sessions for every parent in a family.
+	// Used by lifecycle:: during account deletion and safety:: on account suspension.
+	// [15-data-lifecycle §12, 11-safety §7.3]
+	RevokeFamilySessions(ctx context.Context, familyID uuid.UUID) error
+
+	// GetStudentName returns the display_name for a student by ID.
+	// Bypasses RLS — used by background jobs (comply PDF, plan calendar) that have no family scope.
+	GetStudentName(ctx context.Context, studentID uuid.UUID) (string, error)
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────
@@ -170,4 +179,27 @@ type KratosAdapter interface {
 	// RevokeSessions revokes all active sessions for an identity.
 	// Used when removing a co-parent (Phase 2).
 	RevokeSessions(ctx context.Context, identityID uuid.UUID) error
+
+	// ListSessionsForIdentity returns all active sessions for a Kratos identity.
+	// Used by the lifecycle domain for session management. [15-data-lifecycle §12]
+	ListSessionsForIdentity(ctx context.Context, identityID uuid.UUID) ([]KratosAdminSession, error)
+
+	// RevokeSpecificSession revokes a single Kratos session by session ID.
+	// Used by the lifecycle domain when a parent revokes a specific session. [15-data-lifecycle §12]
+	RevokeSpecificSession(ctx context.Context, sessionID string) error
+
+	// InitiateAccountRecovery sends a Kratos recovery email to the given address.
+	// Email enumeration is prevented by the caller. [15-data-lifecycle §13]
+	InitiateAccountRecovery(ctx context.Context, email string) error
+}
+
+// ─── Cross-Domain Consumer Interfaces ────────────────────────────────────────
+
+// BillingServiceForIam is the narrow billing capability consumed by iam::.
+// Defined here per consumer-interface pattern [ARCH §4.3]. Implemented by a
+// function adapter in cmd/server/main.go over billing.BillingService.
+type BillingServiceForIam interface {
+	// VerifyCreditCardMicroCharge charges $0.50 and immediately refunds it to verify
+	// parental identity for COPPA credit-card consent. [§9.3, 10-billing §13]
+	VerifyCreditCardMicroCharge(ctx context.Context, scope *shared.FamilyScope, paymentMethodID string) error
 }

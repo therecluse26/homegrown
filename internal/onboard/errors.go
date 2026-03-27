@@ -24,6 +24,7 @@ var (
 	ErrNoRecommendations        = errors.New("no recommendations available")
 	ErrNoCommunity              = errors.New("no community suggestions available")
 	ErrInvalidMethodologySlug   = errors.New("invalid methodology slug")
+	ErrRoadmapItemNotFound      = errors.New("roadmap item not found")
 )
 
 // OnboardError wraps a sentinel error with optional context fields. [CODING §2.2]
@@ -76,6 +77,8 @@ func (e *OnboardError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "no_community_suggestions", Message: "No community suggestions available yet — complete methodology selection first", StatusCode: http.StatusNotFound}
 	case errors.Is(e.Err, ErrInvalidMethodologySlug):
 		return &shared.AppError{Code: "invalid_methodology_slug", Message: "One or more methodology slugs are invalid", StatusCode: http.StatusUnprocessableEntity}
+	case errors.Is(e.Err, ErrRoadmapItemNotFound):
+		return &shared.AppError{Code: "roadmap_item_not_found", Message: "Roadmap item not found", StatusCode: http.StatusNotFound}
 	default:
 		return shared.ErrInternal(e)
 	}

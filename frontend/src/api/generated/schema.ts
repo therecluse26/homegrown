@@ -2628,6 +2628,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discovery/content/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a published content page by slug */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Content page slug */
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["discover.ContentPage"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discovery/quiz": {
         parameters: {
             query?: never;
@@ -3066,6 +3114,51 @@ export interface paths {
         };
         trace?: never;
     };
+    "/families/methodology-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get full methodology context for the family dashboard */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["method.MethodologyContext"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/families/profile": {
         parameters: {
             query?: never;
@@ -3355,6 +3448,77 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/families/students/{id}/methodology": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set or clear a student's methodology override */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Methodology override */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["method.UpdateStudentMethodologyCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["method.MethodologySelectionResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
                     };
                 };
             };
@@ -4260,6 +4424,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/onboarding/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restart the onboarding wizard */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["onboard.WizardProgressResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/onboarding/roadmap": {
         parameters: {
             query?: never;
@@ -4312,6 +4530,61 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/onboarding/roadmap/{item_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark a roadmap item as completed */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Roadmap item ID */
+                    item_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["shared.ErrorResponse"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/onboarding/skip": {
@@ -5917,14 +6190,14 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Not Implemented */
-                501: {
+                /** @description OK */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": {
-                            [key: string]: string;
+                            [key: string]: unknown[];
                         };
                     };
                 };
@@ -6297,6 +6570,19 @@ export interface components {
             /** @enum {string} */
             level: "regular" | "honors" | "ap";
         };
+        "discover.ContentPage": {
+            category?: string;
+            content?: string;
+            createdAt?: string;
+            displayOrder?: number;
+            id?: string;
+            metaDescription?: string;
+            metaTitle?: string;
+            slug?: string;
+            status?: string;
+            title?: string;
+            updatedAt?: string;
+        };
         "discover.MethodologyRecommendation": {
             explanation?: string;
             methodology_name?: string;
@@ -6444,6 +6730,12 @@ export interface components {
             sort_order?: number;
             tier?: string;
         };
+        "method.MethodologyContext": {
+            mastery_level?: string;
+            primary?: components["schemas"]["method.MethodologySummaryResponse"];
+            secondary?: components["schemas"]["method.MethodologySummaryResponse"][];
+            terminology?: Record<string, never>;
+        };
         "method.MethodologyDetailResponse": {
             community_config?: Record<string, never>;
             display_name?: string;
@@ -6471,6 +6763,9 @@ export interface components {
         "method.UpdateMethodologyCommand": {
             primary_methodology_slug: components["schemas"]["method.MethodologyID"];
             secondary_methodology_slugs?: components["schemas"]["method.MethodologyID"][];
+        };
+        "method.UpdateStudentMethodologyCommand": {
+            methodology_override_slug?: components["schemas"]["method.MethodologyID"];
         };
         "onboard.AddChildCommand": {
             birth_year?: number;

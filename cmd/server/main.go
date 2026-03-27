@@ -39,6 +39,7 @@ import (
 	notifyadapters "github.com/homegrown-academy/homegrown-academy/internal/notify/adapters"
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/comply"
+	"github.com/homegrown-academy/homegrown-academy/internal/lifecycle"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/plan"
 	"github.com/homegrown-academy/homegrown-academy/internal/recs"
@@ -203,6 +204,7 @@ func main() {
 	quizDefRepo := discover.NewPgQuizDefinitionRepository(db)
 	quizResRepo := discover.NewPgQuizResultRepository(db)
 	discStateRepo := discover.NewPgStateGuideRepository(db)
+	discContentRepo := discover.NewPgContentPageRepository(db)
 
 	discoverMethod := discover.NewMethodAdapter(
 		func(ctx context.Context, slug string) (string, error) {
@@ -218,7 +220,7 @@ func main() {
 			return slug, nil
 		},
 	)
-	discoverSvc := discover.NewDiscoveryService(quizDefRepo, quizResRepo, discStateRepo, discoverMethod)
+	discoverSvc := discover.NewDiscoveryService(quizDefRepo, quizResRepo, discStateRepo, discContentRepo, discoverMethod)
 
 	// ── Step 7d: Wire onboard:: domain ──────────────────────────────────────────
 	// onboard:: orchestrates iam::, method::, and discover:: through consumer-defined
@@ -467,8 +469,8 @@ func main() {
 	// Register social:: event subscriptions
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyCreated{}), social.NewFamilyCreatedHandler(socialSvc))
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.CoParentRemoved{}), social.NewCoParentRemovedHandler(socialSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
+	eventBus.Subscribe(reflect.TypeOf(learn.MilestoneAchieved{}), social.NewMilestoneAchievedHandler(socialSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), social.NewFamilyDeletionScheduledHandler(socialSvc))
 
 	// ── Step 7e½: Wire media:: domain ──────────────────────────────────────────
 	// media:: is the shared file upload infrastructure — all domains that handle
@@ -538,7 +540,7 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(method.MethodologyConfigUpdated{}), mkt.NewMethodologyConfigUpdatedHandler(cache))
 	// Handler structs exist; subscriptions deferred until source event types are defined:
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), mkt.NewContentFlaggedHandler(mktSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), mkt.NewFamilyDeletionScheduledHandler(mktSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), mkt.NewFamilyDeletionScheduledHandler(mktSvc))
 
 	// ── Step 7g: Wire learn:: domain ───────────────────────────────────────────
 	// learn:: consumes iam:: (student verification), method:: (tool resolution),
@@ -572,17 +574,7 @@ func main() {
 			}
 			return student != nil, nil
 		},
-		// GetStudentName — construct FamilyScope via RLS bypass to look up display name
-		func(ctx context.Context, studentID uuid.UUID) (string, error) {
-			var displayName string
-			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
-				return tx.Table("iam_students").Select("display_name").Where("id = ?", studentID).Scan(&displayName).Error
-			})
-			if err != nil || displayName == "" {
-				return studentID.String(), nil // graceful fallback
-			}
-			return displayName, nil
-		},
+		iamSvc.GetStudentName,
 	)
 
 	methodForLearn := learn.NewMethodAdapter(
@@ -660,8 +652,8 @@ func main() {
 	// Register learn:: event subscriptions
 	eventBus.Subscribe(reflect.TypeOf(iam.StudentCreated{}), learn.NewStudentCreatedHandler(learnSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.StudentDeleted{}), learn.NewStudentDeletedHandler(learnSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), learn.NewFamilyDeletionScheduledHandler(learnSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), learn.NewPurchaseCompletedHandler(learnSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), learn.NewFamilyDeletionScheduledHandler(learnSvc))
+	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), learn.NewPurchaseCompletedHandler(learnSvc))
 
 	// ── Step 7h: Wire notify:: domain ───────────────────────────────────────────
 	// notify:: is the cross-cutting event-driven dispatch system. It receives domain
@@ -671,9 +663,11 @@ func main() {
 	notifPrefRepo := notify.NewPgPreferenceRepository(db)
 	notifDigestRepo := notify.NewPgDigestRepository(db)
 
-	// Email adapter: use Postmark in production, noop in dev/test.
+	// Email adapter: use Postmark when token is set, noop otherwise (dev/test). [08-notify §7]
 	var emailAdapter notify.EmailAdapter = notifyadapters.NoopEmailAdapter{}
-	// TODO: Wire PostmarkEmailAdapter when cfg.PostmarkServerToken != ""
+	if cfg.PostmarkServerToken != "" {
+		emailAdapter = notifyadapters.NewPostmarkEmailAdapter(cfg.PostmarkServerToken)
+	}
 
 	// IAM adapter for notify: bridges iam.IamService → notify.IamServiceForNotify.
 	iamForNotify := notify.NewIamAdapter(
@@ -702,6 +696,18 @@ func main() {
 			var familyID uuid.UUID
 			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
 				return tx.Table("iam_parents").Select("family_id").Where("id = ?", parentID).Scan(&familyID).Error
+			})
+			return familyID, err
+		},
+		// GetFamilyIDForCreator — resolves creator → parent → family for PayoutCompleted handler
+		func(ctx context.Context, creatorID uuid.UUID) (uuid.UUID, error) {
+			var familyID uuid.UUID
+			err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Raw(`
+					SELECT p.family_id FROM mkt_creators c
+					JOIN iam_parents p ON p.id = c.parent_id
+					WHERE c.id = ?
+				`, creatorID).Scan(&familyID).Error
 			})
 			return familyID, err
 		},
@@ -789,15 +795,20 @@ func main() {
 		eventBus, billCfg,
 	)
 
+	// Inject billing adapter into iam:: for COPPA credit-card micro-charge. [§9.3]
+	iamSvc.SetBillingService(iamBillingAdapter{svc: billingSvc})
+
 	// Register billing:: event subscriptions
 	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), billing.NewPurchaseCompletedHandler(billingSvc))
 	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseRefunded{}), billing.NewPurchaseRefundedHandler(billingSvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), billing.NewFamilyDeletionScheduledHandler(billingSvc))
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), billing.NewFamilyDeletionScheduledHandler(billingSvc))
 	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(iam.PrimaryParentTransferred{}), billing.NewPrimaryParentTransferredHandler(billingSvc))
 
 	// Now that billing:: is wired, register billing event handlers in notify::
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCreated{}), notify.NewSubscriptionCreatedHandler(notifySvc))
-	// DEFERRED: eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), notify.NewSubscriptionCancelledHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCreated{}), notify.NewSubscriptionCreatedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionChanged{}), notify.NewSubscriptionChangedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), notify.NewSubscriptionCancelledHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(billing.PayoutCompleted{}), notify.NewPayoutCompletedHandler(notifySvc))
 
 	// ── Step 7j: Wire safety:: domain ──────────────────────────────────────────
 	// safety:: is the trust & safety domain — content moderation, CSAM detection,
@@ -810,9 +821,10 @@ func main() {
 	safetyNcmecRepo := safety.NewPgNcmecReportRepository(db)
 	safetyBotRepo := safety.NewPgBotSignalRepository(db)
 
-	// IAM adapter for safety: bridges iam:: → safety::IamServiceForSafety
-	var iamForSafety safety.IamServiceForSafety = safety.NoopIamServiceForSafety{}
-	// FUTURE: wire real IamServiceForSafety when iam:: exposes RevokeSessions
+	// IAM adapter for safety: bridges iam:: → safety::IamServiceForSafety. [CRIT-SAFETY]
+	iamForSafety := safety.NewIamAdapter(func(ctx context.Context, familyID uuid.UUID) error {
+		return iamSvc.RevokeFamilySessions(ctx, familyID)
+	})
 
 	safetyCfg := safety.DefaultSafetyConfig()
 	textScanner := safety.NewTextScanner(safetyCfg)
@@ -916,19 +928,7 @@ func main() {
 			}
 			return student != nil, nil
 		},
-		func(ctx context.Context, studentID uuid.UUID) (string, error) {
-			// Cross-family read for background jobs — look up student name via raw DB.
-			type nameRow struct {
-				DisplayName string `gorm:"column:display_name"`
-			}
-			var row nameRow
-			if err := db.WithContext(ctx).Raw(
-				`SELECT display_name FROM iam_students WHERE id = ?`, studentID,
-			).Scan(&row).Error; err != nil {
-				return "", err
-			}
-			return row.DisplayName, nil
-		},
+		iamSvc.GetStudentName,
 	)
 
 	// Learn adapter for comply: stub — portfolio item data loading deferred until PDF rendering. [14-comply §9.2]
@@ -1023,17 +1023,113 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), comply.NewFamilyDeletionScheduledHandler(complySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), comply.NewSubscriptionCancelledHandler(complySvc))
 
+	// ── Step 7m.5: Wire lifecycle:: domain ───────────────────────────────────────
+	// lifecycle:: is the GDPR/COPPA data lifecycle domain (export, deletion, recovery,
+	// session management). [15-data-lifecycle §1]
+	lifecycleExportRepo := lifecycle.NewPgExportRequestRepository(db)
+	lifecycleDeletionRepo := lifecycle.NewPgDeletionRequestRepository(db)
+	lifecycleRecoveryRepo := lifecycle.NewPgRecoveryRequestRepository(db)
+
+	// IamServiceForLifecycle: bridges lifecycle → IAM/Kratos via function adapter.
+	iamForLifecycle := lifecycle.NewIamAdapter(
+		// InitiateRecoveryFlow: trigger Kratos email recovery (enum-prevention: errors only logged).
+		func(ctx context.Context, email string) error {
+			return kratosAdapter.InitiateAccountRecovery(ctx, email)
+		},
+		// ListSessions: look up identity ID from parentID, then list Kratos sessions.
+		func(ctx context.Context, parentID uuid.UUID) ([]lifecycle.SessionInfo, error) {
+			var identityID uuid.UUID
+			if err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_parents").
+					Select("kratos_identity_id").
+					Where("id = ?", parentID).
+					Scan(&identityID).Error
+			}); err != nil {
+				return nil, err
+			}
+			kratosSessions, err := kratosAdapter.ListSessionsForIdentity(ctx, identityID)
+			if err != nil {
+				return nil, err
+			}
+			sessions := make([]lifecycle.SessionInfo, 0, len(kratosSessions))
+			for _, ks := range kratosSessions {
+				sessions = append(sessions, lifecycle.SessionInfo{
+					SessionID:  ks.SessionID,
+					UserAgent:  ks.UserAgent,
+					IPAddress:  ks.IPAddress,
+					LastActive: ks.LastActive,
+				})
+			}
+			return sessions, nil
+		},
+		// RevokeSession: revoke a specific Kratos session by ID.
+		func(ctx context.Context, sessionID string) error {
+			return kratosAdapter.RevokeSpecificSession(ctx, sessionID)
+		},
+		// RevokeAllSessions: list sessions for identity, revoke all except current.
+		func(ctx context.Context, parentID uuid.UUID, currentSessionID string) (uint32, error) {
+			var identityID uuid.UUID
+			if err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_parents").
+					Select("kratos_identity_id").
+					Where("id = ?", parentID).
+					Scan(&identityID).Error
+			}); err != nil {
+				return 0, err
+			}
+			kratosSession, err := kratosAdapter.ListSessionsForIdentity(ctx, identityID)
+			if err != nil {
+				return 0, err
+			}
+			var count uint32
+			for _, ks := range kratosSession {
+				if ks.SessionID == currentSessionID {
+					continue
+				}
+				if revokeErr := kratosAdapter.RevokeSpecificSession(ctx, ks.SessionID); revokeErr != nil {
+					slog.Error("lifecycle: revoke session", "session_id", ks.SessionID, "error", revokeErr)
+					continue
+				}
+				count++
+			}
+			return count, nil
+		},
+		// RevokeFamilySessions: delegate to iamSvc which iterates all parent identities.
+		func(ctx context.Context, familyID uuid.UUID) error {
+			return iamSvc.RevokeFamilySessions(ctx, familyID)
+		},
+	)
+
+	// BillingServiceForLifecycle: cancels all active subscriptions for a family during deletion.
+	billingForLifecycle := lifecycle.NewBillingAdapter(
+		func(ctx context.Context, familyID uuid.UUID) error {
+			scope := shared.NewFamilyScopeFromID(familyID)
+			_, err := billingSvc.CancelSubscription(ctx, scope)
+			return err
+		},
+	)
+
+	lifecycleSvc := lifecycle.NewLifecycleService(
+		lifecycleExportRepo, lifecycleDeletionRepo, lifecycleRecoveryRepo,
+		iamForLifecycle, billingForLifecycle,
+		eventBus, jobs,
+		[]lifecycle.ExportHandler{},   // domain export handlers — registered at startup in Phase 2
+		[]lifecycle.DeletionHandler{}, // domain deletion handlers — registered at startup in Phase 2
+	)
+
+	// Subscribe lifecycle to family deletion events.
+	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), lifecycle.NewFamilyDeletionScheduledHandler(lifecycleSvc))
+
 	// ── Step 7n: Wire admin:: domain ────────────────────────────────────────────
 	adminFlagRepo := admin.NewPgFeatureFlagRepository(db)
 	adminAuditRepo := admin.NewPgAuditLogRepository(db)
 
-	// Stub cross-domain adapters for admin — full implementations deferred until
-	// other domains expose the required service methods. [16-admin §14]
-	iamForAdmin := &adminIamStub{}
-	safetyForAdmin := &adminSafetyStub{}
-	billingForAdmin := &adminBillingStub{}
-	methodForAdmin := &adminMethodStub{}
-	lifecycleForAdmin := &adminLifecycleStub{}
+	// Wire real cross-domain adapters for admin. [16-admin §14]
+	iamForAdmin := &adminIamAdapter{db: db}
+	safetyForAdmin := &adminSafetyAdapter{db: db, svc: safetySvc}
+	billingForAdmin := &adminBillingAdapter{svc: billingSvc}
+	methodForAdmin := &adminMethodAdapter{db: db}
+	lifecycleForAdmin := &adminLifecycleAdapter{db: db}
 	healthForAdmin := &adminHealthStub{}
 	jobsForAdmin := &adminJobInspectorStub{}
 
@@ -1052,8 +1148,71 @@ func main() {
 	planRepo := plan.NewPgScheduleItemRepository(db)
 	planTemplateRepo := plan.NewPgScheduleTemplateRepository(db)
 
-	iamForPlan := &planIamStub{}
-	learnForPlan := &planLearnStub{}
+	iamForPlan := plan.NewIamAdapter(
+		func(ctx context.Context, studentID, familyID uuid.UUID) (bool, error) {
+			scope := shared.NewFamilyScopeFromID(familyID)
+			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
+			if err != nil || student == nil {
+				return false, err
+			}
+			return true, nil
+		},
+		iamSvc.GetStudentName,
+	)
+	learnForPlan := plan.NewLearnAdapter(
+		// ListActivitiesForCalendar: query learn:: activity logs by date range.
+		func(ctx context.Context, auth *shared.AuthContext, scope *shared.FamilyScope, start, end time.Time, studentID *uuid.UUID) ([]plan.ActivitySummary, error) {
+			if studentID == nil {
+				return []plan.ActivitySummary{}, nil // plan calendar requires a student filter
+			}
+			resp, err := learnSvc.ListActivityLogs(ctx, scope, *studentID, learn.ActivityLogQuery{
+				DateFrom: &start,
+				DateTo:   &end,
+				Limit:    500,
+			})
+			if err != nil {
+				return nil, err
+			}
+			summaries := make([]plan.ActivitySummary, 0, len(resp.Data))
+			for _, a := range resp.Data {
+				sid := a.StudentID
+				s := plan.ActivitySummary{
+					ID:        a.ID,
+					Title:     a.Title,
+					Date:      a.ActivityDate,
+					StudentID: &sid,
+					Tags:      a.SubjectTags,
+				}
+				if len(a.SubjectTags) > 0 {
+					s.Subject = &a.SubjectTags[0]
+				}
+				summaries = append(summaries, s)
+			}
+			return summaries, nil
+		},
+		// LogActivity: map plan's flat args to learn's LogActivityCommand.
+		func(ctx context.Context, _ *shared.AuthContext, scope *shared.FamilyScope, title string, date time.Time, durationMinutes *int, studentID *uuid.UUID, description *string, tags []string) (uuid.UUID, error) {
+			if studentID == nil {
+				return uuid.Nil, fmt.Errorf("plan: studentID required for LogActivity")
+			}
+			var dur *int16
+			if durationMinutes != nil {
+				d := int16(*durationMinutes)
+				dur = &d
+			}
+			resp, err := learnSvc.LogActivity(ctx, scope, *studentID, learn.LogActivityCommand{
+				Title:           title,
+				Description:     description,
+				SubjectTags:     tags,
+				DurationMinutes: dur,
+				ActivityDate:    &date,
+			})
+			if err != nil {
+				return uuid.Nil, err
+			}
+			return resp.ID, nil
+		},
+	)
 	complyForPlan := &planComplyStub{}
 	socialForPlan := &planSocialStub{}
 
@@ -1089,10 +1248,11 @@ func main() {
 		Safety:      safetySvc,
 		Search:      searchSvc,
 		Recs:        recsSvc,
-		Comply:      complySvc,
-		Admin:       adminSvc,
-		Plan:        planSvc,
-		PubSub:      pubsub,
+		Comply:    complySvc,
+		Lifecycle: lifecycleSvc,
+		Admin:     adminSvc,
+		Plan:      planSvc,
+		PubSub:    pubsub,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────
@@ -1106,8 +1266,9 @@ func main() {
 	}
 	social.RegisterFeedWorkers(worker, feedStore, socFriendshipRepo, socPostRepo)
 	media.RegisterMediaWorkers(worker, mediaUploadRepo, mediaProcJobRepo, mediaTranscodeRepo, mediaStorage, mediaSafety, eventBus, jobs)
+	learn.RegisterLearnWorkers(worker, learnSvc)
 	notify.RegisterTaskHandlers(worker, emailAdapter)
-	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, safety.NoopThornAdapter{}, jobs)
+	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, safety.LoggingThornAdapter{}, jobs)
 	recs.RegisterTaskHandlers(worker, db,
 		recSignalRepo, recRecRepo, recFeedbackRepo,
 		recPopularityRepo, recPrefRepo, recAnonRepo,
@@ -1124,6 +1285,20 @@ func main() {
 		}
 	}()
 
+	// ── Step 8.6: Start periodic job scheduler ────────────────────────────────────
+	scheduler, err := shared.CreateJobScheduler(cfg)
+	if err != nil {
+		slog.Warn("job scheduler unavailable (Redis not configured); periodic tasks disabled", "error", err)
+		scheduler = shared.NoopJobScheduler{}
+	}
+	// Weekly progress snapshots for all students — Sunday midnight UTC. [06-learn §12.3]
+	if schedErr := scheduler.Register("0 0 * * 0", learn.SnapshotProgressPayload{}); schedErr != nil {
+		slog.Error("failed to register learn:snapshot_progress schedule", "error", schedErr)
+	}
+	if schedErr := scheduler.Start(); schedErr != nil {
+		slog.Error("job scheduler failed to start", "error", schedErr)
+	}
+
 	// ── Step 9: Start server (non-blocking) ───────────────────────────────────────
 	addr := fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
 	go func() {
@@ -1137,6 +1312,7 @@ func main() {
 	gracefulShutdown(ctx, e, func() {
 		errReporter.Flush(5 * time.Second)
 		worker.Stop()
+		scheduler.Stop()
 		if closeErr := jobs.Close(); closeErr != nil {
 			slog.Error("job enqueuer close error", "error", closeErr)
 		}
@@ -1160,75 +1336,472 @@ type sentryReporter struct{}
 func (sentryReporter) CaptureException(err error) { sentry.CaptureException(err) }
 func (sentryReporter) Flush(d time.Duration) bool  { return sentry.Flush(d) }
 
-// ─── Admin Domain Adapter Stubs ─────────────────────────────────────────────
-// Stub implementations of admin:: consumer-defined interfaces. These delegate to
-// other domains' services but are initially stubbed until those domains expose the
-// required methods. [16-admin §14]
+// ─── Admin Domain Adapters ───────────────────────────────────────────────────
+// Real implementations of admin:: consumer-defined cross-domain interfaces.
+// All use BypassRLSTransaction — admin operations are platform-wide, not family-scoped.
+// [16-admin §14, CODING §BypassRLS]
 
-type adminIamStub struct{}
+// ─── adminIamAdapter ─────────────────────────────────────────────────────────
 
-func (adminIamStub) SearchUsers(_ context.Context, _ *admin.UserSearchQuery, _ *shared.PaginationParams) (*shared.PaginatedResponse[admin.AdminUserSummary], error) {
-	return &shared.PaginatedResponse[admin.AdminUserSummary]{Data: []admin.AdminUserSummary{}}, nil
-}
-func (adminIamStub) GetFamilyDetail(_ context.Context, _ uuid.UUID) (*admin.AdminFamilyInfo, error) {
-	return nil, fmt.Errorf("admin: IAM family detail adapter not yet implemented")
-}
-func (adminIamStub) GetParents(_ context.Context, _ uuid.UUID) ([]admin.AdminParentInfo, error) {
-	return []admin.AdminParentInfo{}, nil
-}
-func (adminIamStub) GetStudents(_ context.Context, _ uuid.UUID) ([]admin.AdminStudentInfo, error) {
-	return []admin.AdminStudentInfo{}, nil
+type adminIamAdapter struct{ db *gorm.DB }
+
+func (a *adminIamAdapter) SearchUsers(ctx context.Context, query *admin.UserSearchQuery, p *shared.PaginationParams) (*shared.PaginatedResponse[admin.AdminUserSummary], error) {
+	type row struct {
+		FamilyID           uuid.UUID  `gorm:"column:family_id"`
+		FamilyName         string     `gorm:"column:family_name"`
+		PrimaryParentEmail string     `gorm:"column:primary_parent_email"`
+		ParentCount        int32      `gorm:"column:parent_count"`
+		StudentCount       int32      `gorm:"column:student_count"`
+		SubscriptionTier   string     `gorm:"column:subscription_tier"`
+		AccountStatus      string     `gorm:"column:account_status"`
+		CreatedAt          time.Time  `gorm:"column:created_at"`
+	}
+	limit := p.EffectiveLimit()
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin cross-family query — RLS bypass required.
+		q := tx.Raw(`
+			SELECT
+				f.id AS family_id,
+				f.display_name AS family_name,
+				pp.email AS primary_parent_email,
+				(SELECT COUNT(*) FROM iam_parents WHERE family_id = f.id) AS parent_count,
+				(SELECT COUNT(*) FROM iam_students WHERE family_id = f.id) AS student_count,
+				f.subscription_tier,
+				COALESCE(sas.status, 'active') AS account_status,
+				f.created_at
+			FROM iam_families f
+			JOIN iam_parents pp ON pp.family_id = f.id AND pp.is_primary = true
+			LEFT JOIN safety_account_status sas ON sas.family_id = f.id
+			WHERE
+				(? IS NULL OR pp.email ILIKE '%' || ? || '%' OR f.display_name ILIKE '%' || ? || '%')
+				AND (? IS NULL OR f.id = ?::uuid)
+				AND (? IS NULL OR COALESCE(sas.status, 'active') = ?)
+				AND (? IS NULL OR f.subscription_tier = ?)
+			ORDER BY f.created_at DESC
+			LIMIT ?`,
+			query.Q, query.Q, query.Q,
+			query.FamilyID, query.FamilyID,
+			query.Status, query.Status,
+			query.Subscription, query.Subscription,
+			limit,
+		)
+		return q.Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.SearchUsers: %w", err)
+	}
+	summaries := make([]admin.AdminUserSummary, len(rows))
+	for i, r := range rows {
+		summaries[i] = admin.AdminUserSummary{
+			FamilyID:           r.FamilyID,
+			FamilyName:         r.FamilyName,
+			PrimaryParentEmail: r.PrimaryParentEmail,
+			ParentCount:        r.ParentCount,
+			StudentCount:       r.StudentCount,
+			SubscriptionTier:   r.SubscriptionTier,
+			AccountStatus:      r.AccountStatus,
+			CreatedAt:          r.CreatedAt,
+		}
+	}
+	return &shared.PaginatedResponse[admin.AdminUserSummary]{Data: summaries}, nil
 }
 
-type adminSafetyStub struct{}
-
-func (adminSafetyStub) GetModerationHistory(_ context.Context, _ uuid.UUID) ([]admin.ModerationActionSummary, error) {
-	return []admin.ModerationActionSummary{}, nil
-}
-func (adminSafetyStub) SuspendAccount(_ context.Context, _ uuid.UUID, _ string) error {
-	return fmt.Errorf("admin: safety suspend adapter not yet implemented")
-}
-func (adminSafetyStub) UnsuspendAccount(_ context.Context, _ uuid.UUID) error {
-	return fmt.Errorf("admin: safety unsuspend adapter not yet implemented")
-}
-func (adminSafetyStub) BanAccount(_ context.Context, _ uuid.UUID, _ string) error {
-	return fmt.Errorf("admin: safety ban adapter not yet implemented")
-}
-func (adminSafetyStub) GetReviewQueue(_ context.Context, _ *shared.PaginationParams) ([]admin.ModerationQueueItem, error) {
-	return []admin.ModerationQueueItem{}, nil
-}
-func (adminSafetyStub) GetReviewQueueItem(_ context.Context, _ uuid.UUID) (*admin.ModerationQueueItem, error) {
-	return nil, nil
-}
-func (adminSafetyStub) TakeModerationAction(_ context.Context, _ uuid.UUID, _ string, _ string) error {
-	return fmt.Errorf("admin: safety moderation action adapter not yet implemented")
-}
-
-type adminBillingStub struct{}
-
-func (adminBillingStub) GetSubscriptionInfo(_ context.Context, _ uuid.UUID) (*admin.AdminSubscriptionInfo, error) {
-	return nil, nil
-}
-
-type adminMethodStub struct{}
-
-func (adminMethodStub) ListMethodologies(_ context.Context) ([]admin.MethodologyConfig, error) {
-	return []admin.MethodologyConfig{}, nil
-}
-func (adminMethodStub) UpdateMethodologyConfig(_ context.Context, _ string, _ *admin.UpdateMethodologyInput) (*admin.MethodologyConfig, error) {
-	return nil, admin.ErrMethodologyNotFound
+func (a *adminIamAdapter) GetFamilyDetail(ctx context.Context, familyID uuid.UUID) (*admin.AdminFamilyInfo, error) {
+	type row struct {
+		ID            uuid.UUID  `gorm:"column:id"`
+		Name          string     `gorm:"column:name"`
+		AccountStatus string     `gorm:"column:account_status"`
+		CreatedAt     time.Time  `gorm:"column:created_at"`
+	}
+	var r row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin cross-family query — RLS bypass required.
+		return tx.Raw(`
+			SELECT f.id, f.display_name AS name, COALESCE(sas.status, 'active') AS account_status, f.created_at
+			FROM iam_families f
+			LEFT JOIN safety_account_status sas ON sas.family_id = f.id
+			WHERE f.id = ?`, familyID).Scan(&r).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetFamilyDetail: %w", err)
+	}
+	if r.ID == uuid.Nil {
+		return nil, admin.ErrUserNotFound
+	}
+	return &admin.AdminFamilyInfo{
+		ID:            r.ID,
+		Name:          r.Name,
+		AccountStatus: r.AccountStatus,
+		CreatedAt:     r.CreatedAt,
+	}, nil
 }
 
-type adminLifecycleStub struct{}
+func (a *adminIamAdapter) GetParents(ctx context.Context, familyID uuid.UUID) ([]admin.AdminParentInfo, error) {
+	type row struct {
+		ID          uuid.UUID `gorm:"column:id"`
+		DisplayName string    `gorm:"column:display_name"`
+		Email       string    `gorm:"column:email"`
+		IsPrimary   bool      `gorm:"column:is_primary"`
+	}
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin cross-family query — RLS bypass required.
+		return tx.Raw(`SELECT id, display_name, email, is_primary FROM iam_parents WHERE family_id = ? ORDER BY is_primary DESC, created_at ASC`, familyID).Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetParents: %w", err)
+	}
+	result := make([]admin.AdminParentInfo, len(rows))
+	for i, r := range rows {
+		result[i] = admin.AdminParentInfo{ID: r.ID, DisplayName: r.DisplayName, Email: r.Email, IsPrimary: r.IsPrimary}
+	}
+	return result, nil
+}
 
-func (adminLifecycleStub) GetPendingDeletions(_ context.Context, _ *shared.PaginationParams) ([]admin.DeletionSummary, error) {
-	return []admin.DeletionSummary{}, nil
+func (a *adminIamAdapter) GetStudents(ctx context.Context, familyID uuid.UUID) ([]admin.AdminStudentInfo, error) {
+	type row struct {
+		ID          uuid.UUID `gorm:"column:id"`
+		DisplayName string    `gorm:"column:display_name"`
+		GradeLevel  *string   `gorm:"column:grade_level"`
+	}
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin cross-family query — RLS bypass required.
+		return tx.Raw(`SELECT id, display_name, grade_level FROM iam_students WHERE family_id = ? ORDER BY created_at ASC`, familyID).Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetStudents: %w", err)
+	}
+	result := make([]admin.AdminStudentInfo, len(rows))
+	for i, r := range rows {
+		result[i] = admin.AdminStudentInfo{ID: r.ID, DisplayName: r.DisplayName, GradeLevel: r.GradeLevel}
+	}
+	return result, nil
 }
-func (adminLifecycleStub) GetRecoveryRequests(_ context.Context, _ *shared.PaginationParams) ([]admin.RecoverySummary, error) {
-	return []admin.RecoverySummary{}, nil
+
+// ─── adminSafetyAdapter ──────────────────────────────────────────────────────
+
+type adminSafetyAdapter struct {
+	db  *gorm.DB
+	svc safety.SafetyService
 }
-func (adminLifecycleStub) ResolveRecoveryRequest(_ context.Context, _ uuid.UUID, _ bool) error {
-	return fmt.Errorf("admin: lifecycle recovery adapter not yet implemented")
+
+func (a *adminSafetyAdapter) GetModerationHistory(ctx context.Context, familyID uuid.UUID) ([]admin.ModerationActionSummary, error) {
+	type row struct {
+		ActionType string    `gorm:"column:action_type"`
+		Reason     string    `gorm:"column:reason"`
+		CreatedAt  time.Time `gorm:"column:created_at"`
+	}
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin cross-family moderation history — RLS bypass required.
+		return tx.Raw(`SELECT action_type, reason, created_at FROM safety_mod_actions WHERE target_family_id = ? ORDER BY created_at DESC LIMIT 50`, familyID).Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetModerationHistory: %w", err)
+	}
+	result := make([]admin.ModerationActionSummary, len(rows))
+	for i, r := range rows {
+		result[i] = admin.ModerationActionSummary{Action: r.ActionType, Reason: r.Reason, CreatedAt: r.CreatedAt}
+	}
+	return result, nil
+}
+
+func (a *adminSafetyAdapter) SuspendAccount(ctx context.Context, familyID uuid.UUID, reason string) error {
+	// Platform admin action — use a system auth context.
+	systemAuth := &shared.AuthContext{ParentID: uuid.Nil, FamilyID: uuid.Nil, IsPlatformAdmin: true}
+	_, err := a.svc.AdminSuspendAccount(ctx, systemAuth, familyID, safety.SuspendAccountCommand{
+		Reason:         reason,
+		SuspensionDays: 30,
+	})
+	return err
+}
+
+func (a *adminSafetyAdapter) UnsuspendAccount(ctx context.Context, familyID uuid.UUID) error {
+	systemAuth := &shared.AuthContext{ParentID: uuid.Nil, FamilyID: uuid.Nil, IsPlatformAdmin: true}
+	_, err := a.svc.AdminLiftSuspension(ctx, systemAuth, familyID, safety.LiftSuspensionCommand{
+		Reason: "Admin lift via admin panel",
+	})
+	return err
+}
+
+func (a *adminSafetyAdapter) BanAccount(ctx context.Context, familyID uuid.UUID, reason string) error {
+	systemAuth := &shared.AuthContext{ParentID: uuid.Nil, FamilyID: uuid.Nil, IsPlatformAdmin: true}
+	_, err := a.svc.AdminBanAccount(ctx, systemAuth, familyID, safety.BanAccountCommand{Reason: reason})
+	return err
+}
+
+func (a *adminSafetyAdapter) GetReviewQueue(ctx context.Context, p *shared.PaginationParams) ([]admin.ModerationQueueItem, error) {
+	type row struct {
+		ID            uuid.UUID       `gorm:"column:id"`
+		TargetType    string          `gorm:"column:target_type"`
+		TargetID      uuid.UUID       `gorm:"column:target_id"`
+		TargetFamilyID *uuid.UUID     `gorm:"column:target_family_id"`
+		FlagType      string          `gorm:"column:flag_type"`
+		Labels        []byte          `gorm:"column:labels"`
+		CreatedAt     time.Time       `gorm:"column:created_at"`
+	}
+	limit := p.EffectiveLimit()
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin moderation queue — RLS bypass required (cross-family view).
+		return tx.Raw(`
+			SELECT id, target_type, target_id, target_family_id, flag_type, labels, created_at
+			FROM safety_content_flags
+			WHERE reviewed = false AND auto_rejected = false
+			ORDER BY created_at ASC
+			LIMIT ?`, limit).Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetReviewQueue: %w", err)
+	}
+	result := make([]admin.ModerationQueueItem, len(rows))
+	for i, r := range rows {
+		familyID := uuid.Nil
+		if r.TargetFamilyID != nil {
+			familyID = *r.TargetFamilyID
+		}
+		result[i] = admin.ModerationQueueItem{
+			ID:          r.ID,
+			ContentType: r.TargetType,
+			ContentID:   r.TargetID,
+			FamilyID:    familyID,
+			Reason:      r.FlagType,
+			Status:      "pending",
+			Details:     r.Labels,
+			CreatedAt:   r.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+func (a *adminSafetyAdapter) GetReviewQueueItem(ctx context.Context, itemID uuid.UUID) (*admin.ModerationQueueItem, error) {
+	type row struct {
+		ID             uuid.UUID  `gorm:"column:id"`
+		TargetType     string     `gorm:"column:target_type"`
+		TargetID       uuid.UUID  `gorm:"column:target_id"`
+		TargetFamilyID *uuid.UUID `gorm:"column:target_family_id"`
+		FlagType       string     `gorm:"column:flag_type"`
+		Labels         []byte     `gorm:"column:labels"`
+		CreatedAt      time.Time  `gorm:"column:created_at"`
+	}
+	var r row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin queue item lookup — RLS bypass required.
+		return tx.Raw(`SELECT id, target_type, target_id, target_family_id, flag_type, labels, created_at FROM safety_content_flags WHERE id = ?`, itemID).Scan(&r).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetReviewQueueItem: %w", err)
+	}
+	if r.ID == uuid.Nil {
+		return nil, nil
+	}
+	familyID := uuid.Nil
+	if r.TargetFamilyID != nil {
+		familyID = *r.TargetFamilyID
+	}
+	return &admin.ModerationQueueItem{
+		ID:          r.ID,
+		ContentType: r.TargetType,
+		ContentID:   r.TargetID,
+		FamilyID:    familyID,
+		Reason:      r.FlagType,
+		Status:      "pending",
+		Details:     r.Labels,
+		CreatedAt:   r.CreatedAt,
+	}, nil
+}
+
+func (a *adminSafetyAdapter) TakeModerationAction(ctx context.Context, itemID uuid.UUID, action string, reason string) error {
+	// Look up the target family from the content flag, then delegate to safety service.
+	var targetFamilyID uuid.UUID
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin action — RLS bypass required to read across families.
+		return tx.Raw(`SELECT COALESCE(target_family_id, '00000000-0000-0000-0000-000000000000'::uuid) FROM safety_content_flags WHERE id = ?`, itemID).Scan(&targetFamilyID).Error
+	})
+	if err != nil {
+		return fmt.Errorf("admin.TakeModerationAction: lookup target: %w", err)
+	}
+	systemAuth := &shared.AuthContext{ParentID: uuid.Nil, FamilyID: uuid.Nil, IsPlatformAdmin: true}
+	_, err = a.svc.AdminTakeAction(ctx, systemAuth, safety.CreateModActionCommand{
+		TargetFamilyID: targetFamilyID,
+		ActionType:     action,
+		Reason:         reason,
+	})
+	return err
+}
+
+// ─── adminBillingAdapter ─────────────────────────────────────────────────────
+
+type adminBillingAdapter struct{ svc billing.BillingService }
+
+func (a *adminBillingAdapter) GetSubscriptionInfo(ctx context.Context, familyID uuid.UUID) (*admin.AdminSubscriptionInfo, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	sub, err := a.svc.GetSubscription(ctx, scope)
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetSubscriptionInfo: %w", err)
+	}
+	status := "active"
+	if sub.Status != nil {
+		status = *sub.Status
+	}
+	return &admin.AdminSubscriptionInfo{
+		Tier:      sub.Tier,
+		Status:    status,
+		ExpiresAt: sub.CurrentPeriodEnd,
+	}, nil
+}
+
+// ─── adminMethodAdapter ──────────────────────────────────────────────────────
+
+type adminMethodAdapter struct{ db *gorm.DB }
+
+func (a *adminMethodAdapter) ListMethodologies(ctx context.Context) ([]admin.MethodologyConfig, error) {
+	type row struct {
+		Slug        string          `gorm:"column:slug"`
+		DisplayName string          `gorm:"column:display_name"`
+		IsActive    bool            `gorm:"column:is_active"`
+		Philosophy  json.RawMessage `gorm:"column:philosophy"`
+		UpdatedAt   time.Time       `gorm:"column:updated_at"`
+	}
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// method_definitions has no RLS; bypass used for consistency with other admin queries.
+		return tx.Raw(`SELECT slug, display_name, is_active, philosophy, updated_at FROM method_definitions ORDER BY display_order ASC`).Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.ListMethodologies: %w", err)
+	}
+	result := make([]admin.MethodologyConfig, len(rows))
+	for i, r := range rows {
+		result[i] = admin.MethodologyConfig{
+			Slug:        r.Slug,
+			DisplayName: r.DisplayName,
+			Enabled:     r.IsActive,
+			Settings:    r.Philosophy,
+			UpdatedAt:   r.UpdatedAt,
+		}
+	}
+	return result, nil
+}
+
+func (a *adminMethodAdapter) UpdateMethodologyConfig(ctx context.Context, slug string, input *admin.UpdateMethodologyInput) (*admin.MethodologyConfig, error) {
+	if input.Enabled == nil && input.Settings == nil {
+		return nil, admin.ErrMethodologyNotFound // nothing to update
+	}
+	type row struct {
+		Slug        string          `gorm:"column:slug"`
+		DisplayName string          `gorm:"column:display_name"`
+		IsActive    bool            `gorm:"column:is_active"`
+		Philosophy  json.RawMessage `gorm:"column:philosophy"`
+		UpdatedAt   time.Time       `gorm:"column:updated_at"`
+	}
+	var r row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin methodology update — bypass for consistency.
+		updates := map[string]any{"updated_at": time.Now()}
+		if input.Enabled != nil {
+			updates["is_active"] = *input.Enabled
+		}
+		if input.Settings != nil {
+			updates["philosophy"] = *input.Settings
+		}
+		if err := tx.Table("method_definitions").Where("slug = ?", slug).Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.Raw(`SELECT slug, display_name, is_active, philosophy, updated_at FROM method_definitions WHERE slug = ?`, slug).Scan(&r).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.UpdateMethodologyConfig: %w", err)
+	}
+	if r.Slug == "" {
+		return nil, admin.ErrMethodologyNotFound
+	}
+	return &admin.MethodologyConfig{
+		Slug:        r.Slug,
+		DisplayName: r.DisplayName,
+		Enabled:     r.IsActive,
+		Settings:    r.Philosophy,
+		UpdatedAt:   r.UpdatedAt,
+	}, nil
+}
+
+// ─── adminLifecycleAdapter ───────────────────────────────────────────────────
+
+type adminLifecycleAdapter struct{ db *gorm.DB }
+
+func (a *adminLifecycleAdapter) GetPendingDeletions(ctx context.Context, p *shared.PaginationParams) ([]admin.DeletionSummary, error) {
+	type row struct {
+		FamilyID    uuid.UUID `gorm:"column:family_id"`
+		FamilyName  string    `gorm:"column:family_name"`
+		RequestedAt time.Time `gorm:"column:requested_at"`
+		ScheduledAt time.Time `gorm:"column:scheduled_at"`
+	}
+	limit := p.EffectiveLimit()
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin lifecycle view — RLS bypass required (cross-family).
+		return tx.Raw(`
+			SELECT d.family_id, f.display_name AS family_name, d.created_at AS requested_at, d.grace_period_ends_at AS scheduled_at
+			FROM lifecycle_deletion_requests d
+			JOIN iam_families f ON f.id = d.family_id
+			WHERE d.status IN ('grace_period', 'processing')
+			ORDER BY d.grace_period_ends_at ASC
+			LIMIT ?`, limit).Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetPendingDeletions: %w", err)
+	}
+	result := make([]admin.DeletionSummary, len(rows))
+	for i, r := range rows {
+		result[i] = admin.DeletionSummary{FamilyID: r.FamilyID, FamilyName: r.FamilyName, RequestedAt: r.RequestedAt, ScheduledAt: r.ScheduledAt}
+	}
+	return result, nil
+}
+
+func (a *adminLifecycleAdapter) GetRecoveryRequests(ctx context.Context, p *shared.PaginationParams) ([]admin.RecoverySummary, error) {
+	type row struct {
+		ID          uuid.UUID `gorm:"column:id"`
+		Email       string    `gorm:"column:email"`
+		RequestedAt time.Time `gorm:"column:requested_at"`
+		Status      string    `gorm:"column:status"`
+	}
+	limit := p.EffectiveLimit()
+	var rows []row
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin recovery view — no RLS on recovery table, bypass for consistency.
+		return tx.Raw(`
+			SELECT id, email, created_at AS requested_at, status
+			FROM lifecycle_recovery_requests
+			WHERE status IN ('pending', 'escalated')
+			ORDER BY created_at ASC
+			LIMIT ?`, limit).Scan(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetRecoveryRequests: %w", err)
+	}
+	result := make([]admin.RecoverySummary, len(rows))
+	for i, r := range rows {
+		result[i] = admin.RecoverySummary{
+			ID:          r.ID,
+			FamilyName:  r.Email, // email is used as identifier (no family yet)
+			RequestedAt: r.RequestedAt,
+			Reason:      r.Status,
+		}
+	}
+	return result, nil
+}
+
+func (a *adminLifecycleAdapter) ResolveRecoveryRequest(ctx context.Context, requestID uuid.UUID, approved bool) error {
+	status := "denied"
+	if approved {
+		status = "completed"
+	}
+	return shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		// Admin recovery resolution — RLS bypass for consistency.
+		return tx.Exec(`UPDATE lifecycle_recovery_requests SET status = ?, resolved_at = now() WHERE id = ?`, status, requestID).Error
+	})
 }
 
 type adminHealthStub struct{}
@@ -1255,27 +1828,9 @@ func (adminJobInspectorStub) RetryDeadLetterJob(_ context.Context, _ string) err
 }
 
 // ─── Plan Domain Adapter Stubs ──────────────────────────────────────────────
-// Stub implementations of plan:: consumer-defined interfaces. These delegate to
-// other domains' services but are initially stubbed until those domains expose the
-// required calendar-aggregation methods. [17-planning §8]
-
-type planIamStub struct{}
-
-func (planIamStub) StudentBelongsToFamily(_ context.Context, _ uuid.UUID, _ uuid.UUID) (bool, error) {
-	return true, nil // safe default — validation deferred
-}
-func (planIamStub) GetStudentName(_ context.Context, studentID uuid.UUID) (string, error) {
-	return studentID.String(), nil // graceful fallback to ID string
-}
-
-type planLearnStub struct{}
-
-func (planLearnStub) ListActivitiesForCalendar(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time, _ *uuid.UUID) ([]plan.ActivitySummary, error) {
-	return []plan.ActivitySummary{}, nil
-}
-func (planLearnStub) LogActivity(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ string, _ time.Time, _ *int, _ *uuid.UUID, _ *string, _ []string) (uuid.UUID, error) {
-	return uuid.Nil, fmt.Errorf("plan: learn adapter not yet implemented")
-}
+// Remaining stubs for comply:: and social:: calendar aggregation methods.
+// Full implementations deferred until those domains expose the required methods.
+// [17-planning §8]
 
 type planComplyStub struct{}
 
@@ -1321,6 +1876,19 @@ func initLogger(cfg *config.AppConfig) {
 	}
 
 	slog.SetDefault(slog.New(handler))
+}
+
+// ─── iamBillingAdapter ───────────────────────────────────────────────────────
+
+// iamBillingAdapter bridges billing.BillingService → iam.BillingServiceForIam.
+// Satisfies the consumer-defined interface pattern [ARCH §4.3].
+type iamBillingAdapter struct{ svc billing.BillingService }
+
+func (a iamBillingAdapter) VerifyCreditCardMicroCharge(ctx context.Context, scope *shared.FamilyScope, paymentMethodID string) error {
+	_, err := a.svc.ProcessCoppaVerification(ctx, billing.CoppaVerificationCommand{
+		PaymentMethodID: paymentMethodID,
+	}, *scope)
+	return err
 }
 
 // parseLogLevel converts a string log level to slog.Level.

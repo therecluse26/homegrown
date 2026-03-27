@@ -25,6 +25,7 @@ type discoveryServiceImpl struct {
 	quizDefRepo QuizDefinitionRepository
 	quizResRepo QuizResultRepository
 	stateRepo   StateGuideRepository
+	contentRepo ContentPageRepository
 	methodology MethodologyServiceForDiscover
 }
 
@@ -34,12 +35,14 @@ func NewDiscoveryService(
 	quizDefRepo QuizDefinitionRepository,
 	quizResRepo QuizResultRepository,
 	stateRepo StateGuideRepository,
+	contentRepo ContentPageRepository,
 	methodSvc MethodologyServiceForDiscover,
 ) DiscoveryService {
 	return &discoveryServiceImpl{
 		quizDefRepo: quizDefRepo,
 		quizResRepo: quizResRepo,
 		stateRepo:   stateRepo,
+		contentRepo: contentRepo,
 		methodology: methodSvc,
 	}
 }
@@ -367,6 +370,17 @@ func (s *discoveryServiceImpl) GetStateGuide(ctx context.Context, stateCode stri
 // ClaimQuizResult delegates to the quiz result repository. [04-onboard §9.4]
 func (s *discoveryServiceImpl) ClaimQuizResult(ctx context.Context, shareID string, familyID any) error {
 	return s.quizResRepo.ClaimForFamily(ctx, shareID, familyID)
+}
+
+// ─── GetContentBySlug ─────────────────────────────────────────────────────────
+
+// GetContentBySlug returns a published content page by its slug. [03-discover §8.4]
+func (s *discoveryServiceImpl) GetContentBySlug(ctx context.Context, slug string) (*ContentPage, error) {
+	page, err := s.contentRepo.FindBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return page, nil
 }
 
 // ─── GetStateRequirements ─────────────────────────────────────────────────────

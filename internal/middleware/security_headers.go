@@ -16,6 +16,15 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			// Disable legacy XSS filter (modern browsers don't need it; it can create vulnerabilities)
 			h.Set("X-XSS-Protection", "0")
+			// HSTS: 2 years, include subdomains, preload-eligible
+			h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			// CSP: restrict origins, block embedding
+			h.Set("Content-Security-Policy",
+				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+					"img-src 'self' data: blob: https://media.homegrown.academy; "+
+					"connect-src 'self' wss:; frame-ancestors 'none'")
+			// Prevent cross-domain Flash/PDF data loading
+			h.Set("X-Permitted-Cross-Domain-Policies", "none")
 			return next(c)
 		}
 	}

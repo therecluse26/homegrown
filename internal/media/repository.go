@@ -155,6 +155,20 @@ func (r *PgUploadRepository) FindExpiredPending(_ context.Context, before time.T
 	return uploads, nil
 }
 
+func (r *PgUploadRepository) ListByFamily(_ context.Context, scope shared.FamilyScope, limit uint32, afterID *uuid.UUID) ([]Upload, error) {
+	q := r.db.Where("family_id = ? AND status != ?", scope.FamilyID(), UploadStatusDeleted).
+		Order("id DESC").
+		Limit(int(limit) + 1) // fetch one extra to detect whether a next page exists
+	if afterID != nil {
+		q = q.Where("id < ?", *afterID)
+	}
+	var uploads []Upload
+	if err := q.Find(&uploads).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return uploads, nil
+}
+
 // ─── PgProcessingJobRepository ────────────────────────────────────────────────
 
 // PgProcessingJobRepository implements ProcessingJobRepository using PostgreSQL/GORM. [09-media §6.2]

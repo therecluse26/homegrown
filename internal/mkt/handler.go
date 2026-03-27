@@ -614,7 +614,7 @@ func (h *Handler) createCheckout(c echo.Context) error {
 	if err != nil {
 		return mapMktError(err)
 	}
-	return c.JSON(http.StatusCreated, resp)
+	return c.JSON(http.StatusOK, resp)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -784,7 +784,7 @@ func (h *Handler) requestPayout(c echo.Context) error {
 	if err != nil {
 		return mapMktError(err)
 	}
-	return c.JSON(http.StatusCreated, resp)
+	return c.JSON(http.StatusOK, resp)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

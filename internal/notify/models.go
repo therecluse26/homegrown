@@ -462,30 +462,41 @@ type FamilyDeletionScheduledEvent struct {
 
 func (FamilyDeletionScheduledEvent) EventName() string { return "iam.FamilyDeletionScheduled" }
 
-// SubscriptionCreatedEvent is a stub for billing::SubscriptionCreated (Phase 2).
+// SubscriptionCreatedEvent mirrors billing::SubscriptionCreated. [08-notify §17.1]
 type SubscriptionCreatedEvent struct {
-	FamilyID uuid.UUID `json:"family_id"`
+	FamilyID         uuid.UUID `json:"family_id"`
+	Tier             string    `json:"tier"`
+	BillingInterval  string    `json:"billing_interval"`
+	CurrentPeriodEnd time.Time `json:"current_period_end"`
 }
 
 func (SubscriptionCreatedEvent) EventName() string { return "billing.SubscriptionCreated" }
 
-// SubscriptionChangedEvent is a stub for billing::SubscriptionChanged (Phase 2).
+// SubscriptionChangedEvent mirrors billing::SubscriptionChanged. [08-notify §17.1]
 type SubscriptionChangedEvent struct {
-	FamilyID uuid.UUID `json:"family_id"`
+	FamilyID         uuid.UUID `json:"family_id"`
+	Tier             string    `json:"tier"`
+	BillingInterval  string    `json:"billing_interval"`
+	CurrentPeriodEnd time.Time `json:"current_period_end"`
+	ChangeType       string    `json:"change_type"`
 }
 
 func (SubscriptionChangedEvent) EventName() string { return "billing.SubscriptionChanged" }
 
-// SubscriptionCancelledEvent is a stub for billing::SubscriptionCancelled (Phase 2).
+// SubscriptionCancelledEvent mirrors billing::SubscriptionCancelled. [08-notify §17.1]
 type SubscriptionCancelledEvent struct {
-	FamilyID uuid.UUID `json:"family_id"`
+	FamilyID    uuid.UUID `json:"family_id"`
+	EffectiveAt time.Time `json:"effective_at"`
 }
 
 func (SubscriptionCancelledEvent) EventName() string { return "billing.SubscriptionCancelled" }
 
-// PayoutCompletedEvent is a stub for billing::PayoutCompleted (Phase 2).
+// PayoutCompletedEvent mirrors billing::PayoutCompleted. [08-notify §17.1]
 type PayoutCompletedEvent struct {
-	FamilyID uuid.UUID `json:"family_id"`
+	CreatorID   uuid.UUID `json:"creator_id"`
+	PayoutID    uuid.UUID `json:"payout_id"`
+	AmountCents int64     `json:"amount_cents"`
+	Currency    string    `json:"currency"`
 }
 
 func (PayoutCompletedEvent) EventName() string { return "billing.PayoutCompleted" }

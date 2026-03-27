@@ -133,6 +133,11 @@ func (m *mockIamService) GetFamilyIDForParent(ctx context.Context, parentID uuid
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
+func (m *mockIamService) GetFamilyIDForCreator(ctx context.Context, creatorID uuid.UUID) (uuid.UUID, error) {
+	args := m.Called(ctx, creatorID)
+	return args.Get(0).(uuid.UUID), args.Error(1)
+}
+
 // mockCache mocks shared.Cache.
 type mockCache struct{ mock.Mock }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/homegrown-academy/homegrown-academy/internal/billing"
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
@@ -292,5 +293,83 @@ func (h *CreatorOnboardedHandler) Handle(ctx context.Context, event shared.Domai
 // FamilyDeletionScheduledHandler handles iam.FamilyDeletionScheduled events.
 // DEFERRED: iam.FamilyDeletionScheduled event does not exist yet. [08-notify §17.1]
 
-// Billing event handlers (SubscriptionCreated, SubscriptionChanged, SubscriptionCancelled, PayoutCompleted)
-// DEFERRED: billing:: domain not implemented. [08-notify §17.1]
+// ─── Billing Event Handlers ──────────────────────────────────────────────────
+
+// SubscriptionCreatedHandler handles billing.SubscriptionCreated events. [08-notify §17.1]
+type SubscriptionCreatedHandler struct{ svc NotificationService }
+
+func NewSubscriptionCreatedHandler(svc NotificationService) *SubscriptionCreatedHandler {
+	return &SubscriptionCreatedHandler{svc: svc}
+}
+
+func (h *SubscriptionCreatedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(billing.SubscriptionCreated)
+	if !ok {
+		return fmt.Errorf("notify.SubscriptionCreatedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleSubscriptionCreated(ctx, SubscriptionCreatedEvent{
+		FamilyID:         e.FamilyID,
+		Tier:             e.Tier,
+		BillingInterval:  e.BillingInterval,
+		CurrentPeriodEnd: e.CurrentPeriodEnd,
+	})
+}
+
+// SubscriptionChangedHandler handles billing.SubscriptionChanged events. [08-notify §17.1]
+type SubscriptionChangedHandler struct{ svc NotificationService }
+
+func NewSubscriptionChangedHandler(svc NotificationService) *SubscriptionChangedHandler {
+	return &SubscriptionChangedHandler{svc: svc}
+}
+
+func (h *SubscriptionChangedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(billing.SubscriptionChanged)
+	if !ok {
+		return fmt.Errorf("notify.SubscriptionChangedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleSubscriptionChanged(ctx, SubscriptionChangedEvent{
+		FamilyID:         e.FamilyID,
+		Tier:             e.Tier,
+		BillingInterval:  e.BillingInterval,
+		CurrentPeriodEnd: e.CurrentPeriodEnd,
+		ChangeType:       e.ChangeType,
+	})
+}
+
+// SubscriptionCancelledHandler handles billing.SubscriptionCancelled events. [08-notify §17.1]
+type SubscriptionCancelledHandler struct{ svc NotificationService }
+
+func NewSubscriptionCancelledHandler(svc NotificationService) *SubscriptionCancelledHandler {
+	return &SubscriptionCancelledHandler{svc: svc}
+}
+
+func (h *SubscriptionCancelledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(billing.SubscriptionCancelled)
+	if !ok {
+		return fmt.Errorf("notify.SubscriptionCancelledHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleSubscriptionCancelled(ctx, SubscriptionCancelledEvent{
+		FamilyID:    e.FamilyID,
+		EffectiveAt: e.EffectiveAt,
+	})
+}
+
+// PayoutCompletedHandler handles billing.PayoutCompleted events. [08-notify §17.1]
+type PayoutCompletedHandler struct{ svc NotificationService }
+
+func NewPayoutCompletedHandler(svc NotificationService) *PayoutCompletedHandler {
+	return &PayoutCompletedHandler{svc: svc}
+}
+
+func (h *PayoutCompletedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(billing.PayoutCompleted)
+	if !ok {
+		return fmt.Errorf("notify.PayoutCompletedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandlePayoutCompleted(ctx, PayoutCompletedEvent{
+		CreatorID:   e.CreatorID,
+		PayoutID:    e.PayoutID,
+		AmountCents: e.AmountCents,
+		Currency:    e.Currency,
+	})
+}

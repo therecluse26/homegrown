@@ -217,6 +217,12 @@ type UploadStatusUpdate struct {
 	PublishedAt *time.Time
 }
 
+// UploadListResponse is the response from ListUploads. [09-media Phase 2]
+type UploadListResponse struct {
+	Items      []UploadInfo `json:"items"`
+	NextCursor *string      `json:"next_cursor,omitempty"`
+}
+
 // ─── Adapter Types ────────────────────────────────────────────────────────────
 
 // CSAMScanResult is the CSAM scan result from Thorn Safer. [09-media §8.3]

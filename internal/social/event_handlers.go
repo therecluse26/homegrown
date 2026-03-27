@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
+	"github.com/homegrown-academy/homegrown-academy/internal/learn"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
@@ -29,17 +30,53 @@ func (h *FamilyCreatedHandler) Handle(ctx context.Context, event shared.DomainEv
 	return h.svc.HandleFamilyCreated(ctx, e.FamilyID)
 }
 
+// ─── MilestoneAchievedHandler ────────────────────────────────────────────────
+
+// MilestoneAchievedHandler handles learn.MilestoneAchieved by creating a milestone post. [05-social §17.4]
+type MilestoneAchievedHandler struct {
+	svc SocialService
+}
+
+// NewMilestoneAchievedHandler creates a new MilestoneAchievedHandler.
+func NewMilestoneAchievedHandler(svc SocialService) *MilestoneAchievedHandler {
+	return &MilestoneAchievedHandler{svc: svc}
+}
+
+func (h *MilestoneAchievedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(learn.MilestoneAchieved)
+	if !ok {
+		return fmt.Errorf("social.MilestoneAchievedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleMilestoneAchieved(ctx, e.FamilyID, MilestoneData{
+		StudentName:   e.StudentName,
+		MilestoneType: e.MilestoneType,
+		Description:   e.Description,
+	})
+}
+
+// ─── FamilyDeletionScheduledHandler ─────────────────────────────────────────
+
+// FamilyDeletionScheduledHandler handles iam.FamilyDeletionScheduled by preparing cascade. [05-social §17.4]
+type FamilyDeletionScheduledHandler struct {
+	svc SocialService
+}
+
+// NewFamilyDeletionScheduledHandler creates a new FamilyDeletionScheduledHandler.
+func NewFamilyDeletionScheduledHandler(svc SocialService) *FamilyDeletionScheduledHandler {
+	return &FamilyDeletionScheduledHandler{svc: svc}
+}
+
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(iam.FamilyDeletionScheduled)
+	if !ok {
+		return fmt.Errorf("social.FamilyDeletionScheduledHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFamilyDeletionScheduled(ctx, e.FamilyID)
+}
+
 // ─── Deferred Handlers ──────────────────────────────────────────────────────
-// These handlers are defined but their event subscriptions are deferred until
-// the required events exist in their respective domains.
 
 // CoParentRemovedHandler would handle iam.CoParentRemoved by disassociating posts.
 // DEFERRED: iam.CoParentRemoved event does not exist yet. [05-social §17.4]
 // When activated, register in main.go:
 //   eventBus.Subscribe(reflect.TypeOf(iam.CoParentRemoved{}), social.NewCoParentRemovedHandler(socialSvc))
-
-// MilestoneAchievedHandler would handle learn.MilestoneAchieved by creating a milestone post.
-// DEFERRED: learn:: domain not implemented. [05-social §17.4]
-
-// FamilyDeletionScheduledHandler would handle iam.FamilyDeletionScheduled by preparing cascade.
-// DEFERRED: iam.FamilyDeletionScheduled event does not exist yet. [05-social §17.4]

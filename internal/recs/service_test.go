@@ -3,7 +3,6 @@ package recs
 import (
 	"context"
 	"errors"
-	"slices"
 	"testing"
 	"time"
 
@@ -940,65 +939,9 @@ func TestDetermineDominantSignal_DefaultMethodology(t *testing.T) {
 	}
 }
 
-func TestMethodologyBaselineSubjects_KnownMethodology(t *testing.T) {
-	subjects := methodologyBaselineSubjects("charlotte-mason")
-	if len(subjects) == 0 {
-		t.Fatal("expected non-empty subjects for charlotte-mason")
-	}
-	if !slices.Contains(subjects, "nature_study") {
-		t.Error("charlotte-mason should include nature_study")
-	}
-}
-
-func TestMethodologyBaselineSubjects_UnknownMethodology(t *testing.T) {
-	subjects := methodologyBaselineSubjects("unknown-method")
-	if len(subjects) == 0 {
-		t.Fatal("expected common subjects as fallback")
-	}
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Age Transition Tests [§10.6]
-// ═══════════════════════════════════════════════════════════════════════════════
-
-func TestMethodologyTransitionAges_KnownMethodology(t *testing.T) {
-	cases := []struct {
-		slug       string
-		wantStage  string
-		wantAge    int
-		wantCount  int
-	}{
-		{"classical", "Logic", 10, 2},
-		{"charlotte-mason", "Form II", 9, 3},
-		{"montessori", "2nd Plane", 6, 2},
-		{"waldorf", "Grade School", 7, 2},
-	}
-	for _, tc := range cases {
-		transitions := methodologyTransitionAges(tc.slug)
-		if len(transitions) != tc.wantCount {
-			t.Errorf("methodologyTransitionAges(%q) count = %d, want %d", tc.slug, len(transitions), tc.wantCount)
-			continue
-		}
-		// Verify the first transition matches expected values.
-		if transitions[0].StageName != tc.wantStage {
-			t.Errorf("methodologyTransitionAges(%q)[0].StageName = %q, want %q", tc.slug, transitions[0].StageName, tc.wantStage)
-		}
-		if transitions[0].Age != tc.wantAge {
-			t.Errorf("methodologyTransitionAges(%q)[0].Age = %d, want %d", tc.slug, transitions[0].Age, tc.wantAge)
-		}
-	}
-}
-
-func TestMethodologyTransitionAges_UnknownMethodology(t *testing.T) {
-	transitions := methodologyTransitionAges("unschooling")
-	if transitions != nil {
-		t.Errorf("expected nil transitions for unschooling, got %d", len(transitions))
-	}
-	transitions = methodologyTransitionAges("unknown-method")
-	if transitions != nil {
-		t.Errorf("expected nil transitions for unknown-method, got %d", len(transitions))
-	}
-}
+// NOTE: methodologyBaselineSubjects and methodologyTransitionAges were pure-function
+// helpers that have been replaced by DB queries (migration 27). Integration tests
+// for these belong in a test that has a real DB connection.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Enabled Types Filtering Tests [§11.1]

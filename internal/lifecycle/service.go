@@ -493,3 +493,24 @@ func (s *LifecycleServiceImpl) RevokeAllSessions(ctx context.Context, auth *shar
 
 	return count, nil
 }
+
+// ─── Event Handlers ───────────────────────────────────────────────────────────
+
+// HandleFamilyDeletion accelerates any pending deletion request when IAM fires
+// FamilyDeletionScheduled. Transitions grace_period → processing and enqueues
+// the deletion job for immediate execution. [15-data-lifecycle §17]
+func (s *LifecycleServiceImpl) HandleFamilyDeletion(ctx context.Context, familyID uuid.UUID) error {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	req, err := s.deletionRepo.FindActiveByFamily(ctx, &scope)
+	if err != nil {
+		return fmt.Errorf("lifecycle: find active deletion for family: %w", err)
+	}
+	if req == nil || req.Status != DeletionStatusGracePeriod {
+		return nil // nothing to accelerate
+	}
+	if err := s.deletionRepo.UpdateStatus(ctx, req.ID, DeletionStatusProcessing); err != nil {
+		return fmt.Errorf("lifecycle: accelerate deletion: %w", err)
+	}
+	_ = s.jobs.Enqueue(ctx, ProcessDeletionJob{DeletionID: req.ID, FamilyID: familyID})
+	return nil
+}

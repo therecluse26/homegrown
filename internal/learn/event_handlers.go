@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
+	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
@@ -50,21 +51,53 @@ func (h *StudentDeletedHandler) Handle(ctx context.Context, event shared.DomainE
 	return h.svc.HandleStudentDeleted(ctx, e.FamilyID, e.StudentID)
 }
 
+// ─── FamilyDeletionScheduledHandler ─────────────────────────────────────────
+
+// FamilyDeletionScheduledHandler handles iam.FamilyDeletionScheduled by
+// triggering a final data export opportunity. [06-learn §17.4]
+type FamilyDeletionScheduledHandler struct {
+	svc LearningService
+}
+
+// NewFamilyDeletionScheduledHandler creates a new FamilyDeletionScheduledHandler.
+func NewFamilyDeletionScheduledHandler(svc LearningService) *FamilyDeletionScheduledHandler {
+	return &FamilyDeletionScheduledHandler{svc: svc}
+}
+
+func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(iam.FamilyDeletionScheduled)
+	if !ok {
+		return fmt.Errorf("learn.FamilyDeletionScheduledHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFamilyDeletionScheduled(ctx, e.FamilyID)
+}
+
+// ─── PurchaseCompletedHandler ─────────────────────────────────────────────────
+
+// PurchaseCompletedHandler handles mkt.PurchaseCompleted by integrating
+// purchased content into the family's learning resources. [06-learn §17.4]
+type PurchaseCompletedHandler struct {
+	svc LearningService
+}
+
+// NewPurchaseCompletedHandler creates a new PurchaseCompletedHandler.
+func NewPurchaseCompletedHandler(svc LearningService) *PurchaseCompletedHandler {
+	return &PurchaseCompletedHandler{svc: svc}
+}
+
+func (h *PurchaseCompletedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(mkt.PurchaseCompleted)
+	if !ok {
+		return fmt.Errorf("learn.PurchaseCompletedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandlePurchaseCompleted(ctx, e.FamilyID, PurchaseMetadata{
+		ContentType: e.ContentMetadata.ContentType,
+		ContentIDs:  e.ContentMetadata.ContentIDs,
+		PublisherID: e.ContentMetadata.PublisherID,
+	})
+}
+
 // ─── Deferred Handlers ──────────────────────────────────────────────────────
-// These handlers are defined but their event subscriptions are deferred until
-// the required events exist in their respective domains.
-
-// FamilyDeletionScheduledHandler would handle iam.FamilyDeletionScheduled by
-// triggering a final data export opportunity.
-// DEFERRED: iam.FamilyDeletionScheduled event does not exist yet. [06-learn §17.4]
-// When activated, register in main.go:
-//   eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), learn.NewFamilyDeletionScheduledHandler(learnSvc))
-
-// PurchaseCompletedHandler would handle mkt.PurchaseCompleted by integrating
-// purchased content into the family's learning resources.
-// DEFERRED: mkt:: domain not implemented. [06-learn §17.4]
-// When activated, register in main.go:
-//   eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), learn.NewPurchaseCompletedHandler(learnSvc))
 
 // MethodologyConfigUpdatedHandler would handle method.MethodologyConfigUpdated
 // by invalidating the tool resolution cache.

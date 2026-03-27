@@ -392,10 +392,13 @@ type AppealFilter struct {
 
 // CsamScanResult is the CSAM scan result from Thorn Safer. [11-safety §8.4]
 type CsamScanResult struct {
-	IsCSAM          bool
-	Hash            *string
-	Confidence      *float64
-	MatchedDatabase *string
+	IsCSAM               bool
+	Hash                 *string
+	Confidence           *float64
+	MatchedDatabase      *string
+	// RequiresManualReview is set by LoggingThornAdapter when real Thorn integration
+	// is unavailable. Callers should queue a manual review task.
+	RequiresManualReview bool
 }
 
 // ModerationResult is the content moderation result from Rekognition. [11-safety §8.4]

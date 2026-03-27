@@ -2469,6 +2469,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/discovery/content/{slug}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "discovery"
+                ],
+                "summary": "Get a published content page by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Content page slug",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/discover.ContentPage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/discovery/quiz": {
             "get": {
                 "produces": [
@@ -2779,6 +2813,36 @@ const docTemplate = `{
                 }
             }
         },
+        "/families/methodology-context": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "families"
+                ],
+                "summary": "Get full methodology context for the family dashboard",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/method.MethodologyContext"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/families/profile": {
             "get": {
                 "produces": [
@@ -3009,6 +3073,69 @@ const docTemplate = `{
                         "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/families/students/{id}/methodology": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "families"
+                ],
+                "summary": "Set or clear a student's methodology override",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Methodology override",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/method.UpdateStudentMethodologyCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/method.MethodologySelectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
                         }
                     }
                 }
@@ -3609,6 +3736,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/onboarding/restart": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Restart the onboarding wizard",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/onboard.WizardProgressResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/onboarding/roadmap": {
             "get": {
                 "produces": [
@@ -3624,6 +3782,40 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/onboard.RoadmapResponse"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/onboarding/roadmap/{item_id}/complete": {
+            "patch": {
+                "tags": [
+                    "onboarding"
+                ],
+                "summary": "Mark a roadmap item as completed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Roadmap item ID",
+                        "name": "item_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -5108,12 +5300,13 @@ const docTemplate = `{
                 ],
                 "summary": "AI-powered search suggestions (Phase 3 — not yet available)",
                 "responses": {
-                    "501": {
-                        "description": "Not Implemented",
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
-                                "type": "string"
+                                "type": "array",
+                                "items": {}
                             }
                         }
                     }
@@ -6303,6 +6496,44 @@ const docTemplate = `{
                 }
             }
         },
+        "discover.ContentPage": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "displayOrder": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metaDescription": {
+                    "type": "string"
+                },
+                "metaTitle": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
         "discover.MethodologyRecommendation": {
             "type": "object",
             "properties": {
@@ -6752,6 +6983,26 @@ const docTemplate = `{
                 }
             }
         },
+        "method.MethodologyContext": {
+            "type": "object",
+            "properties": {
+                "mastery_level": {
+                    "type": "string"
+                },
+                "primary": {
+                    "$ref": "#/definitions/method.MethodologySummaryResponse"
+                },
+                "secondary": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/method.MethodologySummaryResponse"
+                    }
+                },
+                "terminology": {
+                    "type": "object"
+                }
+            }
+        },
         "method.MethodologyDetailResponse": {
             "type": "object",
             "properties": {
@@ -6852,6 +7103,14 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/method.MethodologyID"
                     }
+                }
+            }
+        },
+        "method.UpdateStudentMethodologyCommand": {
+            "type": "object",
+            "properties": {
+                "methodology_override_slug": {
+                    "$ref": "#/definitions/method.MethodologyID"
                 }
             }
         },

@@ -99,6 +99,10 @@ type LifecycleService interface {
 	// RevokeAllSessions revokes all sessions except the current one.
 	// Returns count of revoked sessions.
 	RevokeAllSessions(ctx context.Context, auth *shared.AuthContext) (uint32, error)
+
+	// HandleFamilyDeletion accelerates any pending deletion request for a family
+	// when the iam::FamilyDeletionScheduled event fires. [15-data-lifecycle §17]
+	HandleFamilyDeletion(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

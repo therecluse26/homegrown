@@ -23,8 +23,12 @@ type MediaService interface {
 	// ConfirmUpload confirms that the client has completed a direct upload.
 	ConfirmUpload(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) (*UploadInfo, error)
 
-	// DeleteUpload soft-deletes an upload. (Phase 2)
+	// DeleteUpload deletes an upload from storage and marks it deleted in the DB. (Phase 2)
 	DeleteUpload(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) error
+
+	// ListUploads returns paginated uploads for the family, newest-first. (Phase 2)
+	// limit is capped at 100; afterID is an optional cursor (exclusive lower bound by ID).
+	ListUploads(ctx context.Context, familyID uuid.UUID, limit uint32, afterID *uuid.UUID) (*UploadListResponse, error)
 
 	// ─── Queries ────────────────────────────────────────────────────────
 
@@ -69,6 +73,10 @@ type UploadRepository interface {
 
 	// FindExpiredPending finds expired pending uploads for orphan cleanup.
 	FindExpiredPending(ctx context.Context, before time.Time, limit uint32) ([]Upload, error)
+
+	// ListByFamily returns uploads for a family, newest-first, cursor-paginated.
+	// afterID is an exclusive upper bound (UUID v7 ordering). Returns limit+1 items to detect next page.
+	ListByFamily(ctx context.Context, scope shared.FamilyScope, limit uint32, afterID *uuid.UUID) ([]Upload, error)
 }
 
 // ProcessingJobRepository defines persistence operations for media_processing_jobs.

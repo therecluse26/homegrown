@@ -4,11 +4,13 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
@@ -32,7 +34,7 @@ func NewKratosAdapter(adminURL, publicURL string) *KratosAdapterImpl {
 	return &KratosAdapterImpl{
 		adminURL:   adminURL,
 		publicURL:  publicURL,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -174,6 +176,134 @@ func (a *KratosAdapterImpl) RevokeSessions(ctx context.Context, identityID uuid.
 	return nil
 }
 
+// ListSessionsForIdentity returns all active sessions for a Kratos identity.
+// Calls GET /admin/identities/{identityID}/sessions. [15-data-lifecycle §12]
+func (a *KratosAdapterImpl) ListSessionsForIdentity(ctx context.Context, identityID uuid.UUID) ([]iam.KratosAdminSession, error) {
+	url := fmt.Sprintf("%s/admin/identities/%s/sessions?active=true", a.adminURL, identityID.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode == http.StatusNotFound {
+		return []iam.KratosAdminSession{}, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: list sessions returned %d", iam.ErrKratosError, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to read sessions response", iam.ErrKratosError)
+	}
+
+	var raw []kratosAdminSessionIn
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("%w: failed to parse sessions response", iam.ErrKratosError)
+	}
+
+	sessions := make([]iam.KratosAdminSession, 0, len(raw))
+	for _, s := range raw {
+		sess := iam.KratosAdminSession{
+			SessionID:  s.ID,
+			LastActive: s.AuthenticatedAt,
+		}
+		if len(s.Devices) > 0 {
+			sess.UserAgent = &s.Devices[0].UserAgent
+			sess.IPAddress = &s.Devices[0].IPAddress
+		}
+		sessions = append(sessions, sess)
+	}
+	return sessions, nil
+}
+
+// RevokeSpecificSession revokes a single Kratos session by session ID.
+// Calls DELETE /admin/sessions/{sessionID}. [15-data-lifecycle §12]
+func (a *KratosAdapterImpl) RevokeSpecificSession(ctx context.Context, sessionID string) error {
+	url := fmt.Sprintf("%s/admin/sessions/%s", a.adminURL, sessionID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil // already revoked — idempotent
+	}
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: revoke session returned %d", iam.ErrKratosError, resp.StatusCode)
+	}
+	return nil
+}
+
+// InitiateAccountRecovery triggers a Kratos recovery flow for the given email address.
+// Calls POST /self-service/recovery/api then submits the email.
+// Email enumeration prevention is the caller's responsibility. [15-data-lifecycle §13]
+func (a *KratosAdapterImpl) InitiateAccountRecovery(ctx context.Context, email string) error {
+	// Step 1: create a recovery flow via the public API.
+	flowReq, err := http.NewRequestWithContext(ctx, http.MethodGet, a.publicURL+"/self-service/recovery/api", nil)
+	if err != nil {
+		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+
+	flowResp, err := a.httpClient.Do(flowReq)
+	if err != nil {
+		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+	defer flowResp.Body.Close() //nolint:errcheck
+
+	if flowResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: create recovery flow returned %d", iam.ErrKratosError, flowResp.StatusCode)
+	}
+
+	flowBody, err := io.ReadAll(flowResp.Body)
+	if err != nil {
+		return fmt.Errorf("%w: failed to read recovery flow response", iam.ErrKratosError)
+	}
+
+	var flow kratosFlowIn
+	if err := json.Unmarshal(flowBody, &flow); err != nil {
+		return fmt.Errorf("%w: failed to parse recovery flow response", iam.ErrKratosError)
+	}
+
+	// Step 2: submit the email address to trigger the recovery email.
+	submitURL := fmt.Sprintf("%s/self-service/recovery?flow=%s", a.publicURL, flow.ID)
+	body, err := json.Marshal(map[string]string{"email": email, "method": "link"})
+	if err != nil {
+		return fmt.Errorf("%w: failed to marshal recovery submit body", iam.ErrKratosError)
+	}
+
+	submitReq, err := http.NewRequestWithContext(ctx, http.MethodPost, submitURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+	submitReq.Header.Set("Content-Type", "application/json")
+	submitReq.Header.Set("Accept", "application/json")
+
+	submitResp, err := a.httpClient.Do(submitReq)
+	if err != nil {
+		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
+	}
+	defer submitResp.Body.Close() //nolint:errcheck
+
+	// 200 = recovery email sent; 400/422 = validation error (email not found is NOT an error — enumeration prevention)
+	if submitResp.StatusCode != http.StatusOK && submitResp.StatusCode != http.StatusUnprocessableEntity {
+		return fmt.Errorf("%w: recovery submit returned %d", iam.ErrKratosError, submitResp.StatusCode)
+	}
+	return nil
+}
+
 // ─── Unexported Kratos Response Types ────────────────────────────────────────
 // These types model the Kratos API response JSON.
 // They MUST NOT be exported or used outside this file. [ARCH §4.2]
@@ -194,6 +324,21 @@ type kratosTraitsIn struct {
 }
 
 type kratosIdentityResponse struct {
-	ID     string        `json:"id"`
+	ID     string         `json:"id"`
 	Traits kratosTraitsIn `json:"traits"`
+}
+
+type kratosAdminSessionDevice struct {
+	UserAgent string `json:"user_agent"`
+	IPAddress string `json:"ip_address"`
+}
+
+type kratosAdminSessionIn struct {
+	ID              string                     `json:"id"`
+	AuthenticatedAt time.Time                  `json:"authenticated_at"`
+	Devices         []kratosAdminSessionDevice `json:"devices"`
+}
+
+type kratosFlowIn struct {
+	ID string `json:"id"`
 }

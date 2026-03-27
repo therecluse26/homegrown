@@ -3,6 +3,7 @@ package iam
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -22,13 +23,14 @@ const fallbackMethodologySlug = "charlotte-mason"
 // IamServiceImpl implements IamService.
 // Holds references to repositories, adapters, the event bus, and the raw DB for transactions.
 type IamServiceImpl struct {
-	familyRepo               FamilyRepository
-	parentRepo               ParentRepository
-	studentRepo              StudentRepository
-	kratosAdapter            KratosAdapter
-	eventBus                 *shared.EventBus
-	db                       *gorm.DB // for transaction management
+	familyRepo                 FamilyRepository
+	parentRepo                 ParentRepository
+	studentRepo                StudentRepository
+	kratosAdapter              KratosAdapter
+	eventBus                   *shared.EventBus
+	db                         *gorm.DB // for transaction management
 	defaultMethodologyResolver DefaultMethodologyResolver
+	billingSvc                 BillingServiceForIam // optional; nil before billing:: is wired
 }
 
 // NewIamService creates a new IamServiceImpl.
@@ -54,6 +56,12 @@ func NewIamService(
 // Called from cmd/server/main.go. [02-method Gap 5b]
 func (s *IamServiceImpl) SetDefaultMethodologyResolver(resolver DefaultMethodologyResolver) {
 	s.defaultMethodologyResolver = resolver
+}
+
+// SetBillingService injects the billing adapter after billing:: is wired.
+// Called from cmd/server/main.go. Required for COPPA credit-card micro-charge. [§9.3]
+func (s *IamServiceImpl) SetBillingService(svc BillingServiceForIam) {
+	s.billingSvc = svc
 }
 
 // getDefaultMethodologySlug returns the default methodology slug using the injected resolver,
@@ -296,12 +304,17 @@ func (s *IamServiceImpl) SubmitCoppaConsent(ctx context.Context, scope *shared.F
 		return nil, err
 	}
 
-	// Phase 1: stub consent verification. Credit card micro-charge via Stripe is wired in
-	// billing:: phase. [§9.3]
-	// TODO(billing::): Call Stripe micro-charge adapter when method = "credit_card_verification".
+	// Verify consent token. For credit_card_verification, run Hyperswitch micro-charge.
+	// For other methods (e.g. knowledge_questions), token presence is sufficient for now. [§9.3]
 	if newStatus == CoppaConsentConsented || newStatus == CoppaConsentReVerified {
 		if cmd.Method == "" || cmd.VerificationToken == "" {
 			return nil, ErrConsentVerificationFailed
+		}
+		if cmd.Method == "credit_card_verification" && s.billingSvc != nil {
+			if err := s.billingSvc.VerifyCreditCardMicroCharge(ctx, scope, cmd.VerificationToken); err != nil {
+				slog.Error("iam: COPPA credit card micro-charge failed", "family_id", scope.FamilyID(), "error", err)
+				return nil, ErrConsentVerificationFailed
+			}
 		}
 	}
 
@@ -466,6 +479,45 @@ func toConsentStatusResponse(family *Family) *ConsentStatusResponse {
 		ConsentMethod:     family.CoppaConsentMethod,
 		CanCreateStudents: family.CoppaConsentStatus.CanCreateStudents(),
 	}
+}
+
+// RevokeFamilySessions revokes all Kratos sessions for every parent in the family.
+// Uses BypassRLSTransaction to list parent identity IDs without a family scope
+// (background job and cross-domain context). [15-data-lifecycle §12, 11-safety §7.3]
+func (s *IamServiceImpl) RevokeFamilySessions(ctx context.Context, familyID uuid.UUID) error {
+	var identityIDs []uuid.UUID
+	if err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		return tx.Table("iam_parents").
+			Select("kratos_identity_id").
+			Where("family_id = ?", familyID).
+			Scan(&identityIDs).Error
+	}); err != nil {
+		return fmt.Errorf("iam: list family parent identities: %w", err)
+	}
+
+	var lastErr error
+	for _, identityID := range identityIDs {
+		if err := s.kratosAdapter.RevokeSessions(ctx, identityID); err != nil {
+			slog.Error("iam: revoke sessions for identity", "identity_id", identityID, "error", err)
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+// GetStudentName returns the display_name for a student by ID.
+// Uses BypassRLSTransaction — called by background jobs without a family scope.
+func (s *IamServiceImpl) GetStudentName(ctx context.Context, studentID uuid.UUID) (string, error) {
+	type nameRow struct {
+		DisplayName string `gorm:"column:display_name"`
+	}
+	var row nameRow
+	if err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		return tx.Raw(`SELECT display_name FROM iam_students WHERE id = ?`, studentID).Scan(&row).Error
+	}); err != nil {
+		return "", fmt.Errorf("iam: get student name: %w", err)
+	}
+	return row.DisplayName, nil
 }
 
 func displayNameFromTraits(traits KratosTraits) string {

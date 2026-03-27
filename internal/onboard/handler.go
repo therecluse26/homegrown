@@ -34,6 +34,8 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	onb.GET("/community", h.getCommunity)
 	onb.POST("/complete", h.completeWizard)
 	onb.POST("/skip", h.skipWizard)
+	onb.PATCH("/roadmap/:item_id/complete", h.completeRoadmapItem)
+	onb.POST("/restart", h.restartOnboarding)
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -318,6 +320,51 @@ func (h *Handler) skipWizard(c echo.Context) error {
 		return err
 	}
 	resp, err := h.svc.SkipWizard(c.Request().Context(), &scope)
+	if err != nil {
+		return mapOnboardError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// completeRoadmapItem handles PATCH /v1/onboarding/roadmap/:item_id/complete.
+//
+// @Summary     Mark a roadmap item as completed
+// @Tags        onboarding
+// @Param       item_id  path  string  true  "Roadmap item ID"
+// @Success     204
+// @Failure     401  {object}  shared.ErrorResponse
+// @Failure     404  {object}  shared.ErrorResponse
+// @Router      /onboarding/roadmap/{item_id}/complete [patch]
+func (h *Handler) completeRoadmapItem(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	itemID, err := uuid.Parse(c.Param("item_id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid roadmap item ID")
+	}
+	if err := h.svc.CompleteRoadmapItem(c.Request().Context(), &scope, itemID); err != nil {
+		return mapOnboardError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// restartOnboarding handles POST /v1/onboarding/restart.
+//
+// @Summary     Restart the onboarding wizard
+// @Tags        onboarding
+// @Produce     json
+// @Success     200  {object}  WizardProgressResponse
+// @Failure     401  {object}  shared.ErrorResponse
+// @Failure     404  {object}  shared.ErrorResponse
+// @Router      /onboarding/restart [post]
+func (h *Handler) restartOnboarding(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	resp, err := h.svc.RestartOnboarding(c.Request().Context(), &scope)
 	if err != nil {
 		return mapOnboardError(err)
 	}

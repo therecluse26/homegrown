@@ -200,9 +200,45 @@ func (s *mediaServiceImpl) GetUpload(ctx context.Context, uploadID uuid.UUID, fa
 
 // ─── DeleteUpload ─────────────────────────────────────────────────────────────
 
-func (s *mediaServiceImpl) DeleteUpload(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-	// Phase 2 — not yet implemented
-	return &MediaError{Err: ErrProcessingFailed}
+func (s *mediaServiceImpl) DeleteUpload(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID) error {
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID})
+	upload, err := s.uploads.FindByID(ctx, scope, uploadID)
+	if err != nil {
+		return err
+	}
+
+	// Delete from object storage (best-effort: if it fails the DB record is still marked deleted).
+	// The orphan-cleanup job can retry storage deletion on next run. [09-media §6.1]
+	_ = s.storage.DeleteObject(ctx, upload.StorageKey)
+
+	_, err = s.uploads.UpdateStatus(ctx, uploadID, UploadStatusDeleted, nil)
+	return err
+}
+
+// ─── ListUploads ──────────────────────────────────────────────────────────────
+
+func (s *mediaServiceImpl) ListUploads(ctx context.Context, familyID uuid.UUID, limit uint32, afterID *uuid.UUID) (*UploadListResponse, error) {
+	if limit == 0 || limit > 100 {
+		limit = 20
+	}
+	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: familyID})
+	uploads, err := s.uploads.ListByFamily(ctx, scope, limit, afterID)
+	if err != nil {
+		return nil, err
+	}
+
+	var nextCursor *string
+	if uint32(len(uploads)) > limit {
+		uploads = uploads[:limit]
+		last := uploads[len(uploads)-1].ID.String()
+		nextCursor = &last
+	}
+
+	items := make([]UploadInfo, len(uploads))
+	for i := range uploads {
+		items[i] = *uploadToInfo(&uploads[i], s.config)
+	}
+	return &UploadListResponse{Items: items, NextCursor: nextCursor}, nil
 }
 
 // ─── PresignedGet ─────────────────────────────────────────────────────────────

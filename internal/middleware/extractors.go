@@ -1,9 +1,12 @@
 package middleware
 
 import (
+	"errors"
+
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 // ─── Role Extractors ──────────────────────────────────────────────────────────
@@ -53,23 +56,31 @@ type CreatorContext struct {
 	CreatorID uuid.UUID
 }
 
-// RequireCreator extracts AuthContext and verifies the user has a creator account.
-// Returns 403 Forbidden if no creator account exists. [S§3.1.4]
-//
-// TODO(07-mkt): Replace stub with creator lookup from mkt_creators table.
-// Preferred approach: add CreatorID *uuid.UUID to AuthContext (populated during
-// auth middleware from a JOIN) — no cross-domain call per request. [§13.3]
-// Consuming domains: mkt::
-func RequireCreator(c echo.Context) (*CreatorContext, error) {
+// RequireCreator extracts AuthContext and verifies the user has a creator account
+// by querying mkt_creators. Returns 403 Forbidden if no active creator account exists. [S§3.1.4]
+// Consuming domains: billing::
+func RequireCreator(c echo.Context, db *gorm.DB) (*CreatorContext, error) {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(07-mkt): Look up creator account for auth.ParentID in mkt_creators.
-	// Until marketplace domain is implemented, all creator checks deny access.
-	_ = auth
-	return nil, shared.ErrForbidden()
+	type creatorRow struct {
+		ID uuid.UUID `gorm:"column:id"`
+	}
+	var row creatorRow
+	err = db.WithContext(c.Request().Context()).
+		Table("mkt_creators").
+		Select("id").
+		Where("parent_id = ? AND onboarding_status = 'active'", auth.ParentID).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, shared.ErrForbidden()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &CreatorContext{Auth: auth, CreatorID: row.ID}, nil
 }
 
 // RequireAdmin extracts AuthContext and verifies the user is a platform administrator.

@@ -2500,3 +2500,87 @@ func (s *learningServiceImpl) HandleMethodologyConfigUpdated(_ context.Context) 
 	// TODO: invalidate tool resolution cache (Phase 2)
 	return nil
 }
+
+// ─── Background Jobs ─────────────────────────────────────────────────────────
+
+// SnapshotProgress computes and stores weekly progress snapshots for all active students.
+// Uses BypassRLSTransaction to list students across all families, then constructs a
+// per-family scope to compute metrics using family-scoped repositories. [06-learn §12.3]
+func (s *learningServiceImpl) SnapshotProgress(ctx context.Context) error {
+	type studentRow struct {
+		StudentID uuid.UUID `gorm:"column:id"`
+		FamilyID  uuid.UUID `gorm:"column:family_id"`
+	}
+	var students []studentRow
+	if err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		return tx.Table("iam_students").
+			Select("id, family_id").
+			Where("deleted_at IS NULL").
+			Scan(&students).Error
+	}); err != nil {
+		return err
+	}
+
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	// Weekly window: past 7 days
+	weekAgo := today.AddDate(0, 0, -7)
+
+	var lastErr error
+	for _, s2 := range students {
+		scope := shared.NewFamilyScopeFromID(s2.FamilyID)
+
+		totalActivities, err := s.activityLogRepo.CountByStudentDateRange(ctx, &scope, s2.StudentID, weekAgo, today)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		hoursBySubject, err := s.activityLogRepo.HoursBySubject(ctx, &scope, s2.StudentID, weekAgo, today)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var totalHours float64
+		subjectHours := make([]SubjectHoursResponse, len(hoursBySubject))
+		for i, h := range hoursBySubject {
+			hours := float64(h.TotalMinutes) / 60.0
+			totalHours += hours
+			subjectHours[i] = SubjectHoursResponse{SubjectSlug: h.SubjectSlug, SubjectName: h.SubjectSlug, Hours: hours}
+		}
+		booksCompleted, err := s.readingProgressRepo.CountCompleted(ctx, &scope, s2.StudentID, weekAgo, today)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		journalEntries, err := s.journalEntryRepo.CountByStudentDateRange(ctx, &scope, s2.StudentID, weekAgo, today)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		summary := ProgressSummaryResponse{
+			StudentID:       s2.StudentID,
+			DateFrom:        weekAgo,
+			DateTo:          today,
+			TotalActivities: totalActivities,
+			TotalHours:      totalHours,
+			HoursBySubject:  subjectHours,
+			BooksCompleted:  booksCompleted,
+			JournalEntries:  journalEntries,
+		}
+		data, err := json.Marshal(summary)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		snap := &ProgressSnapshotModel{
+			StudentID:    s2.StudentID,
+			SnapshotDate: today,
+			Data:         data,
+		}
+		if err := s.progressRepo.CreateSnapshot(ctx, &scope, snap); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}

@@ -2,6 +2,7 @@ package media
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -26,6 +27,8 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	g.POST("/uploads", h.requestUpload)
 	g.POST("/uploads/:upload_id/confirm", h.confirmUpload)
 	g.GET("/uploads/:upload_id", h.getUpload)
+	g.DELETE("/uploads/:upload_id", h.deleteUpload)
+	g.GET("/uploads", h.listUploads)
 }
 
 // ─── POST /v1/media/uploads ───────────────────────────────────────────────────
@@ -99,6 +102,55 @@ func (h *Handler) getUpload(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, info)
+}
+
+// ─── DELETE /v1/media/uploads/:upload_id ──────────────────────────────────────
+
+func (h *Handler) deleteUpload(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return shared.ErrUnauthorized()
+	}
+	uploadID, err := uuid.Parse(c.Param("upload_id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid upload ID")
+	}
+	if err := h.svc.DeleteUpload(c.Request().Context(), uploadID, auth.FamilyID); err != nil {
+		return mapMediaError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── GET /v1/media/uploads ────────────────────────────────────────────────────
+
+func (h *Handler) listUploads(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return shared.ErrUnauthorized()
+	}
+
+	var limit uint32 = 20
+	if l := c.QueryParam("limit"); l != "" {
+		var n uint32
+		if _, err := fmt.Sscanf(l, "%d", &n); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	var afterID *uuid.UUID
+	if a := c.QueryParam("after"); a != "" {
+		id, err := uuid.Parse(a)
+		if err != nil {
+			return shared.ErrBadRequest("invalid after cursor")
+		}
+		afterID = &id
+	}
+
+	resp, err := h.svc.ListUploads(c.Request().Context(), auth.FamilyID, limit, afterID)
+	if err != nil {
+		return mapMediaError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // ─── Error Mapping ────────────────────────────────────────────────────────────

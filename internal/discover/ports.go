@@ -38,6 +38,10 @@ type DiscoveryService interface {
 	// Used by onboard:: to claim a quiz result during import. [04-onboard §9.4]
 	// Returns ErrQuizResultAlreadyClaimed if already owned by a different family.
 	ClaimQuizResult(ctx context.Context, shareID string, familyID any) error
+
+	// GetContentBySlug returns a published content page by its slug. [03-discover §8.4]
+	// Returns ErrContentPageNotFound (→ 404) if not found or not published.
+	GetContentBySlug(ctx context.Context, slug string) (*ContentPage, error)
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────

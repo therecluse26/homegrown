@@ -702,20 +702,64 @@ func (s *NotificationServiceImpl) HandleFamilyDeletionScheduled(_ context.Contex
 	return nil
 }
 
-func (s *NotificationServiceImpl) HandleSubscriptionCreated(_ context.Context, _ SubscriptionCreatedEvent) error {
-	return nil
+func (s *NotificationServiceImpl) HandleSubscriptionCreated(ctx context.Context, event SubscriptionCreatedEvent) error {
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         event.FamilyID,
+		NotificationType: TypeSubscriptionCreated,
+		Title:            TypeToTitleTemplate[TypeSubscriptionCreated],
+		Body:             fmt.Sprintf("Your %s subscription is now active", event.Tier),
+		ActionURL:        strPtr("/settings/billing"),
+		Metadata: map[string]any{
+			"tier":             event.Tier,
+			"billing_interval": event.BillingInterval,
+		},
+	})
 }
 
-func (s *NotificationServiceImpl) HandleSubscriptionChanged(_ context.Context, _ SubscriptionChangedEvent) error {
-	return nil
+func (s *NotificationServiceImpl) HandleSubscriptionChanged(ctx context.Context, event SubscriptionChangedEvent) error {
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         event.FamilyID,
+		NotificationType: TypeSubscriptionChanged,
+		Title:            TypeToTitleTemplate[TypeSubscriptionChanged],
+		Body:             fmt.Sprintf("Your subscription has been updated to %s (%s)", event.Tier, event.BillingInterval),
+		ActionURL:        strPtr("/settings/billing"),
+		Metadata: map[string]any{
+			"tier":             event.Tier,
+			"billing_interval": event.BillingInterval,
+			"change_type":      event.ChangeType,
+		},
+	})
 }
 
-func (s *NotificationServiceImpl) HandleSubscriptionCancelled(_ context.Context, _ SubscriptionCancelledEvent) error {
-	return nil
+func (s *NotificationServiceImpl) HandleSubscriptionCancelled(ctx context.Context, event SubscriptionCancelledEvent) error {
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         event.FamilyID,
+		NotificationType: TypeSubscriptionCancelled,
+		Title:            TypeToTitleTemplate[TypeSubscriptionCancelled],
+		Body:             fmt.Sprintf("Your subscription ended on %s", event.EffectiveAt.Format("January 2, 2006")),
+		ActionURL:        strPtr("/settings/billing"),
+		Metadata:         map[string]any{},
+	})
 }
 
-func (s *NotificationServiceImpl) HandlePayoutCompleted(_ context.Context, _ PayoutCompletedEvent) error {
-	return nil
+func (s *NotificationServiceImpl) HandlePayoutCompleted(ctx context.Context, event PayoutCompletedEvent) error {
+	familyID, err := s.iamService.GetFamilyIDForCreator(ctx, event.CreatorID)
+	if err != nil {
+		return fmt.Errorf("notify.HandlePayoutCompleted: lookup family for creator %s: %w", event.CreatorID, err)
+	}
+	amountFormatted := fmt.Sprintf("%.2f %s", float64(event.AmountCents)/100, event.Currency)
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         familyID,
+		NotificationType: TypePayoutCompleted,
+		Title:            TypeToTitleTemplate[TypePayoutCompleted],
+		Body:             fmt.Sprintf("Your payout of %s has been sent", amountFormatted),
+		ActionURL:        strPtr("/marketplace/creator/payouts"),
+		Metadata: map[string]any{
+			"payout_id":    event.PayoutID.String(),
+			"amount_cents": event.AmountCents,
+			"currency":     event.Currency,
+		},
+	})
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

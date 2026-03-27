@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
@@ -26,11 +27,13 @@ func NewFamilyDeletionScheduledHandler(svc BillingService) *FamilyDeletionSchedu
 }
 
 func (h *FamilyDeletionScheduledHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
-	// DEFERRED: When iam:: defines FamilyDeletionScheduled, type-assert directly.
-	// For now, this handler exists for structural completeness.
-	_ = ctx
-	_ = event
-	return fmt.Errorf("billing.FamilyDeletionScheduledHandler: iam::FamilyDeletionScheduled event not yet wired")
+	e, ok := event.(iam.FamilyDeletionScheduled)
+	if !ok {
+		return fmt.Errorf("billing.FamilyDeletionScheduledHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleFamilyDeletionScheduled(ctx, FamilyDeletionScheduledEvent{
+		FamilyID: e.FamilyID,
+	})
 }
 
 // PrimaryParentTransferredHandler handles iam::PrimaryParentTransferred events.

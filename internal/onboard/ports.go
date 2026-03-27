@@ -50,6 +50,14 @@ type OnboardingService interface {
 	// SkipWizard marks the wizard as skipped. [04-onboard §9.6]
 	SkipWizard(ctx context.Context, scope *shared.FamilyScope) (*WizardProgressResponse, error)
 
+	// CompleteRoadmapItem marks a specific roadmap item as completed. [04-onboard Phase 2]
+	// Returns ErrRoadmapItemNotFound (→ 404) if the item does not exist in the family.
+	CompleteRoadmapItem(ctx context.Context, scope *shared.FamilyScope, itemID uuid.UUID) error
+
+	// RestartOnboarding resets the wizard to in-progress and clears materialized guidance. [04-onboard Phase 2]
+	// All completed steps, methodology path, and quiz share ID are cleared.
+	RestartOnboarding(ctx context.Context, scope *shared.FamilyScope) (*WizardProgressResponse, error)
+
 	// ─── Event-Driven (no auth context) ──────────────────────────────────────
 
 	// InitializeWizard creates the wizard progress row for a new family.
@@ -76,6 +84,8 @@ type RoadmapItemRepository interface {
 	ListByFamilyID(ctx context.Context, familyID uuid.UUID) ([]RoadmapItem, error)
 	DeleteByFamilyID(ctx context.Context, familyID uuid.UUID) error
 	BatchCreate(ctx context.Context, items []RoadmapItem) error
+	// MarkComplete sets is_completed=true for the given item. Returns ErrRoadmapItemNotFound if not found in family.
+	MarkComplete(ctx context.Context, itemID, familyID uuid.UUID) error
 }
 
 // StarterRecommendationRepository provides persistence for materialized recommendations.

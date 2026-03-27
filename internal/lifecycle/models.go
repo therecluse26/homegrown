@@ -1,10 +1,199 @@
 package lifecycle
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Custom DB Types [15-data-lifecycle §6, CODING §2.3]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// textArray is a PostgreSQL TEXT[] type for include_domains. [CODING §2.3]
+type textArray []string
+
+func (a textArray) Value() (driver.Value, error) {
+	if len(a) == 0 {
+		return "{}", nil
+	}
+	return "{" + strings.Join(a, ",") + "}", nil
+}
+
+func (a *textArray) Scan(src any) error {
+	if src == nil {
+		*a = nil
+		return nil
+	}
+	var str string
+	switch v := src.(type) {
+	case []byte:
+		str = string(v)
+	case string:
+		str = v
+	default:
+		return fmt.Errorf("textArray.Scan: unsupported type %T", src)
+	}
+	str = strings.TrimPrefix(str, "{")
+	str = strings.TrimSuffix(str, "}")
+	if str == "" {
+		*a = textArray{}
+		return nil
+	}
+	parts := strings.Split(str, ",")
+	result := make(textArray, len(parts))
+	for i, p := range parts {
+		result[i] = strings.TrimSpace(p)
+	}
+	*a = result
+	return nil
+}
+
+// domainStatusMap is a JSONB map[string]bool for deletion domain_status. [15-data-lifecycle §6]
+type domainStatusMap map[string]bool
+
+func (m domainStatusMap) Value() (driver.Value, error) {
+	if m == nil {
+		return "{}", nil
+	}
+	b, err := json.Marshal(m)
+	return string(b), err
+}
+
+func (m *domainStatusMap) Scan(src any) error {
+	if src == nil {
+		*m = domainStatusMap{}
+		return nil
+	}
+	var b []byte
+	switch v := src.(type) {
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return fmt.Errorf("domainStatusMap.Scan: unsupported type %T", src)
+	}
+	result := make(domainStatusMap)
+	if err := json.Unmarshal(b, &result); err != nil {
+		return err
+	}
+	*m = result
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GORM Row Models [15-data-lifecycle §6]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// exportRequestRow is the GORM model for lifecycle_export_requests.
+type exportRequestRow struct {
+	ID                uuid.UUID   `gorm:"column:id;primaryKey"`
+	FamilyID          uuid.UUID   `gorm:"column:family_id"`
+	RequestedBy       uuid.UUID   `gorm:"column:requested_by"`
+	Status            string      `gorm:"column:status"`
+	Format            string      `gorm:"column:format"`
+	IncludeDomains    textArray   `gorm:"column:include_domains;type:text[]"`
+	ArchiveKey        *string     `gorm:"column:archive_key"`
+	DownloadExpiresAt *time.Time  `gorm:"column:download_expires_at"`
+	SizeBytes         *int64      `gorm:"column:size_bytes"`
+	ErrorMessage      *string     `gorm:"column:error_message"`
+	CreatedAt         time.Time   `gorm:"column:created_at"`
+	CompletedAt       *time.Time  `gorm:"column:completed_at"`
+	ExpiresAt         time.Time   `gorm:"column:expires_at"`
+}
+
+func (exportRequestRow) TableName() string { return "lifecycle_export_requests" }
+
+func (r exportRequestRow) toDomain() ExportRequest {
+	return ExportRequest{
+		ID:                r.ID,
+		FamilyID:          r.FamilyID,
+		RequestedBy:       r.RequestedBy,
+		Status:            ExportStatus(r.Status),
+		Format:            ExportFormat(r.Format),
+		IncludeDomains:    []string(r.IncludeDomains),
+		ArchiveKey:        r.ArchiveKey,
+		DownloadExpiresAt: r.DownloadExpiresAt,
+		SizeBytes:         r.SizeBytes,
+		ErrorMessage:      r.ErrorMessage,
+		CreatedAt:         r.CreatedAt,
+		CompletedAt:       r.CompletedAt,
+		ExpiresAt:         r.ExpiresAt,
+	}
+}
+
+// deletionRequestRow is the GORM model for lifecycle_deletion_requests.
+type deletionRequestRow struct {
+	ID                 uuid.UUID        `gorm:"column:id;primaryKey"`
+	FamilyID           uuid.UUID        `gorm:"column:family_id"`
+	RequestedBy        uuid.UUID        `gorm:"column:requested_by"`
+	Reason             *string          `gorm:"column:reason"`
+	DeletionType       string           `gorm:"column:deletion_type"`
+	StudentID          *uuid.UUID       `gorm:"column:student_id"`
+	Status             string           `gorm:"column:status"`
+	GracePeriodEndsAt  time.Time        `gorm:"column:grace_period_ends_at"`
+	ExportOffered      bool             `gorm:"column:export_offered"`
+	ExportRequestID    *uuid.UUID       `gorm:"column:export_request_id"`
+	DomainStatus       domainStatusMap  `gorm:"column:domain_status;type:jsonb"`
+	CreatedAt          time.Time        `gorm:"column:created_at"`
+	CompletedAt        *time.Time       `gorm:"column:completed_at"`
+	CancelledAt        *time.Time       `gorm:"column:cancelled_at"`
+}
+
+func (deletionRequestRow) TableName() string { return "lifecycle_deletion_requests" }
+
+func (r deletionRequestRow) toDomain() DeletionRequest {
+	return DeletionRequest{
+		ID:                r.ID,
+		FamilyID:          r.FamilyID,
+		RequestedBy:       r.RequestedBy,
+		Reason:            r.Reason,
+		DeletionType:      DeletionType(r.DeletionType),
+		StudentID:         r.StudentID,
+		Status:            DeletionStatus(r.Status),
+		GracePeriodEndsAt: r.GracePeriodEndsAt,
+		ExportOffered:     r.ExportOffered,
+		ExportRequestID:   r.ExportRequestID,
+		DomainStatus:      map[string]bool(r.DomainStatus),
+		CreatedAt:         r.CreatedAt,
+		CompletedAt:       r.CompletedAt,
+		CancelledAt:       r.CancelledAt,
+	}
+}
+
+// recoveryRequestRow is the GORM model for lifecycle_recovery_requests.
+type recoveryRequestRow struct {
+	ID                 uuid.UUID  `gorm:"column:id;primaryKey"`
+	Email              string     `gorm:"column:email"`
+	VerificationMethod string     `gorm:"column:verification_method"`
+	Status             string     `gorm:"column:status"`
+	SupportTicketID    *string    `gorm:"column:support_ticket_id"`
+	ResolvedParentID   *uuid.UUID `gorm:"column:resolved_parent_id"`
+	CreatedAt          time.Time  `gorm:"column:created_at"`
+	ResolvedAt         *time.Time `gorm:"column:resolved_at"`
+	ExpiresAt          time.Time  `gorm:"column:expires_at"`
+}
+
+func (recoveryRequestRow) TableName() string { return "lifecycle_recovery_requests" }
+
+func (r recoveryRequestRow) toDomain() RecoveryRequest {
+	return RecoveryRequest{
+		ID:                 r.ID,
+		Email:              r.Email,
+		VerificationMethod: VerificationMethod(r.VerificationMethod),
+		Status:             RecoveryStatus(r.Status),
+		SupportTicketID:    r.SupportTicketID,
+		ResolvedParentID:   r.ResolvedParentID,
+		CreatedAt:          r.CreatedAt,
+		ResolvedAt:         r.ResolvedAt,
+		ExpiresAt:          r.ExpiresAt,
+	}
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Enums [15-data-lifecycle §8]

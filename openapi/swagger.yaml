@@ -790,6 +790,31 @@ definitions:
     - grade_points
     - level
     type: object
+  discover.ContentPage:
+    properties:
+      category:
+        type: string
+      content:
+        type: string
+      createdAt:
+        type: string
+      displayOrder:
+        type: integer
+      id:
+        type: string
+      metaDescription:
+        type: string
+      metaTitle:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      updatedAt:
+        type: string
+    type: object
   discover.MethodologyRecommendation:
     properties:
       explanation:
@@ -1091,6 +1116,19 @@ definitions:
       tier:
         type: string
     type: object
+  method.MethodologyContext:
+    properties:
+      mastery_level:
+        type: string
+      primary:
+        $ref: '#/definitions/method.MethodologySummaryResponse'
+      secondary:
+        items:
+          $ref: '#/definitions/method.MethodologySummaryResponse'
+        type: array
+      terminology:
+        type: object
+    type: object
   method.MethodologyDetailResponse:
     properties:
       community_config:
@@ -1161,6 +1199,11 @@ definitions:
         type: array
     required:
     - primary_methodology_slug
+    type: object
+  method.UpdateStudentMethodologyCommand:
+    properties:
+      methodology_override_slug:
+        $ref: '#/definitions/method.MethodologyID'
     type: object
   onboard.AddChildCommand:
     properties:
@@ -3678,6 +3721,28 @@ paths:
       summary: Trigger transcript PDF generation
       tags:
       - compliance
+  /discovery/content/{slug}:
+    get:
+      parameters:
+      - description: Content page slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/discover.ContentPage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      summary: Get a published content page by slug
+      tags:
+      - discovery
   /discovery/quiz:
     get:
       produces:
@@ -3878,6 +3943,24 @@ paths:
       summary: Update family methodology selection
       tags:
       - families
+  /families/methodology-context:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/method.MethodologyContext'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get full methodology context for the family dashboard
+      tags:
+      - families
   /families/profile:
     get:
       produces:
@@ -4031,6 +4114,46 @@ paths:
       summary: Update student profile
       tags:
       - students
+  /families/students/{id}/methodology:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Methodology override
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/method.UpdateStudentMethodologyCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/method.MethodologySelectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Set or clear a student's methodology override
+      tags:
+      - families
   /families/students/{id}/tools:
     get:
       parameters:
@@ -4415,6 +4538,26 @@ paths:
       summary: Get onboarding starter recommendations
       tags:
       - onboarding
+  /onboarding/restart:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/onboard.WizardProgressResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Restart the onboarding wizard
+      tags:
+      - onboarding
   /onboarding/roadmap:
     get:
       produces:
@@ -4433,6 +4576,28 @@ paths:
           schema:
             $ref: '#/definitions/shared.ErrorResponse'
       summary: Get onboarding roadmap
+      tags:
+      - onboarding
+  /onboarding/roadmap/{item_id}/complete:
+    patch:
+      parameters:
+      - description: Roadmap item ID
+        in: path
+        name: item_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.ErrorResponse'
+      summary: Mark a roadmap item as completed
       tags:
       - onboarding
   /onboarding/skip:
@@ -5363,11 +5528,12 @@ paths:
       produces:
       - application/json
       responses:
-        "501":
-          description: Not Implemented
+        "200":
+          description: OK
           schema:
             additionalProperties:
-              type: string
+              items: {}
+              type: array
             type: object
       security:
       - BearerAuth: []

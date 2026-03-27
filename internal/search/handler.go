@@ -131,14 +131,12 @@ func (h *Handler) autocomplete(c echo.Context) error {
 // @Tags        search
 // @Produce     json
 // @Security    BearerAuth
-// @Success     501 {object} map[string]string
+// @Success     200 {object} map[string][]any
 // @Router      /search/suggestions [get]
-// GET /v1/search/suggestions — Phase 3 stub [12-search §4.3]
-// Returns 501 until the recs:: domain is implemented.
+// GET /v1/search/suggestions — returns empty list until Typesense is wired. [12-search §4.3]
 func (h *Handler) suggestions(c echo.Context) error {
-	return c.JSON(http.StatusNotImplemented, map[string]string{
-		"error": "search suggestions are not yet available",
-	})
+	// TODO(phase-3): wire Typesense suggestions query. Returning empty list for now.
+	return c.JSON(http.StatusOK, map[string]any{"suggestions": []any{}})
 }
 
 // mapSearchError maps any error to an Echo-compatible HTTP error.

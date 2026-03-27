@@ -586,3 +586,6 @@ func (m *mockLearningService) HandlePurchaseCompleted(context.Context, uuid.UUID
 func (m *mockLearningService) HandleMethodologyConfigUpdated(context.Context) error {
 	return nil
 }
+func (m *mockLearningService) SnapshotProgress(context.Context) error {
+	return nil
+}

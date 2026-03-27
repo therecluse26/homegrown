@@ -89,6 +89,9 @@ func (m *mockDiscoveryService) ClaimQuizResult(ctx context.Context, shareID stri
 	}
 	return nil
 }
+func (m *mockDiscoveryService) GetContentBySlug(_ context.Context, _ string) (*ContentPage, error) {
+	return &ContentPage{}, nil
+}
 
 // ─── GET /v1/discovery/quiz ───────────────────────────────────────────────────
 
