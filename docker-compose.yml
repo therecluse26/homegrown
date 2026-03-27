@@ -55,6 +55,25 @@ services:
       retries: 5
       start_period: 10s
 
+  kratos_agent:
+    image: oryd/kratos:v1.3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      DSN: postgres://homegrown:homegrown@postgres:5432/kratos_agent?sslmode=disable
+      LOG_LEVEL: warning
+    command: serve --config /etc/kratos/kratos.yml --dev --watch-courier
+    volumes:
+      - ./kratos:/etc/kratos
+    ports:
+      - "4935:4433"   # Public API (agent)
+      - "4936:4434"   # Admin API (agent)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   kratos-migrate:
     image: oryd/kratos:v1.3
     depends_on:

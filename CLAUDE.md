@@ -176,12 +176,59 @@ incomplete, fix the spec first, then continue coding.
 | `make type-check` | Run TypeScript type checker in `frontend/` |
 | `make migrate` | Run pending database migrations (goose) |
 | `make db-reset` | Drop + recreate + migrate the database |
+| `make seed` | Re-seed the agent database (idempotent; safe to rerun) |
+| `make agent-db-reset` | Full agent DB reset: drop → recreate → migrate → seed |
+| `make agent-kratos-reset` | Wipe + reinitialise the agent Kratos identity store |
 | `make openapi` | Regenerate OpenAPI spec from Go swag annotations |
 | `make generate-types` | Regenerate TypeScript types from OpenAPI spec |
 | `make full-generate` | Run both `openapi` + `generate-types` in sequence |
 | `make install-tools` | Install required build tools (swag, lefthook) |
 | `make install-hooks` | Install lefthook git hooks (one-shot setup) |
 | `make audit` | Run `govulncheck` vulnerability check |
+
+---
+
+## Agent Database
+
+The project runs two isolated databases and two Kratos instances so that agent test
+sessions never pollute the developer's working data.
+
+### Two-Database Model
+
+| Database | Purpose |
+|----------|---------|
+| `homegrown` | Developer's own working database; normally left alone |
+| `homegrown_agent` | Isolated database used exclusively by AI agents for testing |
+
+All seed/reset commands default to `homegrown_agent`. To target the developer database
+explicitly: `make seed DB=homegrown`.
+
+### Two Kratos Instances
+
+| Instance | Public port | Admin port | Used by |
+|----------|-------------|------------|---------|
+| Dev Kratos | `localhost:4933` | `localhost:4934` | Developer login |
+| Agent Kratos | `localhost:4935` | `localhost:4936` | Agent test identities (`seed@example.com`, `admin@example.com`) |
+
+### When to Run Each Command
+
+| Situation | Command |
+|-----------|---------|
+| Starting a new agent test session (data may be stale) | `make seed` |
+| New migrations have been added since last reset | `make agent-db-reset` |
+| Agent login / Kratos identity is broken or stale | `make agent-kratos-reset` |
+| Full clean slate (schema + data + identities) | `make agent-db-reset && make agent-kratos-reset` |
+| Seed the developer's own DB (rarely needed) | `make seed DB=homegrown` |
+
+### Seeder Behaviour
+
+- **Idempotent** — uses `ON CONFLICT … DO NOTHING` throughout; always safe to rerun
+  without duplicating data.
+- **Kratos connectivity** — tries agent Kratos admin API (`localhost:4936`) first, then
+  falls back to dev Kratos (`localhost:4934`). If both are unreachable it falls back to
+  deterministic UUID constants and logs a WARN. Seed data is still inserted correctly; the
+  only difference is that Kratos identities won't exist for those UUIDs (agent login will
+  fail until Kratos is running).
 
 ---
 

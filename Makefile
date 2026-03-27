@@ -10,7 +10,7 @@ GOBIN := $(or $(shell $(GO) env GOBIN),$(shell $(GO) env GOPATH)/bin)
 SWAG := $(GOBIN)/swag
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check lint test type-check \
-        migrate db-reset seed agent-db-reset agent-server \
+        migrate db-reset seed agent-db-reset agent-kratos-reset agent-server \
         openapi generate-types full-generate audit install-tools install-hooks
 
 # Default: run all quality gates
@@ -109,6 +109,12 @@ agent-db-reset:
 	docker compose exec postgres psql -U homegrown -c "DROP DATABASE IF EXISTS homegrown_agent;"
 	docker compose exec postgres psql -U homegrown -c "CREATE DATABASE homegrown_agent;"
 	$(MAKE) seed
+
+# Wipe and reinitialise only the agent Kratos identity store.
+agent-kratos-reset:
+	docker compose exec postgres psql -U homegrown -c \
+	  "DROP DATABASE IF EXISTS kratos_agent; CREATE DATABASE kratos_agent;"
+	docker compose restart kratos_agent
 
 # Start the API server on port 15180 pointed at the agent database.
 agent-server:
