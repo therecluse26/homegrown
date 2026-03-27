@@ -84,6 +84,66 @@ Additionally, before every commit verify:
 
 ---
 
+## Frontend Validation with Playwright (Non-Negotiable)
+
+After implementing any frontend change, you MUST validate it visually using the Playwright
+MCP server **before declaring the work complete**. TypeScript type-checking alone is not
+sufficient — components must be verified to render and behave correctly in a browser.
+
+### Setup
+
+Start the Vite dev server yourself using the Bash tool with `run_in_background: true`.
+Pick any free port (e.g. 5174 to avoid colliding with the user's own dev server):
+
+```bash
+# run_in_background: true
+cd frontend && npm run dev -- --port 15173
+```
+
+Wait a few seconds for the server to be ready, then run your Playwright checks against
+`http://localhost:15173`. Kill the background process when validation is complete.
+
+### Required Validation Steps
+
+For every frontend change, perform ALL of the following:
+
+1. **Navigate to the affected page(s):**
+   ```
+   mcp__pw__browser_navigate → http://localhost:15173/{route}
+   ```
+
+2. **Capture an accessibility snapshot** to verify the DOM structure rendered correctly:
+   ```
+   mcp__pw__browser_snapshot
+   ```
+
+3. **Check for console errors and warnings:**
+   ```
+   mcp__pw__browser_console_messages (level: "warning")
+   ```
+   Zero errors are acceptable. Investigate and fix any that appear.
+
+4. **Exercise the changed interaction(s).** If you added or modified a button, form,
+   modal, or other interactive element — click it, fill it, or trigger it:
+   ```
+   mcp__pw__browser_click / mcp__pw__browser_type / mcp__pw__browser_fill_form
+   ```
+
+5. **Take a screenshot** of the final visual state and describe what you observe:
+   ```
+   mcp__pw__browser_take_screenshot (type: "png")
+   ```
+
+### Definition of Done (Frontend)
+
+A frontend change is **not complete** until:
+- [ ] `npm run type-check` passes (zero TypeScript errors)
+- [ ] The page renders without console errors in Playwright
+- [ ] The changed component/feature is visually correct per screenshot
+- [ ] All interactions you implemented were exercised via Playwright and behaved as expected
+
+---
+
 ## Spec Maintenance (Non-Negotiable)
 
 When any implementation decision changes or extends the current specs, you MUST update the
