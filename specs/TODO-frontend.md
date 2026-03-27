@@ -1,8 +1,10 @@
 # TODO: Frontend Implementation Roadmap
 
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
-> **Current state**: React 19 + Vite + TanStack Query wired. No CSS, no routes,
-> no components, no features. Only `api/client.ts` and `api/generated/schema.ts` exist.
+> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–2 complete
+> (Tailwind v4 CSS infrastructure, design tokens, self-hosted fonts, type scale).
+> No routes, no components, no features yet. `api/client.ts`, `api/generated/schema.ts`,
+> and full `src/styles/` exist.
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -47,7 +49,7 @@ handlers. They MUST be implemented before the frontend phases that depend on the
 | Backend Gap | Blocks Phase | Notes |
 |-------------|-------------|-------|
 | Data lifecycle handler (`internal/lifecycle/handler.go`) + route registration | Phase 7 (data export, account deletion) | Service layer + tests exist; needs handler + main.go wiring |
-| Planning domain (`internal/planning/`) | Phase 10 (calendar, schedules) | Domain spec complete (`17-planning.md`); no backend code exists |
+| ~~Planning domain (`internal/planning/`)~~ | ~~Phase 10~~ | ✅ Backend complete (migration 24, 47 unit tests, wired in main.go) |
 | Session list/revoke API in IAM | Phase 5 (session-management.tsx) | Kratos admin API could proxy this; needs IAM handler endpoints |
 
 ---
@@ -148,16 +150,16 @@ Nothing visual can be built without this.
 
 ### Package & Config Changes
 
-- [ ] `npm install @tailwindcss/vite lucide-react` — add missing deps (DESIGN_TOKENS §1.3, §13.1) `[P1]`
-- [ ] `npm uninstall autoprefixer postcss` — unnecessary with Tailwind v4 (DESIGN_TOKENS §1.3) `[P1]`
-- [ ] Update `frontend/vite.config.ts` — add `import tailwindcss from "@tailwindcss/vite"` and include `tailwindcss()` in `plugins[]` (DESIGN_TOKENS §1.3) `[P1]`
-- [ ] Remove `postcss.config.*` if present — Tailwind v4 needs no PostCSS config `[P1]`
+- [x] `npm install @tailwindcss/vite lucide-react` — add missing deps (DESIGN_TOKENS §1.3, §13.1) `[P1]`
+- [x] `npm uninstall autoprefixer postcss` — unnecessary with Tailwind v4 (DESIGN_TOKENS §1.3) `[P1]`
+- [x] Update `frontend/vite.config.ts` — add `import tailwindcss from "@tailwindcss/vite"` and include `tailwindcss()` in `plugins[]` (DESIGN_TOKENS §1.3) `[P1]`
+- [x] Remove `postcss.config.*` if present — Tailwind v4 needs no PostCSS config `[P1]`
 
 ### CSS File Structure
 
 Create `frontend/src/styles/` with the following files (DESIGN_TOKENS §1.2):
 
-- [ ] `tokens.css` — `@theme` block with all CSS custom properties: `[P1]`
+- [x] `tokens.css` — `@theme` block with all CSS custom properties: `[P1]`
   - Surface colors (7 tiers), primary (3), secondary (4), tertiary (2), feedback (6), text/outline (4), inverse (2) (DESIGN_TOKENS §3)
   - Font families: `--font-display`, `--font-body` (DESIGN_TOKENS §4)
   - Spacing semantic aliases (6 tokens) (DESIGN_TOKENS §6)
@@ -170,17 +172,17 @@ Create `frontend/src/styles/` with the following files (DESIGN_TOKENS §1.2):
   - Container width tokens: `--width-content` (72rem), `--width-content-narrow` (48rem), `--width-sidebar` (16rem), `--width-sidebar-collapsed` (4rem) (DESIGN_TOKENS §8.2)
   - `:root` block for non-theme tokens (gradients, focus-ring) (DESIGN_TOKENS §11)
   - Gradient tokens in `:root` block: `--gradient-primary` (135deg primary→primary-container), `--gradient-surface` (180deg surface→surface-container-low) (DESIGN_TOKENS §16)
-- [ ] `base.css` — `@font-face` declarations, CSS reset additions, `:focus-visible` ring, `prefers-reduced-motion` (DESIGN_TOKENS §4, §10.2) `[P1]`
-- [ ] `components.css` — type-scale composite classes (`.text-display-lg` through `.text-label-sm`, 15 steps) (DESIGN_TOKENS §5) `[P1]`
-- [ ] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class using `::after` pseudo-element for 44×44px hit area (DESIGN_TOKENS §14.3), parent/student Tailwind custom variants (`parent:`, `student:`) using `@custom-variant` with `:where([data-context])` selectors (DESIGN_TOKENS §9, §12, §15.1), MD3 state layer utility classes: `.state-hover`, `.state-pressed`, `.state-focus`, `.state-dragged` applying opacity token overlays via `::before` pseudo-element (DESIGN_TOKENS §14.1) `[P1]`
-- [ ] `print.css` — `@media print` token overrides + hide rules (DESIGN_TOKENS §16) `[P1]`
-- [ ] `app.css` — entry point: `@import "tailwindcss"` then import all above files (DESIGN_TOKENS §1.2) `[P1]`
+- [x] `base.css` — `@font-face` declarations, CSS reset additions, `:focus-visible` ring, `prefers-reduced-motion` (DESIGN_TOKENS §4, §10.2) `[P1]`
+- [x] `components.css` — type-scale composite classes (`.text-display-lg` through `.text-label-sm`, 15 steps) (DESIGN_TOKENS §5) `[P1]`
+- [x] `utilities.css` — z-index utilities (`.z-base` through `.z-tooltip`), `.touch-target` class using `::after` pseudo-element for 44×44px hit area (DESIGN_TOKENS §14.3), parent/student Tailwind custom variants (`parent:`, `student:`) using `@custom-variant` with `:where([data-context])` selectors (DESIGN_TOKENS §9, §12, §15.1), MD3 state layer utility classes: `.state-hover`, `.state-pressed`, `.state-focus`, `.state-dragged` applying opacity token overlays via `::before` pseudo-element (DESIGN_TOKENS §14.1) `[P1]`
+- [x] `print.css` — `@media print` token overrides + hide rules (DESIGN_TOKENS §16) `[P1]`
+- [x] `app.css` — entry point: `@import "tailwindcss"` then import all above files (DESIGN_TOKENS §1.2) `[P1]`
 
 ### Wiring
 
-- [ ] Add `import "./styles/app.css"` to `frontend/src/main.tsx` (before QueryClientProvider) `[P1]`
-- [ ] Verify: Vite dev server starts without CSS errors `[P1]`
-- [ ] Verify: Tailwind utility classes (e.g. `bg-primary`, `text-on-surface`) resolve correctly in a test `<div>` `[P1]`
+- [x] Add `import "./styles/app.css"` to `frontend/src/main.tsx` (before QueryClientProvider) `[P1]`
+- [x] Verify: Vite dev server starts without CSS errors `[P1]`
+- [x] Verify: Tailwind utility classes (e.g. `bg-primary`, `text-on-surface`) resolve correctly in a test `<div>` `[P1]`
 
 ### References
 - DESIGN_TOKENS §1–§3, §6–§11, §15–§17
@@ -198,44 +200,44 @@ Components built in Phase 3 inherit these automatically.
 
 ### Font Hosting
 
-- [ ] Download WOFF2 files for **Plus Jakarta Sans** (SemiBold 600, Bold 700) and **Manrope** (Regular 400, Medium 500, SemiBold 600) — COPPA: no Google Fonts CDN (DESIGN_TOKENS §4.1, SPEC §7) `[P1]`
-- [ ] Create `frontend/public/fonts/` directory and place WOFF2 files there `[P1]`
-- [ ] Add font preload hints to `frontend/index.html`: `[P1]`
+- [x] Download WOFF2 files for **Plus Jakarta Sans** (SemiBold 600, Bold 700) and **Manrope** (Regular 400, Medium 500, SemiBold 600) — COPPA: no Google Fonts CDN (DESIGN_TOKENS §4.1, SPEC §7) `[P1]`
+- [x] Create `frontend/public/fonts/` directory and place WOFF2 files there `[P1]`
+- [x] Add font preload hints to `frontend/index.html`: `[P1]`
   ```html
   <link rel="preload" href="/fonts/PlusJakartaSans-SemiBold.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/Manrope-Regular.woff2" as="font" type="font/woff2" crossorigin />
   ```
-- [ ] Write `@font-face` rules in `base.css` with `font-display: swap` (DESIGN_TOKENS §4.2) `[P1]`
+- [x] Write `@font-face` rules in `base.css` with `font-display: swap` (DESIGN_TOKENS §4.2) `[P1]`
 
 ### Type Scale Verification
 
-- [ ] Confirm all 15 type-scale composite classes render correctly (DESIGN_TOKENS §5): `[P1]`
+- [x] Confirm all 15 type-scale composite classes render correctly (DESIGN_TOKENS §5): `[P1]`
   - Display: `display-lg` (3.5rem), `display-md` (2.8125rem), `display-sm` (2.25rem)
   - Headline: `headline-lg` (2rem), `headline-md` (1.75rem), `headline-sm` (1.5rem)
   - Title: `title-lg` (1.375rem), `title-md` (1rem), `title-sm` (0.875rem)
   - Body: `body-lg` (1rem/1.6), `body-md` (0.875rem/1.55), `body-sm` (0.75rem)
   - Label: `label-lg` (0.875rem), `label-md` (0.75rem), `label-sm` (0.6875rem)
-- [ ] Verify display/headline fonts use Plus Jakarta Sans (SemiBold/Bold) `[P1]`
-- [ ] Verify body/label fonts use Manrope (Regular/Medium/SemiBold) `[P1]`
+- [x] Verify display/headline fonts use Plus Jakarta Sans (SemiBold/Bold) `[P1]`
+- [x] Verify body/label fonts use Manrope (Regular/Medium/SemiBold) `[P1]`
 
 ### Base Styles
 
-- [ ] Set `body` background to `surface` (#faf9f5), text color to `on-surface` (#1b1c1a) (DESIGN_TOKENS §3.1, DESIGN §3.1) `[P1]`
-- [ ] Configure `::selection` style (primary-container bg, on-primary text) `[P1]`
-- [ ] Implement `:focus-visible` ring: 2px solid `focus-ring` (#0c5252), 2px offset (DESIGN_TOKENS §10.3) `[P1]`
-- [ ] Implement `prefers-reduced-motion: reduce` — collapse all transitions to 0.01ms (DESIGN_TOKENS §10.2) `[P1]`
+- [x] Set `body` background to `surface` (#faf9f5), text color to `on-surface` (#1b1c1a) (DESIGN_TOKENS §3.1, DESIGN §3.1) `[P1]`
+- [x] Configure `::selection` style (primary-container bg, on-primary text) `[P1]`
+- [x] Implement `:focus-visible` ring: 2px solid `focus-ring` (#0c5252), 2px offset (DESIGN_TOKENS §10.3) `[P1]`
+- [x] Implement `prefers-reduced-motion: reduce` — collapse all transitions to 0.01ms (DESIGN_TOKENS §10.2) `[P1]`
 
 ### Token & Behavior Verification
 
-- [ ] No-flash guarantee: background transitions use `--duration-normal` or longer; no transition applied on first paint (DESIGN_TOKENS §7.4) `[P1]`
-- [ ] Semantic spacing alias verification: all 6 spacing aliases (`--space-xs` through `--space-3xl`) resolve to correct token values (DESIGN_TOKENS §4.2) `[P1]`
-- [ ] Print stylesheet verification: `print.css` renders correctly in browser print preview — no token colors bleeding into print, appropriate page breaks (DESIGN_TOKENS §16) `[P1]`
+- [x] No-flash guarantee: background transitions use `--duration-normal` or longer; no transition applied on first paint (DESIGN_TOKENS §7.4) `[P1]`
+- [x] Semantic spacing alias verification: all 6 spacing aliases (`--space-xs` through `--space-3xl`) resolve to correct token values (DESIGN_TOKENS §4.2) `[P1]`
+- [x] Print stylesheet verification: `print.css` renders correctly in browser print preview — no token colors bleeding into print, appropriate page breaks (DESIGN_TOKENS §16) `[P1]`
 
 ### Verification
 
-- [ ] Verify: `npm run type-check` passes `[P1]`
-- [ ] Verify: Vite dev server renders correct fonts and colors on a test page `[P1]`
-- [ ] Verify: all token utilities available in Tailwind IntelliSense `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: Vite dev server renders correct fonts and colors on a test page `[P1]`
+- [x] Verify: all token utilities available in Tailwind IntelliSense `[P1]`
 
 ### References
 - DESIGN_TOKENS §3–§5, §7.4, §10, §16
