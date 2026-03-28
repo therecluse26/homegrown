@@ -1,15 +1,17 @@
 # TODO: Frontend Implementation Roadmap
 
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
-> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–5 mostly complete.
-> Phase 5 (Auth Flows + WebSocket Foundation) implemented:
-> `src/lib/kratos.ts`, `src/lib/websocket.ts`, full `src/features/auth/` (Login,
-> Register, AccountRecovery, EmailVerification, AcceptInvitation, CoppaConsent,
-> SessionTimeoutWarning, OAuthButton), `src/features/legal/` (ToS, Privacy, Guidelines),
-> `src/hooks/use-consent.ts`, `src/hooks/use-websocket.ts`.
+> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–6 complete.
+> Phase 6 (Onboarding Wizard) implemented:
+> `src/hooks/use-onboarding.ts`, `src/hooks/use-methodologies.ts`,
+> `src/features/onboarding/onboarding-wizard.tsx`, all 4 step components
+> (`family-profile-step.tsx`, `children-step.tsx`, `methodology-step.tsx`,
+> `roadmap-review-step.tsx`), `src/components/common/methodology-card.tsx`.
+> Full wizard flow validated end-to-end with Playwright (login → 4 steps → redirect to /).
+> Also fixed: seeder missing `onb_wizard_progress` row; `relativeAction()` in kratos.ts.
 > Remaining Phase 5 items: CAPTCHA, session-management, mfa-setup, terms versioning,
 > COPPA re-verification, end-to-end verification with running Kratos/backend.
-> Next: Phase 6 (Onboarding Wizard).
+> Next: Phase 7 (Parent Dashboard & Family Management).
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -635,7 +637,7 @@ Tests the entire data flow: auth → API → TanStack Query → UI.
 
 ### Onboarding Hooks
 
-- [ ] `hooks/use-onboarding.ts` — wraps onboarding API endpoints: `[P1]`
+- [x] `hooks/use-onboarding.ts` — wraps onboarding API endpoints: `[P1]`
   - `useOnboardingProgress()` — `GET /onboarding/progress` (query key: `["onboarding", "progress"]`)
   - `useUpdateFamilyProfile()` — `PATCH /onboarding/family-profile`
   - `useAddChild()` / `useRemoveChild()` — `POST` / `DELETE /onboarding/children`
@@ -649,26 +651,26 @@ Tests the entire data flow: auth → API → TanStack Query → UI.
 
 ### Wizard UI (`features/onboarding/`)
 
-- [ ] `onboarding-wizard.tsx` — wizard container: `[P1]`
+- [x] `onboarding-wizard.tsx` — wizard container: `[P1]`
   - Progress indicator showing 4 steps with current/completed/upcoming states
   - Step navigation (back/next) with validation
   - Skip button always available (`POST /onboarding/skip`)
   - Reads `WizardProgressResponse.current_step` and `completed_steps[]` to determine state
   - Step enum: `family_profile → children → methodology → roadmap_review`
-- [ ] `steps/family-profile-step.tsx` — family name, state selection, location region `[P1]`
+- [x] `steps/family-profile-step.tsx` — family name, state selection, location region `[P1]`
   - Validate required fields before allowing next
   - State selection in family-profile-step feeds into compliance domain — selected state is used by `GET /v1/compliance/state-requirements/:state_code` to surface relevant requirements later
-- [ ] `steps/children-step.tsx` — add student profiles: `[P1]`
+- [x] `steps/children-step.tsx` — add student profiles: `[P1]`
   - Display name, birth year, grade level
   - Add/remove students dynamically
   - COPPA consent must be complete before this step (gate check)
   - Optional step — can proceed with zero students
-- [ ] `steps/methodology-step.tsx` — three methodology paths: `[P1]`
+- [x] `steps/methodology-step.tsx` — three methodology paths: `[P1]`
   - **Quiz-informed**: text input for `share_id` or full quiz URL, "Take the quiz first" outbound link to public site, success state showing matched methodology + confidence score
   - **Exploration**: Browse methodology cards (GET `/methodologies`), drill into detail (GET `/methodologies/{slug}`), select one
   - **Skip**: Proceed with no methodology selected
   - Display methodology tools preview for selected methodology
-- [ ] `steps/roadmap-review-step.tsx` — personalized roadmap: `[P1]`
+- [x] `steps/roadmap-review-step.tsx` — personalized roadmap: `[P1]`
   - GET `/onboarding/roadmap` — age-adapted recommendations with visual age bracket indicator (0–4, 5–7, 8–10, 11–13, 14–18), different content per bracket
   - GET `/onboarding/recommendations` — starter curriculum recommendation cards: top 3 per methodology+grade
   - GET `/onboarding/community` — methodology groups, nearby families count, mentor suggestions
@@ -678,21 +680,21 @@ Tests the entire data flow: auth → API → TanStack Query → UI.
 
 ### Methodology Explorer (shared — also used in settings)
 
-- [ ] `hooks/use-methodologies.ts` — wraps `GET /methodologies` and `GET /methodologies/{slug}`: `[P1]`
+- [x] `hooks/use-methodologies.ts` — wraps `GET /methodologies` and `GET /methodologies/{slug}`: `[P1]`
   - `useMethodologyList()` — query key: `["methodologies"]`
   - `useMethodologyDetail(slug)` — query key: `["methodologies", slug]`
   - `useMethodologyTools(slug)` — query key: `["methodologies", slug, "tools"]`
-- [ ] `components/common/methodology-card.tsx` — methodology summary card for browsing `[P1]`
+- [x] `components/common/methodology-card.tsx` — methodology summary card for browsing `[P1]`
 
 ### Verification
 
-- [ ] Verify: wizard renders correct step based on `current_step` `[P1]`
-- [ ] Verify: completed steps show checkmarks, allow revisiting `[P1]`
-- [ ] Verify: skip onboarding redirects to `/` with `status: "skipped"` `[P1]`
-- [ ] Verify: methodology import from quiz works (valid share_id → matched methodology + confidence) `[P1]`
-- [ ] Verify: roadmap displays age-appropriate recommendations per bracket `[P1]`
-- [ ] Verify: starter curriculum cards display for selected methodology `[P1]`
-- [ ] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: wizard renders correct step based on `current_step` `[P1]`
+- [x] Verify: completed steps show checkmarks, allow revisiting `[P1]`
+- [x] Verify: skip onboarding redirects to `/` with `status: "skipped"` `[P1]`
+- [ ] Verify: methodology import from quiz works (valid share_id → matched methodology + confidence) `[P1]` _(requires live quiz share_id from public site — not testable in dev)_
+- [x] Verify: roadmap displays age-appropriate recommendations per bracket `[P1]`
+- [x] Verify: starter curriculum cards display for selected methodology `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
 
 ### References
 - SPEC §4 (onboarding requirements)

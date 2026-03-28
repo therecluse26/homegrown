@@ -193,6 +193,20 @@ export async function getFlow(
 // ─── Flow submission ──────────────────────────────────────────────────────────
 
 /**
+ * Rewrite a Kratos action URL to a relative path so it routes through the Vite
+ * dev proxy instead of hitting the Kratos instance directly (which would fail
+ * due to CORS). In production all requests go through the same origin anyway.
+ */
+function relativeAction(action: string): string {
+  try {
+    const url = new URL(action);
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return action;
+  }
+}
+
+/**
  * Submit a self-service flow and return a discriminated FlowResult.
  *
  * On validation errors, returns `{ kind: "flow", flow }` with updated nodes.
@@ -208,7 +222,7 @@ export async function submitFlow(
   method: string,
   body: Record<string, string | boolean | number>,
 ): Promise<FlowResult> {
-  const res = await fetch(action, {
+  const res = await fetch(relativeAction(action), {
     method: method.toUpperCase(),
     headers: {
       "Content-Type": "application/json",

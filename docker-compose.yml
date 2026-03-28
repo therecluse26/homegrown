@@ -48,6 +48,8 @@ services:
     volumes:
       - ./kratos:/etc/kratos
     command: serve --config /etc/kratos/kratos.yml --dev --watch-courier
+    extra_hosts:
+      - "host.docker.internal:172.30.0.1"
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:4434/health/alive"]
       interval: 10s
@@ -72,7 +74,7 @@ services:
       - "4935:4433"   # Public API (agent)
       - "4936:4434"   # Admin API (agent)
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:172.30.0.1"
 
   kratos-migrate:
     image: oryd/kratos:v1.3
@@ -87,3 +89,13 @@ services:
 
 volumes:
   pg_data:
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: homegrown-br0
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1

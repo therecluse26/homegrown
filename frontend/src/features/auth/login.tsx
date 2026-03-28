@@ -4,6 +4,7 @@ import { useIntl, FormattedMessage } from "react-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Input, Spinner, FormField } from "@/components/ui";
 import { PageTitle } from "@/components/common";
+import { useAuthContext } from "@/features/auth/auth-provider";
 import {
   initLoginFlow,
   submitFlow,
@@ -30,6 +31,7 @@ type LoginFormState = {
  * 3. Submit to flow's action URL → handle errors or success
  */
 export function Login() {
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthContext();
   const intl = useIntl();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -46,6 +48,7 @@ export function Login() {
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
 
   useEffect(() => {
+    if (isAuthLoading || isAuthenticated) return;
     let active = true;
     void initLoginFlow()
       .then((f) => {
@@ -61,7 +64,7 @@ export function Login() {
     return () => {
       active = false;
     };
-  }, [intl]);
+  }, [intl, isAuthLoading, isAuthenticated]);
 
   useEffect(() => {
     if (rateLimitCountdown <= 0) return;

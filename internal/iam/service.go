@@ -223,15 +223,15 @@ func (s *IamServiceImpl) HandlePostRegistration(ctx context.Context, payload Kra
 
 func (s *IamServiceImpl) HandlePostLogin(ctx context.Context, payload KratosWebhookPayload) error {
 	// Syncs Kratos traits to local DB. RLS bypassed — no family scope in webhook context. [§4.3]
+	var orphaned bool
 	err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		parentRepo := NewPgParentRepository(tx)
 		parent, err := parentRepo.FindByKratosID(ctx, payload.IdentityID)
 		if err != nil {
 			if errors.Is(err, ErrParentNotFound) {
-				// Orphaned Kratos identity — log warning, do not fail webhook.
-				// This can happen if registration webhook failed previously.
-				slog.Warn("post-login: parent not found for kratos identity",
-					"identity_id", payload.IdentityID)
+				// Orphaned Kratos identity — registration webhook previously failed.
+				// Signal recovery after this transaction closes (avoids nested transactions).
+				orphaned = true
 				return nil
 			}
 			return err
@@ -246,7 +246,15 @@ func (s *IamServiceImpl) HandlePostLogin(ctx context.Context, payload KratosWebh
 		})
 		return err
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if orphaned {
+		slog.Warn("post-login: orphaned identity detected, attempting recovery",
+			"identity_id", payload.IdentityID)
+		return s.HandlePostRegistration(ctx, payload)
+	}
+	return nil
 }
 
 func (s *IamServiceImpl) UpdateFamilyProfile(ctx context.Context, scope *shared.FamilyScope, cmd UpdateFamilyCommand) (*FamilyProfileResponse, error) {

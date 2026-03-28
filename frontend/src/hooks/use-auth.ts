@@ -14,7 +14,7 @@ export function useAuth() {
 
   return {
     user,
-    isLoading: query.isLoading,
+    isLoading: query.isPending,
     isAuthenticated: query.isSuccess && !!user,
     isParent: query.isSuccess && !!user?.parent_id,
     isPrimaryParent: !!user?.is_primary_parent,

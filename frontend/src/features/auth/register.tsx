@@ -4,6 +4,7 @@ import { useIntl, FormattedMessage } from "react-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Input, Spinner, FormField } from "@/components/ui";
 import { PageTitle } from "@/components/common";
+import { useAuthContext } from "@/features/auth/auth-provider";
 import {
   initRegistrationFlow,
   submitFlow,
@@ -114,6 +115,7 @@ function PasswordStrengthIndicator({ password }: { password: string }) {
  * which creates the family + parent records in our database, then redirects to /onboarding.
  */
 export function Register() {
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthContext();
   const intl = useIntl();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -131,6 +133,7 @@ export function Register() {
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
+    if (isAuthLoading || isAuthenticated) return;
     let active = true;
     void initRegistrationFlow()
       .then((f) => {
@@ -146,7 +149,7 @@ export function Register() {
     return () => {
       active = false;
     };
-  }, [intl]);
+  }, [intl, isAuthLoading, isAuthenticated]);
 
   const handleChange = useCallback(
     (field: keyof Omit<RegisterFormState, "tosAccepted">) =>

@@ -34,11 +34,13 @@ selfservice:
       after:
         password:
           hooks:
+            - hook: session
             - hook: web_hook
               config:
                 url: http://host.docker.internal:3500/hooks/kratos/post-registration
                 method: POST
                 body: file:///etc/kratos/webhook-body.jsonnet
+                can_interrupt: false
                 auth:
                   type: api_key
                   config:
@@ -56,6 +58,7 @@ selfservice:
                 url: http://host.docker.internal:3500/hooks/kratos/post-login
                 method: POST
                 body: file:///etc/kratos/webhook-body.jsonnet
+                can_interrupt: false
                 auth:
                   type: api_key
                   config:

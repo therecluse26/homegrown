@@ -48,6 +48,9 @@ const (
 	coParentInviteID  = "01900000-0000-7000-8000-000000000032"
 	studentSession1ID = "01900000-0000-7000-8000-000000000033"
 
+	// Onboard
+	seedWizardProgressID = "01900000-0000-7000-8000-000000000131"
+
 	// Social
 	friendshipID     = "01900000-0000-7000-8000-000000000041"
 	groupID          = "01900000-0000-7000-8000-000000000051"
@@ -420,8 +423,8 @@ func kratosLookupOrCreate(baseURL, email string) (string, bool) {
 
 	// Create new identity
 	payload := kratosIdentityBody{
-		SchemaID: "default",
-		Traits:   map[string]any{"email": email},
+		SchemaID: "user",
+		Traits:   map[string]any{"email": email, "name": email},
 		Credentials: map[string]any{
 			"password": map[string]any{
 				"config": map[string]any{
@@ -500,6 +503,7 @@ func seedAll(db *gorm.DB, seedKratosID, adminKratosID string) error {
 		{"PlatformSetup", func(db *gorm.DB) error { return seedPlatformSetup(db, adminKratosID) }},
 		{"IAM", func(db *gorm.DB) error { return seedIAM(db, seedKratosID) }},
 		{"IAMExtended", seedIAMExtended},
+		{"Onboard", seedOnboard},
 		{"Social", seedSocial},
 		{"SocialExtended", seedSocialExtended},
 		{"Marketplace", seedMarketplace},
@@ -692,6 +696,24 @@ func seedIAMExtended(db *gorm.DB) error {
 			return fmt.Errorf("insert student session: %w", err)
 		}
 
+		return nil
+	})
+}
+
+// ─── Onboard seed ─────────────────────────────────────────────────────────────
+
+func seedOnboard(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		// Wizard progress for seed family — in_progress so the UI flow can be tested.
+		if err := tx.Exec(`
+			INSERT INTO onb_wizard_progress
+				(id, family_id, status, current_step, completed_steps)
+			VALUES (?, ?, 'in_progress', 'family_profile', '{}')
+			ON CONFLICT (family_id) DO NOTHING`,
+			seedWizardProgressID, seedFamilyID,
+		).Error; err != nil {
+			return fmt.Errorf("insert wizard progress: %w", err)
+		}
 		return nil
 	})
 }

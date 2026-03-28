@@ -1,6 +1,7 @@
 // Common components — barrel export
 export { ErrorBoundary } from "./error-boundary";
 export { MethodologyBadge } from "./methodology-badge";
+export { MethodologyCard } from "./methodology-card";
 export { NetworkStatus } from "./network-status";
 export { PageTitle } from "./page-title";
 export { ReportButton } from "./report-button";

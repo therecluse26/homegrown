@@ -5,6 +5,7 @@ import { OnboardingLayout } from "@/components/layout/onboarding-layout";
 import { StudentShell } from "@/components/layout/student-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
 import { ProtectedRoute } from "@/components/layout/protected-route";
+import { GuestRoute } from "@/components/layout/guest-route";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { AdminGuard } from "@/components/layout/admin-guard";
 import { StudentGuard } from "@/components/layout/student-guard";
@@ -18,6 +19,9 @@ import { Register } from "@/features/auth/register";
 import { AccountRecovery } from "@/features/auth/account-recovery";
 import { EmailVerification } from "@/features/auth/email-verification";
 import { AcceptInvitation } from "@/features/auth/accept-invitation";
+
+// ─── Phase 6: Onboarding wizard ───────────────────────────────────────────────
+import { OnboardingWizard } from "@/features/onboarding/onboarding-wizard";
 
 // ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
 import { TermsOfService } from "@/features/legal/terms-of-service";
@@ -125,7 +129,9 @@ const routes: RouteObject[] = [
         path: "onboarding",
         element: <OnboardingLayout />,
         errorElement: <RouteErrorBoundary />,
-        children: [{ index: true, ...p("Welcome") }],
+        children: [
+          { index: true, element: <OnboardingWizard />, errorElement: <RouteErrorBoundary /> },
+        ],
       },
     ],
   },
@@ -136,8 +142,14 @@ const routes: RouteObject[] = [
     element: <AuthLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { path: "login", element: <Login />, errorElement: <RouteErrorBoundary /> },
-      { path: "register", element: <Register />, errorElement: <RouteErrorBoundary /> },
+      // Login and register redirect authenticated users away (GuestRoute)
+      {
+        element: <GuestRoute />,
+        children: [
+          { path: "login", element: <Login />, errorElement: <RouteErrorBoundary /> },
+          { path: "register", element: <Register />, errorElement: <RouteErrorBoundary /> },
+        ],
+      },
       { path: "recovery", element: <AccountRecovery />, errorElement: <RouteErrorBoundary /> },
       { path: "verification", element: <EmailVerification />, errorElement: <RouteErrorBoundary /> },
       {
