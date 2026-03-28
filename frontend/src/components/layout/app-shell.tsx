@@ -40,7 +40,7 @@ function SidebarNav() {
       className="hidden lg:flex flex-col fixed top-0 left-0 h-full bg-surface-container-low/80 backdrop-blur-[20px] z-[var(--z-sticky)]"
       style={{ width: "var(--width-sidebar)" }}
     >
-      <div className="p-spacing-card-padding">
+      <div className="p-card-padding">
         <p className="type-title-md text-primary font-semibold">
           {intl.formatMessage({ id: "app.name", defaultMessage: "Homegrown Academy" })}
         </p>

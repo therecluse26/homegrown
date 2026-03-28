@@ -42,7 +42,7 @@ export function AdminShell({ children }: { children?: ReactNode }) {
           className="hidden lg:flex flex-col fixed top-0 left-0 h-full bg-surface-container-low z-[var(--z-sticky)]"
           style={{ width: "var(--width-sidebar)" }}
         >
-          <div className="p-spacing-card-padding">
+          <div className="p-card-padding">
             <NavLink
               to="/"
               className="flex items-center gap-2 text-on-surface-variant type-label-lg hover:text-primary transition-colors duration-[var(--duration-normal)]"

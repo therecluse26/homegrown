@@ -92,7 +92,7 @@ export function Modal({ open, onClose, title, children, className = "" }: ModalP
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative z-modal w-full max-w-lg rounded-xl bg-surface-container-lowest p-spacing-card-padding shadow-ambient-lg ${className}`}
+        className={`relative z-modal w-full max-w-lg rounded-xl bg-surface-container-lowest p-card-padding shadow-ambient-lg ${className}`}
       >
         {children}
       </div>

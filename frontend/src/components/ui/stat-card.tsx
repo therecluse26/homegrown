@@ -27,7 +27,7 @@ export function StatCard({
 }: StatCardProps) {
   return (
     <div
-      className={`bg-surface-container-lowest p-spacing-card-padding parent:rounded-lg student:rounded-xl ${className}`}
+      className={`bg-surface-container-lowest p-card-padding parent:rounded-lg student:rounded-xl ${className}`}
     >
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1">
