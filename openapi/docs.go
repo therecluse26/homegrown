@@ -7264,8 +7264,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "coppa_notice_acknowledged",
-                "method",
-                "verification_token"
+                "method"
             ],
             "properties": {
                 "coppa_notice_acknowledged": {

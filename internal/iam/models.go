@@ -374,7 +374,7 @@ type UpdateFamilyCommand struct {
 // CoppaConsentCommand is the request body for POST /v1/families/consent. [§4.3]
 type CoppaConsentCommand struct {
 	Method                  string `json:"method"                    validate:"required"`
-	VerificationToken       string `json:"verification_token"        validate:"required"`
+	VerificationToken       string `json:"verification_token"        validate:"omitempty"`
 	CoppaNoticeAcknowledged bool   `json:"coppa_notice_acknowledged" validate:"required"`
 }
 

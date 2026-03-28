@@ -23,6 +23,13 @@ import { AcceptInvitation } from "@/features/auth/accept-invitation";
 // ─── Phase 6: Onboarding wizard ───────────────────────────────────────────────
 import { OnboardingWizard } from "@/features/onboarding/onboarding-wizard";
 
+// ─── Phase 7: Settings pages ─────────────────────────────────────────────────
+import { FamilySettings } from "@/features/settings/family-settings";
+import { NotificationPrefs } from "@/features/settings/notification-prefs";
+import { SubscriptionUpgrade } from "@/features/settings/subscription-upgrade";
+import { AccountSettings } from "@/features/settings/account-settings";
+import { PrivacyControls } from "@/features/settings/privacy-controls";
+
 // ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
 import { TermsOfService } from "@/features/legal/terms-of-service";
 import { PrivacyPolicy } from "@/features/legal/privacy-policy";
@@ -89,15 +96,15 @@ const routes: RouteObject[] = [
               { path: "creator/payouts", ...p("Payout Setup") },
 
               // Settings
-              { path: "settings", ...p("Family Settings"), errorElement: <RouteErrorBoundary /> },
-              { path: "settings/notifications", ...p("Notification Preferences") },
-              { path: "settings/subscription", ...p("Subscription") },
-              { path: "settings/account", ...p("Account Settings") },
+              { path: "settings", element: <FamilySettings />, errorElement: <RouteErrorBoundary /> },
+              { path: "settings/notifications", element: <NotificationPrefs /> },
+              { path: "settings/subscription", element: <SubscriptionUpgrade /> },
+              { path: "settings/account", element: <AccountSettings /> },
               { path: "settings/account/sessions", ...p("Session Management") },
               { path: "settings/account/export", ...p("Data Export") },
               { path: "settings/account/delete", ...p("Delete Account") },
               { path: "settings/account/appeals", ...p("Moderation Appeals") },
-              { path: "settings/privacy", ...p("Privacy Controls") },
+              { path: "settings/privacy", element: <PrivacyControls /> },
 
               // Search
               { path: "search", ...p("Search"), errorElement: <RouteErrorBoundary /> },

@@ -7380,7 +7380,7 @@ export interface components {
         "iam.CoppaConsentCommand": {
             coppa_notice_acknowledged: boolean;
             method: string;
-            verification_token: string;
+            verification_token?: string;
         };
         "iam.CreateStudentCommand": {
             birth_year?: number;

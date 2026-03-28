@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useIntl, FormattedMessage } from "react-intl";
-import { useQuery } from "@tanstack/react-query";
 import {
   Button,
   FormField,
@@ -8,32 +7,13 @@ import {
   Select,
   Card,
   Spinner,
+  Icon,
 } from "@/components/ui";
-import { Icon } from "@/components/ui";
 import { Trash2, UserPlus } from "lucide-react";
 import { useAddChild, useRemoveChild } from "@/hooks/use-onboarding";
 import { useConsent } from "@/hooks/use-consent";
-import { apiClient } from "@/api/client";
-import type { components } from "@/api/generated/schema";
-
-type Student = components["schemas"]["iam.StudentResponse"];
-
-const GRADE_LEVELS = [
-  { value: "pre-k", label: "Pre-K" },
-  { value: "kindergarten", label: "Kindergarten" },
-  { value: "grade-1", label: "Grade 1" },
-  { value: "grade-2", label: "Grade 2" },
-  { value: "grade-3", label: "Grade 3" },
-  { value: "grade-4", label: "Grade 4" },
-  { value: "grade-5", label: "Grade 5" },
-  { value: "grade-6", label: "Grade 6" },
-  { value: "grade-7", label: "Grade 7" },
-  { value: "grade-8", label: "Grade 8" },
-  { value: "grade-9", label: "Grade 9" },
-  { value: "grade-10", label: "Grade 10" },
-  { value: "grade-11", label: "Grade 11" },
-  { value: "grade-12", label: "Grade 12" },
-] as const;
+import { useStudents } from "@/hooks/use-family";
+import { GRADE_LEVELS } from "@/lib/constants";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = CURRENT_YEAR - 22;
@@ -73,12 +53,7 @@ export function ChildrenStep({ onNext, onBack }: ChildrenStepProps) {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
 
-  const studentsQuery = useQuery({
-    queryKey: ["family", "students"],
-    queryFn: () => apiClient<Student[]>("/v1/families/students"),
-    staleTime: 1000 * 60,
-  });
-
+  const studentsQuery = useStudents();
   const students = studentsQuery.data ?? [];
 
   function validateForm() {
@@ -115,8 +90,8 @@ export function ChildrenStep({ onNext, onBack }: ChildrenStepProps) {
     if (!consentAcknowledged) return;
     await provideConsent({
       coppa_notice_acknowledged: true,
-      method: "explicit",
-      verification_token: "",
+      method: "checkbox",
+      verification_token: "parent_acknowledged",
     });
   }
 

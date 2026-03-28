@@ -988,7 +988,6 @@ definitions:
     required:
     - coppa_notice_acknowledged
     - method
-    - verification_token
     type: object
   iam.CreateStudentCommand:
     properties:
