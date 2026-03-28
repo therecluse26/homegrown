@@ -29,6 +29,11 @@ import { NotificationPrefs } from "@/features/settings/notification-prefs";
 import { SubscriptionUpgrade } from "@/features/settings/subscription-upgrade";
 import { AccountSettings } from "@/features/settings/account-settings";
 import { PrivacyControls } from "@/features/settings/privacy-controls";
+import { SessionManagement } from "@/features/settings/session-management";
+import { DataExport } from "@/features/settings/data-export";
+import { AccountDeletion } from "@/features/settings/account-deletion";
+import { StudentDeletion } from "@/features/settings/student-deletion";
+import { NotificationCenter } from "@/features/settings/notification-center";
 
 // ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
 import { TermsOfService } from "@/features/legal/terms-of-service";
@@ -100,9 +105,10 @@ const routes: RouteObject[] = [
               { path: "settings/notifications", element: <NotificationPrefs /> },
               { path: "settings/subscription", element: <SubscriptionUpgrade /> },
               { path: "settings/account", element: <AccountSettings /> },
-              { path: "settings/account/sessions", ...p("Session Management") },
-              { path: "settings/account/export", ...p("Data Export") },
-              { path: "settings/account/delete", ...p("Delete Account") },
+              { path: "settings/account/sessions", element: <SessionManagement /> },
+              { path: "settings/account/export", element: <DataExport /> },
+              { path: "settings/account/delete", element: <AccountDeletion /> },
+              { path: "settings/account/delete/student/:studentId", element: <StudentDeletion /> },
               { path: "settings/account/appeals", ...p("Moderation Appeals") },
               { path: "settings/privacy", element: <PrivacyControls /> },
 
@@ -121,8 +127,8 @@ const routes: RouteObject[] = [
 
 
 
-              // Notifications (not in route spec but needed for bell icon link)
-              { path: "notifications", ...p("Notifications") },
+              // Notifications
+              { path: "notifications", element: <NotificationCenter /> },
 
               // 404
               { path: "*", element: <NotFoundPage /> },

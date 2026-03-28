@@ -2,16 +2,19 @@
 
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
 > **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–6 complete.
-> Phase 6 (Onboarding Wizard) implemented:
-> `src/hooks/use-onboarding.ts`, `src/hooks/use-methodologies.ts`,
-> `src/features/onboarding/onboarding-wizard.tsx`, all 4 step components
-> (`family-profile-step.tsx`, `children-step.tsx`, `methodology-step.tsx`,
-> `roadmap-review-step.tsx`), `src/components/common/methodology-card.tsx`.
-> Full wizard flow validated end-to-end with Playwright (login → 4 steps → redirect to /).
-> Also fixed: seeder missing `onb_wizard_progress` row; `relativeAction()` in kratos.ts.
-> Remaining Phase 5 items: CAPTCHA, session-management, mfa-setup, terms versioning,
+> Phase 7 (Parent Dashboard & Family Management) in progress:
+> `hooks/use-family.ts` (full family CRUD + co-parent management hooks),
+> `hooks/use-notifications.ts` (notification queries + mutations + unread count),
+> `hooks/use-data-lifecycle.ts` (export + deletion hooks),
+> `features/settings/family-settings.tsx` (3-tab settings: profile, students, co-parents),
+> `features/settings/account-settings.tsx`, `notification-prefs.tsx`, `subscription-upgrade.tsx`,
+> `features/settings/privacy-controls.tsx`, `session-management.tsx`, `data-export.tsx`,
+> `features/settings/account-deletion.tsx`, `student-deletion.tsx`, `notification-center.tsx`,
+> `components/layout/notification-bell.tsx` (unread badge in header).
+> All pages validated with Playwright. `npm run type-check` passes clean.
+> Remaining Phase 5 items: CAPTCHA, mfa-setup, terms versioning,
 > COPPA re-verification, end-to-end verification with running Kratos/backend.
-> Next: Phase 7 (Parent Dashboard & Family Management).
+> Remaining Phase 7 items: notification-history, billing pages (P2), free tier verification.
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -558,7 +561,7 @@ Depends on Phase 4 auth context and layout.
 
 ### Session & MFA Management
 
-- [ ] `features/settings/session-management.tsx` — list active sessions, revoke individual sessions, "log out all devices" button `[P1]`
+- [x] `features/settings/session-management.tsx` — list active sessions, revoke individual sessions, "log out all devices" button `[P1]`
 - [ ] `features/settings/mfa-setup.tsx` — TOTP MFA setup: QR code display, verification input, recovery codes display + download `[P2]`
 - [x] `features/auth/session-timeout-warning.tsx` — overlay 5min before session expiry: countdown timer, "Extend Session" button, auto-redirect to `/auth/login` on timeout, `aria-live="assertive"` for countdown announcements (SPEC §17.1) `[P1]`
 
@@ -713,7 +716,7 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### Family Management Hooks
 
-- [ ] `hooks/use-family.ts` — wraps family API endpoints: `[P1]`
+- [x] `hooks/use-family.ts` — wraps family API endpoints: `[P1]`
   - `useFamilyProfile()` — `GET /families/profile` (query key: `["family", "profile"]`)
   - `useUpdateFamilyProfile()` — `PATCH /families/profile`
   - `useStudents()` — `GET /families/students` (query key: `["family", "students"]`)
@@ -725,41 +728,41 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### Settings Pages (`features/settings/`)
 
-- [ ] `family-settings.tsx` — main settings page: `[P1]`
+- [x] `family-settings.tsx` — main settings page: `[P1]`
   - Edit family display name, state, location region
   - Change primary methodology (PATCH `/families/methodology`)
   - Manage secondary methodology slugs
   - View subscription tier
-- [ ] `student-management.tsx` — student CRUD embedded in settings: `[P1]`
+- [x] `student-management.tsx` — student CRUD embedded in settings (as StudentsTab in family-settings.tsx): `[P1]`
   - List students with edit/delete
   - Add student form (requires COPPA consent)
   - Per-student methodology override
   - Per-student tool display
-- [ ] `notification-prefs.tsx` — notification preference management: `[P1]`
+- [x] `notification-prefs.tsx` — notification preference management: `[P1]`
   - Per-type per-channel toggle grid (in-app column, email column)
   - Digest frequency with preview text explaining each option (immediate/daily/weekly/off)
   - Lock icon on system-critical non-toggleable notifications
   - "Opt out of all non-essential email" batch toggle
   - CAN-SPAM compliant unsubscribe mechanism
   - (SPEC §13.3, domain spec `specs/domains/08-notify.md`)
-- [ ] `subscription-upgrade.tsx` — minimal upgrade flow: tier comparison, "Subscribe" CTA linking to checkout (Hyperswitch). Required for `<TierGate>` to have a working destination. `[P1]`
+- [x] `subscription-upgrade.tsx` — minimal upgrade flow: tier comparison, "Subscribe" CTA linking to checkout (Hyperswitch). Required for `<TierGate>` to have a working destination. `[P1]`
 - [ ] `subscription-manager.tsx` — full subscription management: `[P2]`
   - Current plan display
   - Upgrade/downgrade flow with downgrade consequence warning modal listing: "Learning data preserved", "Premium tools become read-only", "Compliance reports remain downloadable", "AI recommendations disabled". Explicit confirmation checkbox required.
   - Billing cycle info
   - Payment method management
   - (SPEC §10, §15.3, domain spec `specs/domains/10-billing.md`)
-- [ ] `account-settings.tsx` — account-level settings (`/settings/account`): email, password change, linked OAuth accounts `[P1]`
-- [ ] `privacy-controls.tsx` — per-field visibility toggles for family profile (friends-only / hidden); controls what other families can see (SPEC §5.2) `[P1]`
+- [x] `account-settings.tsx` — account-level settings (`/settings/account`): email, password change, linked OAuth accounts `[P1]`
+- [x] `privacy-controls.tsx` — per-field visibility toggles for family profile (friends-only / hidden); controls what other families can see (SPEC §5.2) `[P1]`
 
 ### Co-Parent Management
 
-- [ ] `features/settings/co-parent-management.tsx` — co-parent invite + management: `[P1]`
+- [x] `features/settings/co-parent-management.tsx` — co-parent invite + management (as CoParentsTab in family-settings.tsx): `[P1]`
   - Invite by email (sends invitation)
   - List co-parents with role badges (primary / co-parent)
   - Remove co-parent with confirmation dialog
   - Transfer primary parent role (with billing responsibility warning)
-- [ ] Primary parent indicator badge in family settings showing who holds billing responsibility `[P1]`
+- [x] Primary parent indicator badge in family settings showing who holds billing responsibility `[P1]`
 
 ### Billing & Payments
 
@@ -769,19 +772,19 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### Data Lifecycle
 
-- [ ] `features/settings/data-export.tsx` — data export request UI: format selection (JSON/CSV), domain selector checkboxes (learn, social, comply, etc.), async polling (5-second interval via `useExportStatus()`), download link with expiry countdown timer, past exports list. Hooks: `useRequestExport()`, `useExportStatus()`, `useExportList()` `[P1]`
-- [ ] `features/settings/account-deletion.tsx` — account deletion flow: consequences display, export offer, grace period countdown timer (days/hours remaining), confirmation input (type family name), cancellation option during grace period. `useDeletionStatus()` hook polls for grace period state. Hooks: `useRequestDeletion()`, `useCancelDeletion()`, `useDeletionStatus()` `[P1]`
-- [ ] `features/settings/student-deletion.tsx` — student profile deletion: separate from full family deletion, COPPA-compliant immediate deletion option (no grace period for child data) `[P1]`
+- [x] `features/settings/data-export.tsx` — data export request UI: format selection (JSON/CSV), domain selector checkboxes (learn, social, comply, etc.), async polling (5-second interval via `useExportStatus()`), download link with expiry countdown timer, past exports list. Hooks: `useRequestExport()`, `useExportStatus()`, `useExportList()` `[P1]`
+- [x] `features/settings/account-deletion.tsx` — account deletion flow: consequences display, export offer, grace period countdown timer (days/hours remaining), confirmation input (type family name), cancellation option during grace period. `useDeletionStatus()` hook polls for grace period state. Hooks: `useRequestDeletion()`, `useCancelDeletion()`, `useDeletionStatus()` `[P1]`
+- [x] `features/settings/student-deletion.tsx` — student profile deletion: separate from full family deletion, COPPA-compliant immediate deletion option (no grace period for child data) `[P1]`
 
 ### Notification Center
 
-- [ ] `hooks/use-notifications.ts` — notification queries + mutations: `[P1]`
+- [x] `hooks/use-notifications.ts` — notification queries + mutations: `[P1]`
   - `useNotifications()` — paginated notification list
   - `useUnreadCount()` — unread notification count (for bell badge)
   - `useMarkRead(id)` — mark single notification read
   - `useMarkAllRead()` — mark all read
-- [ ] `components/layout/notification-bell.tsx` — bell icon in header with unread count badge `[P1]`
-- [ ] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications with type-specific rendering: `[P1]`
+- [x] `components/layout/notification-bell.tsx` — bell icon in header with unread count badge `[P1]`
+- [x] `features/settings/notification-center.tsx` — dropdown/panel listing recent notifications with type-specific rendering: `[P1]`
   - Each notification type renders with: category icon (Lucide), action text, deep link to related content, timestamp
   - `friend_request_received` → user avatar + "sent you a friend request" + Accept/Decline buttons
   - `friend_request_accepted` → user avatar + "accepted your friend request" + View Profile link
@@ -805,7 +808,7 @@ Notification types delivered via WebSocket + notification center, phased as foll
 
 ### API Schema Prerequisite
 
-- [ ] Run `make full-generate` to pull in notification + billing + social endpoints (they exist in Go backend but are not yet in `schema.ts`) `[P1]`
+- [x] Run `make full-generate` to pull in notification + billing + social endpoints (they exist in Go backend but are not yet in `schema.ts`) `[P1]`
 
 ### Verification
 
@@ -815,8 +818,8 @@ Notification types delivered via WebSocket + notification center, phased as foll
 - [ ] Verify: notification preferences save correctly `[P1]`
 - [ ] Verify: co-parent invite sends and co-parent appears in list `[P1]`
 - [ ] Verify: data export request completes and download works `[P1]`
-- [ ] Verify: account deletion flow shows consequences and respects grace period `[P1]`
-- [ ] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: account deletion flow shows consequences and respects grace period `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
 
 ### References
 - SPEC §1.4 (family management), §8 (notifications), §10 (billing), §15 (data lifecycle)

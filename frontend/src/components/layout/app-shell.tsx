@@ -8,12 +8,12 @@ import {
   Calendar,
   Settings,
   Search,
-  Bell,
 } from "lucide-react";
 import { useIntl } from "react-intl";
 import { Icon } from "@/components/ui";
 import { SkipLink } from "@/components/common";
 import { useAuthContext } from "@/features/auth/auth-provider";
+import { NotificationBell } from "@/components/layout/notification-bell";
 
 type NavItem = {
   to: string;
@@ -120,13 +120,7 @@ function Header() {
         >
           <Icon icon={Search} size="md" />
         </NavLink>
-        <NavLink
-          to="/notifications"
-          className="p-2 rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
-          aria-label="Notifications"
-        >
-          <Icon icon={Bell} size="md" />
-        </NavLink>
+        <NotificationBell />
         <div className="type-label-md text-on-surface-variant">
           {user?.display_name ?? ""}
         </div>
