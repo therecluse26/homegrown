@@ -227,6 +227,7 @@ export interface ConversationSummaryResponse {
   other_parent_name: string;
   last_message_preview?: string;
   unread_count: number;
+  is_muted: boolean;
   updated_at: string;
 }
 
@@ -275,9 +276,25 @@ export interface ProfileResponse {
   methodology_names?: string[];
   location_region?: string;
   location_visible?: boolean;
-  privacy_settings?: unknown;
+  privacy_settings?: PrivacySettings;
   friendship_status?: string;
   is_friend: boolean;
+}
+
+export interface PrivacySettings {
+  display_name: string;
+  parent_names: string;
+  children_names: string;
+  children_ages: string;
+  location: string;
+  methodology: string;
+}
+
+export interface UpdateProfileCommand {
+  bio?: string;
+  profile_photo_url?: string;
+  privacy_settings?: PrivacySettings;
+  location_visible?: boolean;
 }
 
 // ── Discovery Types ─────────────────────────────────────────────────────────
@@ -807,6 +824,59 @@ export function useMarkConversationRead(conversationId: string) {
   });
 }
 
+export function useMuteConversation(conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient<void>(
+        `/v1/social/conversations/${conversationId}/mute`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["social", "conversations"] });
+    },
+  });
+}
+
+export function useUnmuteConversation(conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient<void>(
+        `/v1/social/conversations/${conversationId}/mute`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["social", "conversations"] });
+    },
+  });
+}
+
+export function useUpdateComment(commentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { content: string }) =>
+      apiClient<CommentResponse>(`/v1/social/comments/${commentId}`, {
+        method: "PATCH",
+        body: data,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["social"] });
+    },
+  });
+}
+
+export function useEventRsvps(eventId: string | undefined) {
+  return useQuery({
+    queryKey: ["social", "events", eventId, "rsvps"],
+    queryFn: () =>
+      apiClient<EventRsvpResponse[]>(
+        `/v1/social/events/${eventId ?? ""}/rsvps`,
+      ),
+    enabled: !!eventId,
+  });
+}
+
 // ─── Profile Queries ────────────────────────────────────────────────────────
 
 export function useMyProfile() {
@@ -825,6 +895,20 @@ export function useFamilyProfileView(familyId: string | undefined) {
         `/v1/social/families/${familyId ?? ""}/profile`,
       ),
     enabled: !!familyId,
+  });
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateProfileCommand) =>
+      apiClient<ProfileResponse>("/v1/social/profile", {
+        method: "PATCH",
+        body,
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["social", "profile"], data);
+    },
   });
 }
 

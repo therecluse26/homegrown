@@ -62,11 +62,14 @@ import { StudentSequence } from "@/features/student/student-sequence";
 // ─── Phase 9: Social pages ──────────────────────────────────────────────────
 import { Feed } from "@/features/social/feed";
 import { FriendsList } from "@/features/social/friends-list";
+import { FriendDiscovery } from "@/features/social/friend-discovery";
 import { DirectMessages } from "@/features/social/direct-messages";
 import { Conversation as ConversationPage } from "@/features/social/conversation";
 import { GroupsList } from "@/features/social/groups-list";
 import { GroupDetail } from "@/features/social/group-detail";
 import { EventsList } from "@/features/social/events-list";
+import { EventCreation } from "@/features/social/event-creation";
+import { EventDetail } from "@/features/social/event-detail";
 import { FamilyProfile } from "@/features/social/family-profile";
 import { PostDetail } from "@/features/social/post-detail";
 
@@ -95,6 +98,10 @@ import { AuditLog } from "@/features/admin/audit-log";
 // ─── Phase 9: Settings additions ────────────────────────────────────────────
 import { ModerationAppeals } from "@/features/settings/moderation-appeals";
 import { BlockManagement } from "@/features/settings/block-management";
+
+// ─── Phase 10: Planning pages ──────────────────────────────────────────────
+import { CalendarView } from "@/features/planning/calendar-view";
+import { ScheduleEditor } from "@/features/planning/schedule-editor";
 
 // ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
 import { TermsOfService } from "@/features/legal/terms-of-service";
@@ -126,11 +133,14 @@ const routes: RouteObject[] = [
 
               // Social
               { path: "friends", element: <FriendsList />, errorElement: <RouteErrorBoundary /> },
+              { path: "friends/discover", element: <FriendDiscovery /> },
               { path: "messages", element: <DirectMessages />, errorElement: <RouteErrorBoundary /> },
               { path: "messages/:conversationId", element: <ConversationPage /> },
               { path: "groups", element: <GroupsList />, errorElement: <RouteErrorBoundary /> },
               { path: "groups/:groupId", element: <GroupDetail /> },
               { path: "events", element: <EventsList />, errorElement: <RouteErrorBoundary /> },
+              { path: "events/new", element: <EventCreation /> },
+              { path: "events/:eventId", element: <EventDetail /> },
               { path: "post/:postId", element: <PostDetail /> },
 
               // Learning
@@ -187,9 +197,11 @@ const routes: RouteObject[] = [
               { path: "family/:familyId", element: <FamilyProfile /> },
 
               // Calendar / Planning
-              { path: "calendar", ...p("Calendar"), errorElement: <RouteErrorBoundary /> },
-              { path: "calendar/day/:date", ...p("Day View") },
-              { path: "calendar/week/:date", ...p("Week View") },
+              { path: "calendar", element: <CalendarView />, errorElement: <RouteErrorBoundary /> },
+              { path: "calendar/day/:date", element: <CalendarView /> },
+              { path: "calendar/week/:date", element: <CalendarView /> },
+              { path: "schedule/new", element: <ScheduleEditor /> },
+              { path: "schedule/:itemId/edit", element: <ScheduleEditor /> },
               { path: "planning/templates", ...p("Schedule Templates") },
 
 

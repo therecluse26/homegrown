@@ -1069,20 +1069,20 @@ co-located here because reporting without review is an incomplete workflow.
   - Comment composer
   - Post visibility indicator
 - [ ] Post edit action for author family — pencil icon, inline editor, "(edited)" timestamp indicator `[P2]`
-- [ ] Post delete action with confirmation dialog — removes post and all comments `[P1]`
-- [ ] Comment edit/delete by comment author; post author can delete any comment on their post `[P1]`
+- [x] Post delete action with confirmation dialog — removes post and all comments `[P1]`
+- [x] Comment edit/delete by comment author; post author can delete any comment on their post `[P1]`
 - [x] `friends-list.tsx` — friend management (`/friends`): `[P1]`
   - Friends list
   - Pending requests (incoming/outgoing)
   - Friend search (by display name)
   - Block (silent — blocked user sees no change)
-- [ ] `friend-discovery.tsx` — find new friends: `[P1]`
+- [x] `friend-discovery.tsx` — find new friends: `[P1]`
   - Methodology match suggestions
   - Location-based suggestions (if location sharing enabled)
   - Shared groups indicator
   - Name search
 - [x] `block-management.tsx` — block list in settings (view blocked users, unblock) `[P1]`
-- [ ] Unfriend action with confirmation dialog (silent, no notification sent) `[P1]`
+- [x] Unfriend action with confirmation dialog (silent, no notification sent) `[P1]`
 - [x] `direct-messages.tsx` — DM inbox (`/messages`): `[P1]`
   - Conversation list (friends only, parent-to-parent)
   - Unread indicators
@@ -1093,8 +1093,8 @@ co-located here because reporting without review is an incomplete workflow.
   - Real-time message delivery
   - Image attachment button using `file-upload.tsx`, single image per message `[P1]`
   - Inline image preview in message bubble, tap for lightbox (SPEC §7.5) `[P1]`
-- [ ] Conversation mute toggle — bell-off icon, server-persisted mute state, muted conversations show muted indicator in inbox (SPEC §5.4) `[P1]`
-- [ ] Message search within conversation — debounced search input, `Ctrl+F` keyboard shortcut, highlights matching messages (SPEC §5.4) `[P1]`
+- [x] Conversation mute toggle — bell-off icon, server-persisted mute state, muted conversations show muted indicator in inbox (SPEC §5.4) `[P1]`
+- [x] Message search within conversation — debounced search input, `Ctrl+F` keyboard shortcut, highlights matching messages (SPEC §5.4) `[P1]`
 - [x] `groups-list.tsx` — group directory (`/groups`): `[P1]`
   - Platform-managed groups (by methodology) + user-created
   - Join/leave functionality
@@ -1110,14 +1110,14 @@ co-located here because reporting without review is an incomplete workflow.
   - Capacity indicator: "X of Y spots" / "Full" badge (disable RSVP "going" when full)
   - Virtual event: video call link shown only to RSVPed attendees
   - Filter by date, location region, methodology tag
-- [ ] `event-creation.tsx` — create event: title, description, date/time, location type selector (in-person / virtual / hybrid), virtual meeting URL field, capacity number input (optional), visibility (friends / group), methodology tag, group-linked option `[P1]`
-- [ ] Event attendee list for organizer — RSVP list with going/interested/not-going counts, attendee names, CSV export of attendee list (SPEC §5.6) `[P1]`
-- [ ] Event cancellation with attendee notification confirmation dialog `[P1]`
+- [x] `event-creation.tsx` — create event: title, description, date/time, location type selector (in-person / virtual / hybrid), virtual meeting URL field, capacity number input (optional), visibility (friends / group), methodology tag, group-linked option `[P1]`
+- [x] Event attendee list for organizer — RSVP list with going/interested/not-going counts, attendee names, CSV export of attendee list (SPEC §5.6) `[P1]`
+- [x] Event cancellation with attendee notification confirmation dialog `[P1]`
 - [ ] Recurring events support (weekly/monthly/custom) `[P2]`
 - [x] `family-profile.tsx` — public family profile (`/family/:familyId`): `[P1]`
   - Friends-only visibility
   - Family info, methodology, member count
-- [ ] Report button component — reusable "Report" action for posts, comments, messages, listings (uses `report-button.tsx` from Phase 3) (SPEC §11) `[P1]`
+- [x] Report button component — reusable "Report" action for posts, comments, messages, listings (uses `report-button.tsx` from Phase 3) (SPEC §11) `[P1]`
 
 ### Moderation Appeals (`features/settings/`)
 
@@ -1131,8 +1131,8 @@ co-located here because reporting without review is an incomplete workflow.
 
 ### Location Features
 
-- [ ] Location sharing toggle in profile settings (opt-in, never stores GPS coordinates — region only) `[P1]`
-- [ ] Nearby discovery sections in friends/groups/events browsing (when location sharing enabled) `[P1]`
+- [x] Location sharing toggle in profile settings (opt-in, never stores GPS coordinates — region only) `[P1]`
+- [x] Nearby discovery sections in friends/groups/events browsing (when location sharing enabled) `[P1]`
 
 ### Marketplace Features (`features/marketplace/`)
 
@@ -1188,7 +1188,7 @@ co-located here because reporting without review is an incomplete workflow.
   - Scope switching tabs: Social / Marketplace / Learning (family-scoped)
   - Faceted filtering for marketplace results (uses `faceted-filter.tsx`)
   - Sort: relevance, price, rating, recency
-- [ ] `components/layout/search-bar.tsx` — persistent search input in header/sidebar: `[P1]`
+- [x] `components/layout/search-bar.tsx` — persistent search input in header/sidebar: `[P1]`
   - Debounced autocomplete (300ms delay, top 5 suggestions, keyboard navigation)
   - Navigates to `/search?q=...`
   - (SPEC §12, domain spec `specs/domains/12-search.md`)
@@ -1291,15 +1291,15 @@ only happen after core features are stable. Core admin/moderation moved to Phase
 
 ### Planning & Calendar (`features/planning/`)
 
-- [ ] `calendar-view.tsx` — unified calendar (`/calendar`): `[P1]`
+- [x] `calendar-view.tsx` — unified calendar (`/calendar`): `[P1]`
   - Synthesize: learning activities + social events + compliance attendance
   - Daily/weekly view toggle (`/calendar/day/:date`, `/calendar/week/:date`)
   - Three data sources with distinct color coding: learning (tertiary), events (primary), attendance (secondary) + color legend
   - Print-friendly output (MUST be printable — SPEC §17)
-- [ ] `schedule-editor.tsx` — schedule item CRUD form: `[P1]`
+- [x] `schedule-editor.tsx` — schedule item CRUD form: `[P1]`
   - Fields: title, description, student, date, time, duration, category enum, subject (via `<SubjectPicker>`), color, notes
   - Schedule completion checkbox + auto-log workflow: completion checkbox prompts "Log as learning activity?" → auto-creates `learn::` activity with pre-populated fields, links via `linked_activity_id` (17-planning §3.1)
-- [ ] Drag-to-schedule with keyboard alternative (arrow keys + Enter to place items) `[P1]`
+- [x] Drag-to-schedule with keyboard alternative (arrow keys + Enter to place items) `[P1]`
 - [ ] Print-friendly schedule output (separate from calendar print) `[P2]`
 - [ ] `schedule-templates.tsx` — recurring schedule templates (weekly patterns, methodology-specific defaults) `[P2]`
 - [ ] Co-op coordination view (shared schedules between families in a group) `[P2]`
@@ -1351,13 +1351,13 @@ compliance exports and admin oversight.
 - [ ] Error boundary coverage — verify all route segments have error boundaries `[P1]`
 - [ ] Loading state coverage — verify skeleton/spinner states for all async data `[P1]`
 - [ ] Empty state coverage — verify all list views have empty states with CTAs `[P1]`
-- [ ] 404 page — friendly not-found page within AppShell `[P1]`
+- [x] 404 page — friendly not-found page within AppShell `[P1]`
 - [ ] i18n string externalization audit — no hardcoded English strings in components `[P1]`
 - [ ] axe-core CI integration — Playwright + axe-core in GitHub Actions CI pipeline, zero critical/serious violations, PR comment reporting with violation details `[P1]`
 - [ ] 200% zoom verification across all pages (WCAG 1.4.4) `[P1]`
 - [ ] Video caption file support verification (VTT/SRT in video player) `[P1]`
-- [ ] Community guidelines page exists and linked from report dialog `[P1]`
-- [ ] Error retry/offline handling — TanStack Query retry config (3× exponential backoff) + `<NetworkStatus>` banner `[P1]`
+- [x] Community guidelines page exists and linked from report dialog `[P1]`
+- [x] Error retry/offline handling — TanStack Query retry config (3× exponential backoff) + `<NetworkStatus>` banner `[P1]`
 - [ ] VPAT (Voluntary Product Accessibility Template) documentation `[P2]`
 
 ### Testing Infrastructure
@@ -1376,7 +1376,7 @@ compliance exports and admin oversight.
 
 ### Final Quality Gates
 
-- [ ] `npm run type-check` — zero TypeScript errors `[P1]`
+- [x] `npm run type-check` — zero TypeScript errors `[P1]`
 - [ ] All pages render without console errors `[P1]`
 - [ ] All interactive elements keyboard accessible `[P1]`
 - [ ] Lighthouse accessibility score ≥ 90 on all primary pages `[P1]`
@@ -1389,7 +1389,7 @@ compliance exports and admin oversight.
 - [ ] No hardcoded English strings — all user-facing text from i18n catalogs `[P1]`
 - [ ] axe-core: zero critical/serious violations `[P1]`
 - [ ] All pages usable at 200% zoom `[P1]`
-- [ ] Community guidelines page exists and linked from report dialog `[P1]`
+- [x] Community guidelines page exists and linked from report dialog `[P1]`
 
 ### References
 - SPEC §14 (compliance), §16 (admin), §17 (planning), §15 (data lifecycle), §13 (recommendations)

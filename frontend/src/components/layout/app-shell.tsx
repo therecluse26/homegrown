@@ -14,6 +14,7 @@ import { Icon } from "@/components/ui";
 import { SkipLink } from "@/components/common";
 import { useAuthContext } from "@/features/auth/auth-provider";
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { SearchBar } from "@/components/layout/search-bar";
 
 type NavItem = {
   to: string;
@@ -113,9 +114,11 @@ function Header() {
         </p>
       </div>
       <div className="flex items-center gap-3 ml-auto">
+        <SearchBar />
+        {/* Mobile search icon (search bar hidden on mobile) */}
         <NavLink
           to="/search"
-          className="p-2 rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
+          className="md:hidden p-2 rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
           aria-label={intl.formatMessage({ id: "nav.search", defaultMessage: "Search" })}
         >
           <Icon icon={Search} size="md" />

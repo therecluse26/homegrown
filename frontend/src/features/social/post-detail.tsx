@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import { useParams, Link as RouterLink } from "react-router";
+import { useParams, Link as RouterLink, useNavigate } from "react-router";
+import { FormattedMessage, useIntl } from "react-intl";
 import {
   Heart,
   MessageCircle,
@@ -7,6 +8,9 @@ import {
   Send,
   CornerDownRight,
   Trash2,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import {
   Button,
@@ -17,6 +21,7 @@ import {
   ConfirmationDialog,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { ReportButton } from "@/components/common/report-button";
 import {
   usePostDetail,
   useLikePost,
@@ -24,6 +29,7 @@ import {
   useCreateComment,
   useDeleteComment,
   useDeletePost,
+  useUpdateComment,
 } from "@/hooks/use-social";
 import type { CommentResponse } from "@/hooks/use-social";
 
@@ -38,11 +44,15 @@ function Comment({
   postId: string;
   depth?: number;
 }) {
+  const intl = useIntl();
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.content);
   const createComment = useCreateComment(postId);
   const deleteComment = useDeleteComment();
+  const updateComment = useUpdateComment(comment.id);
 
   const handleReply = useCallback(
     (e: React.FormEvent) => {
@@ -61,6 +71,20 @@ function Comment({
     [replyText, comment.id, createComment],
   );
 
+  const handleEditSave = useCallback(() => {
+    if (!editText.trim() || editText.trim() === comment.content) {
+      setIsEditing(false);
+      setEditText(comment.content);
+      return;
+    }
+    updateComment.mutate(
+      { content: editText.trim() },
+      {
+        onSuccess: () => setIsEditing(false),
+      },
+    );
+  }, [editText, comment.content, updateComment]);
+
   return (
     <div className={depth > 0 ? "ml-8 mt-2" : "mt-3"}>
       <div className="flex items-start gap-2.5">
@@ -74,9 +98,46 @@ function Comment({
             <p className="type-label-md font-semibold text-on-surface">
               {comment.author_name}
             </p>
-            <p className="type-body-sm text-on-surface whitespace-pre-wrap">
-              {comment.content}
-            </p>
+            {isEditing ? (
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="text"
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleEditSave();
+                    if (e.key === "Escape") {
+                      setIsEditing(false);
+                      setEditText(comment.content);
+                    }
+                  }}
+                  className="flex-1 bg-surface-container-highest rounded-radius-sm px-2 py-1 text-on-surface type-body-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                  autoFocus
+                />
+                <button
+                  onClick={handleEditSave}
+                  disabled={updateComment.isPending}
+                  className="text-primary hover:text-primary/80 transition-colors"
+                  aria-label={intl.formatMessage({ id: "common.save" })}
+                >
+                  <Icon icon={Check} size="xs" />
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditText(comment.content);
+                  }}
+                  className="text-on-surface-variant hover:text-on-surface transition-colors"
+                  aria-label={intl.formatMessage({ id: "common.cancel" })}
+                >
+                  <Icon icon={X} size="xs" />
+                </button>
+              </div>
+            ) : (
+              <p className="type-body-sm text-on-surface whitespace-pre-wrap">
+                {comment.content}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1 type-label-sm text-on-surface-variant">
             <span>
@@ -87,16 +148,31 @@ function Comment({
                 onClick={() => setShowReplyForm(!showReplyForm)}
                 className="hover:text-primary transition-colors"
               >
-                Reply
+                <FormattedMessage id="social.post.comment.reply" />
               </button>
             )}
             <button
+              onClick={() => {
+                setEditText(comment.content);
+                setIsEditing(true);
+              }}
+              className="hover:text-primary transition-colors"
+              aria-label={intl.formatMessage({
+                id: "social.post.comment.edit",
+              })}
+            >
+              <Icon icon={Pencil} size="xs" />
+            </button>
+            <button
               onClick={() => setShowDeleteConfirm(true)}
               className="hover:text-error transition-colors"
-              aria-label="Delete comment"
+              aria-label={intl.formatMessage({
+                id: "social.post.comment.delete",
+              })}
             >
               <Icon icon={Trash2} size="xs" />
             </button>
+            <ReportButton targetType="comment" targetId={comment.id} />
           </div>
 
           {/* Reply form */}
@@ -114,7 +190,9 @@ function Comment({
                 type="text"
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Write a reply..."
+                placeholder={intl.formatMessage({
+                  id: "social.post.comment.replyPlaceholder",
+                })}
                 className="flex-1 bg-surface-container-highest rounded-radius-sm px-3 py-1.5 text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
               <Button
@@ -143,8 +221,8 @@ function Comment({
       <ConfirmationDialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        title="Delete comment?"
-        confirmLabel="Delete"
+        title={intl.formatMessage({ id: "social.post.comment.delete.title" })}
+        confirmLabel={intl.formatMessage({ id: "common.delete" })}
         destructive
         onConfirm={() => {
           deleteComment.mutate(comment.id, {
@@ -153,7 +231,7 @@ function Comment({
         }}
         loading={deleteComment.isPending}
       >
-        This cannot be undone.
+        <FormattedMessage id="social.post.comment.delete.description" />
       </ConfirmationDialog>
     </div>
   );
@@ -162,6 +240,8 @@ function Comment({
 // ─── Post detail page ───────────────────────────────────────────────────────
 
 export function PostDetail() {
+  const intl = useIntl();
+  const navigate = useNavigate();
   const { postId } = useParams<{ postId: string }>();
   const { data, isPending } = usePostDetail(postId);
   const likePost = useLikePost();
@@ -206,7 +286,7 @@ export function PostDetail() {
         className="inline-flex items-center gap-1 mb-4 type-label-md text-on-surface-variant hover:text-primary transition-colors"
       >
         <Icon icon={ArrowLeft} size="sm" />
-        Back to feed
+        <FormattedMessage id="social.post.backToFeed" />
       </RouterLink>
 
       {/* Post */}
@@ -217,7 +297,7 @@ export function PostDetail() {
             src={post.author_photo_url}
             name={post.author_name}
           />
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="type-title-sm text-on-surface">
               {post.author_name}
             </p>
@@ -229,9 +309,14 @@ export function PostDetail() {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
-              {post.is_edited && " (edited)"}
+              {post.is_edited && (
+                <span className="ml-1">
+                  (<FormattedMessage id="social.post.edited" />)
+                </span>
+              )}
             </p>
           </div>
+          <ReportButton targetType="post" targetId={post.id} />
         </div>
 
         {post.content && (
@@ -269,7 +354,9 @@ export function PostDetail() {
           <button
             onClick={() => setShowDeleteConfirm(true)}
             className="ml-auto text-on-surface-variant hover:text-error transition-colors p-1.5 rounded-radius-sm"
-            aria-label="Delete post"
+            aria-label={intl.formatMessage({
+              id: "social.post.delete",
+            })}
           >
             <Icon icon={Trash2} size="sm" />
           </button>
@@ -282,7 +369,9 @@ export function PostDetail() {
           type="text"
           value={commentText}
           onChange={(e) => setCommentText(e.target.value)}
-          placeholder="Write a comment..."
+          placeholder={intl.formatMessage({
+            id: "social.post.comment.placeholder",
+          })}
           className="flex-1 bg-surface-container-highest rounded-radius-md px-4 py-2.5 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
         />
         <Button
@@ -309,13 +398,17 @@ export function PostDetail() {
       <ConfirmationDialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        title="Delete post?"
-        confirmLabel="Delete"
+        title={intl.formatMessage({ id: "social.post.delete.title" })}
+        confirmLabel={intl.formatMessage({ id: "common.delete" })}
         destructive
-        onConfirm={() => deletePost.mutate(post.id)}
+        onConfirm={() =>
+          deletePost.mutate(post.id, {
+            onSuccess: () => navigate("/"),
+          })
+        }
         loading={deletePost.isPending}
       >
-        This will permanently remove the post and all its comments.
+        <FormattedMessage id="social.post.delete.description" />
       </ConfirmationDialog>
     </div>
   );

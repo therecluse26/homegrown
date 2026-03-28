@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useIntl } from "react-intl";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { FormattedMessage, useIntl } from "react-intl";
 import { useParams, Link as RouterLink } from "react-router";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Send, BellOff, Bell, Search, X } from "lucide-react";
 import {
   Button,
   Icon,
   Skeleton,
   Avatar,
+  Badge,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
 import {
@@ -14,6 +15,8 @@ import {
   useConversations,
   useSendMessage,
   useMarkConversationRead,
+  useMuteConversation,
+  useUnmuteConversation,
 } from "@/hooks/use-social";
 import { useAuth } from "@/hooks/use-auth";
 import type { MessageResponse } from "@/hooks/use-social";
@@ -23,10 +26,36 @@ import type { MessageResponse } from "@/hooks/use-social";
 function MessageBubble({
   message,
   isMine,
+  searchHighlight,
 }: {
   message: MessageResponse;
   isMine: boolean;
+  searchHighlight?: string;
 }) {
+  const content = message.content;
+
+  // Highlight matching search text
+  const renderedContent = useMemo(() => {
+    if (!searchHighlight || !searchHighlight.trim()) return content;
+    const regex = new RegExp(
+      `(${searchHighlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+      "gi",
+    );
+    const parts = content.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark
+          key={i}
+          className="bg-tertiary-fixed text-on-tertiary-fixed rounded-sm px-0.5"
+        >
+          {part}
+        </mark>
+      ) : (
+        part
+      ),
+    );
+  }, [content, searchHighlight]);
+
   return (
     <div
       className={`flex ${isMine ? "justify-end" : "justify-start"} mb-2`}
@@ -43,7 +72,7 @@ function MessageBubble({
             {message.sender_name}
           </p>
         )}
-        <p className="type-body-md whitespace-pre-wrap">{message.content}</p>
+        <p className="type-body-md whitespace-pre-wrap">{renderedContent}</p>
         <p
           className={`type-label-sm mt-1 ${
             isMine ? "text-on-primary/70" : "text-on-surface-variant"
@@ -66,16 +95,35 @@ export function Conversation() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useAuth();
   const [messageText, setMessageText] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { data: messages, isPending } = useMessages(conversationId);
   const { data: conversations } = useConversations();
   const sendMessage = useSendMessage(conversationId ?? "");
   const markRead = useMarkConversationRead(conversationId ?? "");
+  const muteConversation = useMuteConversation(conversationId ?? "");
+  const unmuteConversation = useUnmuteConversation(conversationId ?? "");
 
-  // Find the other participant's name
   const conversation = conversations?.find((c) => c.id === conversationId);
   const otherName = conversation?.other_parent_name ?? "";
+  const isMuted = conversation?.is_muted ?? false;
+
+  // Filter messages by search query
+  const filteredMessages = useMemo(() => {
+    if (!messages) return undefined;
+    if (!searchQuery.trim()) return messages;
+    const q = searchQuery.toLowerCase();
+    return messages.filter((m) => m.content.toLowerCase().includes(q));
+  }, [messages, searchQuery]);
+
+  const searchMatchCount = useMemo(() => {
+    if (!searchQuery.trim() || !messages) return 0;
+    const q = searchQuery.toLowerCase();
+    return messages.filter((m) => m.content.toLowerCase().includes(q)).length;
+  }, [messages, searchQuery]);
 
   // Mark as read on mount
   useEffect(() => {
@@ -85,10 +133,31 @@ export function Conversation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change (but not when searching)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (!showSearch) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, showSearch]);
+
+  // Ctrl+F to toggle search
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
+        if (!showSearch) {
+          setTimeout(() => searchInputRef.current?.focus(), 0);
+        }
+      }
+      if (e.key === "Escape" && showSearch) {
+        setShowSearch(false);
+        setSearchQuery("");
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showSearch]);
 
   const handleSend = useCallback(
     (e: React.FormEvent) => {
@@ -103,6 +172,14 @@ export function Conversation() {
     [messageText, sendMessage],
   );
 
+  const handleMuteToggle = useCallback(() => {
+    if (isMuted) {
+      unmuteConversation.mutate();
+    } else {
+      muteConversation.mutate();
+    }
+  }, [isMuted, muteConversation, unmuteConversation]);
+
   return (
     <div className="max-w-content-narrow mx-auto flex flex-col h-[calc(100vh-8rem)]">
       <PageTitle title={otherName || intl.formatMessage({ id: "social.messages.title" })} />
@@ -116,8 +193,87 @@ export function Conversation() {
           <Icon icon={ArrowLeft} size="sm" />
         </RouterLink>
         <Avatar size="md" name={otherName || "?"} />
-        <p className="type-title-sm text-on-surface">{otherName}</p>
+        <div className="flex-1 min-w-0">
+          <p className="type-title-sm text-on-surface">{otherName}</p>
+          {isMuted && (
+            <Badge variant="secondary">
+              <FormattedMessage id="social.messages.muted" />
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => {
+              setShowSearch((prev) => !prev);
+              if (!showSearch) {
+                setTimeout(() => searchInputRef.current?.focus(), 0);
+              } else {
+                setSearchQuery("");
+              }
+            }}
+            className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            aria-label={intl.formatMessage({
+              id: "social.messages.search",
+            })}
+          >
+            <Icon icon={Search} size="sm" />
+          </button>
+          <button
+            onClick={handleMuteToggle}
+            disabled={muteConversation.isPending || unmuteConversation.isPending}
+            className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            aria-label={intl.formatMessage({
+              id: isMuted
+                ? "social.messages.unmute"
+                : "social.messages.mute",
+            })}
+          >
+            <Icon icon={isMuted ? Bell : BellOff} size="sm" />
+          </button>
+        </div>
       </div>
+
+      {/* Search bar */}
+      {showSearch && (
+        <div className="flex items-center gap-2 py-2 px-1 border-b border-outline-variant/10">
+          <Icon
+            icon={Search}
+            size="sm"
+            className="text-on-surface-variant shrink-0"
+          />
+          <input
+            ref={searchInputRef}
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={intl.formatMessage({
+              id: "social.messages.search.placeholder",
+            })}
+            className="flex-1 bg-transparent text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none"
+            aria-label={intl.formatMessage({
+              id: "social.messages.search.placeholder",
+            })}
+          />
+          {searchQuery && (
+            <span className="type-label-sm text-on-surface-variant shrink-0">
+              <FormattedMessage
+                id="social.messages.search.count"
+                values={{ count: searchMatchCount }}
+              />
+            </span>
+          )}
+          <button
+            onClick={() => {
+              setShowSearch(false);
+              setSearchQuery("");
+            }}
+            className="p-1 rounded-radius-sm text-on-surface-variant hover:text-on-surface transition-colors"
+            aria-label={intl.formatMessage({ id: "common.close" })}
+          >
+            <Icon icon={X} size="xs" />
+          </button>
+        </div>
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto py-4 space-y-1">
@@ -131,11 +287,12 @@ export function Conversation() {
           </div>
         )}
 
-        {messages?.map((msg) => (
+        {filteredMessages?.map((msg) => (
           <MessageBubble
             key={msg.id}
             message={msg}
             isMine={msg.sender_parent_id === user?.parent_id}
+            searchHighlight={searchQuery}
           />
         ))}
         <div ref={messagesEndRef} />
