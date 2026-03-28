@@ -1041,7 +1041,8 @@ co-located here because reporting without review is an incomplete workflow.
 
 ### Prerequisites
 
-- [ ] Run `make full-generate` — social, marketplace, and search endpoints must be in `schema.ts` `[P1]`
+- [x] Run `make full-generate` — social, marketplace, and search endpoints must be in `schema.ts` `[P1]`
+  - Note: No swagger annotations exist for social/mkt/search/admin/safety handlers; TypeScript interfaces defined inline in hook files matching Go backend structs
 
 ### WebSocket Infrastructure
 
@@ -1051,18 +1052,18 @@ co-located here because reporting without review is an incomplete workflow.
 
 ### Social Features (`features/social/`)
 
-- [ ] `feed.tsx` — social feed (index route `/`): `[P1]`
+- [x] `feed.tsx` — social feed (index route `/`): `[P1]`
   - Reverse-chronological posts from friends only
   - Post type-specific rendering for all 6 types: text, photo, milestone, event_share, marketplace_review, resource_share
   - Post cards with type-specific UI variants
   - Infinite scroll / pagination (uses `infinite-scroll.tsx`)
   - `aria-live` region for new posts
-- [ ] `post-composer.tsx` — create new post: `[P1]`
+- [x] `post-composer.tsx` — create new post: `[P1]`
   - Type selector with type-specific UI variants per post type
   - Text input + photo upload (for photo posts)
   - Student mention (for milestone posts)
   - Post visibility indicator (friends icon / group icon)
-- [ ] `post-detail.tsx` — single post view with comments: `[P1]`
+- [x] `post-detail.tsx` — single post view with comments: `[P1]`
   - Like button (one like per family per post, toggle)
   - Comment threading: reply button, nested replies (one level), visual indentation
   - Comment composer
@@ -1070,7 +1071,7 @@ co-located here because reporting without review is an incomplete workflow.
 - [ ] Post edit action for author family — pencil icon, inline editor, "(edited)" timestamp indicator `[P2]`
 - [ ] Post delete action with confirmation dialog — removes post and all comments `[P1]`
 - [ ] Comment edit/delete by comment author; post author can delete any comment on their post `[P1]`
-- [ ] `friends-list.tsx` — friend management (`/friends`): `[P1]`
+- [x] `friends-list.tsx` — friend management (`/friends`): `[P1]`
   - Friends list
   - Pending requests (incoming/outgoing)
   - Friend search (by display name)
@@ -1080,13 +1081,13 @@ co-located here because reporting without review is an incomplete workflow.
   - Location-based suggestions (if location sharing enabled)
   - Shared groups indicator
   - Name search
-- [ ] `block-management.tsx` — block list in settings (view blocked users, unblock) `[P1]`
+- [x] `block-management.tsx` — block list in settings (view blocked users, unblock) `[P1]`
 - [ ] Unfriend action with confirmation dialog (silent, no notification sent) `[P1]`
-- [ ] `direct-messages.tsx` — DM inbox (`/messages`): `[P1]`
+- [x] `direct-messages.tsx` — DM inbox (`/messages`): `[P1]`
   - Conversation list (friends only, parent-to-parent)
   - Unread indicators
   - Real-time via WebSocket
-- [ ] `conversation.tsx` — DM thread (`/messages/:conversationId`): `[P1]`
+- [x] `conversation.tsx` — DM thread (`/messages/:conversationId`): `[P1]`
   - Message list with timestamps
   - Message composer
   - Real-time message delivery
@@ -1094,17 +1095,17 @@ co-located here because reporting without review is an incomplete workflow.
   - Inline image preview in message bubble, tap for lightbox (SPEC §7.5) `[P1]`
 - [ ] Conversation mute toggle — bell-off icon, server-persisted mute state, muted conversations show muted indicator in inbox (SPEC §5.4) `[P1]`
 - [ ] Message search within conversation — debounced search input, `Ctrl+F` keyboard shortcut, highlights matching messages (SPEC §5.4) `[P1]`
-- [ ] `groups-list.tsx` — group directory (`/groups`): `[P1]`
+- [x] `groups-list.tsx` — group directory (`/groups`): `[P1]`
   - Platform-managed groups (by methodology) + user-created
   - Join/leave functionality
-- [ ] `group-detail.tsx` — group page (`/groups/:groupId`): `[P1]`
+- [x] `group-detail.tsx` — group page (`/groups/:groupId`): `[P1]`
   - Group feed
   - Member list
   - Group info
 - [ ] `group-creation.tsx` — create new group: name, description, join policy (open / request / invite-only) `[P2]`
 - [ ] `group-management.tsx` — group admin: promote moderator, remove member, pin posts, approve join requests `[P2]`
 - [ ] Group role management UI — owner → moderator → member hierarchy display, role badges, role change confirmation dialogs (SPEC §5.5) `[P2]`
-- [ ] `events-list.tsx` — events directory (`/events`): `[P1]`
+- [x] `events-list.tsx` — events directory (`/events`): `[P1]`
   - Event cards with RSVP 3-state button (going / interested / not going)
   - Capacity indicator: "X of Y spots" / "Full" badge (disable RSVP "going" when full)
   - Virtual event: video call link shown only to RSVPed attendees
@@ -1113,14 +1114,14 @@ co-located here because reporting without review is an incomplete workflow.
 - [ ] Event attendee list for organizer — RSVP list with going/interested/not-going counts, attendee names, CSV export of attendee list (SPEC §5.6) `[P1]`
 - [ ] Event cancellation with attendee notification confirmation dialog `[P1]`
 - [ ] Recurring events support (weekly/monthly/custom) `[P2]`
-- [ ] `family-profile.tsx` — public family profile (`/family/:familyId`): `[P1]`
+- [x] `family-profile.tsx` — public family profile (`/family/:familyId`): `[P1]`
   - Friends-only visibility
   - Family info, methodology, member count
 - [ ] Report button component — reusable "Report" action for posts, comments, messages, listings (uses `report-button.tsx` from Phase 3) (SPEC §11) `[P1]`
 
 ### Moderation Appeals (`features/settings/`)
 
-- [ ] `moderation-appeals.tsx` — moderation appeals UI at `/settings/account/appeals`: `[P1]`
+- [x] `moderation-appeals.tsx` — moderation appeals UI at `/settings/account/appeals`: `[P1]`
   - List of moderation actions taken against user's content
   - Appeal form: free-text explanation (one appeal per action)
   - Status tracker: pending → in_review → granted / denied
@@ -1135,55 +1136,55 @@ co-located here because reporting without review is an incomplete workflow.
 
 ### Marketplace Features (`features/marketplace/`)
 
-- [ ] `marketplace-browse.tsx` — browse listings (`/marketplace`): `[P1]`
+- [x] `marketplace-browse.tsx` — browse listings (`/marketplace`): `[P1]`
   - Faceted filtering: methodology, subject, grade, price, rating, content type, worldview
   - Full-text search
   - Curated sections: Featured, Trending, New Arrivals, Staff Picks
   - Sort: relevance, price, rating, recency
   - Worldview tag badges on listing cards + worldview filter option
-- [ ] `listing-detail.tsx` — listing page (`/marketplace/listings/:id`): `[P1]`
+- [x] `listing-detail.tsx` — listing page (`/marketplace/listings/:id`): `[P1]`
   - Full listing info, preview, reviews (using `star-rating.tsx`)
   - Add to cart button
   - Verified-purchaser review display (1-5 stars, anonymous by default)
   - Listing lifecycle state badge (draft / submitted / published / archived)
   - Content licensing badge (license type label + info tooltip explaining usage rights) (SPEC §9.2) `[P1]`
-- [ ] `cart.tsx` — shopping cart (`/marketplace/cart`): `[P1]`
+- [x] `cart.tsx` — shopping cart (`/marketplace/cart`): `[P1]`
   - Cart items, quantities, total
   - Checkout flow
   - Cart groups bundle items with discount applied (SPEC §9.4) `[P2]`
 - [ ] Content bundle purchase: bundle badge on listing cards, "Buy Bundle" CTA on detail page (SPEC §9.4) `[P2]`
-- [ ] `purchase-history.tsx` — past purchases (`/marketplace/purchases`): `[P1]`
+- [x] `purchase-history.tsx` — past purchases (`/marketplace/purchases`): `[P1]`
   - Purchase list with download links
   - Content access
-- [ ] `refund-request.tsx` — refund flow (`/marketplace/purchases/:id/refund`): refund reason selector (dropdown), 7-day eligibility window check, refund status tracking (pending → approved → processed / denied), confirmation dialog (SPEC §9.5) `[P1]`
+- [x] `refund-request.tsx` — refund flow (`/marketplace/purchases/:id/refund`): refund reason selector (dropdown), 7-day eligibility window check, refund status tracking (pending → approved → processed / denied), confirmation dialog (SPEC §9.5) `[P1]`
 
 ### Creator Features (`features/marketplace/creator/`)
 
-- [ ] `creator-dashboard.tsx` — creator home (`/creator`): `[P1]`
+- [x] `creator-dashboard.tsx` — creator home (`/creator`): `[P1]`
   - Sales overview, earnings, payout status
   - Analytics: sales chart (line/bar, date range selector), earnings breakdown by listing, payout schedule with next payout date, per-listing metrics (views, purchases, ratings) (SPEC §9.6)
 - [ ] `payout-setup.tsx` — creator payout onboarding (`/creator/payouts`): payout method selection + account setup, payout history, minimum threshold display (SPEC §9.6) `[P2]`
 - [ ] `creator-verification.tsx` — creator identity verification: legal name, tax info (masked SSN/EIN), verification status indicator. Required before first payout. (SPEC §9.1, 07-mkt §11) `[P2]`
-- [ ] `create-listing.tsx` — new listing (`/creator/listings/new`): `[P1]`
+- [x] `create-listing.tsx` — new listing (`/creator/listings/new`): `[P1]`
   - Listing form: title, description, price, category, content upload
   - Preview before publish
   - Listing lifecycle state transition buttons (draft → submitted → published → archived)
   - Note: creators can create listings without identity verification in Phase 1. Verification (`creator-verification.tsx` [P2]) gates **payouts only**, not listing creation. Unverified creators see a persistent banner: "Complete verification to receive payouts."
-- [ ] `edit-listing.tsx` — edit existing listing (`/creator/listings/:id/edit`) `[P1]`
+- [x] `edit-listing.tsx` — edit existing listing (`/creator/listings/:id/edit`) `[P1]`
 - [ ] `listing-version-history.tsx` — version list with upload date, file size, "current" badge. View-only (no rollback in v1). (SPEC §9.2.3) `[P2]`
 - [ ] `creator-reviews.tsx` — view reviews on own listings, respond to reviews `[P2]`
-- [ ] `quiz-builder.tsx` — create quizzes for marketplace (`/creator/quiz-builder`): `[P1]`
+- [x] `quiz-builder.tsx` — create quizzes for marketplace (`/creator/quiz-builder`): `[P1]`
   - Question editor (multiple types)
   - Preview and test
   - Keyboard alternative for drag-and-drop: arrow keys to select question, Enter to grab, arrow keys to move, Enter to drop, Escape to cancel. `aria-live` announcements for position changes (CODING_STANDARDS §3.8)
-- [ ] `sequence-builder.tsx` — create lesson sequences (`/creator/sequence-builder`): `[P1]`
+- [x] `sequence-builder.tsx` — create lesson sequences (`/creator/sequence-builder`): `[P1]`
   - Step editor with ordering
   - Content assignment per step
   - Keyboard alternative for reordering: arrow keys to select step, Enter to grab, arrow keys to move, Enter to drop, Escape to cancel. `aria-live` announcements for position changes (CODING_STANDARDS §3.8)
 
 ### Search (`features/search/`)
 
-- [ ] `search-results.tsx` — global search results (`/search`): `[P1]`
+- [x] `search-results.tsx` — global search results (`/search`): `[P1]`
   - Scope switching tabs: Social / Marketplace / Learning (family-scoped)
   - Faceted filtering for marketplace results (uses `faceted-filter.tsx`)
   - Sort: relevance, price, rating, recency
@@ -1197,15 +1198,15 @@ co-located here because reporting without review is an incomplete workflow.
 > Moved from Phase 10: reporting without review is an incomplete workflow.
 > Day-1 moderation capability is essential alongside social/marketplace launch.
 
-- [ ] `admin-dashboard.tsx` — system health overview (`/admin`): `[P1]`
+- [x] `admin-dashboard.tsx` — system health overview (`/admin`): `[P1]`
   - User counts, content stats, system metrics
   - `<AdminGuard>` wrapper
-- [ ] `user-management.tsx` — user admin: `[P1]`
+- [x] `user-management.tsx` — user admin: `[P1]`
   - Search users by email/name, filter by status
   - View family details
   - Account actions: suspend (with reason), ban (with reason), reactivate
-- [ ] `user-detail.tsx` — individual user detail view (`/admin/users/:id`) `[P1]`
-- [ ] `moderation-queue.tsx` — content moderation: `[P1]`
+- [x] `user-detail.tsx` — individual user detail view (`/admin/users/:id`) `[P1]`
+- [x] `moderation-queue.tsx` — content moderation: `[P1]`
   - Reported content queue (from safety domain reports)
   - Content preview panel (shows reported content inline without navigating away)
   - Review + action with reasons dropdown (approve, remove, warn) + action reason selection
@@ -1213,7 +1214,7 @@ co-located here because reporting without review is an incomplete workflow.
   - Admin notes field per moderation action (internal, not visible to content owner)
   - Moderation states visible to content owners
   - **Appeals tab**: pending appeals with original action context, appeal text, Grant/Deny actions. Different admin than original action (enforced by backend, UI shows warning if same admin). (SPEC §12.2, 11-safety §12.4) `[P1]`
-- [ ] `audit-log.tsx` — admin audit log viewer: filterable by admin user, action type, target entity, date range `[P1]`
+- [x] `audit-log.tsx` — admin audit log viewer: filterable by admin user, action type, target entity, date range `[P1]`
 - References: SPEC §16, domain spec `specs/domains/16-admin.md`
 
 ### Verification
@@ -1231,7 +1232,7 @@ co-located here because reporting without review is an incomplete workflow.
 - [ ] Verify: RSVP state persists and updates event attendee count `[P1]`
 - [ ] Verify: moderation queue receives reports and admin actions persist `[P1]`
 - [ ] Verify: audit log records admin actions with correct metadata `[P1]`
-- [ ] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
 
 ### References
 - SPEC §5 (social), §7 (marketplace), §12 (search), §16 (admin)

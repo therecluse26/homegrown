@@ -59,6 +59,43 @@ import { StudentVideo } from "@/features/student/student-video";
 import { StudentReader } from "@/features/student/student-reader";
 import { StudentSequence } from "@/features/student/student-sequence";
 
+// ─── Phase 9: Social pages ──────────────────────────────────────────────────
+import { Feed } from "@/features/social/feed";
+import { FriendsList } from "@/features/social/friends-list";
+import { DirectMessages } from "@/features/social/direct-messages";
+import { Conversation as ConversationPage } from "@/features/social/conversation";
+import { GroupsList } from "@/features/social/groups-list";
+import { GroupDetail } from "@/features/social/group-detail";
+import { EventsList } from "@/features/social/events-list";
+import { FamilyProfile } from "@/features/social/family-profile";
+import { PostDetail } from "@/features/social/post-detail";
+
+// ─── Phase 9: Marketplace pages ────────────────────────────────────────────
+import { MarketplaceBrowse } from "@/features/marketplace/marketplace-browse";
+import { ListingDetail } from "@/features/marketplace/listing-detail";
+import { Cart } from "@/features/marketplace/cart";
+import { PurchaseHistory } from "@/features/marketplace/purchase-history";
+import { RefundRequest } from "@/features/marketplace/refund-request";
+import { CreatorDashboard } from "@/features/marketplace/creator/creator-dashboard";
+import { CreateListing } from "@/features/marketplace/creator/create-listing";
+import { EditListing } from "@/features/marketplace/creator/edit-listing";
+import { QuizBuilder } from "@/features/marketplace/creator/quiz-builder";
+import { SequenceBuilder } from "@/features/marketplace/creator/sequence-builder";
+
+// ─── Phase 9: Search pages ──────────────────────────────────────────────────
+import { SearchResults } from "@/features/search/search-results";
+
+// ─── Phase 9: Admin pages ──────────────────────────────────────────────────
+import { AdminDashboard } from "@/features/admin/admin-dashboard";
+import { UserManagement } from "@/features/admin/user-management";
+import { UserDetail } from "@/features/admin/user-detail";
+import { ModerationQueue } from "@/features/admin/moderation-queue";
+import { AuditLog } from "@/features/admin/audit-log";
+
+// ─── Phase 9: Settings additions ────────────────────────────────────────────
+import { ModerationAppeals } from "@/features/settings/moderation-appeals";
+import { BlockManagement } from "@/features/settings/block-management";
+
 // ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
 import { TermsOfService } from "@/features/legal/terms-of-service";
 import { PrivacyPolicy } from "@/features/legal/privacy-policy";
@@ -85,15 +122,16 @@ const routes: RouteObject[] = [
             errorElement: <RouteErrorBoundary />,
             children: [
               // Home / Feed
-              { index: true, ...p("Home") },
+              { index: true, element: <Feed />, errorElement: <RouteErrorBoundary /> },
 
               // Social
-              { path: "friends", ...p("Friends"), errorElement: <RouteErrorBoundary /> },
-              { path: "messages", ...p("Messages"), errorElement: <RouteErrorBoundary /> },
-              { path: "messages/:conversationId", ...p("Conversation") },
-              { path: "groups", ...p("Groups"), errorElement: <RouteErrorBoundary /> },
-              { path: "groups/:groupId", ...p("Group") },
-              { path: "events", ...p("Events"), errorElement: <RouteErrorBoundary /> },
+              { path: "friends", element: <FriendsList />, errorElement: <RouteErrorBoundary /> },
+              { path: "messages", element: <DirectMessages />, errorElement: <RouteErrorBoundary /> },
+              { path: "messages/:conversationId", element: <ConversationPage /> },
+              { path: "groups", element: <GroupsList />, errorElement: <RouteErrorBoundary /> },
+              { path: "groups/:groupId", element: <GroupDetail /> },
+              { path: "events", element: <EventsList />, errorElement: <RouteErrorBoundary /> },
+              { path: "post/:postId", element: <PostDetail /> },
 
               // Learning
               { path: "learning", element: <LearningDashboard />, errorElement: <RouteErrorBoundary /> },
@@ -112,20 +150,20 @@ const routes: RouteObject[] = [
               { path: "learning/session", element: <StudentSessionLauncher /> },
 
               // Marketplace
-              { path: "marketplace", ...p("Marketplace"), errorElement: <RouteErrorBoundary /> },
-              { path: "marketplace/listings/:id", ...p("Listing Details") },
-              { path: "marketplace/cart", ...p("Cart") },
-              { path: "marketplace/purchases", ...p("Purchase History") },
-              { path: "marketplace/purchases/:id/refund", ...p("Request Refund") },
+              { path: "marketplace", element: <MarketplaceBrowse />, errorElement: <RouteErrorBoundary /> },
+              { path: "marketplace/listings/:id", element: <ListingDetail /> },
+              { path: "marketplace/cart", element: <Cart /> },
+              { path: "marketplace/purchases", element: <PurchaseHistory /> },
+              { path: "marketplace/purchases/:id/refund", element: <RefundRequest /> },
 
               // Creator
-              { path: "creator", ...p("Creator Dashboard"), errorElement: <RouteErrorBoundary /> },
-              { path: "creator/listings/new", ...p("Create Listing") },
-              { path: "creator/listings/:id/edit", ...p("Edit Listing") },
-              { path: "creator/quiz-builder", ...p("Quiz Builder") },
-              { path: "creator/quiz-builder/:id", ...p("Edit Quiz") },
-              { path: "creator/sequence-builder", ...p("Sequence Builder") },
-              { path: "creator/sequence-builder/:id", ...p("Edit Sequence") },
+              { path: "creator", element: <CreatorDashboard />, errorElement: <RouteErrorBoundary /> },
+              { path: "creator/listings/new", element: <CreateListing /> },
+              { path: "creator/listings/:id/edit", element: <EditListing /> },
+              { path: "creator/quiz-builder", element: <QuizBuilder /> },
+              { path: "creator/quiz-builder/:id", element: <QuizBuilder /> },
+              { path: "creator/sequence-builder", element: <SequenceBuilder /> },
+              { path: "creator/sequence-builder/:id", element: <SequenceBuilder /> },
               { path: "creator/payouts", ...p("Payout Setup") },
 
               // Settings
@@ -138,14 +176,15 @@ const routes: RouteObject[] = [
               { path: "settings/account/export", element: <DataExport /> },
               { path: "settings/account/delete", element: <AccountDeletion /> },
               { path: "settings/account/delete/student/:studentId", element: <StudentDeletion /> },
-              { path: "settings/account/appeals", ...p("Moderation Appeals") },
+              { path: "settings/account/appeals", element: <ModerationAppeals /> },
+              { path: "settings/blocks", element: <BlockManagement /> },
               { path: "settings/privacy", element: <PrivacyControls /> },
 
               // Search
-              { path: "search", ...p("Search"), errorElement: <RouteErrorBoundary /> },
+              { path: "search", element: <SearchResults />, errorElement: <RouteErrorBoundary /> },
 
               // Family profile
-              { path: "family/:familyId", ...p("Family Profile") },
+              { path: "family/:familyId", element: <FamilyProfile /> },
 
               // Calendar / Planning
               { path: "calendar", ...p("Calendar"), errorElement: <RouteErrorBoundary /> },
@@ -240,12 +279,12 @@ const routes: RouteObject[] = [
             element: <AdminShell />,
             errorElement: <RouteErrorBoundary />,
             children: [
-              { index: true, ...p("Admin Dashboard") },
-              { path: "users", ...p("User Management") },
-              { path: "users/:id", ...p("User Details") },
-              { path: "moderation", ...p("Moderation Queue") },
+              { index: true, element: <AdminDashboard /> },
+              { path: "users", element: <UserManagement /> },
+              { path: "users/:id", element: <UserDetail /> },
+              { path: "moderation", element: <ModerationQueue /> },
               { path: "flags", ...p("Feature Flags") },
-              { path: "audit", ...p("Audit Log") },
+              { path: "audit", element: <AuditLog /> },
               { path: "methodologies", ...p("Methodology Config") },
             ],
           },
