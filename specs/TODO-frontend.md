@@ -792,7 +792,7 @@ pages exercise CRUD patterns that all subsequent features follow.
   - `content_flagged` → warning icon + "Your [post/comment] was flagged for review" + link to content
   - `event_cancelled` → calendar icon + "Event [name] was cancelled" + link to events
   - System notifications (ToS update, maintenance) → system icon + non-dismissable until acknowledged
-- [ ] `features/settings/notification-history.tsx` — full notification history page (`/settings/notifications/history`) with filters by type, date range, and read/unread status `[P1]`
+- [x] `features/settings/notification-history.tsx` — full notification history page (`/settings/notifications/history`) with filters by type, date range, and read/unread status `[P1]`
 
 ### Notification Type → Phase Mapping
 
@@ -838,73 +838,73 @@ and family management from prior phases.
 
 ### Prerequisites
 
-- [ ] Run `make full-generate` if not already done — learning endpoints must be in `schema.ts` `[P1]`
+- [x] Run `make full-generate` if not already done — learning endpoints must be in `schema.ts` `[P1]`
 
 ### Learning Hooks (`hooks/`)
 
-- [ ] `use-activities.ts` — activity definitions + activity log CRUD: `[P1]`
+- [x] `use-activities.ts` — activity definitions + activity log CRUD: `[P1]`
   - `useActivityDefs()`, `useCreateActivityDef()`, `useLogActivity()`, etc.
   - Query keys: `["learning", "activity-defs"]`, `["learning", "activity-log", filters]`
-- [ ] `use-journals.ts` — journal entry CRUD: `[P1]`
+- [x] `use-journals.ts` — journal entry CRUD: `[P1]`
   - `useJournalEntries(filters)`, `useCreateJournalEntry()`, `useUpdateJournalEntry()`, etc.
   - Query keys: `["learning", "journals", filters]`
-- [ ] `use-reading.ts` — reading items, progress, lists: `[P1]`
+- [x] `use-reading.ts` — reading items, progress, lists: `[P1]`
   - `useReadingItems()`, `useReadingLists()`, `useUpdateReadingProgress()`, etc.
   - Query keys: `["learning", "reading-items"]`, `["learning", "reading-lists"]`
-- [ ] `use-progress.ts` — student progress aggregation: `[P1]`
+- [x] `use-progress.ts` — student progress aggregation: `[P1]`
   - `useStudentProgress(studentId)` — activity counts, hours, reading completion
   - Query key: `["learning", "progress", studentId]`
-- [ ] `use-quiz.ts` — quiz session management: `[P1]`
+- [x] `use-quiz.ts` — quiz session management: `[P1]`
   - `useQuizSession(sessionId)`, `useSubmitAnswer()`, `useCompleteQuiz()`, etc.
   - Query keys: `["learning", "quiz", sessionId]`
-- [ ] `use-video.ts` — video definitions + progress: `[P1]`
+- [x] `use-video.ts` — video definitions + progress: `[P1]`
   - `useVideoProgress(videoId)`, `useUpdateVideoProgress()`, etc.
-- [ ] `use-sequences.ts` — sequence definitions + progress: `[P1]`
+- [x] `use-sequences.ts` — sequence definitions + progress: `[P1]`
   - `useSequenceProgress(progressId)`, `useAdvanceSequence()`, etc.
-- [ ] `use-assignments.ts` — parent assigns content to students: `[P1]`
+- [x] `use-assignments.ts` — parent assigns content to students: `[P1]`
   - `useAssignments(studentId)`, `useCreateAssignment()`, etc.
-- [ ] `use-subjects.ts` — subject taxonomy: `[P1]`
+- [x] `use-subjects.ts` — subject taxonomy: `[P1]`
   - `useSubjectTaxonomy()`, `useCreateCustomSubject()`
-- [ ] `use-assessments.ts` — assessment/test score CRUD: `[P1]`
+- [x] `use-assessments.ts` — assessment/test score CRUD: `[P1]`
   - `useAssessments(studentId, filters)`, `useCreateAssessment()`, `useGradingScales()`, etc.
   - Query keys: `["learning", "assessments", studentId]`, `["learning", "grading-scales"]`
 
 ### Subject Taxonomy Picker
 
-- [ ] `components/common/subject-picker.tsx` — 3-level hierarchical picker (Category → Subject → Topic) with inline custom subject creation; used in activity logging, assessments, journals, schedules `[P1]`
+- [x] `components/common/subject-picker.tsx` — 3-level hierarchical picker (Category → Subject → Topic) with inline custom subject creation; used in activity logging, assessments, journals, schedules `[P1]`
 
 ### Learning Pages (`features/learning/`)
 
-- [ ] `learning-dashboard.tsx` — overview landing page: `[P1]`
+- [x] `learning-dashboard.tsx` — overview landing page: `[P1]`
   - Quick stats per student (recent activities, reading progress) using `<StatCard>`
   - Methodology-aware tool labels (via `useMethodologyContext()`)
   - Quick-add buttons for logging, journaling, etc.
   - Premium features gated with `<TierGate>`
-- [ ] `activity-log.tsx` — log and browse activities: `[P1]`
+- [x] `activity-log.tsx` — log and browse activities: `[P1]`
   - Activity log table/list with date, subject, duration, student
   - Add activity form: title, description, subject tags (from taxonomy via `<SubjectPicker>`), date, duration, student selector
   - Filter by student, date range, subject
-- [ ] `journal-list.tsx` — browse journal entries: `[P1]`
+- [x] `journal-list.tsx` — browse journal entries: `[P1]`
   - List view with entry type badge (freeform/narration/reflection)
   - Filter by student, type, date range
-- [ ] `journal-editor.tsx` — create/edit journal entry: `[P1]`
+- [x] `journal-editor.tsx` — create/edit journal entry: `[P1]`
   - Rich text editor (uses `rich-text-editor.tsx` component)
   - File attachment support (uses `file-upload.tsx` component)
   - Student selector
   - Subject tags via `<SubjectPicker>`
-- [ ] `reading-lists.tsx` — manage reading lists and items: `[P1]`
+- [x] `reading-lists.tsx` — manage reading lists and items: `[P1]`
   - List view with status badges (to_read/in_progress/completed)
   - Add book form: title, author, ISBN (with auto-populate lookup, fallback to manual entry `[P2]`), student
   - Status transition buttons
   - Reading list grouping/organization
   - Reading list sharing: share button → select friends/groups → shareable link, recipients can view or copy list `[P2]`
-- [ ] `progress-view.tsx` — per-student progress dashboard (`/learning/progress/:studentId`): `[P1]`
+- [x] `progress-view.tsx` — per-student progress dashboard (`/learning/progress/:studentId`): `[P1]`
   - Activity counts by subject
   - Reading completion metrics
   - Hours per week chart
   - Assessment scores overview
   - Export button (async export generation via data lifecycle hooks)
-- [ ] `tests-and-grades.tsx` — assessment entry and grade tracking: `[P1]`
+- [x] `tests-and-grades.tsx` — assessment entry and grade tracking: `[P1]`
   - Assessment entry form: title, subject (via `<SubjectPicker>`), student, date, score type (points/percentage/letter), weight
   - Grading scale configuration (per-family custom scales)
   - Running averages by subject and student
@@ -916,8 +916,8 @@ and family management from prior phases.
 
 ### Methodology Integration
 
-- [ ] All learning tool labels MUST come from methodology config via `useMethodologyContext()` — no hardcoded "Activity Log", "Journal", etc. `[P1]`
-- [ ] `components/common/parent-education-panel.tsx` — expandable guidance panel sourcing content from `ActiveToolResponse.guidance`; includes "Why this tool?" explanation from methodology philosophy `[P1]`
+- [ ] All learning tool labels MUST come from methodology config via `useMethodologyContext()` — no hardcoded "Activity Log", "Journal", etc. `[P1]` *(labels currently use i18n strings; methodology-config integration deferred until methodology context hook is built)*
+- [x] `components/common/parent-education-panel.tsx` — expandable guidance panel sourcing content from `ActiveToolResponse.guidance`; includes "Why this tool?" explanation from methodology philosophy `[P1]`
 
 ### Tool Assignment
 
@@ -925,7 +925,7 @@ and family management from prior phases.
 
 ### Interactive Learning Players
 
-- [ ] `quiz-player.tsx` — interactive quiz (`/learning/quiz/:sessionId`): `[P1]`
+- [x] `quiz-player.tsx` — interactive quiz (`/learning/quiz/:sessionId`): `[P1]`
   - Session lifecycle: `not_started → in_progress → submitted → scored`
   - Question types: multiple choice, fill-in-the-blank, true/false, matching, ordering, short answer
   - Auto-save on each answer for save-and-resume (no data loss on browser crash/navigation)
@@ -934,23 +934,23 @@ and family management from prior phases.
   - Score display on completion
   - `aria-live` for quiz feedback (CODING_STANDARDS §3.8)
   - (SPEC §8.1.9)
-- [ ] `parent-quiz-scoring.tsx` — parent scoring interface for short-answer questions: `[P1]`
+- [x] `parent-quiz-scoring.tsx` — parent scoring interface for short-answer questions: `[P1]`
   - Pending-review list with notification badge on learning dashboard when reviews are pending
   - Question + student response display
   - Score input (correct / partial / incorrect)
   - "Score All" batch action for multiple pending answers
   - (SPEC §8.1.9)
-- [ ] `video-player.tsx` — video playback (`/learning/video/:videoId`): `[P1]`
+- [x] `video-player.tsx` — video playback (`/learning/video/:videoId`): `[P1]`
   - HLS streaming support + external video URLs
   - Progress tracking (last position, completion percentage)
   - Accessible controls
   - Caption file support (VTT/SRT) `[P1]`
   - Caption language selection dropdown when multiple tracks are available (SPEC §17.6.2) `[P1]`
   - Caption styling options (font size, background opacity) stored in localStorage `[P2]`
-- [ ] `content-viewer.tsx` — document/content viewer (`/learning/read/:contentId`): `[P1]`
+- [x] `content-viewer.tsx` — document/content viewer (`/learning/read/:contentId`): `[P1]`
   - PDF/document rendering
   - Progress tracking
-- [ ] `sequence-view.tsx` — lesson sequence (`/learning/sequence/:progressId`): `[P1]`
+- [x] `sequence-view.tsx` — lesson sequence (`/learning/sequence/:progressId`): `[P1]`
   - Linear progression display
   - Current step highlight
   - Unlock logic visualization
@@ -959,38 +959,38 @@ and family management from prior phases.
 
 ### Content Assignment UX
 
-- [ ] Content assignment notification: confirmation toast for parent on successful assignment, "New" badge on student dashboard for unstarted assignments (SPEC §6.5) `[P1]`
-- [ ] Glassmorphism progress overlay for student sessions — semi-transparent `secondary-container` background + backdrop blur showing session progress, time remaining, and current activity (DESIGN §2.6) `[P1]`
+- [x] Content assignment notification: confirmation toast for parent on successful assignment, "New" badge on student dashboard for unstarted assignments (SPEC §6.5) `[P1]`
+- [x] Glassmorphism progress overlay for student sessions — semi-transparent `secondary-container` background + backdrop blur showing session progress, time remaining, and current activity (DESIGN §2.6) `[P1]`
 
 ### Student Features (`features/student/`)
 
-- [ ] `student-dashboard.tsx` — simplified student home: `[P1]`
+- [x] `student-dashboard.tsx` — simplified student home: `[P1]`
   - Assigned content list with "New" badge for unstarted assignments
   - Current sequence progress
   - No social/marketplace access
-- [ ] `student-quiz.tsx` — student-facing quiz (simplified wrapper of quiz-player) `[P1]`
-- [ ] `student-video.tsx` — student-facing video player `[P1]`
-- [ ] `student-reader.tsx` — student-facing content viewer `[P1]`
-- [ ] `student-sequence.tsx` — student-facing sequence progression `[P1]`
+- [x] `student-quiz.tsx` — student-facing quiz (simplified wrapper of quiz-player) `[P1]`
+- [x] `student-video.tsx` — student-facing video player `[P1]`
+- [x] `student-reader.tsx` — student-facing content viewer `[P1]`
+- [x] `student-sequence.tsx` — student-facing sequence progression `[P1]`
 
 ### Student Session Management
 
-- [ ] `hooks/use-student-session.ts` — manages which student is active: `[P1]`
+- [x] `hooks/use-student-session.ts` — manages which student is active: `[P1]`
   - Parent switches between students for logging/viewing
   - Student shell: student is fixed from parent's selection
   - Stored in context (not server state)
   - (ARCHITECTURE §11.2)
-- [ ] Supervised student session detail: age gate UI (10+ verification), session creation flow (parent selects student → confirms → enters student shell), session duration presets (1h / 2h / 4h / end-of-day), timeout warning at 5 minutes remaining, session revocation from parent view, session activity log visible to parent `[P1]`
-- [ ] `features/learning/student-session-activity-log.tsx` — parent-visible log of all actions taken during a student session (pages visited, content viewed, time per item) (SPEC §6.5) `[P1]`
+- [x] Supervised student session detail: age gate UI (10+ verification), session creation flow (parent selects student → confirms → enters student shell), session duration presets (1h / 2h / 4h / end-of-day), timeout warning at 5 minutes remaining, session revocation from parent view, session activity log visible to parent `[P1]`
+- [x] `features/learning/student-session-activity-log.tsx` — parent-visible log of all actions taken during a student session (pages visited, content viewed, time per item) (SPEC §6.5) `[P1]`
 
 ### Learning Data Export
 
-- [ ] Learning data export button on `progress-view.tsx` — triggers domain-scoped export via data lifecycle hooks `[P1]`
+- [x] Learning data export button on `progress-view.tsx` — triggers domain-scoped export via data lifecycle hooks `[P1]`
 
 ### Streak & Milestone Display
 
-- [ ] Streak indicator on learning dashboard: flame/star icon + day count, milestone badges at 7/14/30/60/100 days `[P1]`
-- [ ] Milestone celebration toast on WebSocket event (`streak_milestone`, `learning_milestone`) `[P1]`
+- [x] Streak indicator on learning dashboard: flame/star icon + day count, milestone badges at 7/14/30/60/100 days `[P1]`
+- [ ] Milestone celebration toast on WebSocket event (`streak_milestone`, `learning_milestone`) `[P1]` *(requires WebSocket infrastructure from Phase 5)*
 - Source: SPEC §13.1, 08-notify §9
 
 ### Phase 3 Methodology-Specific Tools (future placeholders)

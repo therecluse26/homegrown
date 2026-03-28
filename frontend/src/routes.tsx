@@ -34,6 +34,30 @@ import { DataExport } from "@/features/settings/data-export";
 import { AccountDeletion } from "@/features/settings/account-deletion";
 import { StudentDeletion } from "@/features/settings/student-deletion";
 import { NotificationCenter } from "@/features/settings/notification-center";
+import { NotificationHistory } from "@/features/settings/notification-history";
+
+// ─── Phase 8: Learning pages ─────────────────────────────────────────────────
+import { LearningDashboard } from "@/features/learning/learning-dashboard";
+import { ActivityLog } from "@/features/learning/activity-log";
+import { JournalList } from "@/features/learning/journal-list";
+import { JournalEditor } from "@/features/learning/journal-editor";
+import { ReadingLists } from "@/features/learning/reading-lists";
+import { ProgressView } from "@/features/learning/progress-view";
+import { QuizPlayer } from "@/features/learning/quiz-player";
+import { ParentQuizScoring } from "@/features/learning/parent-quiz-scoring";
+import { VideoPlayer } from "@/features/learning/video-player";
+import { ContentViewer } from "@/features/learning/content-viewer";
+import { SequenceView } from "@/features/learning/sequence-view";
+import { TestsAndGrades } from "@/features/learning/tests-and-grades";
+import { StudentSessionActivityLog } from "@/features/learning/student-session-activity-log";
+import { StudentSessionLauncher } from "@/features/learning/student-session-launcher";
+
+// ─── Phase 8: Student pages ─────────────────────────────────────────────────
+import { StudentDashboard as StudentDashboardPage } from "@/features/student/student-dashboard";
+import { StudentQuiz } from "@/features/student/student-quiz";
+import { StudentVideo } from "@/features/student/student-video";
+import { StudentReader } from "@/features/student/student-reader";
+import { StudentSequence } from "@/features/student/student-sequence";
 
 // ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
 import { TermsOfService } from "@/features/legal/terms-of-service";
@@ -72,16 +96,20 @@ const routes: RouteObject[] = [
               { path: "events", ...p("Events"), errorElement: <RouteErrorBoundary /> },
 
               // Learning
-              { path: "learning", ...p("Learning Dashboard"), errorElement: <RouteErrorBoundary /> },
-              { path: "learning/activities", ...p("Activity Log") },
-              { path: "learning/journals", ...p("Journals") },
-              { path: "learning/journals/new", ...p("New Journal Entry") },
-              { path: "learning/reading-lists", ...p("Reading Lists") },
-              { path: "learning/progress/:studentId", ...p("Student Progress") },
-              { path: "learning/quiz/:sessionId", ...p("Quiz") },
-              { path: "learning/video/:videoId", ...p("Video Player") },
-              { path: "learning/read/:contentId", ...p("Content Viewer") },
-              { path: "learning/sequence/:progressId", ...p("Sequence View") },
+              { path: "learning", element: <LearningDashboard />, errorElement: <RouteErrorBoundary /> },
+              { path: "learning/activities", element: <ActivityLog /> },
+              { path: "learning/journals", element: <JournalList /> },
+              { path: "learning/journals/new", element: <JournalEditor /> },
+              { path: "learning/reading-lists", element: <ReadingLists /> },
+              { path: "learning/progress/:studentId", element: <ProgressView /> },
+              { path: "learning/grades", element: <TestsAndGrades /> },
+              { path: "learning/quiz/:sessionId", element: <QuizPlayer /> },
+              { path: "learning/quiz/:sessionId/score", element: <ParentQuizScoring /> },
+              { path: "learning/video/:videoId", element: <VideoPlayer /> },
+              { path: "learning/read/:contentId", element: <ContentViewer /> },
+              { path: "learning/sequence/:progressId", element: <SequenceView /> },
+              { path: "learning/session-log/:sessionId", element: <StudentSessionActivityLog /> },
+              { path: "learning/session", element: <StudentSessionLauncher /> },
 
               // Marketplace
               { path: "marketplace", ...p("Marketplace"), errorElement: <RouteErrorBoundary /> },
@@ -103,6 +131,7 @@ const routes: RouteObject[] = [
               // Settings
               { path: "settings", element: <FamilySettings />, errorElement: <RouteErrorBoundary /> },
               { path: "settings/notifications", element: <NotificationPrefs /> },
+              { path: "settings/notifications/history", element: <NotificationHistory /> },
               { path: "settings/subscription", element: <SubscriptionUpgrade /> },
               { path: "settings/account", element: <AccountSettings /> },
               { path: "settings/account/sessions", element: <SessionManagement /> },
@@ -186,11 +215,11 @@ const routes: RouteObject[] = [
             element: <StudentShell />,
             errorElement: <RouteErrorBoundary />,
             children: [
-              { index: true, ...p("Student Dashboard") },
-              { path: "quiz/:sessionId", ...p("Student Quiz") },
-              { path: "video/:videoId", ...p("Student Video") },
-              { path: "read/:contentId", ...p("Student Reader") },
-              { path: "sequence/:progressId", ...p("Student Sequence") },
+              { index: true, element: <StudentDashboardPage /> },
+              { path: "quiz/:sessionId", element: <StudentQuiz /> },
+              { path: "video/:videoId", element: <StudentVideo /> },
+              { path: "read/:contentId", element: <StudentReader /> },
+              { path: "sequence/:progressId", element: <StudentSequence /> },
             ],
           },
         ],
