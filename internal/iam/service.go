@@ -35,7 +35,7 @@ type IamServiceImpl struct {
 	eventBus                   *shared.EventBus
 	db                         *gorm.DB // for transaction management
 	defaultMethodologyResolver DefaultMethodologyResolver
-	billingSvc                 BillingServiceForIam // optional; nil before billing:: is wired
+	billingSvc                 BillingServiceForIam
 }
 
 // NewIamService creates a new IamServiceImpl.
@@ -73,18 +73,15 @@ func (s *IamServiceImpl) SetBillingService(svc BillingServiceForIam) {
 	s.billingSvc = svc
 }
 
-// getDefaultMethodologySlug returns the default methodology slug using the injected resolver,
-// or the fallback slug if the resolver is not set.
+// getDefaultMethodologySlug returns the default methodology slug, falling back to a
+// hardcoded slug on error.
 func (s *IamServiceImpl) getDefaultMethodologySlug(ctx context.Context) string {
-	if s.defaultMethodologyResolver != nil {
-		slug, err := s.defaultMethodologyResolver(ctx)
-		if err != nil {
-			slog.Error("failed to resolve default methodology slug, using fallback", "error", err)
-			return fallbackMethodologySlug
-		}
-		return slug
+	slug, err := s.defaultMethodologyResolver(ctx)
+	if err != nil {
+		slog.Error("failed to resolve default methodology slug, using fallback", "error", err)
+		return fallbackMethodologySlug
 	}
-	return fallbackMethodologySlug
+	return slug
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -327,7 +324,7 @@ func (s *IamServiceImpl) SubmitCoppaConsent(ctx context.Context, scope *shared.F
 		if cmd.Method == "" || cmd.VerificationToken == "" {
 			return nil, ErrConsentVerificationFailed
 		}
-		if cmd.Method == "credit_card_verification" && s.billingSvc != nil {
+		if cmd.Method == "credit_card_verification" {
 			if err := s.billingSvc.VerifyCreditCardMicroCharge(ctx, scope, cmd.VerificationToken); err != nil {
 				slog.Error("iam: COPPA credit card micro-charge failed", "family_id", scope.FamilyID(), "error", err)
 				return nil, ErrConsentVerificationFailed

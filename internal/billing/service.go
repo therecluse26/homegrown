@@ -33,6 +33,9 @@ func NewBillingService(
 	events *shared.EventBus,
 	config BillingConfig,
 ) *BillingServiceImpl {
+	if config.CoppaChargeCents <= 0 {
+		panic("billing: CoppaChargeCents must be > 0 (COPPA compliance requirement)")
+	}
 	return &BillingServiceImpl{
 		subscriptionRepo: subscriptionRepo,
 		transactionRepo:  transactionRepo,
@@ -494,14 +497,9 @@ func (s *BillingServiceImpl) ProcessCoppaVerification(ctx context.Context, cmd C
 		return nil, &BillingError{Err: fmt.Errorf("coppa verification: %w", err)}
 	}
 
-	chargeCents := s.config.CoppaChargeCents
-	if chargeCents == 0 {
-		chargeCents = 50 // default $0.50
-	}
-
 	// Process micro-charge via adapter (charge + immediate refund)
 	chargeID, refundID, err := s.adapter.ProcessMicroCharge(
-		ctx, customerID, cmd.PaymentMethodID, chargeCents,
+		ctx, customerID, cmd.PaymentMethodID, s.config.CoppaChargeCents,
 		"COPPA parental consent verification",
 		map[string]string{
 			"family_id": scope.FamilyID().String(),
@@ -518,7 +516,7 @@ func (s *BillingServiceImpl) ProcessCoppaVerification(ctx context.Context, cmd C
 		FamilyID:             scope.FamilyID(),
 		TransactionType:      TransactionTypeCoppaCharge,
 		Status:               TransactionStatusSucceeded,
-		AmountCents:          chargeCents,
+		AmountCents:          s.config.CoppaChargeCents,
 		Currency:             "usd",
 		HyperswitchPaymentID: &chargeID,
 		Description:          &chargeDesc,
@@ -534,7 +532,7 @@ func (s *BillingServiceImpl) ProcessCoppaVerification(ctx context.Context, cmd C
 			FamilyID:             scope.FamilyID(),
 			TransactionType:      TransactionTypeCoppaRefund,
 			Status:               TransactionStatusSucceeded,
-			AmountCents:          chargeCents,
+			AmountCents:          s.config.CoppaChargeCents,
 			Currency:             "usd",
 			HyperswitchPaymentID: &refundID,
 			Description:          &refundDesc,

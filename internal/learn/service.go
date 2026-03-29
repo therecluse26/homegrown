@@ -2487,12 +2487,12 @@ func (s *learningServiceImpl) HandleStudentDeleted(ctx context.Context, familyID
 }
 
 func (s *learningServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
-	// TODO: trigger final data export opportunity when iam.FamilyDeletionScheduled exists
+	// No-op for learn:: — data exports are handled by lifecycle:: domain.
 	return nil
 }
 
 func (s *learningServiceImpl) HandlePurchaseCompleted(_ context.Context, _ uuid.UUID, _ PurchaseMetadata) error {
-	// TODO: integrate purchased content when mkt:: domain is implemented
+	// No-op for learn:: — purchased content is served directly by mkt:: domain.
 	return nil
 }
 

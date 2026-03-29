@@ -45,7 +45,7 @@ type AppState struct {
 	Config   *config.AppConfig
 	Version  string // Set via -ldflags at build time
 
-	// ─── Domain Services (added incrementally as domains are built) ─
+	// ─── Domain Services ────────────────────────────────────────────
 	IAM         iam.IamService
 	Method      method.MethodologyService
 	Discover    discover.DiscoveryService
@@ -71,7 +71,6 @@ type AppState struct {
 // This avoids a circular import (middleware cannot import app).
 
 // GetAuthValidator satisfies middleware.authDeps.
-// Returns nil until 01-iam wires a concrete KratosSessionValidator.
 func (s *AppState) GetAuthValidator() shared.SessionValidator {
 	return s.Auth
 }

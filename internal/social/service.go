@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -756,7 +757,11 @@ func (s *socialServiceImpl) GetFeed(ctx context.Context, auth *shared.AuthContex
 				postIDs = append(postIDs, id)
 			}
 		}
-		posts, _ = s.postRepo.FindByIDs(ctx, postIDs)
+		var findErr error
+		posts, findErr = s.postRepo.FindByIDs(ctx, postIDs)
+		if findErr != nil {
+			slog.Warn("social: Redis-backed FindByIDs failed, falling back to PostgreSQL", "error", findErr)
+		}
 	}
 
 	// PostgreSQL fallback if Redis is empty or errored.

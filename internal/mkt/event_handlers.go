@@ -46,11 +46,8 @@ func (h *MethodologyConfigUpdatedHandler) Handle(ctx context.Context, event shar
 
 // ─── ContentFlaggedHandler ───────────────────────────────────────────────────
 
-// ContentFlaggedHandler handles safety.ContentFlagged by archiving the flagged listing.
-// DEFERRED: safety:: domain not implemented. [07-mkt §17.4]
-// When activated, register in main.go:
-//
-//	eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), mkt.NewContentFlaggedHandler(mktSvc))
+// ContentFlaggedHandler handles safety.ContentFlagged by logging flagged content.
+// Auto-archiving via ArchiveListingByContentKey is not yet implemented. [07-mkt §17.4]
 type ContentFlaggedHandler struct {
 	svc MarketplaceService
 }
@@ -70,7 +67,11 @@ func (h *ContentFlaggedHandler) Handle(ctx context.Context, event shared.DomainE
 		"flag_type", e.GetFlagType(),
 		"family_id", e.GetFamilyID(),
 	)
-	// TODO(safety): wire h.svc.ArchiveListingByContentKey when service method is added
+	slog.Warn("mkt: ArchiveListingByContentKey not yet implemented — flagged listing not auto-archived",
+		"content_key", e.GetContentKey(),
+		"flag_type", e.GetFlagType(),
+		"family_id", e.GetFamilyID(),
+	)
 	return nil
 }
 
