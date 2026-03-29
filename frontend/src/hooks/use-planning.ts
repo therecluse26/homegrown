@@ -159,6 +159,51 @@ export interface LogAsActivityInput {
   tags?: string[];
 }
 
+// ─── Schedule Template Types ────────────────────────────────────────────────
+
+export interface ScheduleTemplateItem {
+  title: string;
+  category: string;
+  day_of_week: number;
+  start_time: string;
+  duration_minutes: number;
+}
+
+export interface ScheduleTemplate {
+  id: string;
+  name: string;
+  description: string;
+  methodology_slug?: string;
+  items: ScheduleTemplateItem[];
+  is_default: boolean;
+}
+
+export interface CreateScheduleTemplateInput {
+  name: string;
+  description?: string;
+  methodology_slug?: string;
+  items: ScheduleTemplateItem[];
+}
+
+export interface ApplyScheduleTemplateInput {
+  week_start_date: string;
+  student_id?: string;
+}
+
+// ─── Schedule Export Types ──────────────────────────────────────────────────
+
+export interface ExportScheduleInput {
+  format: "csv" | "ical";
+  student_id?: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface ScheduleExportResponse {
+  download_url: string;
+  expires_at: string;
+}
+
 // ─── Calendar Queries ───────────────────────────────────────────────────────
 
 export function useCalendar(params: {
@@ -319,5 +364,76 @@ export function useLogAsActivity(itemId: string) {
       void queryClient.invalidateQueries({ queryKey: ["planning"] });
       void queryClient.invalidateQueries({ queryKey: ["learn"] });
     },
+  });
+}
+
+// ─── Schedule Template Queries & Mutations ──────────────────────────────────
+
+export function useScheduleTemplates() {
+  return useQuery({
+    queryKey: ["planning", "schedule-templates"],
+    queryFn: () =>
+      apiClient<ScheduleTemplate[]>("/v1/planning/schedule-templates"),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useCreateScheduleTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateScheduleTemplateInput) =>
+      apiClient<ScheduleTemplate>("/v1/planning/schedule-templates", {
+        method: "POST",
+        body,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["planning", "schedule-templates"],
+      });
+    },
+  });
+}
+
+export function useApplyScheduleTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      templateId,
+      ...body
+    }: ApplyScheduleTemplateInput & { templateId: string }) =>
+      apiClient<{ items_created: number }>(
+        `/v1/planning/schedule-templates/${templateId}/apply`,
+        { method: "POST", body },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planning"] });
+    },
+  });
+}
+
+export function useDeleteScheduleTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (templateId: string) =>
+      apiClient<void>(`/v1/planning/schedule-templates/${templateId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["planning", "schedule-templates"],
+      });
+    },
+  });
+}
+
+// ─── Schedule Export ─────────────────────────────────────────────────────────
+
+export function useExportSchedule() {
+  return useMutation({
+    mutationFn: (body: ExportScheduleInput) =>
+      apiClient<ScheduleExportResponse>("/v1/planning/schedule/export", {
+        method: "POST",
+        body,
+      }),
   });
 }

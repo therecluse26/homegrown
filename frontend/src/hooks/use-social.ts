@@ -31,6 +31,7 @@ export interface PostResponse {
   comments_count: number;
   is_edited: boolean;
   is_liked_by_me: boolean;
+  is_mine: boolean;
   created_at: string;
 }
 
@@ -188,6 +189,12 @@ export interface EventDetailResponse extends EventSummaryResponse {
   created_at: string;
 }
 
+export interface RecurrencePattern {
+  frequency: "weekly" | "biweekly" | "monthly" | "custom";
+  end_date?: string;
+  days_of_week?: number[];
+}
+
 export interface CreateEventCommand {
   title: string;
   description?: string;
@@ -201,6 +208,7 @@ export interface CreateEventCommand {
   visibility: string;
   group_id?: string;
   methodology_slug?: string;
+  recurrence?: RecurrencePattern;
 }
 
 export interface UpdateEventCommand {
@@ -646,6 +654,110 @@ export function useLeaveGroup() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["social", "groups"] });
+    },
+  });
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateGroupCommand) =>
+      apiClient<GroupDetailResponse>("/v1/social/groups", {
+        method: "POST",
+        body,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["social", "groups"] });
+    },
+  });
+}
+
+export function useUpdateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, ...body }: UpdateGroupCommand & { groupId: string }) =>
+      apiClient<void>(`/v1/social/groups/${groupId}`, {
+        method: "PATCH",
+        body,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["social", "groups"] });
+    },
+  });
+}
+
+export function usePromoteMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, familyId }: { groupId: string; familyId: string }) =>
+      apiClient<void>(`/v1/social/groups/${groupId}/members/${familyId}/promote`, {
+        method: "POST",
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["social", "groups", groupId, "members"] });
+    },
+  });
+}
+
+export function useDemoteMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, familyId }: { groupId: string; familyId: string }) =>
+      apiClient<void>(`/v1/social/groups/${groupId}/members/${familyId}/demote`, {
+        method: "POST",
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["social", "groups", groupId, "members"] });
+    },
+  });
+}
+
+export function useRemoveGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, familyId }: { groupId: string; familyId: string }) =>
+      apiClient<void>(`/v1/social/groups/${groupId}/members/${familyId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["social", "groups", groupId, "members"] });
+    },
+  });
+}
+
+export function usePendingJoinRequests(groupId: string | undefined) {
+  return useQuery({
+    queryKey: ["social", "groups", groupId, "pending"],
+    queryFn: () =>
+      apiClient<GroupMemberResponse[]>(
+        `/v1/social/groups/${groupId ?? ""}/members?status=pending`,
+      ),
+    enabled: !!groupId,
+  });
+}
+
+export function useApproveJoinRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, familyId }: { groupId: string; familyId: string }) =>
+      apiClient<void>(`/v1/social/groups/${groupId}/members/${familyId}/approve`, {
+        method: "POST",
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["social", "groups", groupId] });
+    },
+  });
+}
+
+export function useDenyJoinRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, familyId }: { groupId: string; familyId: string }) =>
+      apiClient<void>(`/v1/social/groups/${groupId}/members/${familyId}/deny`, {
+        method: "POST",
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["social", "groups", groupId] });
     },
   });
 }

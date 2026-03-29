@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useParams, Link as RouterLink } from "react-router";
-import { ArrowLeft, ShoppingCart, Star, Download, FileText } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Star, Download, FileText, Package } from "lucide-react";
 import {
   Button,
   Card,
@@ -15,6 +15,7 @@ import {
   useListingReviews,
   useAddToCart,
   useCreateReview,
+  usePurchaseBundle,
 } from "@/hooks/use-marketplace";
 import type { ReviewResponse } from "@/hooks/use-marketplace";
 
@@ -67,6 +68,7 @@ export function ListingDetail() {
   const { data: reviewsResp } = useListingReviews(id);
   const reviews = reviewsResp?.data;
   const addToCart = useAddToCart();
+  const purchaseBundle = usePurchaseBundle();
   const createReview = useCreateReview(id ?? "");
 
   const [reviewRating, setReviewRating] = useState(5);
@@ -141,6 +143,12 @@ export function ListingDetail() {
             <div className="flex items-center gap-2 mb-2">
               <Badge variant="secondary">{listing.content_type.replace("_", " ")}</Badge>
               <Badge variant="default">{listing.status}</Badge>
+              {listing.is_bundle && (
+                <Badge variant="primary">
+                  <Icon icon={Package} size="xs" className="mr-1" />
+                  <FormattedMessage id="marketplace.bundle.badge" />
+                </Badge>
+              )}
             </div>
 
             <h1 className="type-headline-sm text-on-surface mb-2">
@@ -176,8 +184,20 @@ export function ListingDetail() {
 
             <p className="type-headline-md text-primary mb-4">{price}</p>
 
-            <div className="flex gap-2">
-              {listing.price_cents > 0 ? (
+            <div className="flex gap-2 flex-wrap">
+              {listing.is_bundle && listing.bundle_id ? (
+                <Button
+                  variant="primary"
+                  onClick={() => purchaseBundle.mutate(listing.bundle_id!)}
+                  disabled={purchaseBundle.isPending}
+                >
+                  <Icon icon={Package} size="sm" className="mr-1" />
+                  <FormattedMessage
+                    id="marketplace.bundle.buyBundle"
+                    values={{ price: `$${(listing.price_cents / 100).toFixed(2)}` }}
+                  />
+                </Button>
+              ) : listing.price_cents > 0 ? (
                 <Button
                   variant="primary"
                   onClick={() => addToCart.mutate(listing.id)}
@@ -232,6 +252,42 @@ export function ListingDetail() {
           </p>
         )}
       </Card>
+
+      {/* Bundle contents */}
+      {listing.is_bundle && listing.bundle_items && listing.bundle_items.length > 0 && (
+        <Card className="p-card-padding mb-6">
+          <h2 className="type-title-md text-on-surface mb-3">
+            <FormattedMessage id="marketplace.bundle.contents" />
+          </h2>
+          <div className="space-y-2">
+            {listing.bundle_items.map((item) => (
+              <div
+                key={item.listing_id}
+                className="flex items-center gap-3 p-2 rounded-radius-sm bg-surface-container-low"
+              >
+                <Icon icon={FileText} size="sm" className="text-on-surface-variant shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="type-body-sm text-on-surface truncate">{item.title}</p>
+                  <p className="type-label-sm text-on-surface-variant">
+                    {item.content_type.replace("_", " ")}
+                  </p>
+                </div>
+                <span className="type-label-sm text-on-surface-variant shrink-0">
+                  {item.price_cents === 0
+                    ? intl.formatMessage({ id: "price.free" })
+                    : `$${(item.price_cents / 100).toFixed(2)}`}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="type-label-sm text-on-surface-variant mt-3">
+            <FormattedMessage
+              id="marketplace.bundle.itemCount"
+              values={{ count: listing.bundle_items.length }}
+            />
+          </p>
+        </Card>
+      )}
 
       {/* Files */}
       {listing.files.length > 0 && (

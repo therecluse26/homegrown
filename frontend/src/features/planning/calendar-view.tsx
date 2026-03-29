@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   CalendarDays,
   Printer,
+  Download,
 } from "lucide-react";
 import {
   Button,
@@ -20,7 +21,7 @@ import {
   Select,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
-import { useCalendar } from "@/hooks/use-planning";
+import { useCalendar, useExportSchedule } from "@/hooks/use-planning";
 import type { CalendarItem, CalendarSource } from "@/hooks/use-planning";
 import { useStudents } from "@/hooks/use-family";
 
@@ -287,6 +288,155 @@ function ColorLegend() {
   );
 }
 
+// ─── Export panel ───────────────────────────────────────────────────────────
+
+function ExportPanel({
+  defaultStart,
+  defaultEnd,
+  students,
+  onClose,
+}: {
+  defaultStart: string;
+  defaultEnd: string;
+  students?: { id?: string; display_name?: string }[];
+  onClose: () => void;
+}) {
+  const intl = useIntl();
+  const exportSchedule = useExportSchedule();
+  const [format, setFormat] = useState<"csv" | "ical">("ical");
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(defaultEnd);
+  const [studentId, setStudentId] = useState("");
+
+  const handleExport = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      exportSchedule.mutate(
+        {
+          format,
+          start_date: startDate,
+          end_date: endDate,
+          student_id: studentId || undefined,
+        },
+        {
+          onSuccess: (data) => {
+            window.open(data.download_url, "_blank", "noopener,noreferrer");
+            onClose();
+          },
+        },
+      );
+    },
+    [format, startDate, endDate, studentId, exportSchedule, onClose],
+  );
+
+  return (
+    <Card className="p-card-padding">
+      <h3 className="type-title-sm text-on-surface mb-4">
+        <FormattedMessage id="planning.export.title" />
+      </h3>
+      <form onSubmit={handleExport} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="type-label-md text-on-surface block mb-1">
+              <FormattedMessage id="planning.export.format" />
+            </label>
+            <div className="flex gap-2">
+              {(["ical", "csv"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFormat(f)}
+                  className={`px-3 py-1.5 rounded-radius-sm type-label-md transition-colors ${
+                    format === f
+                      ? "bg-primary text-on-primary"
+                      : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
+                  }`}
+                >
+                  {f.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {students && students.length > 0 && (
+            <div>
+              <label
+                htmlFor="export-student"
+                className="type-label-md text-on-surface block mb-1"
+              >
+                <FormattedMessage id="planning.export.student" />
+              </label>
+              <select
+                id="export-student"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              >
+                <option value="">
+                  {intl.formatMessage({ id: "planning.export.allStudents" })}
+                </option>
+                {students.filter((s) => s.id).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.display_name ?? s.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label
+              htmlFor="export-start"
+              className="type-label-md text-on-surface block mb-1"
+            >
+              <FormattedMessage id="planning.export.startDate" />
+            </label>
+            <input
+              id="export-start"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="export-end"
+              className="type-label-md text-on-surface block mb-1"
+            >
+              <FormattedMessage id="planning.export.endDate" />
+            </label>
+            <input
+              id="export-end"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="tertiary" size="sm" onClick={onClose}>
+            <FormattedMessage id="common.cancel" />
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            disabled={!startDate || !endDate || exportSchedule.isPending}
+          >
+            <Icon icon={Download} size="sm" className="mr-1" />
+            <FormattedMessage id="planning.export.download" />
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 // ─── Calendar page ──────────────────────────────────────────────────────────
 
 type ViewMode = "week" | "day";
@@ -299,6 +449,7 @@ export function CalendarView() {
   const [studentFilter, setStudentFilter] = useState<string | undefined>();
 
   const { data: students } = useStudents();
+  const [showExport, setShowExport] = useState(false);
 
   // Compute date range for the query
   const dateRange = useMemo(() => {
@@ -440,12 +591,32 @@ export function CalendarView() {
           <Button
             variant="tertiary"
             size="sm"
+            onClick={() => setShowExport((v) => !v)}
+            aria-label={intl.formatMessage({ id: "planning.export.title" })}
+          >
+            <Icon icon={Download} size="sm" />
+          </Button>
+          <Button
+            variant="tertiary"
+            size="sm"
             onClick={() => window.print()}
           >
             <Icon icon={Printer} size="sm" />
           </Button>
         </div>
       </div>
+
+      {/* Export panel */}
+      {showExport && (
+        <div className="mb-4">
+          <ExportPanel
+            defaultStart={dateRange.start}
+            defaultEnd={dateRange.end}
+            students={students}
+            onClose={() => setShowExport(false)}
+          />
+        </div>
+      )}
 
       {/* Date navigation */}
       <div className="flex items-center justify-between mb-4">

@@ -25,6 +25,13 @@ export interface ListingFileResponse {
   version: number;
 }
 
+export interface BundleItemResponse {
+  listing_id: string;
+  title: string;
+  content_type: string;
+  price_cents: number;
+}
+
 export interface ListingDetailResponse {
   id: string;
   creator_id: string;
@@ -49,6 +56,10 @@ export interface ListingDetailResponse {
   published_at?: string;
   created_at: string;
   updated_at: string;
+  bundle_id?: string;
+  bundle_name?: string;
+  is_bundle: boolean;
+  bundle_items?: BundleItemResponse[];
 }
 
 export interface CuratedSectionResponse {
@@ -367,6 +378,21 @@ export function useGetFreeListing() {
   });
 }
 
+export function usePurchaseBundle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (bundleId: string) =>
+      apiClient<{ purchase_id: string }>(
+        `/v1/marketplace/bundles/${bundleId}/purchase`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["marketplace", "purchases"] });
+      void qc.invalidateQueries({ queryKey: ["marketplace", "cart"] });
+    },
+  });
+}
+
 // ─── Reviews ─────────────────────────────────────────────────────────────────
 
 export function useCreateReview(listingId: string) {
@@ -523,5 +549,191 @@ export function useRequestPayout() {
         "/v1/marketplace/payouts/request",
         { method: "POST" },
       ),
+  });
+}
+
+// ─── Payout Methods & Config ──────────────────────────────────────────────────
+
+export interface PayoutMethod {
+  id: string;
+  type: "bank_account" | "paypal";
+  label: string;
+  is_default: boolean;
+  last_four: string;
+}
+
+export interface PayoutHistory {
+  id: string;
+  amount_cents: number;
+  status: "pending" | "processing" | "completed" | "failed";
+  created_at: string;
+}
+
+export interface PayoutConfig {
+  minimum_threshold_cents: number;
+  next_payout_date: string;
+  total_earnings_cents: number;
+  pending_balance_cents: number;
+}
+
+export function usePayoutConfig() {
+  return useQuery({
+    queryKey: ["marketplace", "payouts", "config"],
+    queryFn: () =>
+      apiClient<PayoutConfig>("/v1/marketplace/payouts/config"),
+  });
+}
+
+export function usePayoutMethods() {
+  return useQuery({
+    queryKey: ["marketplace", "payouts", "methods"],
+    queryFn: () =>
+      apiClient<PayoutMethod[]>("/v1/marketplace/payouts/methods"),
+  });
+}
+
+export function usePayoutHistory() {
+  return useQuery({
+    queryKey: ["marketplace", "payouts", "history"],
+    queryFn: () =>
+      apiClient<PayoutHistory[]>("/v1/marketplace/payouts/history"),
+  });
+}
+
+export function useAddPayoutMethod() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cmd: {
+      type: "bank_account" | "paypal";
+      label: string;
+      account_number?: string;
+      routing_number?: string;
+      paypal_email?: string;
+    }) =>
+      apiClient<PayoutMethod>("/v1/marketplace/payouts/methods", {
+        method: "POST",
+        body: JSON.stringify(cmd),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["marketplace", "payouts", "methods"] });
+    },
+  });
+}
+
+export function useRemovePayoutMethod() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (methodId: string) =>
+      apiClient<void>(`/v1/marketplace/payouts/methods/${methodId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["marketplace", "payouts", "methods"] });
+    },
+  });
+}
+
+export function useSetDefaultPayoutMethod() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (methodId: string) =>
+      apiClient<void>(`/v1/marketplace/payouts/methods/${methodId}/default`, {
+        method: "PUT",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["marketplace", "payouts", "methods"] });
+    },
+  });
+}
+
+// ─── Creator Verification ─────────────────────────────────────────────────────
+
+export interface CreatorVerification {
+  status: "unverified" | "pending" | "verified" | "rejected";
+  legal_name?: string;
+  tax_id_last_four?: string;
+  submitted_at?: string;
+}
+
+export function useCreatorVerification() {
+  return useQuery({
+    queryKey: ["marketplace", "creator", "verification"],
+    queryFn: () =>
+      apiClient<CreatorVerification>("/v1/marketplace/creator/verification"),
+  });
+}
+
+export function useSubmitVerification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cmd: { legal_name: string; tax_id: string }) =>
+      apiClient<CreatorVerification>("/v1/marketplace/creator/verification", {
+        method: "POST",
+        body: JSON.stringify(cmd),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["marketplace", "creator", "verification"],
+      });
+    },
+  });
+}
+
+// ─── Listing Version History ──────────────────────────────────────────────────
+
+export interface ListingVersion {
+  id: string;
+  version_number: number;
+  file_name: string;
+  file_size_bytes: number;
+  uploaded_at: string;
+  is_current: boolean;
+}
+
+export function useListingVersions(listingId: string) {
+  return useQuery({
+    queryKey: ["marketplace", "listing", listingId, "versions"],
+    queryFn: () =>
+      apiClient<ListingVersion[]>(
+        `/v1/marketplace/listings/${listingId}/versions`,
+      ),
+    enabled: !!listingId,
+  });
+}
+
+// ─── Creator Reviews ──────────────────────────────────────────────────────────
+
+export interface CreatorReview {
+  id: string;
+  listing_id: string;
+  listing_title: string;
+  reviewer_name: string;
+  rating: number;
+  text: string;
+  response?: string;
+  created_at: string;
+}
+
+export function useCreatorReviews() {
+  return useQuery({
+    queryKey: ["marketplace", "creator", "reviews"],
+    queryFn: () =>
+      apiClient<CreatorReview[]>("/v1/marketplace/creator/reviews"),
+  });
+}
+
+export function useRespondToReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reviewId, response }: { reviewId: string; response: string }) =>
+      apiClient<void>(`/v1/marketplace/reviews/${reviewId}/respond`, {
+        method: "POST",
+        body: JSON.stringify({ response }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["marketplace", "creator", "reviews"],
+      });
+    },
   });
 }

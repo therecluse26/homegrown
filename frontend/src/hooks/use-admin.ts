@@ -398,7 +398,97 @@ export function useAdminAuditLog(params: {
 export function useFeatureFlags() {
   return useQuery({
     queryKey: ["admin", "flags"],
-    queryFn: () => apiClient<FeatureFlag[]>("/v1/admin/flags"),
+    queryFn: () => apiClient<FeatureFlag[]>("/v1/admin/feature-flags"),
+  });
+}
+
+export function useUpdateFeatureFlag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      enabled?: boolean;
+      rollout_percentage?: number;
+      whitelisted_families?: string[];
+    }) =>
+      apiClient<FeatureFlag>(`/v1/admin/feature-flags/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "flags"] });
+    },
+  });
+}
+
+export function useCreateFeatureFlag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cmd: {
+      key: string;
+      description: string;
+      enabled: boolean;
+      rollout_percentage?: number;
+    }) =>
+      apiClient<FeatureFlag>("/v1/admin/feature-flags", {
+        method: "POST",
+        body: JSON.stringify(cmd),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "flags"] });
+    },
+  });
+}
+
+// ─── Admin: Methodology Config ───────────────────────────────────────────────
+
+export interface MethodologyTool {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface MethodologyConfigFull {
+  slug: string;
+  display_name: string;
+  philosophy: string;
+  tools: MethodologyTool[];
+}
+
+export function useMethodologyConfigs() {
+  return useQuery({
+    queryKey: ["admin", "methodology-configs"],
+    queryFn: () =>
+      apiClient<MethodologyConfigFull[]>("/v1/admin/methodology-configs"),
+  });
+}
+
+export function useUpdateMethodologyConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      slug,
+      ...body
+    }: {
+      slug: string;
+      display_name?: string;
+      philosophy?: string;
+      tools?: MethodologyTool[];
+    }) =>
+      apiClient<MethodologyConfigFull>(
+        `/v1/admin/methodology-configs/${slug}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(body),
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "methodology-configs"] });
+    },
   });
 }
 

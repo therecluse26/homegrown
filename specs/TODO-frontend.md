@@ -9,10 +9,17 @@
 > (VTT `<track>` support), keyboard accessibility, console error check, Lighthouse a11y ≥ 90.
 > Previously completed: image alt text, drag-drop keyboard, bundle analysis, TanStack Query tuning,
 > i18n audit, CAPTCHA (Turnstile), print stylesheet, Playwright a11y test suite + axe-core CI.
-> **Remaining**: 46 "Verify:" items (require running backend + Kratos), 1 blocked item
+> **Remaining**: 45 "Verify:" items (require running backend + Kratos), 1 blocked item
 > (API types from generated schema — needs backend swagger annotations), P2/P3 features.
-> Remaining Phase 5: mfa-setup (P2), terms versioning (P2).
-> Remaining Phase 7: billing pages (P2), free tier verification (needs backend).
+> **Completed P2**: mfa-setup, terms versioning banner, subscription-manager, pricing-page,
+> payment-methods, transaction-history, projects, tool-assignment, group-creation,
+> group-management, compliance-setup, attendance-tracker, assessment-records, standardized-tests,
+> coppa-micro-charge, payout-setup, creator-verification, listing-version-history,
+> creator-reviews, feature-flags, methodology-config, recommendations (cards + preferences + transparency),
+> post-edit, group-role-management, recurring-events, content-bundle-purchase, schedule-templates,
+> schedule-export.
+> **Remaining P2**: print-friendly schedule, co-op coordination view, VPAT docs, screen reader test matrix.
+> Remaining Phase 7: free tier verification (needs backend).
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -514,7 +521,7 @@ a layout and depends on auth state. This is the app skeleton.
 - [x] Verify: `npm run type-check` passes `[P1]`
 - [x] Verify: keyboard navigation through sidebar/nav links works `[P1]`
 - [ ] Verify: admin routes accessible only to `is_platform_admin` users `[P1]`
-- [ ] Verify: compliance routes show TierGate for free-tier families `[P2]`
+- [x] Verify: compliance routes show TierGate for free-tier families `[P2]`
 - [x] Verify: route tree covers all 17 domains (IAM, method, discover-import, onboard, social, learn, mkt, notify, media, billing, safety, search, recs, comply, data-lifecycle, admin, planning) `[P1]`
 - [x] Verify: skip link targets `#main-content` and is the first focusable element on every layout `[P1]`
 - [x] Verify: `apiClient` is the sole fetch wrapper — no direct `fetch()` calls elsewhere in the codebase `[P1]`
@@ -560,7 +567,7 @@ Depends on Phase 4 auth context and layout.
 ### Session & MFA Management
 
 - [x] `features/settings/session-management.tsx` — list active sessions, revoke individual sessions, "log out all devices" button `[P1]`
-- [ ] `features/settings/mfa-setup.tsx` — TOTP MFA setup: QR code display, verification input, recovery codes display + download `[P2]`
+- [x] `features/settings/mfa-setup.tsx` — TOTP MFA setup: QR code display, verification input, recovery codes display + download `[P2]`
 - [x] `features/auth/session-timeout-warning.tsx` — overlay 5min before session expiry: countdown timer, "Extend Session" button, auto-redirect to `/auth/login` on timeout, `aria-live="assertive"` for countdown announcements (SPEC §17.1) `[P1]`
 
 ### Legal Pages (`features/legal/`)
@@ -568,7 +575,7 @@ Depends on Phase 4 auth context and layout.
 - [x] `terms-of-service.tsx` — `/legal/terms` — rendered ToS content `[P1]`
 - [x] `privacy-policy.tsx` — `/legal/privacy` — rendered privacy policy `[P1]`
 - [x] `community-guidelines.tsx` — `/legal/guidelines` — community guidelines linked from report dialog `[P1]`
-- [ ] Terms versioning: re-acceptance prompt banner when policy version changes; dismissable only by accepting new terms. COPPA re-verification trigger for families with students when ToS version changes (SPEC §7.3) `[P2]`
+- [x] Terms versioning: re-acceptance prompt banner when policy version changes; dismissable only by accepting new terms. COPPA re-verification trigger for families with students when ToS version changes (SPEC §7.3) `[P2]`
 
 ### COPPA Consent Flow
 
@@ -587,7 +594,7 @@ Depends on Phase 4 auth context and layout.
 - [x] Rate limiting feedback on login — `429` response → friendly "Too many attempts" message + retry countdown timer (SPEC §1.2) `[P1]`
 - [x] Email verification resend button with 60-second cooldown timer — disabled state + countdown during cooldown (SPEC §1.3) `[P1]`
 - [x] COPPA consent re-verification prompt when ToS version changes for families with students already added (SPEC §7.3) `[P1]`
-- [ ] `features/auth/coppa-micro-charge.tsx` — COPPA micro-charge verification: micro-charge explanation, amount verification input, retry on mismatch (10-billing §13) `[P2]`
+- [x] `features/auth/coppa-micro-charge.tsx` — COPPA micro-charge verification: micro-charge explanation, amount verification input, retry on mismatch (10-billing §13) `[P2]`
 
 ### WebSocket Foundation
 
@@ -744,7 +751,7 @@ pages exercise CRUD patterns that all subsequent features follow.
   - CAN-SPAM compliant unsubscribe mechanism
   - (SPEC §13.3, domain spec `specs/domains/08-notify.md`)
 - [x] `subscription-upgrade.tsx` — minimal upgrade flow: tier comparison, "Subscribe" CTA linking to checkout (Hyperswitch). Required for `<TierGate>` to have a working destination. `[P1]`
-- [ ] `subscription-manager.tsx` — full subscription management: `[P2]`
+- [x] `subscription-manager.tsx` — full subscription management: `[P2]`
   - Current plan display
   - Upgrade/downgrade flow with downgrade consequence warning modal listing: "Learning data preserved", "Premium tools become read-only", "Compliance reports remain downloadable", "AI recommendations disabled". Explicit confirmation checkbox required.
   - Billing cycle info
@@ -764,9 +771,9 @@ pages exercise CRUD patterns that all subsequent features follow.
 
 ### Billing & Payments
 
-- [ ] `features/billing/pricing-page.tsx` — tier comparison table, monthly/annual toggle, feature matrix with CTA buttons `[P2]`
-- [ ] `features/billing/payment-methods.tsx` — list saved payment methods, add/remove, set default (Hyperswitch integration) `[P2]`
-- [ ] `features/billing/transaction-history.tsx` — purchases, subscription payments, creator payouts with date range filter `[P2]`
+- [x] `features/billing/pricing-page.tsx` — tier comparison table, monthly/annual toggle, feature matrix with CTA buttons `[P2]`
+- [x] `features/billing/payment-methods.tsx` — list saved payment methods, add/remove, set default (Hyperswitch integration) `[P2]`
+- [x] `features/billing/transaction-history.tsx` — purchases, subscription payments, creator payouts with date range filter `[P2]`
 
 ### Data Lifecycle
 
@@ -907,7 +914,7 @@ and family management from prior phases.
   - Grading scale configuration (per-family custom scales)
   - Running averages by subject and student
   - Hooks: `useAssessments()`, `useGradingScales()`
-- [ ] `projects.tsx` — project creation and tracking: `[P2]`
+- [x] `projects.tsx` — project creation and tracking: `[P2]`
   - Project creation with milestones (title, description, due date)
   - Status lifecycle: planning → in_progress → completed
   - Per-student project list with progress indicators
@@ -919,7 +926,7 @@ and family management from prior phases.
 
 ### Tool Assignment
 
-- [ ] `features/learning/tool-assignment.tsx` — per-student tool activation/deactivation with methodology defaults; parent can show/hide tools per student `[P2]`
+- [x] `features/learning/tool-assignment.tsx` — per-student tool activation/deactivation with methodology defaults; parent can show/hide tools per student `[P2]`
 
 ### Interactive Learning Players
 
@@ -1066,7 +1073,7 @@ co-located here because reporting without review is an incomplete workflow.
   - Comment threading: reply button, nested replies (one level), visual indentation
   - Comment composer
   - Post visibility indicator
-- [ ] Post edit action for author family — pencil icon, inline editor, "(edited)" timestamp indicator `[P2]`
+- [x] Post edit action for author family — pencil icon, inline editor, "(edited)" timestamp indicator `[P2]`
 - [x] Post delete action with confirmation dialog — removes post and all comments `[P1]`
 - [x] Comment edit/delete by comment author; post author can delete any comment on their post `[P1]`
 - [x] `friends-list.tsx` — friend management (`/friends`): `[P1]`
@@ -1100,9 +1107,9 @@ co-located here because reporting without review is an incomplete workflow.
   - Group feed
   - Member list
   - Group info
-- [ ] `group-creation.tsx` — create new group: name, description, join policy (open / request / invite-only) `[P2]`
-- [ ] `group-management.tsx` — group admin: promote moderator, remove member, pin posts, approve join requests `[P2]`
-- [ ] Group role management UI — owner → moderator → member hierarchy display, role badges, role change confirmation dialogs (SPEC §5.5) `[P2]`
+- [x] `group-creation.tsx` — create new group: name, description, join policy (open / request / invite-only) `[P2]`
+- [x] `group-management.tsx` — group admin: promote moderator, remove member, pin posts, approve join requests `[P2]`
+- [x] Group role management UI — owner → moderator → member hierarchy display, role badges, role change confirmation dialogs (SPEC §5.5) `[P2]`
 - [x] `events-list.tsx` — events directory (`/events`): `[P1]`
   - Event cards with RSVP 3-state button (going / interested / not going)
   - Capacity indicator: "X of Y spots" / "Full" badge (disable RSVP "going" when full)
@@ -1111,7 +1118,7 @@ co-located here because reporting without review is an incomplete workflow.
 - [x] `event-creation.tsx` — create event: title, description, date/time, location type selector (in-person / virtual / hybrid), virtual meeting URL field, capacity number input (optional), visibility (friends / group), methodology tag, group-linked option `[P1]`
 - [x] Event attendee list for organizer — RSVP list with going/interested/not-going counts, attendee names, CSV export of attendee list (SPEC §5.6) `[P1]`
 - [x] Event cancellation with attendee notification confirmation dialog `[P1]`
-- [ ] Recurring events support (weekly/monthly/custom) `[P2]`
+- [x] Recurring events support (weekly/monthly/custom) `[P2]`
 - [x] `family-profile.tsx` — public family profile (`/family/:familyId`): `[P1]`
   - Friends-only visibility
   - Family info, methodology, member count
@@ -1150,7 +1157,7 @@ co-located here because reporting without review is an incomplete workflow.
   - Cart items, quantities, total
   - Checkout flow
   - Cart groups bundle items with discount applied (SPEC §9.4) `[P2]`
-- [ ] Content bundle purchase: bundle badge on listing cards, "Buy Bundle" CTA on detail page (SPEC §9.4) `[P2]`
+- [x] Content bundle purchase: bundle badge on listing cards, "Buy Bundle" CTA on detail page (SPEC §9.4) `[P2]`
 - [x] `purchase-history.tsx` — past purchases (`/marketplace/purchases`): `[P1]`
   - Purchase list with download links
   - Content access
@@ -1161,16 +1168,16 @@ co-located here because reporting without review is an incomplete workflow.
 - [x] `creator-dashboard.tsx` — creator home (`/creator`): `[P1]`
   - Sales overview, earnings, payout status
   - Analytics: sales chart (line/bar, date range selector), earnings breakdown by listing, payout schedule with next payout date, per-listing metrics (views, purchases, ratings) (SPEC §9.6)
-- [ ] `payout-setup.tsx` — creator payout onboarding (`/creator/payouts`): payout method selection + account setup, payout history, minimum threshold display (SPEC §9.6) `[P2]`
-- [ ] `creator-verification.tsx` — creator identity verification: legal name, tax info (masked SSN/EIN), verification status indicator. Required before first payout. (SPEC §9.1, 07-mkt §11) `[P2]`
+- [x] `payout-setup.tsx` — creator payout onboarding (`/creator/payouts`): payout method selection + account setup, payout history, minimum threshold display (SPEC §9.6) `[P2]`
+- [x] `creator-verification.tsx` — creator identity verification: legal name, tax info (masked SSN/EIN), verification status indicator. Required before first payout. (SPEC §9.1, 07-mkt §11) `[P2]`
 - [x] `create-listing.tsx` — new listing (`/creator/listings/new`): `[P1]`
   - Listing form: title, description, price, category, content upload
   - Preview before publish
   - Listing lifecycle state transition buttons (draft → submitted → published → archived)
   - Note: creators can create listings without identity verification in Phase 1. Verification (`creator-verification.tsx` [P2]) gates **payouts only**, not listing creation. Unverified creators see a persistent banner: "Complete verification to receive payouts."
 - [x] `edit-listing.tsx` — edit existing listing (`/creator/listings/:id/edit`) `[P1]`
-- [ ] `listing-version-history.tsx` — version list with upload date, file size, "current" badge. View-only (no rollback in v1). (SPEC §9.2.3) `[P2]`
-- [ ] `creator-reviews.tsx` — view reviews on own listings, respond to reviews `[P2]`
+- [x] `listing-version-history.tsx` — version list with upload date, file size, "current" badge. View-only (no rollback in v1). (SPEC §9.2.3) `[P2]`
+- [x] `creator-reviews.tsx` — view reviews on own listings, respond to reviews `[P2]`
 - [x] `quiz-builder.tsx` — create quizzes for marketplace (`/creator/quiz-builder`): `[P1]`
   - Question editor (multiple types)
   - Preview and test
@@ -1250,21 +1257,21 @@ only happen after core features are stable. Core admin/moderation moved to Phase
 
 ### Compliance Features (`features/compliance/`) — Premium Only
 
-- [ ] `compliance-setup.tsx` — state compliance configuration: `[P2]`
+- [x] `compliance-setup.tsx` — state compliance configuration: `[P2]`
   - Select state requirements
   - Configure tracking thresholds
   - `<TierGate>` wrapper for free-tier users
-- [ ] `attendance-tracker.tsx` — daily attendance marking: `[P2]`
+- [x] `attendance-tracker.tsx` — daily attendance marking: `[P2]`
   - Per-student daily attendance with 4 states: present / absent / partial / excused
   - Summary with threshold tracking
   - Calendar heatmap view (color-coded by status per student) with color legend
   - Attendance threshold/pace indicator (ahead / on-track / behind) with progress bar vs state requirement
   - Auto-generated attendance entries from logged learning activities with visual indicator distinguishing auto vs manual entries
   - `aria-live` announcements for attendance state changes
-- [ ] `assessment-records.tsx` — assessment record management: `[P2]`
+- [x] `assessment-records.tsx` — assessment record management: `[P2]`
   - Link assessments to compliance requirements
   - Score tracking
-- [ ] `standardized-tests.tsx` — standardized test score entry form (title, test name, date, scores by section) `[P2]`
+- [x] `standardized-tests.tsx` — standardized test score entry form (title, test name, date, scores by section) `[P2]`
 - [ ] `portfolio-list.tsx` — portfolio management: `[P3]`
   - List portfolios per student
   - Create new portfolio (select student + date range + template)
@@ -1299,9 +1306,9 @@ only happen after core features are stable. Core admin/moderation moved to Phase
   - Schedule completion checkbox + auto-log workflow: completion checkbox prompts "Log as learning activity?" → auto-creates `learn::` activity with pre-populated fields, links via `linked_activity_id` (17-planning §3.1)
 - [x] Drag-to-schedule with keyboard alternative (arrow keys + Enter to place items) `[P1]`
 - [ ] Print-friendly schedule output (separate from calendar print) `[P2]`
-- [ ] `schedule-templates.tsx` — recurring schedule templates (weekly patterns, methodology-specific defaults) `[P2]`
+- [x] `schedule-templates.tsx` — recurring schedule templates (weekly patterns, methodology-specific defaults) `[P2]`
 - [ ] Co-op coordination view (shared schedules between families in a group) `[P2]`
-- [ ] Schedule sharing/export (CSV, iCal formats) `[P2]`
+- [x] Schedule sharing/export (CSV, iCal formats) `[P2]`
 - References: SPEC §17, domain spec `specs/domains/17-planning.md`
 
 ### Admin Config (`features/admin/`) — Admin Only
@@ -1309,15 +1316,15 @@ only happen after core features are stable. Core admin/moderation moved to Phase
 > Core admin (dashboard, user management, moderation queue, audit log) moved to Phase 9.
 > These remaining items are P2 configuration features.
 
-- [ ] `feature-flags.tsx` — feature flag management: toggle, rollout percentage, family whitelist `[P2]`
-- [ ] `methodology-config.tsx` — methodology configuration editing (tool labels, descriptions, philosophy text) `[P2]`
+- [x] `feature-flags.tsx` — feature flag management: toggle, rollout percentage, family whitelist `[P2]`
+- [x] `methodology-config.tsx` — methodology configuration editing (tool labels, descriptions, philosophy text) `[P2]`
 - References: SPEC §16, domain spec `specs/domains/16-admin.md`
 
 ### Recommendations (`features/recommendations/`)
 
-- [ ] Recommendation cards/carousel on learning dashboard (content suggestions based on methodology + student profile) `[P2]`
-- [ ] Recommendation preferences: dismiss individual recommendation, block category, undo dismiss `[P2]`
-- [ ] Transparency labels: "Why recommended?" expandable explanation + AI-generated content badge where applicable `[P2]`
+- [x] Recommendation cards/carousel on learning dashboard (content suggestions based on methodology + student profile) `[P2]`
+- [x] Recommendation preferences: dismiss individual recommendation, block category, undo dismiss `[P2]`
+- [x] Transparency labels: "Why recommended?" expandable explanation + AI-generated content badge where applicable `[P2]`
 - References: SPEC §13, domain spec `specs/domains/13-recs.md`
 
 ### Data Lifecycle

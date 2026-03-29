@@ -7,6 +7,7 @@ import {
   MapPin,
   Video,
   Globe,
+  RefreshCw,
 } from "lucide-react";
 import { Link as RouterLink } from "react-router";
 import {
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
 import { useCreateEvent, useMyGroups } from "@/hooks/use-social";
-import type { CreateEventCommand } from "@/hooks/use-social";
+import type { CreateEventCommand, RecurrencePattern } from "@/hooks/use-social";
 import { useMethodologyContext } from "@/features/auth/methodology-provider";
 
 type LocationType = "in_person" | "virtual" | "hybrid";
@@ -38,6 +39,30 @@ export function EventCreation() {
   const [locationType, setLocationType] = useState<LocationType>("in_person");
   const [linkToGroup, setLinkToGroup] = useState(false);
   const [addMethodologyTag, setAddMethodologyTag] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrence, setRecurrence] = useState<RecurrencePattern>({
+    frequency: "weekly",
+  });
+
+  const DAY_NAMES: { value: number; labelId: string }[] = [
+    { value: 1, labelId: "social.events.recurrence.day.mon" },
+    { value: 2, labelId: "social.events.recurrence.day.tue" },
+    { value: 3, labelId: "social.events.recurrence.day.wed" },
+    { value: 4, labelId: "social.events.recurrence.day.thu" },
+    { value: 5, labelId: "social.events.recurrence.day.fri" },
+    { value: 6, labelId: "social.events.recurrence.day.sat" },
+    { value: 0, labelId: "social.events.recurrence.day.sun" },
+  ];
+
+  const toggleDayOfWeek = (day: number) => {
+    setRecurrence((prev) => {
+      const current = prev.days_of_week ?? [];
+      const updated = current.includes(day)
+        ? current.filter((d) => d !== day)
+        : [...current, day];
+      return { ...prev, days_of_week: updated };
+    });
+  };
 
   const updateField = <K extends keyof CreateEventCommand>(
     key: K,
@@ -78,13 +103,14 @@ export function EventCreation() {
           addMethodologyTag && methodology?.primarySlug
             ? methodology.primarySlug
             : undefined,
+        recurrence: isRecurring ? recurrence : undefined,
       };
 
       createEvent.mutate(data, {
         onSuccess: () => navigate("/events"),
       });
     },
-    [form, locationType, linkToGroup, addMethodologyTag, methodology, createEvent, navigate],
+    [form, locationType, linkToGroup, addMethodologyTag, methodology, createEvent, navigate, isRecurring, recurrence],
   );
 
   return (
@@ -161,6 +187,101 @@ export function EventCreation() {
                 />
               )}
             </FormField>
+          </div>
+
+          {/* Recurrence */}
+          <div className="space-y-3">
+            <Checkbox
+              label={intl.formatMessage({ id: "social.events.recurrence.enable" })}
+              checked={isRecurring}
+              onChange={(e) => setIsRecurring(e.target.checked)}
+            />
+            {isRecurring && (
+              <Card className="p-4 bg-surface-container-low space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon icon={RefreshCw} size="sm" className="text-primary" />
+                  <span className="type-label-lg text-on-surface">
+                    <FormattedMessage id="social.events.recurrence.title" />
+                  </span>
+                </div>
+
+                <FormField
+                  label={intl.formatMessage({ id: "social.events.recurrence.frequency" })}
+                >
+                  {({ id }) => (
+                    <select
+                      id={id}
+                      value={recurrence.frequency}
+                      onChange={(e) =>
+                        setRecurrence((prev) => ({
+                          ...prev,
+                          frequency: e.target.value as RecurrencePattern["frequency"],
+                        }))
+                      }
+                      className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                    >
+                      <option value="weekly">
+                        {intl.formatMessage({ id: "social.events.recurrence.frequency.weekly" })}
+                      </option>
+                      <option value="biweekly">
+                        {intl.formatMessage({ id: "social.events.recurrence.frequency.biweekly" })}
+                      </option>
+                      <option value="monthly">
+                        {intl.formatMessage({ id: "social.events.recurrence.frequency.monthly" })}
+                      </option>
+                      <option value="custom">
+                        {intl.formatMessage({ id: "social.events.recurrence.frequency.custom" })}
+                      </option>
+                    </select>
+                  )}
+                </FormField>
+
+                {recurrence.frequency === "custom" && (
+                  <fieldset>
+                    <legend className="type-label-md text-on-surface mb-2">
+                      <FormattedMessage id="social.events.recurrence.daysOfWeek" />
+                    </legend>
+                    <div className="flex flex-wrap gap-2">
+                      {DAY_NAMES.map(({ value, labelId }) => {
+                        const checked = recurrence.days_of_week?.includes(value) ?? false;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => toggleDayOfWeek(value)}
+                            className={`px-3 py-1.5 rounded-radius-sm type-label-md transition-colors ${
+                              checked
+                                ? "bg-primary text-on-primary"
+                                : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+                            }`}
+                          >
+                            <FormattedMessage id={labelId} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                )}
+
+                <FormField
+                  label={intl.formatMessage({ id: "social.events.recurrence.endDate" })}
+                >
+                  {({ id }) => (
+                    <Input
+                      id={id}
+                      type="date"
+                      value={recurrence.end_date ?? ""}
+                      onChange={(e) =>
+                        setRecurrence((prev) => ({
+                          ...prev,
+                          end_date: e.target.value || undefined,
+                        }))
+                      }
+                    />
+                  )}
+                </FormField>
+              </Card>
+            )}
           </div>
 
           {/* Location type selector */}

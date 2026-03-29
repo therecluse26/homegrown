@@ -33,12 +33,12 @@ import (
 
 // AppState holds shared infrastructure and domain service interfaces.
 // All third-party vendor types are hidden behind generic ports defined in shared/.
-// Domain service fields are uncommented as each domain is implemented. [§5.1]
+// All domain service fields must be non-nil; NewApp will panic if any are missing. [§5.1]
 type AppState struct {
 	// ─── Infrastructure ─────────────────────────────────────────────
 	DB       *gorm.DB
 	Cache    shared.Cache
-	Auth     shared.SessionValidator // nil until 01-iam wires KratosSessionValidator
+	Auth     shared.SessionValidator
 	Errors   shared.ErrorReporter
 	Jobs     shared.JobEnqueuer // background job enqueuer (asynq-backed)
 	EventBus *shared.EventBus
@@ -46,10 +46,10 @@ type AppState struct {
 	Version  string // Set via -ldflags at build time
 
 	// ─── Domain Services (added incrementally as domains are built) ─
-	IAM      iam.IamService
-	Method   method.MethodologyService
-	Discover discover.DiscoveryService
-	Onboard  onboard.OnboardingService
+	IAM         iam.IamService
+	Method      method.MethodologyService
+	Discover    discover.DiscoveryService
+	Onboard     onboard.OnboardingService
 	Social      social.SocialService
 	Learn       learn.LearningService
 	Marketplace mkt.MarketplaceService
@@ -146,59 +146,25 @@ func NewApp(state *AppState) *echo.Echo {
 	pub.Use(middleware.RateLimit(state, 100, 60*time.Second))
 
 	// ─── Domain Route Registration ────────────────────────────────────
-	if state.IAM != nil {
-		iam.NewHandler(state.IAM, state.Config.AuthWebhookSecret).Register(auth, hooks)
-	}
-	if state.Method != nil {
-		method.NewHandler(state.Method).Register(pub, auth)
-	}
-	if state.Discover != nil {
-		discover.NewHandler(state.Discover).Register(pub, auth)
-	}
-	if state.Onboard != nil {
-		onboard.NewHandler(state.Onboard).Register(auth)
-	}
-	if state.Social != nil {
-		social.NewHandler(state.Social, state.PubSub, state.Config.CORSAllowedOrigins).Register(auth)
-	}
-	if state.Learn != nil {
-		learn.NewHandler(state.Learn).Register(auth)
-	}
-	if state.Media != nil {
-		media.NewHandler(state.Media).Register(auth)
-	}
-	if state.Marketplace != nil {
-		mkt.NewHandler(state.Marketplace, state.Cache).Register(auth, hooks, pub)
-	}
-	if state.Notify != nil {
-		notify.NewHandler(state.Notify, state.Config.UnsubscribeSecret).Register(auth, pub)
-	}
-	if state.Billing != nil {
-		billing.NewHandler(state.Billing, state.Config.BillingWebhookSecret, state.DB).Register(auth, hooks)
-	}
+	iam.NewHandler(state.IAM, state.Config.AuthWebhookSecret).Register(auth, hooks)
+	method.NewHandler(state.Method).Register(pub, auth)
+	discover.NewHandler(state.Discover).Register(pub, auth)
+	onboard.NewHandler(state.Onboard).Register(auth)
+	social.NewHandler(state.Social, state.PubSub, state.Config.CORSAllowedOrigins).Register(auth)
+	learn.NewHandler(state.Learn).Register(auth)
+	media.NewHandler(state.Media).Register(auth)
+	mkt.NewHandler(state.Marketplace, state.Cache).Register(auth, hooks, pub)
+	notify.NewHandler(state.Notify, state.Config.UnsubscribeSecret).Register(auth, pub)
+	billing.NewHandler(state.Billing, state.Config.BillingWebhookSecret, state.DB).Register(auth, hooks)
 	// Shared admin group — used by both safety and admin domains.
 	adminGroup := auth.Group("/admin")
-	if state.Safety != nil {
-		safety.NewHandler(state.Safety).Register(auth, adminGroup)
-	}
-	if state.Search != nil {
-		search.NewHandler(state.Search, state).Register(auth)
-	}
-	if state.Recs != nil {
-		recs.NewHandler(state.Recs).Register(auth)
-	}
-	if state.Comply != nil {
-		comply.NewHandler(state.Comply).Register(auth)
-	}
-	if state.Lifecycle != nil {
-		lifecycle.NewHandler(state.Lifecycle).Register(auth, pub)
-	}
-	if state.Admin != nil {
-		admin.NewHandler(state.Admin).Register(auth, adminGroup)
-	}
-	if state.Plan != nil {
-		plan.NewHandler(state.Plan).Register(auth)
-	}
+	safety.NewHandler(state.Safety).Register(auth, adminGroup)
+	search.NewHandler(state.Search, state).Register(auth)
+	recs.NewHandler(state.Recs).Register(auth)
+	comply.NewHandler(state.Comply).Register(auth)
+	lifecycle.NewHandler(state.Lifecycle).Register(auth, pub)
+	admin.NewHandler(state.Admin).Register(auth, adminGroup)
+	plan.NewHandler(state.Plan).Register(auth)
 
 	return e
 }

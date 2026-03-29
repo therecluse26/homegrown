@@ -25,6 +25,7 @@ const Register = lazy(() => import("@/features/auth/register").then(m => ({ defa
 const AccountRecovery = lazy(() => import("@/features/auth/account-recovery").then(m => ({ default: m.AccountRecovery })));
 const EmailVerification = lazy(() => import("@/features/auth/email-verification").then(m => ({ default: m.EmailVerification })));
 const AcceptInvitation = lazy(() => import("@/features/auth/accept-invitation").then(m => ({ default: m.AcceptInvitation })));
+const CoppaMicroCharge = lazy(() => import("@/features/auth/coppa-micro-charge").then(m => ({ default: m.CoppaMicroCharge })));
 
 // Onboarding
 const OnboardingWizard = lazy(() => import("@/features/onboarding/onboarding-wizard").then(m => ({ default: m.OnboardingWizard })));
@@ -43,6 +44,8 @@ const NotificationCenter = lazy(() => import("@/features/settings/notification-c
 const NotificationHistory = lazy(() => import("@/features/settings/notification-history").then(m => ({ default: m.NotificationHistory })));
 const ModerationAppeals = lazy(() => import("@/features/settings/moderation-appeals").then(m => ({ default: m.ModerationAppeals })));
 const BlockManagement = lazy(() => import("@/features/settings/block-management").then(m => ({ default: m.BlockManagement })));
+const MfaSetup = lazy(() => import("@/features/settings/mfa-setup").then(m => ({ default: m.MfaSetup })));
+const SubscriptionManager = lazy(() => import("@/features/settings/subscription-manager").then(m => ({ default: m.SubscriptionManager })));
 
 // Learning
 const LearningDashboard = lazy(() => import("@/features/learning/learning-dashboard").then(m => ({ default: m.LearningDashboard })));
@@ -59,6 +62,8 @@ const SequenceView = lazy(() => import("@/features/learning/sequence-view").then
 const TestsAndGrades = lazy(() => import("@/features/learning/tests-and-grades").then(m => ({ default: m.TestsAndGrades })));
 const StudentSessionActivityLog = lazy(() => import("@/features/learning/student-session-activity-log").then(m => ({ default: m.StudentSessionActivityLog })));
 const StudentSessionLauncher = lazy(() => import("@/features/learning/student-session-launcher").then(m => ({ default: m.StudentSessionLauncher })));
+const Projects = lazy(() => import("@/features/learning/projects").then(m => ({ default: m.Projects })));
+const ToolAssignment = lazy(() => import("@/features/learning/tool-assignment").then(m => ({ default: m.ToolAssignment })));
 
 // Student
 const StudentDashboardPage = lazy(() => import("@/features/student/student-dashboard").then(m => ({ default: m.StudentDashboard })));
@@ -80,6 +85,8 @@ const EventCreation = lazy(() => import("@/features/social/event-creation").then
 const EventDetail = lazy(() => import("@/features/social/event-detail").then(m => ({ default: m.EventDetail })));
 const FamilyProfile = lazy(() => import("@/features/social/family-profile").then(m => ({ default: m.FamilyProfile })));
 const PostDetail = lazy(() => import("@/features/social/post-detail").then(m => ({ default: m.PostDetail })));
+const GroupCreation = lazy(() => import("@/features/social/group-creation").then(m => ({ default: m.GroupCreation })));
+const GroupManagement = lazy(() => import("@/features/social/group-management").then(m => ({ default: m.GroupManagement })));
 
 // Marketplace
 const MarketplaceBrowse = lazy(() => import("@/features/marketplace/marketplace-browse").then(m => ({ default: m.MarketplaceBrowse })));
@@ -92,6 +99,15 @@ const CreateListing = lazy(() => import("@/features/marketplace/creator/create-l
 const EditListing = lazy(() => import("@/features/marketplace/creator/edit-listing").then(m => ({ default: m.EditListing })));
 const QuizBuilder = lazy(() => import("@/features/marketplace/creator/quiz-builder").then(m => ({ default: m.QuizBuilder })));
 const SequenceBuilder = lazy(() => import("@/features/marketplace/creator/sequence-builder").then(m => ({ default: m.SequenceBuilder })));
+const PayoutSetup = lazy(() => import("@/features/marketplace/payout-setup").then(m => ({ default: m.PayoutSetup })));
+const CreatorVerification = lazy(() => import("@/features/marketplace/creator-verification").then(m => ({ default: m.CreatorVerification })));
+const CreatorReviews = lazy(() => import("@/features/marketplace/creator-reviews").then(m => ({ default: m.CreatorReviews })));
+const ListingVersionHistory = lazy(() => import("@/features/marketplace/listing-version-history").then(m => ({ default: m.ListingVersionHistory })));
+
+// Billing
+const PricingPage = lazy(() => import("@/features/billing/pricing-page").then(m => ({ default: m.PricingPage })));
+const PaymentMethods = lazy(() => import("@/features/billing/payment-methods").then(m => ({ default: m.PaymentMethods })));
+const TransactionHistory = lazy(() => import("@/features/billing/transaction-history").then(m => ({ default: m.TransactionHistory })));
 
 // Search
 const SearchResults = lazy(() => import("@/features/search/search-results").then(m => ({ default: m.SearchResults })));
@@ -102,10 +118,19 @@ const UserManagement = lazy(() => import("@/features/admin/user-management").the
 const UserDetail = lazy(() => import("@/features/admin/user-detail").then(m => ({ default: m.UserDetail })));
 const ModerationQueue = lazy(() => import("@/features/admin/moderation-queue").then(m => ({ default: m.ModerationQueue })));
 const AuditLog = lazy(() => import("@/features/admin/audit-log").then(m => ({ default: m.AuditLog })));
+const FeatureFlags = lazy(() => import("@/features/admin/feature-flags").then(m => ({ default: m.FeatureFlags })));
+const MethodologyConfigPage = lazy(() => import("@/features/admin/methodology-config").then(m => ({ default: m.MethodologyConfig })));
 
 // Planning
 const CalendarView = lazy(() => import("@/features/planning/calendar-view").then(m => ({ default: m.CalendarView })));
 const ScheduleEditor = lazy(() => import("@/features/planning/schedule-editor").then(m => ({ default: m.ScheduleEditor })));
+const ScheduleTemplates = lazy(() => import("@/features/planning/schedule-templates").then(m => ({ default: m.ScheduleTemplates })));
+
+// Compliance
+const ComplianceSetup = lazy(() => import("@/features/compliance/compliance-setup").then(m => ({ default: m.ComplianceSetup })));
+const AttendanceTracker = lazy(() => import("@/features/compliance/attendance-tracker").then(m => ({ default: m.AttendanceTracker })));
+const AssessmentRecords = lazy(() => import("@/features/compliance/assessment-records").then(m => ({ default: m.AssessmentRecords })));
+const StandardizedTests = lazy(() => import("@/features/compliance/standardized-tests").then(m => ({ default: m.StandardizedTests })));
 
 // Legal
 const TermsOfService = lazy(() => import("@/features/legal/terms-of-service").then(m => ({ default: m.TermsOfService })));
@@ -139,7 +164,9 @@ const routes: RouteObject[] = [
               { path: "messages", element: <DirectMessages />, errorElement: <RouteErrorBoundary /> },
               { path: "messages/:conversationId", element: <ConversationPage /> },
               { path: "groups", element: <GroupsList />, errorElement: <RouteErrorBoundary /> },
+              { path: "groups/new", element: <GroupCreation /> },
               { path: "groups/:groupId", element: <GroupDetail /> },
+              { path: "groups/:groupId/manage", element: <GroupManagement /> },
               { path: "events", element: <EventsList />, errorElement: <RouteErrorBoundary /> },
               { path: "events/new", element: <EventCreation /> },
               { path: "events/:eventId", element: <EventDetail /> },
@@ -160,6 +187,8 @@ const routes: RouteObject[] = [
               { path: "learning/sequence/:progressId", element: <SequenceView /> },
               { path: "learning/session-log/:sessionId", element: <StudentSessionActivityLog /> },
               { path: "learning/session", element: <StudentSessionLauncher /> },
+              { path: "learning/projects", element: <Projects /> },
+              { path: "learning/tools", element: <ToolAssignment /> },
 
               // Marketplace
               { path: "marketplace", element: <MarketplaceBrowse />, errorElement: <RouteErrorBoundary /> },
@@ -176,7 +205,17 @@ const routes: RouteObject[] = [
               { path: "creator/quiz-builder/:id", element: <QuizBuilder /> },
               { path: "creator/sequence-builder", element: <SequenceBuilder /> },
               { path: "creator/sequence-builder/:id", element: <SequenceBuilder /> },
-              { path: "creator/payouts", ...p("Payout Setup") },
+              { path: "creator/payouts", element: <PayoutSetup /> },
+              { path: "creator/verification", element: <CreatorVerification /> },
+              { path: "creator/reviews", element: <CreatorReviews /> },
+
+              // Marketplace listing versions
+              { path: "marketplace/listings/:listingId/versions", element: <ListingVersionHistory /> },
+
+              // Billing
+              { path: "billing", element: <PricingPage />, errorElement: <RouteErrorBoundary /> },
+              { path: "billing/payment-methods", element: <PaymentMethods /> },
+              { path: "billing/transactions", element: <TransactionHistory /> },
 
               // Settings
               { path: "settings", element: <FamilySettings />, errorElement: <RouteErrorBoundary /> },
@@ -191,6 +230,8 @@ const routes: RouteObject[] = [
               { path: "settings/account/appeals", element: <ModerationAppeals /> },
               { path: "settings/blocks", element: <BlockManagement /> },
               { path: "settings/privacy", element: <PrivacyControls /> },
+              { path: "settings/account/mfa", element: <MfaSetup /> },
+              { path: "settings/subscription/manage", element: <SubscriptionManager /> },
 
               // Search
               { path: "search", element: <SearchResults />, errorElement: <RouteErrorBoundary /> },
@@ -204,7 +245,7 @@ const routes: RouteObject[] = [
               { path: "calendar/week/:date", element: <CalendarView /> },
               { path: "schedule/new", element: <ScheduleEditor /> },
               { path: "schedule/:itemId/edit", element: <ScheduleEditor /> },
-              { path: "planning/templates", ...p("Schedule Templates") },
+              { path: "planning/templates", element: <ScheduleTemplates /> },
 
 
 
@@ -247,6 +288,7 @@ const routes: RouteObject[] = [
       },
       { path: "recovery", element: <AccountRecovery />, errorElement: <RouteErrorBoundary /> },
       { path: "verification", element: <EmailVerification />, errorElement: <RouteErrorBoundary /> },
+      { path: "coppa/verify", element: <CoppaMicroCharge />, errorElement: <RouteErrorBoundary /> },
       {
         path: "accept-invite/:token",
         element: <AcceptInvitation />,
@@ -297,9 +339,9 @@ const routes: RouteObject[] = [
               { path: "users", element: <UserManagement /> },
               { path: "users/:id", element: <UserDetail /> },
               { path: "moderation", element: <ModerationQueue /> },
-              { path: "flags", ...p("Feature Flags") },
+              { path: "flags", element: <FeatureFlags /> },
               { path: "audit", element: <AuditLog /> },
-              { path: "methodologies", ...p("Methodology Config") },
+              { path: "methodologies", element: <MethodologyConfigPage /> },
             ],
           },
         ],
@@ -317,10 +359,10 @@ const routes: RouteObject[] = [
         element: <AppShell />,
         errorElement: <RouteErrorBoundary />,
         children: [
-          { index: true, ...p("Compliance Setup") },
-          { path: "attendance", ...p("Attendance Tracker") },
-          { path: "assessments", ...p("Assessment Records") },
-          { path: "tests", ...p("Standardized Tests") },
+          { index: true, element: <ComplianceSetup />, errorElement: <RouteErrorBoundary /> },
+          { path: "attendance", element: <AttendanceTracker /> },
+          { path: "assessments", element: <AssessmentRecords /> },
+          { path: "tests", element: <StandardizedTests /> },
           { path: "portfolios", ...p("Portfolios") },
           { path: "portfolios/:id", ...p("Portfolio Builder") },
           { path: "transcripts", ...p("Transcripts") },

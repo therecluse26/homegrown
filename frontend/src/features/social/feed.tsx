@@ -11,6 +11,7 @@ import {
   Star,
   Share2,
   Trash2,
+  Pencil,
   Users,
 } from "lucide-react";
 import {
@@ -31,6 +32,7 @@ import {
   useLikePost,
   useUnlikePost,
   useDeletePost,
+  useUpdatePost,
 } from "@/hooks/use-social";
 import type { PostResponse, PostType, CreatePostCommand } from "@/hooks/use-social";
 
@@ -152,7 +154,10 @@ function PostCard({ post }: { post: PostResponse }) {
   const likePost = useLikePost();
   const unlikePost = useUnlikePost();
   const deletePost = useDeletePost();
+  const updatePost = useUpdatePost(post.id);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(post.content ?? "");
 
   const handleLikeToggle = useCallback(() => {
     if (post.is_liked_by_me) {
@@ -161,6 +166,16 @@ function PostCard({ post }: { post: PostResponse }) {
       likePost.mutate(post.id);
     }
   }, [post.id, post.is_liked_by_me, likePost, unlikePost]);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!editContent.trim()) return;
+    updatePost.mutate(
+      { content: editContent.trim() },
+      {
+        onSuccess: () => setIsEditing(false),
+      },
+    );
+  }, [editContent, updatePost]);
 
   const TypeIcon = POST_TYPE_ICONS[post.post_type] ?? MessageCircle;
   const timeAgo = formatTimeAgo(post.created_at, intl);
@@ -208,6 +223,17 @@ function PostCard({ post }: { post: PostResponse }) {
             </button>
           }
         >
+          {post.is_mine && (
+            <DropdownMenuItem
+              onClick={() => {
+                setEditContent(post.content ?? "");
+                setIsEditing(true);
+              }}
+            >
+              <Icon icon={Pencil} size="sm" />
+              <FormattedMessage id="social.post.edit" />
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             destructive
             onClick={() => setShowDeleteConfirm(true)}
@@ -219,10 +245,39 @@ function PostCard({ post }: { post: PostResponse }) {
       </div>
 
       {/* Post content */}
-      {post.content && (
-        <p className="type-body-md text-on-surface mb-4 whitespace-pre-wrap">
-          {post.content}
-        </p>
+      {isEditing ? (
+        <div className="mb-4">
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+            aria-label={intl.formatMessage({ id: "social.post.edit.label" })}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => setIsEditing(false)}
+            >
+              <FormattedMessage id="action.cancel" />
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveEdit}
+              disabled={!editContent.trim() || updatePost.isPending}
+            >
+              <FormattedMessage id="social.post.edit.save" />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        post.content && (
+          <p className="type-body-md text-on-surface mb-4 whitespace-pre-wrap">
+            {post.content}
+          </p>
+        )
       )}
 
       {/* Post actions */}
