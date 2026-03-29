@@ -159,6 +159,11 @@ export function ProgressView() {
               )}
             </span>
           </Button>
+          <span aria-live="polite" className="sr-only">
+            {requestExport.isSuccess && (
+              <FormattedMessage id="dataExport.exportQueued" />
+            )}
+          </span>
         </div>
       </Card>
 
@@ -171,7 +176,7 @@ export function ProgressView() {
           <Skeleton height="h-24" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-live="polite" aria-atomic="true">
           <StatCard
             label={intl.formatMessage({ id: "learning.stat.activities" })}
             value={String(summary?.total_activities ?? 0)}

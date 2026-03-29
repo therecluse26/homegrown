@@ -3,6 +3,13 @@ import { apiClient } from "@/api/client";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+export interface CaptionTrack {
+  src: string;
+  srclang: string;
+  label: string;
+  kind: "subtitles" | "captions" | "descriptions";
+}
+
 export interface VideoDefResponse {
   id: string;
   publisher_id: string;
@@ -14,6 +21,7 @@ export interface VideoDefResponse {
   thumbnail_url?: string;
   video_url: string;
   video_source: string;
+  caption_tracks?: CaptionTrack[];
   created_at: string;
 }
 

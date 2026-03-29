@@ -9,6 +9,8 @@ import {
   VolumeX,
   Maximize,
   CheckCircle,
+  Captions,
+  CaptionsOff,
 } from "lucide-react";
 import {
   Button,
@@ -35,6 +37,7 @@ export function StudentVideo() {
   const progressTimer = useRef<ReturnType<typeof setInterval>>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [captionsOn, setCaptionsOn] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -68,6 +71,17 @@ export function StudentVideo() {
 
   function formatTime(s: number) {
     return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
+  }
+
+  function handleToggleCaptions() {
+    if (!videoRef.current) return;
+    const tracks = videoRef.current.textTracks;
+    const next = !captionsOn;
+    for (let i = 0; i < tracks.length; i++) {
+      const t = tracks[i];
+      if (t) t.mode = next ? "showing" : "hidden";
+    }
+    setCaptionsOn(next);
   }
 
   const pct = duration > 0 ? Math.round((currentTime / duration) * 100) : 0;
@@ -105,7 +119,19 @@ export function StudentVideo() {
             onLoadedMetadata={() => setDuration(videoRef.current?.duration ?? 0)}
             onEnded={() => { setIsPlaying(false); saveProgress(); }}
             playsInline
-          />
+            crossOrigin="anonymous"
+          >
+            {videoDef?.caption_tracks?.map((track, i) => (
+              <track
+                key={track.srclang}
+                kind={track.kind}
+                src={track.src}
+                srcLang={track.srclang}
+                label={track.label}
+                default={i === 0}
+              />
+            ))}
+          </video>
         </div>
         <div className="p-4 space-y-3">
           <input
@@ -126,8 +152,8 @@ export function StudentVideo() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => { if (videoRef.current) isPlaying ? videoRef.current.pause() : void videoRef.current.play(); }}
-                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface"
+                onClick={() => { if (videoRef.current) { if (isPlaying) { videoRef.current.pause(); } else { void videoRef.current.play(); } } }}
+                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface touch-target"
                 aria-label={intl.formatMessage({ id: isPlaying ? "video.pause" : "video.play" })}
               >
                 <Icon icon={isPlaying ? Pause : Play} size="md" aria-hidden />
@@ -135,11 +161,21 @@ export function StudentVideo() {
               <button
                 type="button"
                 onClick={() => { if (videoRef.current) { videoRef.current.muted = !isMuted; setIsMuted(!isMuted); } }}
-                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface"
+                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface touch-target"
                 aria-label={intl.formatMessage({ id: isMuted ? "video.unmute" : "video.mute" })}
               >
                 <Icon icon={isMuted ? VolumeX : Volume2} size="md" aria-hidden />
               </button>
+              {videoDef?.caption_tracks && videoDef.caption_tracks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleToggleCaptions}
+                  className="p-2 rounded-full hover:bg-surface-container-high text-on-surface touch-target"
+                  aria-label={intl.formatMessage({ id: captionsOn ? "video.captionsOff" : "video.captionsOn" })}
+                >
+                  <Icon icon={captionsOn ? CaptionsOff : Captions} size="md" aria-hidden />
+                </button>
+              )}
               <span className="type-label-sm text-on-surface-variant">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
@@ -154,7 +190,7 @@ export function StudentVideo() {
               <button
                 type="button"
                 onClick={() => videoRef.current?.requestFullscreen()}
-                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface"
+                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface touch-target"
                 aria-label={intl.formatMessage({ id: "video.fullscreen" })}
               >
                 <Icon icon={Maximize} size="md" aria-hidden />

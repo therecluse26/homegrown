@@ -120,7 +120,7 @@ function Header() {
         {/* Mobile search icon (search bar hidden on mobile) */}
         <NavLink
           to="/search"
-          className="md:hidden p-2 rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
+          className="md:hidden p-2 min-w-11 min-h-11 flex items-center justify-center rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
           aria-label={intl.formatMessage({ id: "nav.search", defaultMessage: "Search" })}
         >
           <Icon icon={Search} size="md" />

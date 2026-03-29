@@ -214,27 +214,29 @@ export function StudentQuiz() {
       </Card>
 
       {/* Score result */}
-      {isScored && session?.score !== undefined && (
-        <Card className="text-center space-y-3">
-          <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center bg-primary-container">
-            <span className="type-headline-md text-on-primary-container font-bold">
-              {session.max_score
-                ? Math.round((session.score / session.max_score) * 100)
-                : session.score}
-              %
-            </span>
-          </div>
-          <p
-            className={`type-title-sm font-medium ${
-              session.passed ? "text-primary" : "text-error"
-            }`}
-          >
-            <FormattedMessage
-              id={session.passed ? "quiz.score.passed" : "quiz.score.failed"}
-            />
-          </p>
-        </Card>
-      )}
+      <div aria-live="polite" aria-atomic="true">
+        {isScored && session?.score !== undefined && (
+          <Card className="text-center space-y-3">
+            <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center bg-primary-container">
+              <span className="type-headline-md text-on-primary-container font-bold">
+                {session.max_score
+                  ? Math.round((session.score / session.max_score) * 100)
+                  : session.score}
+                %
+              </span>
+            </div>
+            <p
+              className={`type-title-sm font-medium ${
+                session.passed ? "text-primary" : "text-error"
+              }`}
+            >
+              <FormattedMessage
+                id={session.passed ? "quiz.score.passed" : "quiz.score.failed"}
+              />
+            </p>
+          </Card>
+        )}
+      </div>
 
       {/* Question */}
       {currentQuestion && !isScored && (

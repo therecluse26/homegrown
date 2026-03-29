@@ -95,7 +95,7 @@ export function NotificationCenter() {
   const markAllRead = useMarkAllRead();
 
   useEffect(() => {
-    document.title = `${intl.formatMessage({ id: "notifications.title" })} — Homegrown Academy`;
+    document.title = `${intl.formatMessage({ id: "notifications.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
     headingRef.current?.focus();
   }, [intl]);
 

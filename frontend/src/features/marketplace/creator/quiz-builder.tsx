@@ -271,6 +271,7 @@ export function QuizBuilder() {
   const intl = useIntl();
   const [quizTitle, setQuizTitle] = useState("");
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState("");
 
   const addQuestion = useCallback(() => {
     setQuestions((prev) => [
@@ -301,6 +302,9 @@ export function QuizBuilder() {
       const removed = arr.splice(from, 1);
       if (removed.length === 0) return prev;
       arr.splice(to, 0, removed[0]!);
+      setReorderAnnouncement(
+        `Question moved from position ${from + 1} to position ${to + 1} of ${prev.length}`,
+      );
       return arr;
     });
   }, []);
@@ -346,6 +350,11 @@ export function QuizBuilder() {
           </span>
         </div>
       </Card>
+
+      {/* Screen reader reorder announcements */}
+      <div aria-live="assertive" className="sr-only">
+        {reorderAnnouncement}
+      </div>
 
       {/* Questions */}
       <div className="space-y-4 mb-6" role="list" aria-label="Quiz questions">

@@ -84,7 +84,7 @@ export function Cart() {
                   <div className="w-16 h-16 rounded-radius-sm overflow-hidden shrink-0 bg-surface-container-low">
                     <img
                       src={item.thumbnail_url}
-                      alt=""
+                      alt={item.title}
                       className="w-full h-full object-cover"
                     />
                   </div>

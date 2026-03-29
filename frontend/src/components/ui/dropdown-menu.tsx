@@ -74,7 +74,7 @@ export function DropdownMenu({ trigger, children, className = "" }: DropdownMenu
   );
 
   return (
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+     
     <div className={`relative inline-block ${className}`} onKeyDown={handleKeyDown}>
       <div ref={triggerRef} onClick={() => setOpen((prev) => !prev)}>
         {trigger}

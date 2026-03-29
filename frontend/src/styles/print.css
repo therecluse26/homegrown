@@ -28,11 +28,68 @@
     --duration-slower: 0ms;
   }
 
-  /* Structural hide rules */
+  /* Structural hide rules — hide chrome, keep content */
   nav,
   aside,
   [data-print-hide],
-  .no-print {
+  .no-print,
+  .skip-link,
+  button:not([data-print-keep]),
+  [role="search"],
+  [aria-label="notifications"] {
     display: none !important;
+  }
+
+  /* Full-width layout — remove sidebar constraints */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Page break controls */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  table,
+  figure,
+  .card {
+    break-inside: avoid;
+  }
+
+  /* Ensure links show their URL in print */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+
+  /* Calendar print: ensure grid is visible and full-width */
+  [data-print-keep] {
+    display: block !important;
+  }
+
+  /* Progress bars: use border instead of background for visibility */
+  [role="progressbar"] {
+    border: 1px solid #000;
+  }
+
+  /* Remove background colors from badges for ink savings */
+  [class*="badge"] {
+    background: transparent !important;
+    border: 1px solid #666 !important;
+    color: #000 !important;
+  }
+
+  /* Page margins */
+  @page {
+    margin: 2cm;
+  }
+
+  @page :first {
+    margin-top: 3cm;
   }
 }

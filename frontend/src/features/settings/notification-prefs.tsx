@@ -21,7 +21,7 @@ export function NotificationPrefs() {
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    document.title = `${intl.formatMessage({ id: "settings.notifications.title" })} — Homegrown Academy`;
+    document.title = `${intl.formatMessage({ id: "settings.notifications.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
     headingRef.current?.focus();
   }, [intl]);
 

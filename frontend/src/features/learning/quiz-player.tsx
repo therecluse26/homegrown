@@ -423,13 +423,15 @@ export function QuizPlayer() {
       </Card>
 
       {/* Score display if scored */}
-      {isScored && session?.score !== undefined && session?.max_score !== undefined && (
-        <ScoreDisplay
-          score={session.score}
-          maxScore={session.max_score}
-          passed={session.passed ?? false}
-        />
-      )}
+      <div aria-live="polite" aria-atomic="true">
+        {isScored && session?.score !== undefined && session?.max_score !== undefined && (
+          <ScoreDisplay
+            score={session.score}
+            maxScore={session.max_score}
+            passed={session.passed ?? false}
+          />
+        )}
+      </div>
 
       {/* Question card */}
       {currentQuestion && !isScored && (

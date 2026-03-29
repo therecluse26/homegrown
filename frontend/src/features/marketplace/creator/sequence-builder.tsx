@@ -189,6 +189,7 @@ export function SequenceBuilder() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [steps, setSteps] = useState<SequenceStep[]>([]);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState("");
 
   const addStep = useCallback(() => {
     setSteps((prev) => [
@@ -219,6 +220,9 @@ export function SequenceBuilder() {
       const removed = arr.splice(from, 1);
       if (removed.length === 0) return prev;
       arr.splice(to, 0, removed[0]!);
+      setReorderAnnouncement(
+        `Step moved from position ${from + 1} to position ${to + 1} of ${prev.length}`,
+      );
       return arr;
     });
   }, []);
@@ -288,6 +292,11 @@ export function SequenceBuilder() {
           </div>
         </div>
       </Card>
+
+      {/* Screen reader reorder announcements */}
+      <div aria-live="assertive" className="sr-only">
+        {reorderAnnouncement}
+      </div>
 
       {/* Steps */}
       <div className="space-y-4 mb-6" role="list" aria-label="Sequence steps">

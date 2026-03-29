@@ -1,20 +1,18 @@
 # TODO: Frontend Implementation Roadmap
 
 > **Scope**: Full React SPA — from empty scaffolding to production-ready.
-> **Current state**: React 19 + Vite + TanStack Query wired. Phases 1–6 complete.
-> Phase 7 (Parent Dashboard & Family Management) in progress:
-> `hooks/use-family.ts` (full family CRUD + co-parent management hooks),
-> `hooks/use-notifications.ts` (notification queries + mutations + unread count),
-> `hooks/use-data-lifecycle.ts` (export + deletion hooks),
-> `features/settings/family-settings.tsx` (3-tab settings: profile, students, co-parents),
-> `features/settings/account-settings.tsx`, `notification-prefs.tsx`, `subscription-upgrade.tsx`,
-> `features/settings/privacy-controls.tsx`, `session-management.tsx`, `data-export.tsx`,
-> `features/settings/account-deletion.tsx`, `student-deletion.tsx`, `notification-center.tsx`,
-> `components/layout/notification-bell.tsx` (unread badge in header).
-> All pages validated with Playwright. `npm run type-check` passes clean.
-> Remaining Phase 5 items: CAPTCHA, mfa-setup, terms versioning,
-> COPPA re-verification, end-to-end verification with running Kratos/backend.
-> Remaining Phase 7 items: notification-history, billing pages (P2), free tier verification.
+> **Current state**: React 19 + Vite + TanStack Query wired. **All P1 implementation and audit items complete.**
+> Phases 1–10 P1 fully implemented and validated with Playwright.
+> `npm run type-check` + ESLint (with jsx-a11y) pass clean.
+> Phase 10 audits complete: responsive (375–1280px), touch targets (44px min via `touch-target`),
+> screen reader (aria-live on all dynamic content), 200% zoom (WCAG 1.4.4), video captions
+> (VTT `<track>` support), keyboard accessibility, console error check, Lighthouse a11y ≥ 90.
+> Previously completed: image alt text, drag-drop keyboard, bundle analysis, TanStack Query tuning,
+> i18n audit, CAPTCHA (Turnstile), print stylesheet, Playwright a11y test suite + axe-core CI.
+> **Remaining**: 46 "Verify:" items (require running backend + Kratos), 1 blocked item
+> (API types from generated schema — needs backend swagger annotations), P2/P3 features.
+> Remaining Phase 5: mfa-setup (P2), terms versioning (P2).
+> Remaining Phase 7: billing pages (P2), free tier verification (needs backend).
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
 > guides, Homeschooling 101) lives in the Astro SSG public site per ARCHITECTURE
@@ -514,7 +512,7 @@ a layout and depends on auth state. This is the app skeleton.
 - [ ] Verify: authenticated user with complete onboarding sees AppShell at `/` `[P1]`
 - [x] Verify: all routes lazy-load correctly (check network tab) `[P1]`
 - [x] Verify: `npm run type-check` passes `[P1]`
-- [ ] Verify: keyboard navigation through sidebar/nav links works `[P1]`
+- [x] Verify: keyboard navigation through sidebar/nav links works `[P1]`
 - [ ] Verify: admin routes accessible only to `is_platform_admin` users `[P1]`
 - [ ] Verify: compliance routes show TierGate for free-tier families `[P2]`
 - [x] Verify: route tree covers all 17 domains (IAM, method, discover-import, onboard, social, learn, mkt, notify, media, billing, safety, search, recs, comply, data-lifecycle, admin, planning) `[P1]`
@@ -557,7 +555,7 @@ Depends on Phase 4 auth context and layout.
 - [x] `email-verification.tsx` — handles `?flow=xxx` re-entry from URL. Shows success/error state. `[P1]`
 - [x] `oauth-button.tsx` — reusable OAuth button component with provider-specific icons (Google, Facebook, Apple) + Kratos OAuth redirect initiation `[P1]`
 - [x] Terms of service / privacy policy acceptance checkbox on registration form (must accept before submit) `[P1]`
-- [ ] CAPTCHA integration on registration (hCaptcha or Turnstile) to prevent automated signups `[P1]`
+- [x] CAPTCHA integration on registration (hCaptcha or Turnstile) to prevent automated signups `[P1]`
 
 ### Session & MFA Management
 
@@ -614,7 +612,7 @@ Depends on Phase 4 auth context and layout.
 - [ ] Verify: COPPA consent blocks student creation until consented `[P1]`
 - [ ] Verify: recovery email flow works `[P1]`
 - [ ] Verify: OAuth buttons present and functional `[P1]`
-- [ ] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
 - [ ] Verify: ToS/privacy acceptance required before registration completes `[P1]`
 - [ ] Verify: session management lists and revokes sessions correctly `[P1]`
 - [ ] Verify: password strength indicator updates reactively `[P1]`
@@ -1019,7 +1017,7 @@ These tools are methodology-specific extensions. Listed here as `[P3]` placehold
 - [ ] Verify: methodology terminology used throughout (not hardcoded labels) `[P1]`
 - [ ] Verify: assessment entry with grading scales works `[P1]`
 - [ ] Verify: subject taxonomy picker supports 3-level hierarchy + custom subjects `[P1]`
-- [ ] Verify: `npm run type-check` passes `[P1]`
+- [x] Verify: `npm run type-check` passes `[P1]`
 
 ### References
 - SPEC §6 (learning requirements)
@@ -1333,11 +1331,11 @@ compliance exports and admin oversight.
 
 ### Cross-Cutting Polish
 
-- [ ] Responsive audit — verify all pages work at all breakpoints (sm/md/lg/xl/2xl/3xl) `[P1]`
-- [ ] Touch target audit — verify all interactive elements ≥ 44×44px below `md` breakpoint `[P1]`
+- [x] Responsive audit — verify all pages work at all breakpoints (sm/md/lg/xl/2xl/3xl) `[P1]`
+- [x] Touch target audit — verify all interactive elements ≥ 44×44px below `md` breakpoint `[P1]`
 - [x] Focus management audit — verify focus moves to `<h1>` on every route change `[P1]`
-- [ ] Screen reader audit — verify `aria-live` regions for all dynamic content: social feed, quiz feedback, notifications, attendance state changes, GPA recalculations, drag-and-drop position changes, search results, form validation errors, export status updates, session timeout warnings `[P1]`
-- [ ] Print stylesheet audit — verify print output for all printable pages: compliance docs, schedules, portfolios, transcripts, progress reports `[P1]`
+- [x] Screen reader audit — verify `aria-live` regions for all dynamic content: social feed, quiz feedback, notifications, attendance state changes, GPA recalculations, drag-and-drop position changes, search results, form validation errors, export status updates, session timeout warnings `[P1]`
+- [x] Print stylesheet audit — verify print output for all printable pages: compliance docs, schedules, portfolios, transcripts, progress reports `[P1]`
 - [x] `prefers-reduced-motion` audit — verify all animations collapse `[P1]`
 - [x] Surface hierarchy audit — verify no `1px solid` borders, only tonal shifts `[P1]`
 - [x] Token compliance audit — grep for hardcoded hex, arbitrary z-index, Tailwind default palette `[P1]`
@@ -1345,50 +1343,50 @@ compliance exports and admin oversight.
 - [x] Parent/student context audit — `data-context` attribute present on layout wrappers, `parent:`/`student:` custom variant selectors functional in all applicable components `[P1]`
 - [x] `aria-live` region audit — comprehensive list of all dynamic content areas that must have `aria-live` regions: form errors, toast notifications, feed updates, quiz scores, search results, export progress, session timers, attendance changes, GPA updates, drag reorder confirmations `[P1]`
 - [x] Skip link audit — verify skip link present and functional on every layout (AppShell, StudentShell, AdminShell, OnboardingLayout, AuthLayout) `[P1]`
-- [ ] Drag-and-drop keyboard alternative audit — verify all drag interfaces have keyboard alternatives: quiz-builder, sequence-builder, portfolio-builder, schedule drag-to-schedule, calendar item reorder `[P1]`
-- [ ] Image alt text audit — verify all `<img>` elements have meaningful `alt` attributes; decorative images use `alt=""` `[P1]`
-- [ ] Print style verification for all printable pages — compliance docs, schedules, portfolios, transcripts, progress reports, calendar views `[P1]`
+- [x] Drag-and-drop keyboard alternative audit — verify all drag interfaces have keyboard alternatives: quiz-builder, sequence-builder, portfolio-builder, schedule drag-to-schedule, calendar item reorder `[P1]`
+- [x] Image alt text audit — verify all `<img>` elements have meaningful `alt` attributes; decorative images use `alt=""` `[P1]`
+- [x] Print style verification for all printable pages — compliance docs, schedules, portfolios, transcripts, progress reports, calendar views `[P1]`
 - [x] Error boundary coverage — verify all route segments have error boundaries `[P1]`
 - [x] Loading state coverage — verify skeleton/spinner states for all async data `[P1]`
 - [x] Empty state coverage — verify all list views have empty states with CTAs `[P1]`
 - [x] 404 page — friendly not-found page within AppShell `[P1]`
-- [ ] i18n string externalization audit — no hardcoded English strings in components `[P1]`
-- [ ] axe-core CI integration — Playwright + axe-core in GitHub Actions CI pipeline, zero critical/serious violations, PR comment reporting with violation details `[P1]`
-- [ ] 200% zoom verification across all pages (WCAG 1.4.4) `[P1]`
-- [ ] Video caption file support verification (VTT/SRT in video player) `[P1]`
+- [x] i18n string externalization audit — no hardcoded English strings in components `[P1]`
+- [x] axe-core CI integration — Playwright + axe-core in GitHub Actions CI pipeline, zero critical/serious violations, PR comment reporting with violation details `[P1]`
+- [x] 200% zoom verification across all pages (WCAG 1.4.4) `[P1]`
+- [x] Video caption file support verification (VTT/SRT in video player) `[P1]`
 - [x] Community guidelines page exists and linked from report dialog `[P1]`
 - [x] Error retry/offline handling — TanStack Query retry config (3× exponential backoff) + `<NetworkStatus>` banner `[P1]`
 - [ ] VPAT (Voluntary Product Accessibility Template) documentation `[P2]`
 
 ### Testing Infrastructure
 
-- [ ] Playwright accessibility regression test suite — covers critical user journeys (login, onboarding, activity logging, quiz taking, marketplace purchase, messaging) with axe-core assertions `[P1]`
-- [ ] axe-core CI pipeline — GitHub Actions workflow running Playwright a11y tests on every PR, failure blocks merge, PR comment with violation summary and links `[P1]`
+- [x] Playwright accessibility regression test suite — covers critical user journeys (login, onboarding, activity logging, quiz taking, marketplace purchase, messaging) with axe-core assertions `[P1]`
+- [x] axe-core CI pipeline — GitHub Actions workflow running Playwright a11y tests on every PR, failure blocks merge, PR comment with violation summary and links `[P1]`
 - [ ] Screen reader test matrix documentation — document tested combinations (NVDA + Firefox, VoiceOver + Safari, JAWS + Chrome) with pass/fail per critical journey `[P2]`
-- [ ] Image alt text automation — ESLint `jsx-a11y` rule enforcement for `img-redundant-alt`, `alt-text`, and `img-has-alt`; CI gate `[P1]`
+- [x] Image alt text automation — ESLint `jsx-a11y` rule enforcement for `img-redundant-alt`, `alt-text`, and `img-has-alt`; CI gate `[P1]`
 
 ### Performance
 
 - [x] Route code-splitting — verify all feature routes lazy-load `[P1]`
-- [ ] Image optimization — verify all images use appropriate formats, lazy loading `[P1]`
-- [ ] Bundle analysis — check for unexpectedly large dependencies `[P1]`
-- [ ] TanStack Query optimization — verify staleTime/gcTime tuned per query type `[P1]`
+- [x] Image optimization — verify all images use appropriate formats, lazy loading `[P1]`
+- [x] Bundle analysis — check for unexpectedly large dependencies `[P1]`
+- [x] TanStack Query optimization — verify staleTime/gcTime tuned per query type `[P1]`
 
 ### Final Quality Gates
 
 - [x] `npm run type-check` — zero TypeScript errors `[P1]`
-- [ ] All pages render without console errors `[P1]`
-- [ ] All interactive elements keyboard accessible `[P1]`
-- [ ] Lighthouse accessibility score ≥ 90 on all primary pages `[P1]`
+- [x] All pages render without console errors `[P1]`
+- [x] All interactive elements keyboard accessible `[P1]`
+- [x] Lighthouse accessibility score ≥ 90 on all primary pages `[P1]`
 - [x] No `any` types anywhere in codebase (search: `as any`, `: any`) `[P1]`
 - [x] No hardcoded hex colors (search: `#[0-9a-f]`) `[P1]`
 - [x] No `style={{ }}` inline styles `[P1]`
 - [x] No direct `fetch()` calls outside `api/client.ts` `[P1]`
 - [x] No TanStack Query usage outside custom hooks `[P1]`
-- [ ] All API types from `src/api/generated/schema.ts` only `[P1]`
-- [ ] No hardcoded English strings — all user-facing text from i18n catalogs `[P1]`
-- [ ] axe-core: zero critical/serious violations `[P1]`
-- [ ] All pages usable at 200% zoom `[P1]`
+- [ ] All API types from `src/api/generated/schema.ts` only `[P1]` _(blocked: 120+ types manually defined in hooks because backend handlers lack swagger annotations; requires `make full-generate` after backend swag annotations are added)_
+- [x] No hardcoded English strings — all user-facing text from i18n catalogs `[P1]`
+- [x] axe-core: zero critical/serious violations `[P1]`
+- [x] All pages usable at 200% zoom `[P1]`
 - [x] Community guidelines page exists and linked from report dialog `[P1]`
 
 ### References

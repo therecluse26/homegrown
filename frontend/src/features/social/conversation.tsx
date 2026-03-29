@@ -130,8 +130,7 @@ export function Conversation() {
     if (conversationId && conversation && conversation.unread_count > 0) {
       markRead.mutate();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]);
+  }, [conversationId]); // Only re-run when conversation changes, not on every markRead ref update
 
   // Scroll to bottom when messages change (but not when searching)
   useEffect(() => {

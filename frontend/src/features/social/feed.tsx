@@ -110,7 +110,7 @@ function PostComposer() {
                   key={type}
                   type="button"
                   onClick={() => setPostType(type)}
-                  className={`p-2 rounded-radius-sm transition-colors ${
+                  className={`p-2 rounded-radius-sm transition-colors touch-target ${
                     postType === type
                       ? "bg-primary-container text-on-primary-container"
                       : "text-on-surface-variant hover:bg-surface-container-low"
@@ -336,7 +336,7 @@ export function Feed() {
             action={
               <RouterLink
                 to="/friends"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-radius-button type-label-md"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-radius-button type-label-md touch-target"
               >
                 <FormattedMessage id="social.feed.empty.cta" />
               </RouterLink>

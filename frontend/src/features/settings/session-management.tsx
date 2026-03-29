@@ -58,7 +58,7 @@ export function SessionManagement() {
   const [showRevokeAll, setShowRevokeAll] = useState(false);
 
   useEffect(() => {
-    document.title = `${intl.formatMessage({ id: "sessions.title" })} — Homegrown Academy`;
+    document.title = `${intl.formatMessage({ id: "sessions.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
     headingRef.current?.focus();
   }, [intl]);
 

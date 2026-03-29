@@ -261,7 +261,8 @@ export function ReadingLists() {
                   {item.reading_item.cover_image_url ? (
                     <img
                       src={item.reading_item.cover_image_url}
-                      alt=""
+                      alt={`Cover of ${item.reading_item.title}`}
+                      loading="lazy"
                       className="w-12 h-16 rounded-lg object-cover shrink-0"
                     />
                   ) : (

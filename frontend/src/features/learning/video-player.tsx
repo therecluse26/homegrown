@@ -9,6 +9,8 @@ import {
   VolumeX,
   Maximize,
   CheckCircle,
+  Captions,
+  CaptionsOff,
 } from "lucide-react";
 import {
   Button,
@@ -42,6 +44,7 @@ export function VideoPlayer() {
   const progressTimer = useRef<ReturnType<typeof setInterval>>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [captionsOn, setCaptionsOn] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -95,6 +98,17 @@ export function VideoPlayer() {
   function handleFullscreen() {
     if (!videoRef.current) return;
     void videoRef.current.requestFullscreen();
+  }
+
+  function handleToggleCaptions() {
+    if (!videoRef.current) return;
+    const tracks = videoRef.current.textTracks;
+    const next = !captionsOn;
+    for (let i = 0; i < tracks.length; i++) {
+      const t = tracks[i];
+      if (t) t.mode = next ? "showing" : "hidden";
+    }
+    setCaptionsOn(next);
   }
 
   function handleTimeUpdate() {
@@ -178,7 +192,18 @@ export function VideoPlayer() {
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={handleVideoEnd}
             playsInline
+            crossOrigin="anonymous"
           >
+            {videoDef?.caption_tracks?.map((track, i) => (
+              <track
+                key={track.srclang}
+                kind={track.kind}
+                src={track.src}
+                srcLang={track.srclang}
+                label={track.label}
+                default={i === 0}
+              />
+            ))}
             <FormattedMessage id="video.unsupported" />
           </video>
         </div>
@@ -201,7 +226,7 @@ export function VideoPlayer() {
               <button
                 type="button"
                 onClick={handlePlayPause}
-                className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface"
+                className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface touch-target"
                 aria-label={intl.formatMessage({
                   id: isPlaying ? "video.pause" : "video.play",
                 })}
@@ -212,7 +237,7 @@ export function VideoPlayer() {
               <button
                 type="button"
                 onClick={handleToggleMute}
-                className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface"
+                className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface touch-target"
                 aria-label={intl.formatMessage({
                   id: isMuted ? "video.unmute" : "video.mute",
                 })}
@@ -223,6 +248,23 @@ export function VideoPlayer() {
                   aria-hidden
                 />
               </button>
+
+              {videoDef?.caption_tracks && videoDef.caption_tracks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleToggleCaptions}
+                  className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface touch-target"
+                  aria-label={intl.formatMessage({
+                    id: captionsOn ? "video.captionsOff" : "video.captionsOn",
+                  })}
+                >
+                  <Icon
+                    icon={captionsOn ? CaptionsOff : Captions}
+                    size="md"
+                    aria-hidden
+                  />
+                </button>
+              )}
 
               <span className="type-label-sm text-on-surface-variant">
                 {formatTime(currentTime)} / {formatTime(duration)}
@@ -240,7 +282,7 @@ export function VideoPlayer() {
               <button
                 type="button"
                 onClick={handleFullscreen}
-                className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface"
+                className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface touch-target"
                 aria-label={intl.formatMessage({ id: "video.fullscreen" })}
               >
                 <Icon icon={Maximize} size="md" aria-hidden />

@@ -123,7 +123,7 @@ export function ListingDetail() {
             <div className="w-48 h-48 rounded-radius-md overflow-hidden shrink-0 bg-surface-container-low">
               <img
                 src={listing.thumbnail_url}
-                alt=""
+                alt={listing.title}
                 className="w-full h-full object-cover"
               />
             </div>

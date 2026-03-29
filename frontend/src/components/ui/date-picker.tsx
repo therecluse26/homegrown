@@ -191,7 +191,7 @@ export function DatePicker({
       </div>
 
       {/* Day grid */}
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+      { }
       <div
         className="grid grid-cols-7 gap-0"
         role="grid"

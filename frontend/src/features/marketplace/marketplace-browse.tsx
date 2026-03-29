@@ -39,7 +39,8 @@ function ListingCard({ listing }: { listing: ListingBrowseResponse }) {
           <div className="w-full h-32 rounded-radius-sm bg-surface-container-low mb-3 overflow-hidden">
             <img
               src={listing.thumbnail_url}
-              alt=""
+              alt={listing.title}
+              loading="lazy"
               className="w-full h-full object-cover"
             />
           </div>

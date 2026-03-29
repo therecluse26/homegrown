@@ -85,7 +85,7 @@ export function ImageGallery({
 
       {currentImage &&
         createPortal(
-          // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+           
           <div
             className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/80"
             onKeyDown={handleKeyDown}

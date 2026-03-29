@@ -24,7 +24,7 @@ interface ContentResponse {
 
 // Placeholder hook — will be replaced when backend has swag annotations
 function useContentDef(id: string) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   void id;
   return {
     data: undefined as ContentResponse | undefined,

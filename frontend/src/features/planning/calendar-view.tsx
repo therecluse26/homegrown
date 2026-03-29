@@ -451,7 +451,7 @@ export function CalendarView() {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "planning.calendar.previous",
           })}
@@ -460,7 +460,7 @@ export function CalendarView() {
         </button>
 
         <div className="flex items-center gap-3">
-          <h2 className="type-title-md text-on-surface font-semibold">
+          <h2 className="type-title-md text-on-surface font-semibold" aria-live="polite" aria-atomic="true">
             {headerText}
           </h2>
           <button
@@ -473,7 +473,7 @@ export function CalendarView() {
 
         <button
           onClick={() => navigate(1)}
-          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "planning.calendar.next",
           })}

@@ -159,6 +159,12 @@ export function DataExport() {
             <Icon icon={FileDown} size="xs" aria-hidden className="mr-1.5" />
             <FormattedMessage id="dataExport.request" />
           </Button>
+
+          <div aria-live="polite" className="sr-only">
+            {requestExport.isSuccess && (
+              <FormattedMessage id="dataExport.exportQueued" />
+            )}
+          </div>
         </form>
       </Card>
 
@@ -177,7 +183,7 @@ export function DataExport() {
           message={intl.formatMessage({ id: "dataExport.history.empty" })}
         />
       ) : (
-        <ul className="flex flex-col gap-2" role="list">
+        <ul className="flex flex-col gap-2" role="list" aria-live="polite">
           {exportList.data.map((exp) => (
             <li key={exp.id}>
               <Card className="flex items-center justify-between">
@@ -196,7 +202,7 @@ export function DataExport() {
                     <a
                       href={exp.download_url}
                       download
-                      className="p-2 rounded-radius-button text-primary hover:bg-primary-container transition-colors"
+                      className="p-2 rounded-radius-button text-primary hover:bg-primary-container transition-colors touch-target"
                       aria-label={intl.formatMessage({
                         id: "dataExport.download",
                       })}

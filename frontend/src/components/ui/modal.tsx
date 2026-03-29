@@ -74,7 +74,7 @@ export function Modal({ open, onClose, title, children, className = "" }: ModalP
   if (!open) return null;
 
   return createPortal(
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+     
     <div
       className="fixed inset-0 z-modal flex items-center justify-center p-4"
       onKeyDown={handleKeyDown}

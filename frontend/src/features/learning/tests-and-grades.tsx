@@ -415,7 +415,7 @@ export function TestsAndGrades() {
 
       {/* Summary stats */}
       {effectiveStudent && !assessmentsLoading && assessments.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3" aria-live="polite" aria-atomic="true">
           <StatCard
             label={intl.formatMessage({ id: "grades.stat.total" })}
             value={String(totalAssessments)}

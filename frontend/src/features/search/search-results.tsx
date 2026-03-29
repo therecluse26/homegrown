@@ -36,7 +36,9 @@ function SocialResult({ result }: { result: SearchResult }) {
                   </span>
                 )}
                 {result.family.is_friend && (
-                  <Badge variant="primary">Friend</Badge>
+                  <Badge variant="primary">
+                    <FormattedMessage id="search.result.friend" />
+                  </Badge>
                 )}
               </div>
             </div>
@@ -55,7 +57,10 @@ function SocialResult({ result }: { result: SearchResult }) {
             <div>
               <p className="type-title-sm text-on-surface">{result.group.name}</p>
               <span className="type-label-sm text-on-surface-variant">
-                {result.group.member_count} members
+                <FormattedMessage
+                  id="search.result.memberCount"
+                  values={{ count: result.group.member_count }}
+                />
               </span>
             </div>
           </div>
@@ -86,12 +91,16 @@ function SocialResult({ result }: { result: SearchResult }) {
 }
 
 function MarketplaceResult({ result }: { result: SearchResult }) {
+  const intl = useIntl();
   if (!result.listing) return null;
   const listing = result.listing;
   const price =
     listing.price_cents === 0
-      ? "Free"
-      : `$${(listing.price_cents / 100).toFixed(2)}`;
+      ? intl.formatMessage({ id: "price.free" })
+      : intl.formatNumber(listing.price_cents / 100, {
+          style: "currency",
+          currency: "USD",
+        });
 
   return (
     <RouterLink to={`/marketplace/listings/${listing.listing_id}`}>
@@ -115,7 +124,10 @@ function MarketplaceResult({ result }: { result: SearchResult }) {
                 {listing.publisher_name}
               </span>
               <Badge variant="secondary">
-                {listing.content_type.replace("_", " ")}
+                {intl.formatMessage({
+                  id: `marketplace.contentType.${listing.content_type}`,
+                  defaultMessage: listing.content_type.replace("_", " "),
+                })}
               </Badge>
             </div>
           </div>
@@ -126,6 +138,7 @@ function MarketplaceResult({ result }: { result: SearchResult }) {
 }
 
 function LearningResult({ result }: { result: SearchResult }) {
+  const intl = useIntl();
   const item = result.activity ?? result.journal ?? result.reading_item;
   if (!item) return null;
 
@@ -136,7 +149,12 @@ function LearningResult({ result }: { result: SearchResult }) {
         <div>
           <p className="type-title-sm text-on-surface">{item.title}</p>
           <div className="flex items-center gap-2 mt-0.5">
-            <Badge variant="secondary">{result.type.replace("_", " ")}</Badge>
+            <Badge variant="secondary">
+              {intl.formatMessage({
+                id: `search.resultType.${result.type}`,
+                defaultMessage: result.type.replace("_", " "),
+              })}
+            </Badge>
             <span className="type-label-sm text-on-surface-variant">
               {item.student_name}
             </span>

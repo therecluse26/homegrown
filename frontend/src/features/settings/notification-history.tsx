@@ -120,7 +120,7 @@ export function NotificationHistory() {
   const unreadCount = data?.unread_count ?? 0;
 
   useEffect(() => {
-    document.title = `${intl.formatMessage({ id: "notificationHistory.title" })} — Homegrown Academy`;
+    document.title = `${intl.formatMessage({ id: "notificationHistory.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
     headingRef.current?.focus();
   }, [intl]);
 

@@ -26,7 +26,7 @@ export async function apiClient<T>(
     const error = await response.json().catch(() => ({
       error: { code: "unknown", message: "An error occurred" },
     }));
-    // eslint-disable-next-line @typescript-eslint/only-throw-error
+     
     throw error;
   }
 

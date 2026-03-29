@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import { useIntl, FormattedMessage } from "react-intl";
 import { useQueryClient } from "@tanstack/react-query";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 import { Button, Input, Spinner, FormField } from "@/components/ui";
 import { PageTitle } from "@/components/common";
 import { useAuthContext } from "@/features/auth/auth-provider";
@@ -16,6 +17,10 @@ import {
   type KratosError,
 } from "@/lib/kratos";
 import { OAuthButton } from "./oauth-button";
+
+// Turnstile site key — use test key in dev, real key in production
+const TURNSTILE_SITE_KEY =
+  import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "1x00000000000000000000AA";
 
 type RegisterFormState = {
   email: string;
@@ -131,6 +136,8 @@ export function Register() {
   const [globalError, setGlobalError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [captchaToken, setCaptchaToken] = useState<string>("");
+  const turnstileRef = useRef<TurnstileInstance | null>(null);
 
   useEffect(() => {
     if (isAuthLoading || isAuthenticated) return;
@@ -175,6 +182,14 @@ export function Register() {
       return;
     }
 
+    if (!captchaToken) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        captcha: intl.formatMessage({ id: "auth.register.captchaRequired" }),
+      }));
+      return;
+    }
+
     setIsSubmitting(true);
     setGlobalError("");
     setFieldErrors({});
@@ -188,6 +203,7 @@ export function Register() {
         password: form.password,
         method: "password",
         csrf_token: csrfToken,
+        captcha_token: captchaToken,
       });
 
       if (result.kind === "success") {
@@ -216,6 +232,9 @@ export function Register() {
       );
     } finally {
       setIsSubmitting(false);
+      // Reset CAPTCHA so user gets a fresh challenge on retry
+      setCaptchaToken("");
+      turnstileRef.current?.reset();
     }
   }
 
@@ -401,6 +420,30 @@ export function Register() {
                   aria-live="assertive"
                 >
                   {fieldErrors["tos"]}
+                </p>
+              )}
+            </div>
+
+            {/* CAPTCHA verification */}
+            <div>
+              <Turnstile
+                ref={turnstileRef}
+                siteKey={TURNSTILE_SITE_KEY}
+                onSuccess={(token) => {
+                  setCaptchaToken(token);
+                  setFieldErrors((prev) => ({ ...prev, captcha: "" }));
+                }}
+                onError={() => setCaptchaToken("")}
+                onExpire={() => setCaptchaToken("")}
+                options={{ theme: "light", size: "normal" }}
+              />
+              {fieldErrors["captcha"] && (
+                <p
+                  className="mt-1 text-label-sm text-error"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  {fieldErrors["captcha"]}
                 </p>
               )}
             </div>

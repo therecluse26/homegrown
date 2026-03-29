@@ -12,7 +12,7 @@ export function NotificationBell() {
   return (
     <NavLink
       to="/notifications"
-      className="relative p-2 rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
+      className="relative p-2 min-w-11 min-h-11 flex items-center justify-center rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
       aria-label={intl.formatMessage(
         { id: "notifications.bell.label" },
         { count },

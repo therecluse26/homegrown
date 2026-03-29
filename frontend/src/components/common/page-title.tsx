@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useIntl } from "react-intl";
 
 type PageTitleProps = {
   /** The page title — set as document.title and rendered as h1 */
@@ -9,11 +10,13 @@ type PageTitleProps = {
 };
 
 export function PageTitle({ title, subtitle, className = "" }: PageTitleProps) {
+  const intl = useIntl();
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    document.title = `${title} — Homegrown Academy`;
-  }, [title]);
+    const appName = intl.formatMessage({ id: "app.name" });
+    document.title = `${title} — ${appName}`;
+  }, [title, intl]);
 
   // Focus heading on mount for screen reader announcement on route transitions
   useEffect(() => {
