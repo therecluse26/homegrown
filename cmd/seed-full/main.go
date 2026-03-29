@@ -114,8 +114,15 @@ const (
 	dRecsPref  = 0x0083
 	dWizard    = 0x0090
 	dCoppa     = 0x0091
-	dCurated   = 0x00A0
-	dPubMember = 0x00A1
+	dCurated    = 0x00A0
+	dPubMember  = 0x00A1
+	dVideoProg  = 0x00B0
+	dProjProg   = 0x00B1
+	dSeqProg    = 0x00B2
+	dGradScale  = 0x00B3
+	dStdTest    = 0x00B4
+	dMediaUp    = 0x00B5
+	dStarterRec = 0x00B6
 )
 
 // Existing seed UUIDs from the basic seeder (for cross-referencing).
@@ -557,7 +564,11 @@ func main() {
 
 	steps := []step{
 		{"IAM", s.seedIAM},
+		{"GradingScales", s.seedGradingScales},
+		{"MediaUploads", s.seedMediaUploads},
 		{"Onboarding", s.seedOnboarding},
+		{"NotificationPreferences", s.seedNotificationPreferences},
+		{"StarterRecommendations", s.seedStarterRecommendations},
 		{"SocialProfiles", s.seedSocialProfiles},
 		{"Friendships", s.seedFriendships},
 		{"Groups", s.seedGroups},
@@ -576,7 +587,12 @@ func main() {
 		{"ReadingProgress", s.seedReadingProgress},
 		{"AssessmentResults", s.seedAssessmentResults},
 		{"Compliance", s.seedCompliance},
+		{"Transcripts", s.seedTranscripts},
+		{"Portfolios", s.seedPortfolios},
+		{"StandardizedTests", s.seedStandardizedTests},
 		{"ScheduleItems", s.seedScheduleItems},
+		{"ScheduleTemplates", s.seedScheduleTemplates},
+		{"LearningProgress", s.seedLearningProgress},
 		{"Notifications", s.seedNotifications},
 		{"Billing", s.seedBilling},
 		{"Recommendations", s.seedRecommendations},
