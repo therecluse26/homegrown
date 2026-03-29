@@ -13,7 +13,7 @@ GOOSE := $(GOBIN)/goose
 DATABASE_URL ?= postgres://homegrown:homegrown@localhost:5932/homegrown
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check lint test type-check \
-        migrate db-reset seed agent-db-reset agent-kratos-reset agent-server \
+        migrate db-reset seed seed-full agent-db-reset agent-kratos-reset agent-server \
         openapi generate-types full-generate audit install-tools install-hooks
 
 # Default: run all quality gates
@@ -106,6 +106,11 @@ full-generate:
 DB ?= homegrown_agent
 seed:
 	$(GO) run ./cmd/seed/ --db $(DB)
+
+# Full-scale seed: basic seed + 997 additional families with rich data across all domains.
+# Creates ~1000 families, social interactions, learning content, marketplace, compliance, etc.
+seed-full: seed
+	$(GO) run ./cmd/seed-full/ --db $(DB)
 
 # Full agent database reset: drop → recreate → migrate → seed
 agent-db-reset:

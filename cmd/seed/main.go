@@ -1427,7 +1427,7 @@ func seedLearnExtended(db *gorm.DB, platformPublisherID string) error {
 			VALUES
 				(?, ?, ?, ?, ?::JSONB),
 				(?, ?, ?, ?, ?::JSONB)
-			ON CONFLICT (family_id, student_id, snapshot_date) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			progressSnapshot1ID, seedFamilyID, emmaStudentID, snap1Date, snap1Data,
 			progressSnapshot2ID, seedFamilyID, emmaStudentID, snap2Date, snap2Data,
 		).Error; err != nil {
@@ -2011,7 +2011,7 @@ func seedComply(db *gorm.DB) error {
 				INSERT INTO comply_attendance
 					(id, family_id, student_id, attendance_date, status)
 				VALUES (?, ?, ?, ?, ?)
-				ON CONFLICT (family_id, student_id, attendance_date) DO NOTHING`,
+				ON CONFLICT DO NOTHING`,
 				a.id, seedFamilyID, a.studentID, date, a.status,
 			).Error; err != nil {
 				return fmt.Errorf("insert attendance %s: %w", a.id, err)
