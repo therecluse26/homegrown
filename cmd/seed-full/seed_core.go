@@ -16,15 +16,36 @@ func (s *seeder) seedIAM() error {
 		// ── Families (skip first 3 — they exist from basic seeder) ──
 		var famRows [][]any
 		for _, f := range s.families[3:] {
+			// ~40% of families have 1–2 secondary methodologies.
+			var secondarySlugs string
+			if s.rng.Float64() < 0.40 {
+				candidates := make([]string, 0, len(methodologySlugs)-1)
+				for _, slug := range methodologySlugs {
+					if slug != f.PrimaryMethodology {
+						candidates = append(candidates, slug)
+					}
+				}
+				n := 1 + s.rng.Intn(2) // 1–2 secondary
+				picks := pickN(s.rng, len(candidates), min(n, len(candidates)))
+				picked := make([]string, len(picks))
+				for i, idx := range picks {
+					picked[i] = candidates[idx]
+				}
+				secondarySlugs = "{" + strings.Join(picked, ",") + "}"
+			} else {
+				secondarySlugs = "{}"
+			}
+
 			famRows = append(famRows, []any{
 				f.ID, f.DisplayName, f.StateCode, f.PrimaryMethodology,
+				secondarySlugs,
 				f.SubscriptionTier, "consented", f.CreatedAt, f.CreatedAt,
 			})
 		}
 		if err := execBatch(tx,
-			"INSERT INTO iam_families (id, display_name, state_code, primary_methodology_slug, subscription_tier, coppa_consent_status, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO iam_families (id, display_name, state_code, primary_methodology_slug, secondary_methodology_slugs, subscription_tier, coppa_consent_status, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			famRows,
 		); err != nil {
 			return fmt.Errorf("families: %w", err)
@@ -51,26 +72,38 @@ func (s *seeder) seedIAM() error {
 		if err := execBatch(tx,
 			"INSERT INTO iam_parents (id, family_id, kratos_identity_id, display_name, email, is_primary, is_platform_admin, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			parentRows,
 		); err != nil {
 			return fmt.Errorf("parents: %w", err)
 		}
 
-		// ── Students ──
+		// ── Students (~15% get a methodology override different from family primary) ──
 		var studentRows [][]any
 		for _, f := range s.families[3:] {
 			for _, st := range f.Students {
+				var override any = nil
+				if s.rng.Float64() < 0.15 {
+					// Pick a methodology different from the family's primary.
+					for {
+						slug := methodologySlugs[s.rng.Intn(len(methodologySlugs))]
+						if slug != f.PrimaryMethodology {
+							override = slug
+							break
+						}
+					}
+				}
 				studentRows = append(studentRows, []any{
 					st.ID, f.ID, st.Name, st.BirthYear, st.GradeLevel,
+					override,
 					f.CreatedAt, f.CreatedAt,
 				})
 			}
 		}
 		if err := execBatch(tx,
-			"INSERT INTO iam_students (id, family_id, display_name, birth_year, grade_level, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO iam_students (id, family_id, display_name, birth_year, grade_level, methodology_override_slug, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			studentRows,
 		); err != nil {
 			return fmt.Errorf("students: %w", err)
@@ -97,7 +130,7 @@ func (s *seeder) seedIAM() error {
 		if err := execBatch(tx,
 			"INSERT INTO iam_coppa_audit_log (id, family_id, action, method, previous_status, new_status, performed_by, ip_hash, created_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			coppaRows,
 		); err != nil {
 			return fmt.Errorf("coppa: %w", err)
@@ -237,7 +270,7 @@ func (s *seeder) seedFriendships() error {
 		return execBatch(tx,
 			"INSERT INTO soc_friendships (id, requester_family_id, accepter_family_id, status, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -273,7 +306,7 @@ func (s *seeder) seedGroups() error {
 		if err := execBatch(tx,
 			"INSERT INTO soc_groups (id, group_type, name, description, creator_family_id, methodology_slug, join_policy, member_count, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			groupRows,
 		); err != nil {
 			return fmt.Errorf("groups: %w", err)
@@ -383,7 +416,7 @@ func (s *seeder) seedPosts() error {
 		return execBatch(tx,
 			"INSERT INTO soc_posts (id, family_id, author_parent_id, post_type, content, group_id, visibility, likes_count, comments_count, is_edited, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -424,7 +457,7 @@ func (s *seeder) seedComments() error {
 		return execBatch(tx,
 			"INSERT INTO soc_comments (id, post_id, family_id, author_parent_id, content, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -453,7 +486,7 @@ func (s *seeder) seedPostLikes() error {
 		return execBatch(tx,
 			"INSERT INTO soc_post_likes (id, post_id, family_id, created_at) VALUES ",
 			"(?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -523,7 +556,7 @@ func (s *seeder) seedConversations() error {
 		if err := execBatch(tx,
 			"INSERT INTO soc_conversations (id, created_at, updated_at) VALUES ",
 			"(?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			convoRows,
 		); err != nil {
 			return fmt.Errorf("conversations: %w", err)
@@ -541,7 +574,7 @@ func (s *seeder) seedConversations() error {
 		return execBatch(tx,
 			"INSERT INTO soc_messages (id, conversation_id, sender_parent_id, sender_family_id, content, created_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			msgRows,
 		)
 	})
@@ -638,7 +671,7 @@ func (s *seeder) seedEvents() error {
 		if err := execBatch(tx,
 			"INSERT INTO soc_events (id, creator_family_id, creator_parent_id, group_id, title, description, event_date, end_date, location_name, location_region, is_virtual, virtual_url, capacity, visibility, status, methodology_slug, attendee_count, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			eventRows,
 		); err != nil {
 			return fmt.Errorf("events: %w", err)
@@ -647,7 +680,7 @@ func (s *seeder) seedEvents() error {
 		return execBatch(tx,
 			"INSERT INTO soc_event_rsvps (id, event_id, family_id, status, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rsvpRows,
 		)
 	})

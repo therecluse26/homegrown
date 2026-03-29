@@ -131,6 +131,23 @@ const (
 	existSeedPublisher  = "01900000-0000-7000-8000-000000000201"
 )
 
+// Deterministic methodology UUIDs.
+// learn_* tables use UUID methodology_id columns (no FK to method_definitions yet).
+// We create stable UUIDs for each slug so content can be filtered by methodology.
+var methodologyUUIDs = map[string]string{
+	"charlotte-mason": "01910000-aa01-7000-8000-000000000001",
+	"classical":       "01910000-aa01-7000-8000-000000000002",
+	"traditional":     "01910000-aa01-7000-8000-000000000003",
+	"montessori":      "01910000-aa01-7000-8000-000000000004",
+	"waldorf":         "01910000-aa01-7000-8000-000000000005",
+	"unschooling":     "01910000-aa01-7000-8000-000000000006",
+}
+
+// methodologySlugs lists all slugs in a stable order for round-robin assignment.
+var methodologySlugs = []string{
+	"charlotte-mason", "classical", "traditional", "montessori", "waldorf", "unschooling",
+}
+
 // ─── Core types ───────────────────────────────────────────────────────────────
 
 type student struct {

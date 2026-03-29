@@ -69,6 +69,7 @@ migrate:
 
 # Reset the database (drop + recreate + migrate)
 db-reset:
+	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'homegrown' AND pid <> pg_backend_pid();"
 	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS homegrown;"
 	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE homegrown;"
 	$(MAKE) migrate

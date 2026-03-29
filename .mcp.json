@@ -3,6 +3,10 @@
     "reflex": {
       "command": "./node_modules/.bin/rfx",
       "args": ["mcp"]
+    },
+    "plenum": {
+      "command": "/scratch/cache/cargo/bin/plenum",
+      "args": ["mcp"]
     }
   }
 }

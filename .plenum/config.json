@@ -1,0 +1,20 @@
+{
+  "connections": {
+    "agent": {
+      "engine": "postgres",
+      "host": "localhost",
+      "port": 5932,
+      "user": "homegrown",
+      "password": "homegrown",
+      "database": "homegrown_agent"
+    },
+    "dev": {
+      "engine": "postgres",
+      "host": "localhost",
+      "port": 5932,
+      "user": "homegrown",
+      "password": "homegrown",
+      "database": "homegrown"
+    }
+  }
+}

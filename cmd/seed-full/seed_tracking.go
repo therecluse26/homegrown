@@ -23,6 +23,9 @@ func (s *seeder) seedActivityLogs() error {
 				continue
 			}
 
+			// Use family's primary methodology UUID for activity logs.
+			methID := methodologyUUIDs[f.PrimaryMethodology]
+
 			// Activity level * 6 logs per student.
 			logsPerStudent := f.ActivityLevel * 6
 			for _, st := range f.Students {
@@ -37,7 +40,7 @@ func (s *seeder) seedActivityLogs() error {
 						uid(dActLog, seq), f.ID, st.ID,
 						at.Title, at.Description,
 						"{" + strings.Join(at.Subjects, ",") + "}",
-						contentID, at.Duration,
+						contentID, methID, at.Duration,
 						date.Format("2006-01-02"),
 						date, date,
 					})
@@ -46,9 +49,9 @@ func (s *seeder) seedActivityLogs() error {
 		}
 
 		return execBatch(tx,
-			"INSERT INTO learn_activity_logs (id, family_id, student_id, title, description, subject_tags, content_id, duration_minutes, activity_date, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO learn_activity_logs (id, family_id, student_id, title, description, subject_tags, content_id, methodology_id, duration_minutes, activity_date, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -122,7 +125,7 @@ func (s *seeder) seedJournalEntries() error {
 		return execBatch(tx,
 			"INSERT INTO learn_journal_entries (id, family_id, student_id, entry_type, title, content, subject_tags, entry_date, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -176,7 +179,7 @@ func (s *seeder) seedReadingProgress() error {
 		return execBatch(tx,
 			"INSERT INTO learn_reading_progress (id, family_id, student_id, reading_item_id, reading_list_id, status, started_at, completed_at, notes, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -218,7 +221,7 @@ func (s *seeder) seedAssessmentResults() error {
 		return execBatch(tx,
 			"INSERT INTO learn_assessment_results (id, family_id, student_id, assessment_def_id, score, max_score, weight, notes, assessment_date, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -339,7 +342,7 @@ func (s *seeder) seedCompliance() error {
 		if err := execBatch(tx,
 			"INSERT INTO comply_attendance (id, family_id, student_id, attendance_date, status, duration_minutes, notes, is_auto, manual_override, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			attendRows,
 		); err != nil {
 			return fmt.Errorf("attendance: %w", err)
@@ -388,7 +391,7 @@ func (s *seeder) seedCompliance() error {
 		if err := execBatch(tx,
 			"INSERT INTO comply_assessment_records (id, family_id, student_id, title, subject, assessment_type, score, max_score, grade_letter, grade_points, is_passing, source_activity_id, assessment_date, notes, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			compAssRows,
 		); err != nil {
 			return fmt.Errorf("comply assessments: %w", err)
@@ -437,7 +440,7 @@ func (s *seeder) seedCompliance() error {
 		if err := execBatch(tx,
 			"INSERT INTO comply_courses (id, family_id, student_id, transcript_id, title, subject, grade_level, credits, grade_letter, grade_points, level, school_year, semester, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			courseRows,
 		); err != nil {
 			return fmt.Errorf("courses: %w", err)
@@ -508,7 +511,7 @@ func (s *seeder) seedScheduleItems() error {
 		return execBatch(tx,
 			"INSERT INTO plan_schedule_items (id, family_id, student_id, title, description, start_date, start_time, end_time, duration_minutes, category, subject_id, color, is_completed, completed_at, linked_activity_id, linked_event_id, recurrence_rule, notes, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -553,7 +556,7 @@ func (s *seeder) seedNotifications() error {
 		return execBatch(tx,
 			"INSERT INTO notify_notifications (id, family_id, notification_type, category, title, body, action_url, metadata, is_read, created_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -620,7 +623,7 @@ func (s *seeder) seedBilling() error {
 		if err := execBatch(tx,
 			"INSERT INTO bill_subscriptions (id, family_id, hyperswitch_subscription_id, hyperswitch_customer_id, tier, status, billing_interval, current_period_start, current_period_end, cancel_at_period_end, canceled_at, amount_cents, currency, hyperswitch_price_id, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			subRows,
 		); err != nil {
 			return fmt.Errorf("billing subscriptions: %w", err)
@@ -629,7 +632,7 @@ func (s *seeder) seedBilling() error {
 		return execBatch(tx,
 			"INSERT INTO bill_transactions (id, family_id, transaction_type, status, amount_cents, currency, hyperswitch_payment_id, hyperswitch_invoice_id, description, metadata, created_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			txnRows,
 		)
 	})
@@ -727,7 +730,7 @@ func (s *seeder) seedRecommendations() error {
 		if err := execBatch(tx,
 			"INSERT INTO recs_signals (id, family_id, student_id, signal_type, methodology_slug, payload, signal_date, created_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?::JSONB, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			signalRows,
 		); err != nil {
 			return fmt.Errorf("recs signals: %w", err)

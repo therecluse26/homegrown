@@ -46,6 +46,7 @@ server
 
 /seed
 !seed/
+/seed-full
 
 /*.png
 

@@ -285,8 +285,8 @@ func main() {
 	}
 
 	// ── Kratos identities ─────────────────────────────────────────────────
-	seedKratosID := ensureKratosIdentity()
-	adminKratosID := ensureAdminKratosIdentity()
+	seedKratosID := ensureKratosIdentity(dbName)
+	adminKratosID := ensureAdminKratosIdentity(dbName)
 
 	// ── Seed all domains ──────────────────────────────────────────────────
 	if err := seedAll(db, seedKratosID, adminKratosID); err != nil {
@@ -460,10 +460,21 @@ func kratosLookupOrCreate(baseURL, email string) (string, bool) {
 	return "", false
 }
 
+// kratosURLOrder returns Kratos admin base URLs in priority order for the given
+// database name. The agent database uses agent Kratos first; everything else
+// (including the dev "homegrown" database) tries dev Kratos first so that
+// identities land in the correct instance and dev-app login works.
+func kratosURLOrder(dbName string) []string {
+	if dbName == "homegrown_agent" {
+		return []string{kratosAgentAdminURL, kratosAdminURL}
+	}
+	return []string{kratosAdminURL, kratosAgentAdminURL}
+}
+
 // ensureKratosIdentity creates or retrieves the seed@example.com identity.
-// Tries the agent Kratos instance first, then the dev instance.
-func ensureKratosIdentity() string {
-	for _, baseURL := range []string{kratosAgentAdminURL, kratosAdminURL} {
+// Tries the appropriate Kratos instance first based on the target database.
+func ensureKratosIdentity(dbName string) string {
+	for _, baseURL := range kratosURLOrder(dbName) {
 		if id, ok := kratosLookupOrCreate(baseURL, "seed@example.com"); ok {
 			return id
 		}
@@ -473,8 +484,8 @@ func ensureKratosIdentity() string {
 }
 
 // ensureAdminKratosIdentity creates or retrieves the admin@example.com identity.
-func ensureAdminKratosIdentity() string {
-	for _, baseURL := range []string{kratosAgentAdminURL, kratosAdminURL} {
+func ensureAdminKratosIdentity(dbName string) string {
+	for _, baseURL := range kratosURLOrder(dbName) {
 		if id, ok := kratosLookupOrCreate(baseURL, "admin@example.com"); ok {
 			return id
 		}

@@ -36,6 +36,50 @@ code content. The `Read` tool is still used for reading full files.
 
 ---
 
+## Database Inspection (Plenum MCP)
+
+This project uses [Plenum](https://github.com/coredb-io/plenum) as a read-only database
+introspection and query MCP server. It gives Claude direct access to PostgreSQL schema and
+data without needing `psql` via Bash.
+
+### Tools
+
+| Tool | Purpose |
+|------|---------|
+| `mcp__plenum__connect` | Connect to a named database (`agent` or `dev`) |
+| `mcp__plenum__introspect` | Inspect schema: tables, columns, types, constraints |
+| `mcp__plenum__query` | Execute read-only SQL (`SELECT` only) |
+
+### Named Connections
+
+| Name | Database | Use case |
+|------|----------|----------|
+| `agent` | `homegrown_agent` | Agent testing — **use this by default** |
+| `dev` | `homegrown` | Developer's working database |
+
+Connection config lives in `.plenum/config.json` (committed to git).
+Credentials: user `homegrown`, password `homegrown`, host `localhost`, port `5932`.
+
+### When to Use
+
+- **Schema inspection** — check table structure, column types, constraints after migrations
+- **Debugging data issues** — verify seed data, check foreign key relationships
+- **Verifying migrations** — confirm new tables/columns exist after `make migrate`
+- **Query validation** — test SELECT queries before embedding them in Go code
+
+### When NOT to Use
+
+- **Write operations** — Plenum is strictly read-only (rejects INSERT/UPDATE/DELETE/DDL).
+  Use `psql` via Bash for writes.
+- **Performance testing** — use `psql` with `EXPLAIN ANALYZE` directly.
+
+### Subagent Delegation
+
+When launching Explore or Plan agents via the Task tool, the prompt MUST instruct the agent
+to use `mcp__plenum__*` tools for database inspection instead of running `psql` via Bash.
+
+---
+
 ## Coding Standards & Architecture
 
 All implementation work MUST follow `specs/CODING_STANDARDS.md`. That document is the

@@ -29,7 +29,7 @@ func (s *seeder) seedPublishers() error {
 		if err := execBatch(tx,
 			"INSERT INTO mkt_publishers (id, name, slug, description, is_platform, is_verified, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			pubRows,
 		); err != nil {
 			return fmt.Errorf("publishers: %w", err)
@@ -67,7 +67,7 @@ func (s *seeder) seedPublishers() error {
 		if err := execBatch(tx,
 			"INSERT INTO mkt_creators (id, parent_id, onboarding_status, store_name, store_bio, tos_accepted_at, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			creatorRows,
 		); err != nil {
 			return fmt.Errorf("creators: %w", err)
@@ -76,7 +76,7 @@ func (s *seeder) seedPublishers() error {
 		return execBatch(tx,
 			"INSERT INTO mkt_publisher_members (id, publisher_id, creator_id, role, created_at) VALUES ",
 			"(?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			memberRows,
 		)
 	})
@@ -102,16 +102,20 @@ func (s *seeder) seedPublishedContent() error {
 				title = fmt.Sprintf("%s — Variation %d", at.Title, i/len(activityTemplates)+1)
 			}
 
+			// Assign methodology: round-robin across slugs so every methodology has content.
+			methSlug := methodologySlugs[i%len(methodologySlugs)]
+			methID := methodologyUUIDs[methSlug]
+
 			actRows = append(actRows, []any{
 				aID, pubID, title, at.Description,
 				"{" + strings.Join(at.Subjects, ",") + "}",
-				at.Duration, true, now, now,
+				methID, at.Duration, true, now, now,
 			})
 		}
 		if err := execBatch(tx,
-			"INSERT INTO learn_activity_defs (id, publisher_id, title, description, subject_tags, est_duration_minutes, is_active, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO learn_activity_defs (id, publisher_id, title, description, subject_tags, methodology_id, est_duration_minutes, is_active, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			actRows,
 		); err != nil {
 			return fmt.Errorf("activity defs: %w", err)
@@ -136,7 +140,7 @@ func (s *seeder) seedPublishedContent() error {
 		if err := execBatch(tx,
 			"INSERT INTO learn_reading_items (id, publisher_id, title, author, subject_tags, description, page_count, is_active, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			readRows,
 		); err != nil {
 			return fmt.Errorf("reading items: %w", err)
@@ -176,7 +180,7 @@ func (s *seeder) seedPublishedContent() error {
 		if err := execBatch(tx,
 			"INSERT INTO learn_assessment_defs (id, publisher_id, title, description, subject_tags, scoring_type, max_score, is_active, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			assRows,
 		); err != nil {
 			return fmt.Errorf("assessment defs: %w", err)
@@ -203,11 +207,13 @@ func (s *seeder) seedPublishedContent() error {
 			pubID := s.publisherIDs[s.rng.Intn(len(s.publisherIDs))]
 			title := quizTitles[i%len(quizTitles)]
 			subjects := []string{subjectTags[s.rng.Intn(len(subjectTags))]}
+			methSlug := methodologySlugs[i%len(methodologySlugs)]
+			methID := methodologyUUIDs[methSlug]
 
 			quizRows = append(quizRows, []any{
 				qID, pubID, title, "Quiz: " + title,
 				"{" + strings.Join(subjects, ",") + "}",
-				15, 70, false, true, numQuestionsPerQuiz, true, now, now,
+				methID, 15, 70, false, true, numQuestionsPerQuiz, true, now, now,
 			})
 
 			// Questions for this quiz.
@@ -232,6 +238,7 @@ func (s *seeder) seedPublishedContent() error {
 					fmt.Sprintf("Question %d for %s", j+1, title),
 					answerData,
 					"{" + strings.Join(subjects, ",") + "}",
+					methID, // inherit methodology from parent quiz
 					1 + s.rng.Intn(5), // difficulty 1–5
 					qType != "short_answer",
 					10, true, now, now,
@@ -244,18 +251,18 @@ func (s *seeder) seedPublishedContent() error {
 		}
 
 		if err := execBatch(tx,
-			"INSERT INTO learn_quiz_defs (id, publisher_id, title, description, subject_tags, time_limit_minutes, passing_score_percent, shuffle_questions, show_correct_after, question_count, is_active, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO learn_quiz_defs (id, publisher_id, title, description, subject_tags, methodology_id, time_limit_minutes, passing_score_percent, shuffle_questions, show_correct_after, question_count, is_active, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			quizRows,
 		); err != nil {
 			return fmt.Errorf("quiz defs: %w", err)
 		}
 
 		if err := execBatch(tx,
-			"INSERT INTO learn_questions (id, publisher_id, question_type, content, answer_data, subject_tags, difficulty_level, auto_scorable, points, is_active, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO learn_questions (id, publisher_id, question_type, content, answer_data, subject_tags, methodology_id, difficulty_level, auto_scorable, points, is_active, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			questionRows,
 		); err != nil {
 			return fmt.Errorf("questions: %w", err)
@@ -295,17 +302,19 @@ func (s *seeder) seedPublishedContent() error {
 			title := videoTitles[i%len(videoTitles)]
 			subjects := []string{subjectTags[s.rng.Intn(len(subjectTags))]}
 			duration := 300 + s.rng.Intn(1500) // 5–30 minutes
+			methSlug := methodologySlugs[i%len(methodologySlugs)]
+			methID := methodologyUUIDs[methSlug]
 
 			vidRows = append(vidRows, []any{
 				vID, pubID, title, "Video lesson: " + title,
 				"{" + strings.Join(subjects, ",") + "}",
-				duration, "", "youtube", "", true, now, now,
+				methID, duration, "", "youtube", "", true, now, now,
 			})
 		}
 		if err := execBatch(tx,
-			"INSERT INTO learn_video_defs (id, publisher_id, title, description, subject_tags, duration_seconds, video_url, video_source, external_video_id, is_active, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO learn_video_defs (id, publisher_id, title, description, subject_tags, methodology_id, duration_seconds, video_url, video_source, external_video_id, is_active, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			vidRows,
 		); err != nil {
 			return fmt.Errorf("video defs: %w", err)
@@ -345,7 +354,7 @@ func (s *seeder) seedPublishedContent() error {
 		if err := execBatch(tx,
 			"INSERT INTO learn_project_defs (id, publisher_id, title, description, subject_tags, milestone_templates, is_active, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			projRows,
 		); err != nil {
 			return fmt.Errorf("project defs: %w", err)
@@ -369,11 +378,13 @@ func (s *seeder) seedPublishedContent() error {
 			pubID := s.publisherIDs[s.rng.Intn(len(s.publisherIDs))]
 			title := seqTitles[i%len(seqTitles)]
 			subjects := []string{subjectTags[s.rng.Intn(len(subjectTags))]}
+			methSlug := methodologySlugs[i%len(methodologySlugs)]
+			methID := methodologyUUIDs[methSlug]
 
 			seqDefRows = append(seqDefRows, []any{
 				sID, pubID, title, "Learning sequence: " + title,
 				"{" + strings.Join(subjects, ",") + "}",
-				true, true, now, now,
+				methID, true, true, now, now,
 			})
 
 			// 3–5 items per sequence mixing content types.
@@ -398,9 +409,9 @@ func (s *seeder) seedPublishedContent() error {
 		}
 
 		if err := execBatch(tx,
-			"INSERT INTO learn_sequence_defs (id, publisher_id, title, description, subject_tags, is_linear, is_active, created_at, updated_at) VALUES ",
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"INSERT INTO learn_sequence_defs (id, publisher_id, title, description, subject_tags, methodology_id, is_linear, is_active, created_at, updated_at) VALUES ",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"ON CONFLICT DO NOTHING",
 			seqDefRows,
 		); err != nil {
 			return fmt.Errorf("sequence defs: %w", err)
@@ -409,7 +420,7 @@ func (s *seeder) seedPublishedContent() error {
 		return execBatch(tx,
 			"INSERT INTO learn_sequence_items (id, sequence_def_id, sort_order, content_type, content_id, is_required, unlock_after_previous, created_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			seqItemRows,
 		)
 	})
@@ -448,10 +459,19 @@ func (s *seeder) seedListings() error {
 
 			created := randomDate(s.rng, s.now.AddDate(-1, 0, 0), s.now.AddDate(0, -1, 0))
 
+			// Tag each listing with 1–2 methodology UUIDs.
+			numMethTags := 1 + s.rng.Intn(2)
+			methPicks := pickN(s.rng, len(methodologySlugs), numMethTags)
+			methUUIDs := make([]string, len(methPicks))
+			for mi, idx := range methPicks {
+				methUUIDs[mi] = methodologyUUIDs[methodologySlugs[idx]]
+			}
+			methTagArr := "{" + strings.Join(methUUIDs, ",") + "}"
+
 			rows = append(rows, []any{
 				lID, creatorID, pubID, title, lt.Description,
 				lt.PriceCents,
-				"{}", // methodology_tags (UUID array — left empty, methodology matching done via subject_tags)
+				methTagArr,
 				"{" + strings.Join(lt.Subjects, ",") + "}",
 				lt.GradeMin, lt.GradeMax, lt.ContentType,
 				"published", ratingAvg, ratingCount, 1,
@@ -462,7 +482,7 @@ func (s *seeder) seedListings() error {
 		return execBatch(tx,
 			"INSERT INTO mkt_listings (id, creator_id, publisher_id, title, description, price_cents, methodology_tags, subject_tags, grade_min, grade_max, content_type, status, rating_avg, rating_count, version, published_at, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?::UUID[], ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -477,6 +497,10 @@ func (s *seeder) seedPurchases() error {
 	return bypassRLS(s.db, func(tx *gorm.DB) error {
 		var rows [][]any
 		seq := 0
+
+		// Track (family, listing) pairs to avoid unique constraint violations.
+		type flPair struct{ f, l string }
+		seen := make(map[flPair]bool)
 
 		// ~30% of families make 1–5 purchases.
 		for famIdx := 3; famIdx < len(s.families); famIdx++ {
@@ -502,6 +526,12 @@ func (s *seeder) seedPurchases() error {
 					continue
 				}
 
+				pair := flPair{f.ID, s.listingIDs[lIdx]}
+				if seen[pair] {
+					continue
+				}
+				seen[pair] = true
+
 				seq++
 				purchaseID := uid(dPurchase, seq)
 				s.purchaseListingMap[purchaseID] = s.listingIDs[lIdx]
@@ -521,6 +551,12 @@ func (s *seeder) seedPurchases() error {
 
 		// Seed family buys 10 listings for a rich library.
 		for _, lIdx := range pickN(s.rng, len(s.listingIDs), min(10, len(s.listingIDs))) {
+			pair := flPair{existSeedFamilyID, s.listingIDs[lIdx]}
+			if seen[pair] {
+				continue
+			}
+			seen[pair] = true
+
 			seq++
 			purchaseID := uid(dPurchase, seq)
 			s.purchaseListingMap[purchaseID] = s.listingIDs[lIdx]
@@ -537,7 +573,7 @@ func (s *seeder) seedPurchases() error {
 		return execBatch(tx,
 			"INSERT INTO mkt_purchases (id, family_id, listing_id, creator_id, amount_cents, platform_fee_cents, creator_payout_cents, created_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
@@ -570,7 +606,7 @@ func (s *seeder) seedReviews() error {
 		return execBatch(tx,
 			"INSERT INTO mkt_reviews (id, listing_id, purchase_id, family_id, rating, review_text, is_anonymous, moderation_status, created_at, updated_at) VALUES ",
 			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			"ON CONFLICT (id) DO NOTHING",
+			"ON CONFLICT DO NOTHING",
 			rows,
 		)
 	})
