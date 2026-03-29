@@ -9,6 +9,7 @@ import {
   PenTool,
   ClipboardList,
 } from "lucide-react";
+import { useMethodologyContext } from "@/features/auth/methodology-provider";
 import {
   Button,
   Card,
@@ -43,6 +44,7 @@ export function ProgressView() {
   const intl = useIntl();
   const { studentId } = useParams<{ studentId: string }>();
   const { data: students } = useStudents();
+  const { toolLabel } = useMethodologyContext();
   const student = students?.find((s) => s.id === studentId);
 
   const [dateFrom, setDateFrom] = useState("");
@@ -94,7 +96,10 @@ export function ProgressView() {
         <h1 className="type-headline-md text-on-surface font-semibold">
           <FormattedMessage
             id="progress.title"
-            values={{ name: student?.display_name ?? "" }}
+            values={{
+              name: student?.display_name ?? "",
+              tool: toolLabel("progress-tracking", intl.formatMessage({ id: "learning.action.progress" })),
+            }}
           />
         </h1>
       </div>

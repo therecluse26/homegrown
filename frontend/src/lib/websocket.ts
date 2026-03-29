@@ -11,6 +11,8 @@ export type WsMessageType =
   | "new_message"
   | "notification"
   | "friend_request"
+  | "streak_milestone"
+  | "learning_milestone"
   | "ping"
   | "pong";
 

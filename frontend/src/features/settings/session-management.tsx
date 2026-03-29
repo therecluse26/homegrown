@@ -1,5 +1,4 @@
 import { FormattedMessage, useIntl } from "react-intl";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Monitor, Smartphone, Globe, LogOut } from "lucide-react";
 import {
   Badge,
@@ -10,55 +9,8 @@ import {
   Icon,
   Skeleton,
 } from "@/components/ui";
-import { apiClient } from "@/api/client";
-import { useState } from "react";
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-// Session list/revoke endpoints aren't yet in the generated schema.
-// These lightweight types will be replaced once the IAM handler is wired.
-
-interface Session {
-  id: string;
-  device: string;
-  browser: string;
-  ip_address: string;
-  last_active: string;
-  is_current: boolean;
-  created_at: string;
-}
-
-// ─── Hooks ──────────────────────────────────────────────────────────────────
-
-function useSessions() {
-  return useQuery({
-    queryKey: ["auth", "sessions"],
-    queryFn: () => apiClient<Session[]>("/v1/auth/sessions"),
-    staleTime: 1000 * 30,
-  });
-}
-
-function useRevokeSession() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (sessionId: string) =>
-      apiClient<void>(`/v1/auth/sessions/${sessionId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["auth", "sessions"] });
-    },
-  });
-}
-
-function useRevokeAllSessions() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      apiClient<void>("/v1/auth/sessions/revoke-all", { method: "POST" }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["auth", "sessions"] });
-      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-    },
-  });
-}
+import { useSessions, useRevokeSession, useRevokeAllSessions } from "@/hooks/use-sessions";
+import { useState, useEffect, useRef } from "react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -97,12 +49,18 @@ function formatRelativeTime(
 
 export function SessionManagement() {
   const intl = useIntl();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const sessions = useSessions();
   const revokeSession = useRevokeSession();
   const revokeAll = useRevokeAllSessions();
 
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
   const [showRevokeAll, setShowRevokeAll] = useState(false);
+
+  useEffect(() => {
+    document.title = `${intl.formatMessage({ id: "sessions.title" })} — Homegrown Academy`;
+    headingRef.current?.focus();
+  }, [intl]);
 
   if (sessions.isPending) {
     return (
@@ -119,7 +77,7 @@ export function SessionManagement() {
   if (sessions.error) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="type-headline-md text-on-surface font-semibold mb-6">
+        <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none mb-6">
           <FormattedMessage id="sessions.title" />
         </h1>
         <Card className="bg-error-container">
@@ -137,7 +95,7 @@ export function SessionManagement() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="type-headline-md text-on-surface font-semibold">
+        <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none">
           <FormattedMessage id="sessions.title" />
         </h1>
         {otherSessions.length > 0 && (

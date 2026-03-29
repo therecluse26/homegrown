@@ -18,6 +18,7 @@ import {
   useCreateReadingList,
   type ReadingStatus,
 } from "@/hooks/use-reading";
+import { useMethodologyContext } from "@/features/auth/methodology-provider";
 
 // ─── Status badge ───────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ function StatusBadge({ status }: { status: ReadingStatus }) {
 export function ReadingLists() {
   const intl = useIntl();
   const { data: students, isPending: studentsLoading } = useStudents();
+  const { toolLabel } = useMethodologyContext();
   const { data: lists, isPending: listsLoading } = useReadingLists();
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showNewList, setShowNewList] = useState(false);
@@ -97,7 +99,7 @@ export function ReadingLists() {
     <div className="mx-auto max-w-content-narrow space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="type-headline-md text-on-surface font-semibold">
-          <FormattedMessage id="reading.title" />
+          {toolLabel("reading-lists", intl.formatMessage({ id: "reading.title" }))}
         </h1>
         <Button
           variant="primary"

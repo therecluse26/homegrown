@@ -1,17 +1,9 @@
 import { Navigate, Outlet } from "react-router";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/api/client";
+import { useStudentIdentity } from "@/hooks/use-student-identity";
 import { Spinner } from "@/components/ui";
-import type { components } from "@/api/generated/schema";
-
-type StudentSession = components["schemas"]["iam.StudentSessionIdentityResponse"];
 
 export function StudentGuard() {
-  const { data: session, isLoading, isError } = useQuery({
-    queryKey: ["student", "session"],
-    queryFn: () => apiClient<StudentSession>("/v1/student/session"),
-    retry: false,
-  });
+  const { data: session, isLoading, isError } = useStudentIdentity();
 
   if (isLoading) {
     return (

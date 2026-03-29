@@ -24,6 +24,7 @@ import { ParentEducationPanel } from "@/components/common/parent-education-panel
 import { useStudents } from "@/hooks/use-family";
 import { useStudentProgress, useStreak } from "@/hooks/use-progress";
 import { useAuth } from "@/hooks/use-auth";
+import { useMethodologyContext } from "@/features/auth/methodology-provider";
 
 // ─── Streak milestone thresholds ─────────────────────────────────────────────
 
@@ -135,11 +136,11 @@ function StudentProgressCard({
 
 function QuickAction({
   icon,
-  labelId,
+  label,
   to,
 }: {
   icon: typeof BookOpen;
-  labelId: string;
+  label: string;
   to: string;
 }) {
   return (
@@ -150,9 +151,7 @@ function QuickAction({
       <div className="p-3 rounded-full bg-primary-container text-on-primary-container group-hover:bg-primary group-hover:text-on-primary transition-colors">
         <Icon icon={icon} size="lg" aria-hidden />
       </div>
-      <span className="type-label-md text-on-surface">
-        <FormattedMessage id={labelId} />
-      </span>
+      <span className="type-label-md text-on-surface">{label}</span>
     </RouterLink>
   );
 }
@@ -163,6 +162,7 @@ export function LearningDashboard() {
   const intl = useIntl();
   const { tier } = useAuth();
   const { data: students, isPending: studentsLoading } = useStudents();
+  const { toolLabel } = useMethodologyContext();
 
   return (
     <div className="mx-auto max-w-content-narrow space-y-8">
@@ -181,32 +181,32 @@ export function LearningDashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <QuickAction
             icon={ClipboardList}
-            labelId="learning.action.logActivity"
+            label={toolLabel("activities", intl.formatMessage({ id: "learning.action.logActivity" }))}
             to="/learning/activities"
           />
           <QuickAction
             icon={PenTool}
-            labelId="learning.action.journal"
+            label={toolLabel("journaling", intl.formatMessage({ id: "learning.action.journal" }))}
             to="/learning/journals"
           />
           <QuickAction
             icon={BookMarked}
-            labelId="learning.action.reading"
+            label={toolLabel("reading-lists", intl.formatMessage({ id: "learning.action.reading" }))}
             to="/learning/reading-lists"
           />
           <QuickAction
             icon={BarChart3}
-            labelId="learning.action.progress"
+            label={toolLabel("progress-tracking", intl.formatMessage({ id: "learning.action.progress" }))}
             to="/learning/progress/select"
           />
           <QuickAction
             icon={GraduationCap}
-            labelId="learning.action.grades"
+            label={toolLabel("tests-grades", intl.formatMessage({ id: "learning.action.grades" }))}
             to="/learning/grades"
           />
           <QuickAction
             icon={Plus}
-            labelId="learning.action.addNew"
+            label={intl.formatMessage({ id: "learning.action.addNew" })}
             to="/learning/activities?new=1"
           />
         </div>

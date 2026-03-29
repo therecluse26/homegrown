@@ -27,6 +27,11 @@ export function NotificationBell() {
           {count > 99 ? "99+" : count}
         </span>
       )}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {count > 0
+          ? intl.formatMessage({ id: "notifications.unread.sr" }, { count })
+          : ""}
+      </span>
     </NavLink>
   );
 }

@@ -15,6 +15,7 @@ import { InfiniteScroll } from "@/components/ui";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { useStudents } from "@/hooks/use-family";
 import { useActivityLog, useLogActivity } from "@/hooks/use-activities";
+import { useMethodologyContext } from "@/features/auth/methodology-provider";
 
 // ─── Add activity form ──────────────────────────────────────────────────────
 
@@ -172,6 +173,7 @@ export function ActivityLog() {
   const intl = useIntl();
   const [searchParams] = useSearchParams();
   const { data: students, isPending: studentsLoading } = useStudents();
+  const { toolLabel } = useMethodologyContext();
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showForm, setShowForm] = useState(searchParams.get("new") === "1");
   const [subjectFilter, setSubjectFilter] = useState("");
@@ -201,7 +203,7 @@ export function ActivityLog() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="type-headline-md text-on-surface font-semibold">
-          <FormattedMessage id="activityLog.title" />
+          {toolLabel("activities", intl.formatMessage({ id: "activityLog.title" }))}
         </h1>
         <Button
           variant="primary"

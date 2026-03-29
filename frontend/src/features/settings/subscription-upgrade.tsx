@@ -1,7 +1,8 @@
-import { FormattedMessage } from "react-intl";
+import { FormattedMessage, useIntl } from "react-intl";
 import { Badge, Button, Card, Icon } from "@/components/ui";
 import { Check } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { PageTitle } from "@/components/common/page-title";
 
 type Tier = {
   id: string;
@@ -50,16 +51,16 @@ const TIERS: Tier[] = [
 ];
 
 export function SubscriptionUpgrade() {
+  const intl = useIntl();
   const { tier } = useAuth();
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="type-headline-md text-on-surface font-semibold mb-2">
-        <FormattedMessage id="settings.subscription.title" />
-      </h1>
-      <p className="type-body-md text-on-surface-variant mb-8">
-        <FormattedMessage id="settings.subscription.description" />
-      </p>
+      <PageTitle
+        title={intl.formatMessage({ id: "settings.subscription.title" })}
+        subtitle={intl.formatMessage({ id: "settings.subscription.description" })}
+        className="mb-8"
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {TIERS.map((t) => {

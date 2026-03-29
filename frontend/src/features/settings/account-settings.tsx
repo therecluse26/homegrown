@@ -1,4 +1,4 @@
-import { FormattedMessage } from "react-intl";
+import { FormattedMessage, useIntl } from "react-intl";
 import { Badge, Button, Card, Icon } from "@/components/ui";
 import { Link } from "@/components/ui";
 import {
@@ -9,15 +9,15 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { PageTitle } from "@/components/common/page-title";
 
 export function AccountSettings() {
+  const intl = useIntl();
   const { user } = useAuth();
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="type-headline-md text-on-surface font-semibold mb-6">
-        <FormattedMessage id="settings.account.title" />
-      </h1>
+      <PageTitle title={intl.formatMessage({ id: "settings.account.title" })} className="mb-6" />
 
       {/* Email */}
       <Card className="mb-4">

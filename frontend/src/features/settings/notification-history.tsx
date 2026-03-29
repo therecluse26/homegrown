@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
 import {
@@ -99,6 +99,7 @@ function formatTimeAgo(dateStr: string, intl: ReturnType<typeof useIntl>) {
 
 export function NotificationHistory() {
   const intl = useIntl();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState<NotificationType | "">("");
   const [readFilter, setReadFilter] = useState<"" | "true" | "false">("");
@@ -117,6 +118,11 @@ export function NotificationHistory() {
   const notifications = data?.notifications ?? [];
   const total = data?.total ?? 0;
   const unreadCount = data?.unread_count ?? 0;
+
+  useEffect(() => {
+    document.title = `${intl.formatMessage({ id: "notificationHistory.title" })} — Homegrown Academy`;
+    headingRef.current?.focus();
+  }, [intl]);
 
   const hasActiveFilters = typeFilter !== "" || readFilter !== "";
   const pageSize = 20;
@@ -160,7 +166,7 @@ export function NotificationHistory() {
   if (error) {
     return (
       <div className="mx-auto max-w-3xl">
-        <h1 className="type-headline-md text-on-surface font-semibold mb-6">
+        <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none mb-6">
           <FormattedMessage id="notificationHistory.title" />
         </h1>
         <Card className="bg-error-container">
@@ -177,7 +183,7 @@ export function NotificationHistory() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="type-headline-md text-on-surface font-semibold">
+          <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none">
             <FormattedMessage id="notificationHistory.title" />
           </h1>
           <p className="type-body-sm text-on-surface-variant mt-1">

@@ -1,8 +1,8 @@
-import { type ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 import { Outlet } from "react-router";
 import { useIntl } from "react-intl";
 import { SkipLink } from "@/components/common";
-import { ProgressBar } from "@/components/ui";
+import { ProgressBar, Spinner } from "@/components/ui";
 
 type OnboardingLayoutProps = {
   children?: ReactNode;
@@ -32,7 +32,15 @@ export function OnboardingLayout({ children, progress }: OnboardingLayoutProps) 
           id="main-content"
           className="max-w-[var(--width-content-narrow)] mx-auto px-spacing-page-x pb-12"
         >
-          {children ?? <Outlet />}
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-12">
+                <Spinner size="lg" className="text-primary" />
+              </div>
+            }
+          >
+            {children ?? <Outlet />}
+          </Suspense>
         </main>
       </div>
     </>

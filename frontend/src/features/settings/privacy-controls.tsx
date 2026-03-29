@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { MapPin } from "lucide-react";
 import { Card, Checkbox, Icon, Select, Skeleton } from "@/components/ui";
+import { PageTitle } from "@/components/common/page-title";
 import {
   useMyProfile,
   useUpdateProfile,
@@ -94,13 +95,11 @@ export function PrivacyControls() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="type-headline-md text-on-surface font-semibold mb-2">
-        <FormattedMessage id="settings.privacy.title" />
-      </h1>
-
-      <p className="type-body-md text-on-surface-variant mb-6">
-        <FormattedMessage id="settings.privacy.description" />
-      </p>
+      <PageTitle
+        title={intl.formatMessage({ id: "settings.privacy.title" })}
+        subtitle={intl.formatMessage({ id: "settings.privacy.description" })}
+        className="mb-6"
+      />
 
       {/* Location sharing toggle */}
       <Card className="p-card-padding mb-6">

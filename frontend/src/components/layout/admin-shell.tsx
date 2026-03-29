@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import {
   LayoutDashboard,
@@ -10,7 +10,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useIntl } from "react-intl";
-import { Icon } from "@/components/ui";
+import { Icon, Spinner } from "@/components/ui";
 import { SkipLink } from "@/components/common";
 
 type NavItem = {
@@ -78,7 +78,15 @@ export function AdminShell({ children }: { children?: ReactNode }) {
         <div className="flex-1 lg:pl-[var(--width-sidebar)]">
           <div className="max-w-[var(--width-content)] mx-auto px-spacing-page-x lg:px-spacing-page-x-lg py-6">
             <main id="main-content" key={location.pathname}>
-              {children ?? <Outlet />}
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-12">
+                    <Spinner size="lg" className="text-primary" />
+                  </div>
+                }
+              >
+                {children ?? <Outlet />}
+              </Suspense>
             </main>
           </div>
         </div>

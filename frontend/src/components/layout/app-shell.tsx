@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import {
   Home,
@@ -10,11 +10,13 @@ import {
   Search,
 } from "lucide-react";
 import { useIntl } from "react-intl";
-import { Icon } from "@/components/ui";
+import { Icon, Spinner } from "@/components/ui";
 import { SkipLink } from "@/components/common";
 import { useAuthContext } from "@/features/auth/auth-provider";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { SearchBar } from "@/components/layout/search-bar";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { CoppaReverificationBanner } from "@/features/auth/coppa-reverification-banner";
 
 type NavItem = {
   to: string;
@@ -135,6 +137,9 @@ function Header() {
 export function AppShell({ children }: { children?: ReactNode }) {
   const location = useLocation();
 
+  // Connect WebSocket for real-time notifications and milestone toasts
+  useWebSocket();
+
   return (
     <>
       <SkipLink />
@@ -146,8 +151,17 @@ export function AppShell({ children }: { children?: ReactNode }) {
       >
         <div className="max-w-[var(--width-content)] mx-auto px-spacing-page-x lg:px-spacing-page-x-lg">
           <Header />
+          <CoppaReverificationBanner />
           <main id="main-content" key={location.pathname}>
-            {children ?? <Outlet />}
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-12">
+                  <Spinner size="lg" className="text-primary" />
+                </div>
+              }
+            >
+              {children ?? <Outlet />}
+            </Suspense>
           </main>
           <div className="h-20 lg:h-8" />
         </div>

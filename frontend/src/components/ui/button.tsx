@@ -68,7 +68,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ) : (
         leadingIcon
       )}
-      <span className={loading ? "invisible" : ""}>{children}</span>
+      <span className={`inline-flex items-center gap-2${loading ? " invisible" : ""}`}>{children}</span>
       {!loading && trailingIcon}
       {loading && (
         <span className="sr-only">Loading</span>

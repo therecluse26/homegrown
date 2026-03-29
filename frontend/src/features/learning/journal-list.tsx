@@ -16,6 +16,7 @@ import {
   useJournalEntries,
   type JournalEntryType,
 } from "@/hooks/use-journals";
+import { useMethodologyContext } from "@/features/auth/methodology-provider";
 
 const ENTRY_TYPE_COLORS: Record<JournalEntryType, string> = {
   freeform: "bg-tertiary-fixed text-on-tertiary-fixed",
@@ -26,6 +27,7 @@ const ENTRY_TYPE_COLORS: Record<JournalEntryType, string> = {
 export function JournalList() {
   const intl = useIntl();
   const { data: students, isPending: studentsLoading } = useStudents();
+  const { toolLabel } = useMethodologyContext();
   const [selectedStudent, setSelectedStudent] = useState("");
   const [typeFilter, setTypeFilter] = useState<JournalEntryType | "">("");
 
@@ -48,7 +50,7 @@ export function JournalList() {
     <div className="mx-auto max-w-content-narrow space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="type-headline-md text-on-surface font-semibold">
-          <FormattedMessage id="journals.title" />
+          {toolLabel("journaling", intl.formatMessage({ id: "journals.title" }))}
         </h1>
         <RouterLink to="/learning/journals/new" className="no-underline">
           <Button variant="primary" size="sm" disabled={!effectiveStudent}>

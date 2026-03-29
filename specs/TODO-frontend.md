@@ -588,7 +588,7 @@ Depends on Phase 4 auth context and layout.
 - [x] Password strength indicator on registration form — visual meter (colored bar) + descriptive text label (weak/fair/strong), colors use token feedback palette (SPEC §1) `[P1]`
 - [x] Rate limiting feedback on login — `429` response → friendly "Too many attempts" message + retry countdown timer (SPEC §1.2) `[P1]`
 - [x] Email verification resend button with 60-second cooldown timer — disabled state + countdown during cooldown (SPEC §1.3) `[P1]`
-- [ ] COPPA consent re-verification prompt when ToS version changes for families with students already added (SPEC §7.3) `[P1]`
+- [x] COPPA consent re-verification prompt when ToS version changes for families with students already added (SPEC §7.3) `[P1]`
 - [ ] `features/auth/coppa-micro-charge.tsx` — COPPA micro-charge verification: micro-charge explanation, amount verification input, retry on mismatch (10-billing §13) `[P2]`
 
 ### WebSocket Foundation
@@ -916,7 +916,7 @@ and family management from prior phases.
 
 ### Methodology Integration
 
-- [ ] All learning tool labels MUST come from methodology config via `useMethodologyContext()` — no hardcoded "Activity Log", "Journal", etc. `[P1]` *(labels currently use i18n strings; methodology-config integration deferred until methodology context hook is built)*
+- [x] All learning tool labels MUST come from methodology config via `useMethodologyContext()` — no hardcoded "Activity Log", "Journal", etc. `[P1]`
 - [x] `components/common/parent-education-panel.tsx` — expandable guidance panel sourcing content from `ActiveToolResponse.guidance`; includes "Why this tool?" explanation from methodology philosophy `[P1]`
 
 ### Tool Assignment
@@ -990,7 +990,7 @@ and family management from prior phases.
 ### Streak & Milestone Display
 
 - [x] Streak indicator on learning dashboard: flame/star icon + day count, milestone badges at 7/14/30/60/100 days `[P1]`
-- [ ] Milestone celebration toast on WebSocket event (`streak_milestone`, `learning_milestone`) `[P1]` *(requires WebSocket infrastructure from Phase 5)*
+- [x] Milestone celebration toast on WebSocket event (`streak_milestone`, `learning_milestone`) `[P1]`
 - Source: SPEC §13.1, 08-notify §9
 
 ### Phase 3 Methodology-Specific Tools (future placeholders)
@@ -1335,22 +1335,22 @@ compliance exports and admin oversight.
 
 - [ ] Responsive audit — verify all pages work at all breakpoints (sm/md/lg/xl/2xl/3xl) `[P1]`
 - [ ] Touch target audit — verify all interactive elements ≥ 44×44px below `md` breakpoint `[P1]`
-- [ ] Focus management audit — verify focus moves to `<h1>` on every route change `[P1]`
+- [x] Focus management audit — verify focus moves to `<h1>` on every route change `[P1]`
 - [ ] Screen reader audit — verify `aria-live` regions for all dynamic content: social feed, quiz feedback, notifications, attendance state changes, GPA recalculations, drag-and-drop position changes, search results, form validation errors, export status updates, session timeout warnings `[P1]`
 - [ ] Print stylesheet audit — verify print output for all printable pages: compliance docs, schedules, portfolios, transcripts, progress reports `[P1]`
-- [ ] `prefers-reduced-motion` audit — verify all animations collapse `[P1]`
-- [ ] Surface hierarchy audit — verify no `1px solid` borders, only tonal shifts `[P1]`
-- [ ] Token compliance audit — grep for hardcoded hex, arbitrary z-index, Tailwind default palette `[P1]`
-- [ ] Dark mode architecture readiness audit — zero `dark:` Tailwind prefixes anywhere in codebase, all colors via token classes only, CSS-only theme switch structure ready (DESIGN_TOKENS §2.9) `[P1]`
-- [ ] Parent/student context audit — `data-context` attribute present on layout wrappers, `parent:`/`student:` custom variant selectors functional in all applicable components `[P1]`
-- [ ] `aria-live` region audit — comprehensive list of all dynamic content areas that must have `aria-live` regions: form errors, toast notifications, feed updates, quiz scores, search results, export progress, session timers, attendance changes, GPA updates, drag reorder confirmations `[P1]`
-- [ ] Skip link audit — verify skip link present and functional on every layout (AppShell, StudentShell, AdminShell, OnboardingLayout, AuthLayout) `[P1]`
+- [x] `prefers-reduced-motion` audit — verify all animations collapse `[P1]`
+- [x] Surface hierarchy audit — verify no `1px solid` borders, only tonal shifts `[P1]`
+- [x] Token compliance audit — grep for hardcoded hex, arbitrary z-index, Tailwind default palette `[P1]`
+- [x] Dark mode architecture readiness audit — zero `dark:` Tailwind prefixes anywhere in codebase, all colors via token classes only, CSS-only theme switch structure ready (DESIGN_TOKENS §2.9) `[P1]`
+- [x] Parent/student context audit — `data-context` attribute present on layout wrappers, `parent:`/`student:` custom variant selectors functional in all applicable components `[P1]`
+- [x] `aria-live` region audit — comprehensive list of all dynamic content areas that must have `aria-live` regions: form errors, toast notifications, feed updates, quiz scores, search results, export progress, session timers, attendance changes, GPA updates, drag reorder confirmations `[P1]`
+- [x] Skip link audit — verify skip link present and functional on every layout (AppShell, StudentShell, AdminShell, OnboardingLayout, AuthLayout) `[P1]`
 - [ ] Drag-and-drop keyboard alternative audit — verify all drag interfaces have keyboard alternatives: quiz-builder, sequence-builder, portfolio-builder, schedule drag-to-schedule, calendar item reorder `[P1]`
 - [ ] Image alt text audit — verify all `<img>` elements have meaningful `alt` attributes; decorative images use `alt=""` `[P1]`
 - [ ] Print style verification for all printable pages — compliance docs, schedules, portfolios, transcripts, progress reports, calendar views `[P1]`
-- [ ] Error boundary coverage — verify all route segments have error boundaries `[P1]`
-- [ ] Loading state coverage — verify skeleton/spinner states for all async data `[P1]`
-- [ ] Empty state coverage — verify all list views have empty states with CTAs `[P1]`
+- [x] Error boundary coverage — verify all route segments have error boundaries `[P1]`
+- [x] Loading state coverage — verify skeleton/spinner states for all async data `[P1]`
+- [x] Empty state coverage — verify all list views have empty states with CTAs `[P1]`
 - [x] 404 page — friendly not-found page within AppShell `[P1]`
 - [ ] i18n string externalization audit — no hardcoded English strings in components `[P1]`
 - [ ] axe-core CI integration — Playwright + axe-core in GitHub Actions CI pipeline, zero critical/serious violations, PR comment reporting with violation details `[P1]`
@@ -1369,7 +1369,7 @@ compliance exports and admin oversight.
 
 ### Performance
 
-- [ ] Route code-splitting — verify all feature routes lazy-load `[P1]`
+- [x] Route code-splitting — verify all feature routes lazy-load `[P1]`
 - [ ] Image optimization — verify all images use appropriate formats, lazy loading `[P1]`
 - [ ] Bundle analysis — check for unexpectedly large dependencies `[P1]`
 - [ ] TanStack Query optimization — verify staleTime/gcTime tuned per query type `[P1]`
@@ -1380,11 +1380,11 @@ compliance exports and admin oversight.
 - [ ] All pages render without console errors `[P1]`
 - [ ] All interactive elements keyboard accessible `[P1]`
 - [ ] Lighthouse accessibility score ≥ 90 on all primary pages `[P1]`
-- [ ] No `any` types anywhere in codebase (search: `as any`, `: any`) `[P1]`
-- [ ] No hardcoded hex colors (search: `#[0-9a-f]`) `[P1]`
-- [ ] No `style={{ }}` inline styles `[P1]`
-- [ ] No direct `fetch()` calls outside `api/client.ts` `[P1]`
-- [ ] No TanStack Query usage outside custom hooks `[P1]`
+- [x] No `any` types anywhere in codebase (search: `as any`, `: any`) `[P1]`
+- [x] No hardcoded hex colors (search: `#[0-9a-f]`) `[P1]`
+- [x] No `style={{ }}` inline styles `[P1]`
+- [x] No direct `fetch()` calls outside `api/client.ts` `[P1]`
+- [x] No TanStack Query usage outside custom hooks `[P1]`
 - [ ] All API types from `src/api/generated/schema.ts` only `[P1]`
 - [ ] No hardcoded English strings — all user-facing text from i18n catalogs `[P1]`
 - [ ] axe-core: zero critical/serious violations `[P1]`

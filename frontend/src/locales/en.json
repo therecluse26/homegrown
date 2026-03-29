@@ -82,6 +82,9 @@
   "coppa.acknowledge": "I understand and consent to data collection for my children's accounts",
   "coppa.submit": "Give consent",
   "coppa.privacy": "Read our {privacyLink} for full details",
+  "coppa.reverify.banner": "Our Terms of Service have been updated. Because your family includes student accounts, we need you to review and re-accept the updated terms to continue.",
+  "coppa.reverify.action": "Review updated terms",
+  "coppa.reverify.dismiss": "Remind me later",
 
   "onboarding.title": "Welcome to Homegrown Academy",
   "onboarding.subtitle": "Let's set up your family profile",
@@ -305,6 +308,7 @@
   "notifications.markRead": "Mark as read",
   "notifications.managePreferences": "Manage notification preferences",
   "notifications.bell.label": "{count, plural, =0 {Notifications} one {1 unread notification} other {{count} unread notifications}}",
+  "notifications.unread.sr": "{count, plural, one {1 new notification} other {{count} new notifications}}",
   "notifications.time.justNow": "Just now",
   "notifications.time.minutes": "{count, plural, one {1 minute ago} other {{count} minutes ago}}",
   "notifications.time.hours": "{count, plural, one {1 hour ago} other {{count} hours ago}}",
@@ -509,7 +513,7 @@
   "reading.status.inProgress": "Reading",
   "reading.status.completed": "Finished",
 
-  "progress.title": "{name}'s Progress",
+  "progress.title": "{name}'s {tool}",
   "progress.noStudent": "No student selected",
   "progress.dateFrom": "From",
   "progress.dateTo": "To",
@@ -639,6 +643,9 @@
 
   "learning.streak.days": "{count}d streak",
   "learning.streak.milestone": "{days}-day milestone reached!",
+
+  "milestone.streak": "{name} hit a {days}-day learning streak!",
+  "milestone.learning": "{name} reached a new learning milestone: {type}!",
 
   "progress.exportStarted": "Export started",
 

@@ -14,6 +14,7 @@ import {
 import { InfiniteScroll } from "@/components/ui";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import { useStudents } from "@/hooks/use-family";
+import { useMethodologyContext } from "@/features/auth/methodology-provider";
 import {
   useAssessments,
   useCreateAssessment,
@@ -300,6 +301,7 @@ function ScoreDisplay({
 export function TestsAndGrades() {
   const intl = useIntl();
   const { data: students, isPending: studentsLoading } = useStudents();
+  const { toolLabel } = useMethodologyContext();
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [subjectFilter, setSubjectFilter] = useState("");
@@ -340,7 +342,7 @@ export function TestsAndGrades() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="type-headline-md text-on-surface font-semibold">
-          <FormattedMessage id="grades.title" />
+          {toolLabel("tests-grades", intl.formatMessage({ id: "grades.title" }))}
         </h1>
         <Button
           variant="primary"

@@ -1,8 +1,8 @@
-import { type ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { ArrowLeft, BookOpen, Home, Trophy } from "lucide-react";
 import { useIntl } from "react-intl";
-import { Icon } from "@/components/ui";
+import { Icon, Spinner } from "@/components/ui";
 import { SkipLink } from "@/components/common";
 
 type NavItem = {
@@ -37,7 +37,15 @@ export function StudentShell({ children }: { children?: ReactNode }) {
         </header>
         <div className="max-w-[var(--width-content)] mx-auto px-spacing-page-x">
           <main id="main-content" key={location.pathname}>
-            {children ?? <Outlet />}
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-12">
+                  <Spinner size="lg" className="text-primary" />
+                </div>
+              }
+            >
+              {children ?? <Outlet />}
+            </Suspense>
           </main>
         </div>
         <nav

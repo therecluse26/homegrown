@@ -1,22 +1,15 @@
 import { Navigate, Outlet, useLocation } from "react-router";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/api/client";
+import { useOnboardingProgress } from "@/hooks/use-onboarding";
 import { useAuthContext } from "@/features/auth/auth-provider";
 import { Spinner } from "@/components/ui";
-import type { WizardProgress } from "@/types";
 
 export function OnboardingGuard() {
   const { isAuthenticated } = useAuthContext();
   const location = useLocation();
 
-  const { data: progress, isLoading } = useQuery({
-    queryKey: ["onboarding", "progress"],
-    queryFn: () => apiClient<WizardProgress>("/v1/onboarding/progress"),
-    enabled: isAuthenticated,
-    retry: false,
-  });
+  const { data: progress, isLoading } = useOnboardingProgress();
 
-  if (isLoading) {
+  if (!isAuthenticated || isLoading) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
         <Spinner size="lg" className="text-primary" />

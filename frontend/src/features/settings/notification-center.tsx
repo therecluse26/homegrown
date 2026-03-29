@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
 import {
@@ -88,9 +89,15 @@ function formatTimeAgo(dateStr: string, intl: ReturnType<typeof useIntl>) {
 
 export function NotificationCenter() {
   const intl = useIntl();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const { data, isPending, error } = useNotifications();
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
+
+  useEffect(() => {
+    document.title = `${intl.formatMessage({ id: "notifications.title" })} — Homegrown Academy`;
+    headingRef.current?.focus();
+  }, [intl]);
 
   const notifications = data?.notifications ?? [];
   const unreadCount = data?.unread_count ?? 0;
@@ -121,7 +128,7 @@ export function NotificationCenter() {
   if (error) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="type-headline-md text-on-surface font-semibold mb-6">
+        <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold mb-6 outline-none">
           <FormattedMessage id="notifications.title" />
         </h1>
         <Card className="bg-error-container">
@@ -136,7 +143,7 @@ export function NotificationCenter() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="type-headline-md text-on-surface font-semibold">
+        <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none">
           <FormattedMessage id="notifications.title" />
         </h1>
         {unreadCount > 0 && (

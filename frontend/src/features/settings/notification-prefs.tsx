@@ -1,4 +1,5 @@
-import { FormattedMessage } from "react-intl";
+import { useEffect, useRef } from "react";
+import { FormattedMessage, useIntl } from "react-intl";
 import { Badge, Card } from "@/components/ui";
 
 const NOTIFICATION_TYPES = [
@@ -16,10 +17,18 @@ const CHANNELS = [
 ] as const;
 
 export function NotificationPrefs() {
+  const intl = useIntl();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    document.title = `${intl.formatMessage({ id: "settings.notifications.title" })} — Homegrown Academy`;
+    headingRef.current?.focus();
+  }, [intl]);
+
   return (
     <div className="mx-auto max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
-        <h1 className="type-headline-md text-on-surface font-semibold">
+        <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none">
           <FormattedMessage id="settings.notifications.title" />
         </h1>
         <Badge variant="secondary">
@@ -34,7 +43,7 @@ export function NotificationPrefs() {
       <Card>
         <table className="w-full">
           <thead>
-            <tr className="border-b border-outline-variant">
+            <tr className="border-b border-outline-variant/10">
               <th className="text-left type-label-sm text-on-surface-variant pb-3">
                 <FormattedMessage id="settings.notifications.type" />
               </th>
@@ -50,7 +59,7 @@ export function NotificationPrefs() {
           </thead>
           <tbody>
             {NOTIFICATION_TYPES.map((nt) => (
-              <tr key={nt.id} className="border-b border-outline-variant last:border-0">
+              <tr key={nt.id} className="border-b border-outline-variant/10 last:border-0">
                 <td className="py-3 type-body-sm text-on-surface">
                   <FormattedMessage id={nt.labelId} />
                 </td>

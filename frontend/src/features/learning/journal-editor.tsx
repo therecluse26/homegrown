@@ -17,11 +17,13 @@ import {
   useCreateJournalEntry,
   type JournalEntryType,
 } from "@/hooks/use-journals";
+import { useMethodologyContext } from "@/features/auth/methodology-provider";
 
 export function JournalEditor() {
   const intl = useIntl();
   const navigate = useNavigate();
   const { data: students, isPending: studentsLoading } = useStudents();
+  const { toolLabel } = useMethodologyContext();
 
   const [studentId, setStudentId] = useState("");
   const [entryType, setEntryType] = useState<JournalEntryType>("freeform");
@@ -70,7 +72,7 @@ export function JournalEditor() {
           </span>
         </Button>
         <h1 className="type-headline-md text-on-surface font-semibold">
-          <FormattedMessage id="journalEditor.title" />
+          {toolLabel("journaling", intl.formatMessage({ id: "journalEditor.title" }))}
         </h1>
       </div>
 

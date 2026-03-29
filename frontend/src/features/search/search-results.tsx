@@ -230,7 +230,7 @@ export function SearchResults() {
       </div>
 
       {/* Results */}
-      <div className="mt-6">
+      <div className="mt-6" aria-live="polite" aria-atomic="false">
         {!q && (
           <EmptyState
             illustration={<Icon icon={Search} size="xl" />}

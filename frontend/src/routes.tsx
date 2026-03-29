@@ -1,3 +1,4 @@
+import { lazy } from "react";
 import { createBrowserRouter, type RouteObject } from "react-router";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthLayout } from "@/components/layout/auth-layout";
@@ -13,104 +14,105 @@ import { RouteErrorBoundary } from "@/components/layout/route-error-boundary";
 import { NotFoundPage } from "@/components/layout/not-found-page";
 import { PlaceholderPage } from "@/components/layout/placeholder-page";
 
-// ─── Phase 5: Auth pages ───────────────────────────────────────────────────────
-import { Login } from "@/features/auth/login";
-import { Register } from "@/features/auth/register";
-import { AccountRecovery } from "@/features/auth/account-recovery";
-import { EmailVerification } from "@/features/auth/email-verification";
-import { AcceptInvitation } from "@/features/auth/accept-invitation";
+// ─── Lazy-loaded feature pages ──────────────────────────────────────────────
+// Each feature module is code-split into its own chunk via React.lazy.
+// Suspense boundaries in each shell component (AppShell, AdminShell, etc.)
+// show a spinner while the chunk loads.
 
-// ─── Phase 6: Onboarding wizard ───────────────────────────────────────────────
-import { OnboardingWizard } from "@/features/onboarding/onboarding-wizard";
+// Auth
+const Login = lazy(() => import("@/features/auth/login").then(m => ({ default: m.Login })));
+const Register = lazy(() => import("@/features/auth/register").then(m => ({ default: m.Register })));
+const AccountRecovery = lazy(() => import("@/features/auth/account-recovery").then(m => ({ default: m.AccountRecovery })));
+const EmailVerification = lazy(() => import("@/features/auth/email-verification").then(m => ({ default: m.EmailVerification })));
+const AcceptInvitation = lazy(() => import("@/features/auth/accept-invitation").then(m => ({ default: m.AcceptInvitation })));
 
-// ─── Phase 7: Settings pages ─────────────────────────────────────────────────
-import { FamilySettings } from "@/features/settings/family-settings";
-import { NotificationPrefs } from "@/features/settings/notification-prefs";
-import { SubscriptionUpgrade } from "@/features/settings/subscription-upgrade";
-import { AccountSettings } from "@/features/settings/account-settings";
-import { PrivacyControls } from "@/features/settings/privacy-controls";
-import { SessionManagement } from "@/features/settings/session-management";
-import { DataExport } from "@/features/settings/data-export";
-import { AccountDeletion } from "@/features/settings/account-deletion";
-import { StudentDeletion } from "@/features/settings/student-deletion";
-import { NotificationCenter } from "@/features/settings/notification-center";
-import { NotificationHistory } from "@/features/settings/notification-history";
+// Onboarding
+const OnboardingWizard = lazy(() => import("@/features/onboarding/onboarding-wizard").then(m => ({ default: m.OnboardingWizard })));
 
-// ─── Phase 8: Learning pages ─────────────────────────────────────────────────
-import { LearningDashboard } from "@/features/learning/learning-dashboard";
-import { ActivityLog } from "@/features/learning/activity-log";
-import { JournalList } from "@/features/learning/journal-list";
-import { JournalEditor } from "@/features/learning/journal-editor";
-import { ReadingLists } from "@/features/learning/reading-lists";
-import { ProgressView } from "@/features/learning/progress-view";
-import { QuizPlayer } from "@/features/learning/quiz-player";
-import { ParentQuizScoring } from "@/features/learning/parent-quiz-scoring";
-import { VideoPlayer } from "@/features/learning/video-player";
-import { ContentViewer } from "@/features/learning/content-viewer";
-import { SequenceView } from "@/features/learning/sequence-view";
-import { TestsAndGrades } from "@/features/learning/tests-and-grades";
-import { StudentSessionActivityLog } from "@/features/learning/student-session-activity-log";
-import { StudentSessionLauncher } from "@/features/learning/student-session-launcher";
+// Settings
+const FamilySettings = lazy(() => import("@/features/settings/family-settings").then(m => ({ default: m.FamilySettings })));
+const NotificationPrefs = lazy(() => import("@/features/settings/notification-prefs").then(m => ({ default: m.NotificationPrefs })));
+const SubscriptionUpgrade = lazy(() => import("@/features/settings/subscription-upgrade").then(m => ({ default: m.SubscriptionUpgrade })));
+const AccountSettings = lazy(() => import("@/features/settings/account-settings").then(m => ({ default: m.AccountSettings })));
+const PrivacyControls = lazy(() => import("@/features/settings/privacy-controls").then(m => ({ default: m.PrivacyControls })));
+const SessionManagement = lazy(() => import("@/features/settings/session-management").then(m => ({ default: m.SessionManagement })));
+const DataExport = lazy(() => import("@/features/settings/data-export").then(m => ({ default: m.DataExport })));
+const AccountDeletion = lazy(() => import("@/features/settings/account-deletion").then(m => ({ default: m.AccountDeletion })));
+const StudentDeletion = lazy(() => import("@/features/settings/student-deletion").then(m => ({ default: m.StudentDeletion })));
+const NotificationCenter = lazy(() => import("@/features/settings/notification-center").then(m => ({ default: m.NotificationCenter })));
+const NotificationHistory = lazy(() => import("@/features/settings/notification-history").then(m => ({ default: m.NotificationHistory })));
+const ModerationAppeals = lazy(() => import("@/features/settings/moderation-appeals").then(m => ({ default: m.ModerationAppeals })));
+const BlockManagement = lazy(() => import("@/features/settings/block-management").then(m => ({ default: m.BlockManagement })));
 
-// ─── Phase 8: Student pages ─────────────────────────────────────────────────
-import { StudentDashboard as StudentDashboardPage } from "@/features/student/student-dashboard";
-import { StudentQuiz } from "@/features/student/student-quiz";
-import { StudentVideo } from "@/features/student/student-video";
-import { StudentReader } from "@/features/student/student-reader";
-import { StudentSequence } from "@/features/student/student-sequence";
+// Learning
+const LearningDashboard = lazy(() => import("@/features/learning/learning-dashboard").then(m => ({ default: m.LearningDashboard })));
+const ActivityLog = lazy(() => import("@/features/learning/activity-log").then(m => ({ default: m.ActivityLog })));
+const JournalList = lazy(() => import("@/features/learning/journal-list").then(m => ({ default: m.JournalList })));
+const JournalEditor = lazy(() => import("@/features/learning/journal-editor").then(m => ({ default: m.JournalEditor })));
+const ReadingLists = lazy(() => import("@/features/learning/reading-lists").then(m => ({ default: m.ReadingLists })));
+const ProgressView = lazy(() => import("@/features/learning/progress-view").then(m => ({ default: m.ProgressView })));
+const QuizPlayer = lazy(() => import("@/features/learning/quiz-player").then(m => ({ default: m.QuizPlayer })));
+const ParentQuizScoring = lazy(() => import("@/features/learning/parent-quiz-scoring").then(m => ({ default: m.ParentQuizScoring })));
+const VideoPlayer = lazy(() => import("@/features/learning/video-player").then(m => ({ default: m.VideoPlayer })));
+const ContentViewer = lazy(() => import("@/features/learning/content-viewer").then(m => ({ default: m.ContentViewer })));
+const SequenceView = lazy(() => import("@/features/learning/sequence-view").then(m => ({ default: m.SequenceView })));
+const TestsAndGrades = lazy(() => import("@/features/learning/tests-and-grades").then(m => ({ default: m.TestsAndGrades })));
+const StudentSessionActivityLog = lazy(() => import("@/features/learning/student-session-activity-log").then(m => ({ default: m.StudentSessionActivityLog })));
+const StudentSessionLauncher = lazy(() => import("@/features/learning/student-session-launcher").then(m => ({ default: m.StudentSessionLauncher })));
 
-// ─── Phase 9: Social pages ──────────────────────────────────────────────────
-import { Feed } from "@/features/social/feed";
-import { FriendsList } from "@/features/social/friends-list";
-import { FriendDiscovery } from "@/features/social/friend-discovery";
-import { DirectMessages } from "@/features/social/direct-messages";
-import { Conversation as ConversationPage } from "@/features/social/conversation";
-import { GroupsList } from "@/features/social/groups-list";
-import { GroupDetail } from "@/features/social/group-detail";
-import { EventsList } from "@/features/social/events-list";
-import { EventCreation } from "@/features/social/event-creation";
-import { EventDetail } from "@/features/social/event-detail";
-import { FamilyProfile } from "@/features/social/family-profile";
-import { PostDetail } from "@/features/social/post-detail";
+// Student
+const StudentDashboardPage = lazy(() => import("@/features/student/student-dashboard").then(m => ({ default: m.StudentDashboard })));
+const StudentQuiz = lazy(() => import("@/features/student/student-quiz").then(m => ({ default: m.StudentQuiz })));
+const StudentVideo = lazy(() => import("@/features/student/student-video").then(m => ({ default: m.StudentVideo })));
+const StudentReader = lazy(() => import("@/features/student/student-reader").then(m => ({ default: m.StudentReader })));
+const StudentSequence = lazy(() => import("@/features/student/student-sequence").then(m => ({ default: m.StudentSequence })));
 
-// ─── Phase 9: Marketplace pages ────────────────────────────────────────────
-import { MarketplaceBrowse } from "@/features/marketplace/marketplace-browse";
-import { ListingDetail } from "@/features/marketplace/listing-detail";
-import { Cart } from "@/features/marketplace/cart";
-import { PurchaseHistory } from "@/features/marketplace/purchase-history";
-import { RefundRequest } from "@/features/marketplace/refund-request";
-import { CreatorDashboard } from "@/features/marketplace/creator/creator-dashboard";
-import { CreateListing } from "@/features/marketplace/creator/create-listing";
-import { EditListing } from "@/features/marketplace/creator/edit-listing";
-import { QuizBuilder } from "@/features/marketplace/creator/quiz-builder";
-import { SequenceBuilder } from "@/features/marketplace/creator/sequence-builder";
+// Social
+const Feed = lazy(() => import("@/features/social/feed").then(m => ({ default: m.Feed })));
+const FriendsList = lazy(() => import("@/features/social/friends-list").then(m => ({ default: m.FriendsList })));
+const FriendDiscovery = lazy(() => import("@/features/social/friend-discovery").then(m => ({ default: m.FriendDiscovery })));
+const DirectMessages = lazy(() => import("@/features/social/direct-messages").then(m => ({ default: m.DirectMessages })));
+const ConversationPage = lazy(() => import("@/features/social/conversation").then(m => ({ default: m.Conversation })));
+const GroupsList = lazy(() => import("@/features/social/groups-list").then(m => ({ default: m.GroupsList })));
+const GroupDetail = lazy(() => import("@/features/social/group-detail").then(m => ({ default: m.GroupDetail })));
+const EventsList = lazy(() => import("@/features/social/events-list").then(m => ({ default: m.EventsList })));
+const EventCreation = lazy(() => import("@/features/social/event-creation").then(m => ({ default: m.EventCreation })));
+const EventDetail = lazy(() => import("@/features/social/event-detail").then(m => ({ default: m.EventDetail })));
+const FamilyProfile = lazy(() => import("@/features/social/family-profile").then(m => ({ default: m.FamilyProfile })));
+const PostDetail = lazy(() => import("@/features/social/post-detail").then(m => ({ default: m.PostDetail })));
 
-// ─── Phase 9: Search pages ──────────────────────────────────────────────────
-import { SearchResults } from "@/features/search/search-results";
+// Marketplace
+const MarketplaceBrowse = lazy(() => import("@/features/marketplace/marketplace-browse").then(m => ({ default: m.MarketplaceBrowse })));
+const ListingDetail = lazy(() => import("@/features/marketplace/listing-detail").then(m => ({ default: m.ListingDetail })));
+const Cart = lazy(() => import("@/features/marketplace/cart").then(m => ({ default: m.Cart })));
+const PurchaseHistory = lazy(() => import("@/features/marketplace/purchase-history").then(m => ({ default: m.PurchaseHistory })));
+const RefundRequest = lazy(() => import("@/features/marketplace/refund-request").then(m => ({ default: m.RefundRequest })));
+const CreatorDashboard = lazy(() => import("@/features/marketplace/creator/creator-dashboard").then(m => ({ default: m.CreatorDashboard })));
+const CreateListing = lazy(() => import("@/features/marketplace/creator/create-listing").then(m => ({ default: m.CreateListing })));
+const EditListing = lazy(() => import("@/features/marketplace/creator/edit-listing").then(m => ({ default: m.EditListing })));
+const QuizBuilder = lazy(() => import("@/features/marketplace/creator/quiz-builder").then(m => ({ default: m.QuizBuilder })));
+const SequenceBuilder = lazy(() => import("@/features/marketplace/creator/sequence-builder").then(m => ({ default: m.SequenceBuilder })));
 
-// ─── Phase 9: Admin pages ──────────────────────────────────────────────────
-import { AdminDashboard } from "@/features/admin/admin-dashboard";
-import { UserManagement } from "@/features/admin/user-management";
-import { UserDetail } from "@/features/admin/user-detail";
-import { ModerationQueue } from "@/features/admin/moderation-queue";
-import { AuditLog } from "@/features/admin/audit-log";
+// Search
+const SearchResults = lazy(() => import("@/features/search/search-results").then(m => ({ default: m.SearchResults })));
 
-// ─── Phase 9: Settings additions ────────────────────────────────────────────
-import { ModerationAppeals } from "@/features/settings/moderation-appeals";
-import { BlockManagement } from "@/features/settings/block-management";
+// Admin
+const AdminDashboard = lazy(() => import("@/features/admin/admin-dashboard").then(m => ({ default: m.AdminDashboard })));
+const UserManagement = lazy(() => import("@/features/admin/user-management").then(m => ({ default: m.UserManagement })));
+const UserDetail = lazy(() => import("@/features/admin/user-detail").then(m => ({ default: m.UserDetail })));
+const ModerationQueue = lazy(() => import("@/features/admin/moderation-queue").then(m => ({ default: m.ModerationQueue })));
+const AuditLog = lazy(() => import("@/features/admin/audit-log").then(m => ({ default: m.AuditLog })));
 
-// ─── Phase 10: Planning pages ──────────────────────────────────────────────
-import { CalendarView } from "@/features/planning/calendar-view";
-import { ScheduleEditor } from "@/features/planning/schedule-editor";
+// Planning
+const CalendarView = lazy(() => import("@/features/planning/calendar-view").then(m => ({ default: m.CalendarView })));
+const ScheduleEditor = lazy(() => import("@/features/planning/schedule-editor").then(m => ({ default: m.ScheduleEditor })));
 
-// ─── Phase 5: Legal pages ─────────────────────────────────────────────────────
-import { TermsOfService } from "@/features/legal/terms-of-service";
-import { PrivacyPolicy } from "@/features/legal/privacy-policy";
-import { CommunityGuidelines } from "@/features/legal/community-guidelines";
+// Legal
+const TermsOfService = lazy(() => import("@/features/legal/terms-of-service").then(m => ({ default: m.TermsOfService })));
+const PrivacyPolicy = lazy(() => import("@/features/legal/privacy-policy").then(m => ({ default: m.PrivacyPolicy })));
+const CommunityGuidelines = lazy(() => import("@/features/legal/community-guidelines").then(m => ({ default: m.CommunityGuidelines })));
 
 // ─── Lazy placeholder factory ────────────────────────────────────────────────
-// Each domain page will be replaced with a real lazy(() => import(...)) as it's built.
-// For now, every route gets a lightweight placeholder with the correct page title.
 function p(title: string) {
   return { element: <PlaceholderPage title={title} /> };
 }

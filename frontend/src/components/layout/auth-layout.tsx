@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 import { Outlet, Link } from "react-router";
 import { useIntl } from "react-intl";
 import { SkipLink } from "@/components/common";
@@ -39,7 +39,9 @@ export function AuthLayout({ children }: { children?: ReactNode }) {
 
           {/* Card */}
           <div className="bg-surface-container-lowest rounded-2xl p-8 shadow-ambient-sm space-y-6">
-            {children ?? <Outlet />}
+            <Suspense fallback={null}>
+              {children ?? <Outlet />}
+            </Suspense>
           </div>
         </div>
       </div>

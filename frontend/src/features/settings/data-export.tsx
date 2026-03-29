@@ -17,6 +17,7 @@ import {
   useRequestExport,
   type ExportFormat,
 } from "@/hooks/use-data-lifecycle";
+import { PageTitle } from "@/components/common/page-title";
 
 const EXPORT_DOMAINS = [
   { id: "learning", labelId: "dataExport.domain.learning" },
@@ -95,12 +96,11 @@ export function DataExport() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="type-headline-md text-on-surface font-semibold mb-2">
-        <FormattedMessage id="dataExport.title" />
-      </h1>
-      <p className="type-body-md text-on-surface-variant mb-6">
-        <FormattedMessage id="dataExport.description" />
-      </p>
+      <PageTitle
+        title={intl.formatMessage({ id: "dataExport.title" })}
+        subtitle={intl.formatMessage({ id: "dataExport.description" })}
+        className="mb-6"
+      />
 
       {/* Request new export */}
       <Card className="mb-6">
