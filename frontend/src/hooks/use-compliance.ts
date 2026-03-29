@@ -81,6 +81,167 @@ export interface ComplianceAssessment {
   date: string;
 }
 
+// ─── Portfolio Types ─────────────────────────────────────────────────────────
+
+export type PortfolioStatus = "draft" | "generating" | "ready";
+export type PortfolioOrganization = "chronological" | "by_subject" | "by_type";
+
+export interface PortfolioSummary {
+  id: string;
+  student_id: string;
+  student_name: string;
+  title: string;
+  status: PortfolioStatus;
+  date_range_start: string;
+  date_range_end: string;
+  item_count: number;
+  download_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioDetail {
+  id: string;
+  student_id: string;
+  student_name: string;
+  title: string;
+  status: PortfolioStatus;
+  date_range_start: string;
+  date_range_end: string;
+  organization: PortfolioOrganization;
+  cover_student_name?: string;
+  cover_date_range?: string;
+  items: PortfolioItem[];
+  download_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioItem {
+  id: string;
+  item_type: "work_sample" | "assessment" | "attendance" | "journal" | "activity";
+  title: string;
+  subject?: string;
+  date: string;
+  source_id: string;
+  sort_order: number;
+}
+
+export interface PortfolioItemCandidate {
+  id: string;
+  item_type: PortfolioItem["item_type"];
+  title: string;
+  subject?: string;
+  date: string;
+}
+
+export interface CreatePortfolioInput {
+  student_id: string;
+  title: string;
+  date_range_start: string;
+  date_range_end: string;
+  organization: PortfolioOrganization;
+  cover_student_name?: string;
+  cover_date_range?: string;
+}
+
+export interface UpdatePortfolioInput {
+  title?: string;
+  organization?: PortfolioOrganization;
+  cover_student_name?: string;
+  cover_date_range?: string;
+  items?: { source_id: string; item_type: PortfolioItem["item_type"]; sort_order: number }[];
+}
+
+// ─── Transcript Types ────────────────────────────────────────────────────────
+
+export type TranscriptStatus = "draft" | "generating" | "ready";
+export type CourseLevel = "regular" | "honors" | "ap" | "dual_enrollment";
+export type GpaDisplay = "four_point" | "percentage" | "pass_fail";
+
+export interface TranscriptSummary {
+  id: string;
+  student_id: string;
+  student_name: string;
+  title: string;
+  status: TranscriptStatus;
+  semester_count: number;
+  total_credits: number;
+  cumulative_gpa?: number;
+  download_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TranscriptDetail {
+  id: string;
+  student_id: string;
+  student_name: string;
+  title: string;
+  status: TranscriptStatus;
+  gpa_display: GpaDisplay;
+  semesters: TranscriptSemester[];
+  cumulative_gpa?: number;
+  total_credits: number;
+  download_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TranscriptSemester {
+  id: string;
+  name: string;
+  sort_order: number;
+  courses: TranscriptCourse[];
+  semester_gpa?: number;
+  semester_credits: number;
+}
+
+export interface TranscriptCourse {
+  id: string;
+  title: string;
+  subject?: string;
+  level: CourseLevel;
+  credits: number;
+  grade: string;
+  grade_points?: number;
+  sort_order: number;
+}
+
+export interface CreateTranscriptInput {
+  student_id: string;
+  title: string;
+  gpa_display?: GpaDisplay;
+}
+
+export interface UpdateTranscriptInput {
+  title?: string;
+  gpa_display?: GpaDisplay;
+}
+
+export interface AddSemesterInput {
+  name: string;
+  sort_order: number;
+}
+
+export interface AddCourseInput {
+  semester_id: string;
+  title: string;
+  subject?: string;
+  level: CourseLevel;
+  credits: number;
+  grade: string;
+  sort_order: number;
+}
+
+export interface UpdateCourseInput {
+  title?: string;
+  subject?: string;
+  level?: CourseLevel;
+  credits?: number;
+  grade?: string;
+}
+
 // ─── Queries ────────────────────────────────────────────────────────────────
 
 export function useStateRequirements(stateCode: string | undefined) {
@@ -224,6 +385,277 @@ export function useLinkAssessment() {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["compliance", "assessments"],
+      });
+    },
+  });
+}
+
+// ─── Portfolio Queries & Mutations ──────────────────────────────────────────
+
+export function usePortfolios(studentId?: string) {
+  return useQuery({
+    queryKey: ["compliance", "portfolios", studentId],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (studentId) params.set("student_id", studentId);
+      const qs = params.toString();
+      return apiClient<PortfolioSummary[]>(
+        `/v1/compliance/portfolios${qs ? `?${qs}` : ""}`,
+      );
+    },
+    staleTime: 1000 * 60,
+  });
+}
+
+export function usePortfolioDetail(id: string | undefined) {
+  return useQuery({
+    queryKey: ["compliance", "portfolios", id],
+    queryFn: () =>
+      apiClient<PortfolioDetail>(
+        `/v1/compliance/portfolios/${id ?? ""}`,
+      ),
+    enabled: !!id,
+    staleTime: 1000 * 30,
+  });
+}
+
+export function usePortfolioItemCandidates(params: {
+  student_id: string;
+  date_range_start: string;
+  date_range_end: string;
+  item_type?: PortfolioItem["item_type"];
+}) {
+  return useQuery({
+    queryKey: ["compliance", "portfolios", "candidates", params],
+    queryFn: () => {
+      const searchParams = new URLSearchParams();
+      searchParams.set("student_id", params.student_id);
+      searchParams.set("start", params.date_range_start);
+      searchParams.set("end", params.date_range_end);
+      if (params.item_type) searchParams.set("type", params.item_type);
+      return apiClient<PortfolioItemCandidate[]>(
+        `/v1/compliance/portfolios/candidates?${searchParams.toString()}`,
+      );
+    },
+    enabled: !!params.student_id && !!params.date_range_start && !!params.date_range_end,
+    staleTime: 1000 * 60,
+  });
+}
+
+export function useCreatePortfolio() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreatePortfolioInput) =>
+      apiClient<PortfolioSummary>("/v1/compliance/portfolios", {
+        method: "POST",
+        body,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "portfolios"],
+      });
+    },
+  });
+}
+
+export function useUpdatePortfolio(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdatePortfolioInput) =>
+      apiClient<PortfolioDetail>(
+        `/v1/compliance/portfolios/${id}`,
+        { method: "PATCH", body },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "portfolios"],
+      });
+    },
+  });
+}
+
+export function useGeneratePortfolio(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient<{ status: PortfolioStatus }>(
+        `/v1/compliance/portfolios/${id}/generate`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "portfolios", id],
+      });
+    },
+  });
+}
+
+export function useDeletePortfolio() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient<void>(`/v1/compliance/portfolios/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "portfolios"],
+      });
+    },
+  });
+}
+
+// ─── Transcript Queries & Mutations ─────────────────────────────────────────
+
+export function useTranscripts(studentId?: string) {
+  return useQuery({
+    queryKey: ["compliance", "transcripts", studentId],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (studentId) params.set("student_id", studentId);
+      const qs = params.toString();
+      return apiClient<TranscriptSummary[]>(
+        `/v1/compliance/transcripts${qs ? `?${qs}` : ""}`,
+      );
+    },
+    staleTime: 1000 * 60,
+  });
+}
+
+export function useTranscriptDetail(id: string | undefined) {
+  return useQuery({
+    queryKey: ["compliance", "transcripts", id],
+    queryFn: () =>
+      apiClient<TranscriptDetail>(
+        `/v1/compliance/transcripts/${id ?? ""}`,
+      ),
+    enabled: !!id,
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useCreateTranscript() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateTranscriptInput) =>
+      apiClient<TranscriptSummary>("/v1/compliance/transcripts", {
+        method: "POST",
+        body,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts"],
+      });
+    },
+  });
+}
+
+export function useUpdateTranscript(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateTranscriptInput) =>
+      apiClient<TranscriptDetail>(
+        `/v1/compliance/transcripts/${id}`,
+        { method: "PATCH", body },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts"],
+      });
+    },
+  });
+}
+
+export function useAddSemester(transcriptId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AddSemesterInput) =>
+      apiClient<TranscriptSemester>(
+        `/v1/compliance/transcripts/${transcriptId}/semesters`,
+        { method: "POST", body },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts", transcriptId],
+      });
+    },
+  });
+}
+
+export function useAddCourse(transcriptId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AddCourseInput) =>
+      apiClient<TranscriptCourse>(
+        `/v1/compliance/transcripts/${transcriptId}/courses`,
+        { method: "POST", body },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts", transcriptId],
+      });
+    },
+  });
+}
+
+export function useUpdateCourse(transcriptId: string, courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateCourseInput) =>
+      apiClient<TranscriptCourse>(
+        `/v1/compliance/transcripts/${transcriptId}/courses/${courseId}`,
+        { method: "PATCH", body },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts", transcriptId],
+      });
+    },
+  });
+}
+
+export function useDeleteCourse(transcriptId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (courseId: string) =>
+      apiClient<void>(
+        `/v1/compliance/transcripts/${transcriptId}/courses/${courseId}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts", transcriptId],
+      });
+    },
+  });
+}
+
+export function useGenerateTranscript(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient<{ status: TranscriptStatus }>(
+        `/v1/compliance/transcripts/${id}/generate`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts", id],
+      });
+    },
+  });
+}
+
+export function useDeleteTranscript() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient<void>(`/v1/compliance/transcripts/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["compliance", "transcripts"],
       });
     },
   });

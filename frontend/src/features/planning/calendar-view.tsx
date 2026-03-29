@@ -596,13 +596,11 @@ export function CalendarView() {
           >
             <Icon icon={Download} size="sm" />
           </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => window.print()}
-          >
-            <Icon icon={Printer} size="sm" />
-          </Button>
+          <RouterLink to="/planning/print">
+            <Button variant="tertiary" size="sm">
+              <Icon icon={Printer} size="sm" />
+            </Button>
+          </RouterLink>
         </div>
       </div>
 

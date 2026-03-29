@@ -12,7 +12,6 @@ import { AdminGuard } from "@/components/layout/admin-guard";
 import { StudentGuard } from "@/components/layout/student-guard";
 import { RouteErrorBoundary } from "@/components/layout/route-error-boundary";
 import { NotFoundPage } from "@/components/layout/not-found-page";
-import { PlaceholderPage } from "@/components/layout/placeholder-page";
 
 // ─── Lazy-loaded feature pages ──────────────────────────────────────────────
 // Each feature module is code-split into its own chunk via React.lazy.
@@ -125,22 +124,23 @@ const MethodologyConfigPage = lazy(() => import("@/features/admin/methodology-co
 const CalendarView = lazy(() => import("@/features/planning/calendar-view").then(m => ({ default: m.CalendarView })));
 const ScheduleEditor = lazy(() => import("@/features/planning/schedule-editor").then(m => ({ default: m.ScheduleEditor })));
 const ScheduleTemplates = lazy(() => import("@/features/planning/schedule-templates").then(m => ({ default: m.ScheduleTemplates })));
+const SchedulePrint = lazy(() => import("@/features/planning/schedule-print").then(m => ({ default: m.SchedulePrint })));
+const CoopCoordination = lazy(() => import("@/features/planning/coop-coordination").then(m => ({ default: m.CoopCoordination })));
 
 // Compliance
 const ComplianceSetup = lazy(() => import("@/features/compliance/compliance-setup").then(m => ({ default: m.ComplianceSetup })));
 const AttendanceTracker = lazy(() => import("@/features/compliance/attendance-tracker").then(m => ({ default: m.AttendanceTracker })));
 const AssessmentRecords = lazy(() => import("@/features/compliance/assessment-records").then(m => ({ default: m.AssessmentRecords })));
 const StandardizedTests = lazy(() => import("@/features/compliance/standardized-tests").then(m => ({ default: m.StandardizedTests })));
+const PortfolioList = lazy(() => import("@/features/compliance/portfolio-list").then(m => ({ default: m.PortfolioList })));
+const PortfolioBuilder = lazy(() => import("@/features/compliance/portfolio-builder").then(m => ({ default: m.PortfolioBuilder })));
+const TranscriptList = lazy(() => import("@/features/compliance/transcript-list").then(m => ({ default: m.TranscriptList })));
+const TranscriptBuilder = lazy(() => import("@/features/compliance/transcript-builder").then(m => ({ default: m.TranscriptBuilder })));
 
 // Legal
 const TermsOfService = lazy(() => import("@/features/legal/terms-of-service").then(m => ({ default: m.TermsOfService })));
 const PrivacyPolicy = lazy(() => import("@/features/legal/privacy-policy").then(m => ({ default: m.PrivacyPolicy })));
 const CommunityGuidelines = lazy(() => import("@/features/legal/community-guidelines").then(m => ({ default: m.CommunityGuidelines })));
-
-// ─── Lazy placeholder factory ────────────────────────────────────────────────
-function p(title: string) {
-  return { element: <PlaceholderPage title={title} /> };
-}
 
 const routes: RouteObject[] = [
   // ─── Authenticated routes ──────────────────────────────────────────────────
@@ -246,8 +246,8 @@ const routes: RouteObject[] = [
               { path: "schedule/new", element: <ScheduleEditor /> },
               { path: "schedule/:itemId/edit", element: <ScheduleEditor /> },
               { path: "planning/templates", element: <ScheduleTemplates /> },
-
-
+              { path: "planning/print", element: <SchedulePrint /> },
+              { path: "planning/coop", element: <CoopCoordination /> },
 
 
               // Notifications
@@ -363,10 +363,10 @@ const routes: RouteObject[] = [
           { path: "attendance", element: <AttendanceTracker /> },
           { path: "assessments", element: <AssessmentRecords /> },
           { path: "tests", element: <StandardizedTests /> },
-          { path: "portfolios", ...p("Portfolios") },
-          { path: "portfolios/:id", ...p("Portfolio Builder") },
-          { path: "transcripts", ...p("Transcripts") },
-          { path: "transcripts/:id", ...p("Transcript Builder") },
+          { path: "portfolios", element: <PortfolioList /> },
+          { path: "portfolios/:id", element: <PortfolioBuilder /> },
+          { path: "transcripts", element: <TranscriptList /> },
+          { path: "transcripts/:id", element: <TranscriptBuilder /> },
         ],
       },
     ],

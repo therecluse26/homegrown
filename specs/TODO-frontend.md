@@ -18,7 +18,9 @@
 > creator-reviews, feature-flags, methodology-config, recommendations (cards + preferences + transparency),
 > post-edit, group-role-management, recurring-events, content-bundle-purchase, schedule-templates,
 > schedule-export.
-> **Remaining P2**: print-friendly schedule, co-op coordination view, VPAT docs, screen reader test matrix.
+> **All P2 complete.**
+> **Completed P3**: portfolio-list, portfolio-builder, transcript-list, transcript-builder.
+> **Remaining P3**: methodology-specific tools (nature journal, trivium tracker, etc.).
 > Remaining Phase 7: free tier verification (needs backend).
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
@@ -1272,10 +1274,10 @@ only happen after core features are stable. Core admin/moderation moved to Phase
   - Link assessments to compliance requirements
   - Score tracking
 - [x] `standardized-tests.tsx` — standardized test score entry form (title, test name, date, scores by section) `[P2]`
-- [ ] `portfolio-list.tsx` — portfolio management: `[P3]`
+- [x] `portfolio-list.tsx` — portfolio management: `[P3]`
   - List portfolios per student
   - Create new portfolio (select student + date range + template)
-- [ ] `portfolio-builder.tsx` — portfolio construction and PDF generation: `[P3]`
+- [x] `portfolio-builder.tsx` — portfolio construction and PDF generation: `[P3]`
   - Item selection UI with filters (by subject, date range, type)
   - Organization type selector (chronological / by-subject / by-type)
   - Drag/arrange portfolio sections (work samples, assessments, attendance) with keyboard alternative (arrow keys + Enter/Escape)
@@ -1284,8 +1286,8 @@ only happen after core features are stable. Core admin/moderation moved to Phase
   - Status lifecycle: draft → generating → ready
   - Generate + download PDF
   - Print-ready layout (uses `print.css` tokens)
-- [ ] `transcript-list.tsx` — transcript management per student `[P3]`
-- [ ] `transcript-builder.tsx` — transcript construction: `[P3]`
+- [x] `transcript-list.tsx` — transcript management per student `[P3]`
+- [x] `transcript-builder.tsx` — transcript construction: `[P3]`
   - Course entry with level selector: regular / honors / AP / dual-enrollment
   - Multi-semester tab navigation
   - Weighted GPA calculation: honors +0.5, AP/dual-enrollment +1.0 weighting
@@ -1305,9 +1307,9 @@ only happen after core features are stable. Core admin/moderation moved to Phase
   - Fields: title, description, student, date, time, duration, category enum, subject (via `<SubjectPicker>`), color, notes
   - Schedule completion checkbox + auto-log workflow: completion checkbox prompts "Log as learning activity?" → auto-creates `learn::` activity with pre-populated fields, links via `linked_activity_id` (17-planning §3.1)
 - [x] Drag-to-schedule with keyboard alternative (arrow keys + Enter to place items) `[P1]`
-- [ ] Print-friendly schedule output (separate from calendar print) `[P2]`
+- [x] Print-friendly schedule output (separate from calendar print) `[P2]`
 - [x] `schedule-templates.tsx` — recurring schedule templates (weekly patterns, methodology-specific defaults) `[P2]`
-- [ ] Co-op coordination view (shared schedules between families in a group) `[P2]`
+- [x] Co-op coordination view (shared schedules between families in a group) `[P2]`
 - [x] Schedule sharing/export (CSV, iCal formats) `[P2]`
 - References: SPEC §17, domain spec `specs/domains/17-planning.md`
 
@@ -1363,13 +1365,13 @@ compliance exports and admin oversight.
 - [x] Video caption file support verification (VTT/SRT in video player) `[P1]`
 - [x] Community guidelines page exists and linked from report dialog `[P1]`
 - [x] Error retry/offline handling — TanStack Query retry config (3× exponential backoff) + `<NetworkStatus>` banner `[P1]`
-- [ ] VPAT (Voluntary Product Accessibility Template) documentation `[P2]`
+- [x] VPAT (Voluntary Product Accessibility Template) documentation `[P2]`
 
 ### Testing Infrastructure
 
 - [x] Playwright accessibility regression test suite — covers critical user journeys (login, onboarding, activity logging, quiz taking, marketplace purchase, messaging) with axe-core assertions `[P1]`
 - [x] axe-core CI pipeline — GitHub Actions workflow running Playwright a11y tests on every PR, failure blocks merge, PR comment with violation summary and links `[P1]`
-- [ ] Screen reader test matrix documentation — document tested combinations (NVDA + Firefox, VoiceOver + Safari, JAWS + Chrome) with pass/fail per critical journey `[P2]`
+- [x] Screen reader test matrix documentation — document tested combinations (NVDA + Firefox, VoiceOver + Safari, JAWS + Chrome) with pass/fail per critical journey `[P2]`
 - [x] Image alt text automation — ESLint `jsx-a11y` rule enforcement for `img-redundant-alt`, `alt-text`, and `img-has-alt`; CI gate `[P1]`
 
 ### Performance
