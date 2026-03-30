@@ -559,7 +559,7 @@ func (s *IamServiceImpl) InviteCoParent(ctx context.Context, scope *shared.Famil
 	var invite *CoParentInvite
 	err = shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
 		var txErr error
-		invite, txErr = NewPgCoParentInviteRepository(tx).Create(ctx, scope.FamilyID(), cmd.Email, tokenHash, expiresAt)
+		invite, txErr = NewPgCoParentInviteRepository(tx).Create(ctx, scope.FamilyID(), auth.ParentID, cmd.Email, tokenHash, expiresAt)
 		return txErr
 	})
 	if err != nil {

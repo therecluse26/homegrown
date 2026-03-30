@@ -454,8 +454,9 @@ type ConsentStatusResponse struct {
 type CoParentInviteModel struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey"`
 	FamilyID  uuid.UUID `gorm:"type:uuid;not null"`
+	InvitedBy uuid.UUID `gorm:"type:uuid;not null"`
 	Email     string    `gorm:"not null"`
-	TokenHash string    `gorm:"not null"`
+	TokenHash string    `gorm:"column:token;not null"`
 	Status    string    `gorm:"not null;default:pending"`
 	ExpiresAt time.Time `gorm:"not null"`
 	CreatedAt time.Time `gorm:"not null"`

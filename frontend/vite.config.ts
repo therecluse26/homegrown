@@ -26,12 +26,13 @@ export default defineConfig({
         changeOrigin: true,
       },
       // Kratos self-service routes (browser flows, SPA AJAX)
+      // Uses KRATOS_PORT env var to switch between dev (4933) and agent (4935)
       "/self-service": {
-        target: "http://localhost:4933",
+        target: `http://localhost:${process.env.KRATOS_PORT ?? "4933"}`,
         changeOrigin: true,
       },
       "/sessions": {
-        target: "http://localhost:4933",
+        target: `http://localhost:${process.env.KRATOS_PORT ?? "4933"}`,
         changeOrigin: true,
       },
     },

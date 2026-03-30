@@ -98,3 +98,44 @@ export function useMarkAllRead() {
     },
   });
 }
+
+// ─── Notification Preferences ────────────────────────────────────────────────
+
+export interface NotificationPreference {
+  notification_type: string;
+  channel: string;
+  enabled: boolean;
+  digest_frequency: string;
+  system_critical: boolean;
+}
+
+export function useNotificationPreferences() {
+  return useQuery({
+    queryKey: ["notifications", "preferences"],
+    queryFn: () =>
+      apiClient<NotificationPreference[]>("/v1/notifications/preferences"),
+    staleTime: 1000 * 60, // 1 min — preferences rarely change
+  });
+}
+
+interface PreferenceUpdate {
+  notification_type: string;
+  channel: string;
+  enabled: boolean;
+}
+
+export function useUpdateNotificationPreferences() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (preferences: PreferenceUpdate[]) =>
+      apiClient<NotificationPreference[]>("/v1/notifications/preferences", {
+        method: "PATCH",
+        body: { preferences },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["notifications", "preferences"],
+      });
+    },
+  });
+}

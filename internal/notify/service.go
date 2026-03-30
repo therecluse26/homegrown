@@ -96,6 +96,14 @@ func (s *NotificationServiceImpl) ListNotifications(ctx context.Context, params 
 	}, nil
 }
 
+func (s *NotificationServiceImpl) GetUnreadCount(ctx context.Context, scope *shared.FamilyScope) (int64, error) {
+	count, err := s.notificationRepo.CountUnread(ctx, scope)
+	if err != nil {
+		return 0, &NotifyError{Err: fmt.Errorf("count unread: %w", err)}
+	}
+	return count, nil
+}
+
 func (s *NotificationServiceImpl) GetPreferences(ctx context.Context, scope *shared.FamilyScope) ([]PreferenceResponse, error) {
 	stored, err := s.preferenceRepo.GetAll(ctx, scope)
 	if err != nil {

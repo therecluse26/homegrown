@@ -7,15 +7,24 @@ import { apiClient } from "@/api/client";
 
 export type ExportFormat = "json" | "csv";
 
-export type ExportStatus = "pending" | "processing" | "ready" | "expired" | "failed";
+export type ExportStatus = "pending" | "processing" | "completed" | "expired" | "failed";
 
+/** Full export detail returned by the single-export status endpoint. */
 export interface ExportRequest {
   id: string;
   format: ExportFormat;
-  domains: string[];
   status: ExportStatus;
   download_url?: string;
   expires_at?: string;
+  created_at: string;
+}
+
+/** Lighter summary returned in paginated list responses. */
+export interface ExportSummary {
+  id: string;
+  status: ExportStatus;
+  format: ExportFormat;
+  size_bytes?: number;
   created_at: string;
 }
 
@@ -35,10 +44,15 @@ export interface DeletionRequest {
 
 // ─── Export Queries & Mutations ──────────────────────────────────────────────
 
+interface PaginatedExports {
+  items: ExportSummary[];
+  total: number;
+}
+
 export function useExportList() {
   return useQuery({
     queryKey: ["data", "exports"],
-    queryFn: () => apiClient<ExportRequest[]>("/v1/data/exports"),
+    queryFn: () => apiClient<PaginatedExports>("/v1/account/exports"),
     staleTime: 1000 * 30,
   });
 }
@@ -47,7 +61,7 @@ export function useExportStatus(exportId: string | undefined) {
   return useQuery({
     queryKey: ["data", "exports", exportId],
     queryFn: () =>
-      apiClient<ExportRequest>(`/v1/data/exports/${exportId ?? ""}`),
+      apiClient<ExportRequest>(`/v1/account/export/${exportId ?? ""}`),
     enabled: !!exportId,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
@@ -62,9 +76,9 @@ export function useRequestExport() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (params: { format: ExportFormat; domains: string[] }) =>
-      apiClient<ExportRequest>("/v1/data/exports", {
+      apiClient<{ export_id: string; status: string }>("/v1/account/export", {
         method: "POST",
-        body: params,
+        body: { format: params.format, include_domains: params.domains },
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["data", "exports"] });
@@ -78,7 +92,7 @@ export function useDeletionStatus() {
   return useQuery({
     queryKey: ["data", "deletion"],
     queryFn: () =>
-      apiClient<DeletionRequest>("/v1/families/deletion-request"),
+      apiClient<DeletionRequest>("/v1/account/deletion"),
     staleTime: 1000 * 60,
     // Return a default "none" state if the endpoint 404s (no pending request)
     retry: (failureCount, error) => {
@@ -93,7 +107,7 @@ export function useRequestDeletion() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiClient<void>("/v1/families/deletion-request", { method: "POST" }),
+      apiClient<void>("/v1/account/deletion", { method: "POST" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["data", "deletion"] });
     },
@@ -104,7 +118,7 @@ export function useCancelDeletion() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiClient<void>("/v1/families/deletion-request", { method: "DELETE" }),
+      apiClient<void>("/v1/account/deletion", { method: "DELETE" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["data", "deletion"] });
     },

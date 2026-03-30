@@ -11,7 +11,7 @@ import {
   Skeleton,
   Spinner,
 } from "@/components/ui";
-import { Download, FileDown, Clock, CheckCircle, XCircle } from "lucide-react";
+import { FileDown, Clock, CheckCircle, XCircle } from "lucide-react";
 import {
   useExportList,
   useRequestExport,
@@ -29,11 +29,11 @@ const EXPORT_DOMAINS = [
 
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
-    case "ready":
+    case "completed":
       return (
         <Badge variant="primary">
           <Icon icon={CheckCircle} size="xs" aria-hidden className="mr-1" />
-          <FormattedMessage id="dataExport.status.ready" />
+          <FormattedMessage id="dataExport.status.completed" />
         </Badge>
       );
     case "processing":
@@ -178,39 +178,24 @@ export function DataExport() {
           <Skeleton height="h-16" />
           <Skeleton height="h-16" />
         </div>
-      ) : !exportList.data || exportList.data.length === 0 ? (
+      ) : !exportList.data?.items?.length ? (
         <EmptyState
           message={intl.formatMessage({ id: "dataExport.history.empty" })}
         />
       ) : (
         <ul className="flex flex-col gap-2" role="list" aria-live="polite">
-          {exportList.data.map((exp) => (
+          {exportList.data.items.map((exp) => (
             <li key={exp.id}>
               <Card className="flex items-center justify-between">
                 <div>
                   <p className="type-body-sm text-on-surface">
-                    {exp.format.toUpperCase()} —{" "}
-                    {exp.domains.join(", ")}
+                    {exp.format.toUpperCase()}
                   </p>
                   <p className="type-label-sm text-on-surface-variant">
                     {new Date(exp.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={exp.status} />
-                  {exp.status === "ready" && exp.download_url && (
-                    <a
-                      href={exp.download_url}
-                      download
-                      className="p-2 rounded-radius-button text-primary hover:bg-primary-container transition-colors touch-target"
-                      aria-label={intl.formatMessage({
-                        id: "dataExport.download",
-                      })}
-                    >
-                      <Icon icon={Download} size="sm" aria-hidden />
-                    </a>
-                  )}
-                </div>
+                <StatusBadge status={exp.status} />
               </Card>
             </li>
           ))}

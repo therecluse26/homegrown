@@ -80,6 +80,9 @@ type NotificationService interface {
 	// ListNotifications returns a paginated notification list with unread count.
 	ListNotifications(ctx context.Context, params NotificationListParams, scope *shared.FamilyScope) (*NotificationListResponse, error)
 
+	// GetUnreadCount returns the number of unread notifications for the family.
+	GetUnreadCount(ctx context.Context, scope *shared.FamilyScope) (int64, error)
+
 	// GetPreferences returns the full type x channel preference matrix with defaults applied.
 	GetPreferences(ctx context.Context, scope *shared.FamilyScope) ([]PreferenceResponse, error)
 }

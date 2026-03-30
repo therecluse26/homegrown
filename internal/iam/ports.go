@@ -206,7 +206,7 @@ type StudentRepository interface {
 // CoParentInviteRepository defines persistence for co-parent invites. [CODING §8.2]
 type CoParentInviteRepository interface {
 	// Create inserts a new invite record. NOT family-scoped (token generated server-side). [§5]
-	Create(ctx context.Context, familyID uuid.UUID, email, tokenHash string, expiresAt time.Time) (*CoParentInvite, error)
+	Create(ctx context.Context, familyID, invitedBy uuid.UUID, email, tokenHash string, expiresAt time.Time) (*CoParentInvite, error)
 
 	// FindByID finds an invite by ID. Family-scoped.
 	FindByID(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) (*CoParentInvite, error)

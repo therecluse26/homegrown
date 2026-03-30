@@ -357,9 +357,10 @@ func NewPgCoParentInviteRepository(db *gorm.DB) *PgCoParentInviteRepository {
 	return &PgCoParentInviteRepository{db: db}
 }
 
-func (r *PgCoParentInviteRepository) Create(ctx context.Context, familyID uuid.UUID, email, tokenHash string, expiresAt time.Time) (*CoParentInvite, error) {
+func (r *PgCoParentInviteRepository) Create(ctx context.Context, familyID, invitedBy uuid.UUID, email, tokenHash string, expiresAt time.Time) (*CoParentInvite, error) {
 	model := &CoParentInviteModel{
 		FamilyID:  familyID,
+		InvitedBy: invitedBy,
 		Email:     email,
 		TokenHash: tokenHash,
 		Status:    "pending",

@@ -26,6 +26,7 @@ func (h *Handler) Register(authGroup *echo.Group, publicGroup *echo.Group) {
 
 	// Notification Feed
 	n.GET("", h.listNotifications)
+	n.GET("/unread-count", h.getUnreadCount)
 	n.PATCH("/:id/read", h.markRead)
 	n.PATCH("/read-all", h.markAllRead)
 
@@ -54,6 +55,20 @@ func (h *Handler) listNotifications(c echo.Context) error {
 		return mapNotifyError(err)
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+// getUnreadCount handles GET /v1/notifications/unread-count. [08-notify §4.1]
+func (h *Handler) getUnreadCount(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+
+	count, err := h.svc.GetUnreadCount(c.Request().Context(), &scope)
+	if err != nil {
+		return mapNotifyError(err)
+	}
+	return c.JSON(http.StatusOK, map[string]int64{"count": count})
 }
 
 // markRead handles PATCH /v1/notifications/:id/read. [08-notify §4.1]

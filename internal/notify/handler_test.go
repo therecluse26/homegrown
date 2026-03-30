@@ -59,6 +59,7 @@ type handlerMockService struct {
 	processUnsubscribeFn   func(ctx context.Context, token string) error
 	generateUnsubscribeFn  func(familyID uuid.UUID, notificationType string, channel string) (string, error)
 	createNotificationFn   func(ctx context.Context, cmd CreateNotificationCommand) error
+	getUnreadCountFn       func(ctx context.Context, scope *shared.FamilyScope) (int64, error)
 }
 
 func newHandlerMockService() *handlerMockService { return &handlerMockService{} }
@@ -110,6 +111,12 @@ func (m *handlerMockService) CreateNotification(ctx context.Context, cmd CreateN
 		return m.createNotificationFn(ctx, cmd)
 	}
 	panic("CreateNotification not stubbed")
+}
+func (m *handlerMockService) GetUnreadCount(ctx context.Context, scope *shared.FamilyScope) (int64, error) {
+	if m.getUnreadCountFn != nil {
+		return m.getUnreadCountFn(ctx, scope)
+	}
+	return 0, nil
 }
 func (m *handlerMockService) SendEmail(_ context.Context, _ SendEmailCommand) error {
 	return nil

@@ -348,7 +348,7 @@
   "dataExport.history": "Past exports",
   "dataExport.history.empty": "No previous exports",
   "dataExport.download": "Download export",
-  "dataExport.status.ready": "Ready",
+  "dataExport.status.completed": "Completed",
   "dataExport.status.processing": "Processing",
   "dataExport.status.expired": "Expired",
   "dataExport.status.failed": "Failed",
