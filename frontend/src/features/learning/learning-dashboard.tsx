@@ -10,6 +10,14 @@ import {
   Plus,
   Flame,
   Trophy,
+  Leaf,
+  Columns3,
+  Music,
+  Eye,
+  Heart,
+  Lightbulb,
+  Scissors,
+  Home,
 } from "lucide-react";
 import {
   Button,
@@ -156,13 +164,38 @@ function QuickAction({
   );
 }
 
+// ─── Methodology-specific tool definitions ────────────────────────────────────
+
+const METHODOLOGY_TOOLS: Record<string, { icon: typeof Leaf; labelId: string; to: string }[]> = {
+  "charlotte-mason": [
+    { icon: Leaf,     labelId: "methodologyTools.natureJournal.title",   to: "/learning/nature-journal" },
+    { icon: Heart,    labelId: "methodologyTools.habitTracking.title",    to: "/learning/habit-tracking" },
+  ],
+  "classical": [
+    { icon: Columns3, labelId: "methodologyTools.triviumTracker.title",  to: "/learning/trivium-tracker" },
+  ],
+  "waldorf": [
+    { icon: Music,    labelId: "methodologyTools.rhythmPlanner.title",   to: "/learning/rhythm-planner" },
+    { icon: Scissors, labelId: "methodologyTools.handworkProjects.title",to: "/learning/handwork-projects" },
+  ],
+  "montessori": [
+    { icon: Eye,      labelId: "methodologyTools.observationLogs.title", to: "/learning/observation-logs" },
+    { icon: Home,     labelId: "methodologyTools.practicalLife.title",   to: "/learning/practical-life" },
+  ],
+  "unschooling": [
+    { icon: Lightbulb,labelId: "methodologyTools.interestLedLog.title",  to: "/learning/interest-led-log" },
+  ],
+};
+
 // ─── Main dashboard ─────────────────────────────────────────────────────────
 
 export function LearningDashboard() {
   const intl = useIntl();
   const { tier } = useAuth();
   const { data: students, isPending: studentsLoading } = useStudents();
-  const { toolLabel } = useMethodologyContext();
+  const { toolLabel, primarySlug } = useMethodologyContext();
+
+  const methodologyTools = primarySlug ? (METHODOLOGY_TOOLS[primarySlug] ?? []) : [];
 
   return (
     <div className="mx-auto max-w-content-narrow space-y-8">
@@ -211,6 +244,25 @@ export function LearningDashboard() {
           />
         </div>
       </section>
+
+      {/* Methodology-specific tools */}
+      {methodologyTools.length > 0 && (
+        <section aria-label={intl.formatMessage({ id: "methodologyTools.dashboard.title" })}>
+          <h2 className="type-title-md text-on-surface font-semibold mb-4">
+            <FormattedMessage id="methodologyTools.dashboard.title" />
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {methodologyTools.map(tool => (
+              <QuickAction
+                key={tool.to}
+                icon={tool.icon}
+                label={intl.formatMessage({ id: tool.labelId })}
+                to={tool.to}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Methodology guidance */}
       <ParentEducationPanel

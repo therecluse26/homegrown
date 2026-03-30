@@ -19,8 +19,10 @@
 > post-edit, group-role-management, recurring-events, content-bundle-purchase, schedule-templates,
 > schedule-export.
 > **All P2 complete.**
-> **Completed P3**: portfolio-list, portfolio-builder, transcript-list, transcript-builder.
-> **Remaining P3**: methodology-specific tools (nature journal, trivium tracker, etc.).
+> **Completed P3**: portfolio-list, portfolio-builder, transcript-list, transcript-builder,
+> nature-journal, trivium-tracker, rhythm-planner, observation-logs, habit-tracking,
+> interest-led-log, handwork-projects, practical-life.
+> **All P3 complete.**
 > Remaining Phase 7: free tier verification (needs backend).
 >
 > **Out of Scope**: The Discovery domain (methodology quiz, explorer pages, state
@@ -435,6 +437,14 @@ a layout and depends on auth state. This is the app skeleton.
     /learning/video/:videoId → VideoPlayer
     /learning/read/:contentId → ContentViewer
     /learning/sequence/:progressId → SequenceView
+    /learning/nature-journal → NatureJournal
+    /learning/trivium-tracker → TriviumTracker
+    /learning/rhythm-planner → RhythmPlanner
+    /learning/observation-logs → ObservationLogs
+    /learning/habit-tracking → HabitTracking
+    /learning/interest-led-log → InterestLedLog
+    /learning/handwork-projects → HandworkProjects
+    /learning/practical-life → PracticalLife
     /marketplace → MarketplaceBrowse
     /marketplace/listings/:id → ListingDetail
     /marketplace/cart → Cart
@@ -1004,14 +1014,14 @@ and family management from prior phases.
 
 These tools are methodology-specific extensions. Listed here as `[P3]` placeholders to ensure they are tracked:
 
-- [ ] Nature journal (Charlotte Mason) — `observation_type`, species, weather, drawing/photo upload `[P3]`
-- [ ] Trivium tracker (Classical) — grammar/logic/rhetoric stage tracking per subject `[P3]`
-- [ ] Rhythm planner (Waldorf) — day-of-week time blocks, rhythm templates `[P3]`
-- [ ] Observation logs (Montessori) — work chosen, duration, concentration level `[P3]`
-- [ ] Habit tracking (Charlotte Mason) — habit goals, streaks, parent notes `[P3]`
-- [ ] Interest-led activity log (Unschooling) — auto-tagging activities to subjects `[P3]`
-- [ ] Handwork project tracker (Waldorf) — materials, techniques, photos `[P3]`
-- [ ] Practical life activities (Montessori) — life skill categories, mastery levels `[P3]`
+- [x] Nature journal (Charlotte Mason) — `observation_type`, species, weather, drawing/photo upload `[P3]`
+- [x] Trivium tracker (Classical) — grammar/logic/rhetoric stage tracking per subject `[P3]`
+- [x] Rhythm planner (Waldorf) — day-of-week time blocks, rhythm templates `[P3]`
+- [x] Observation logs (Montessori) — work chosen, duration, concentration level `[P3]`
+- [x] Habit tracking (Charlotte Mason) — habit goals, streaks, parent notes `[P3]`
+- [x] Interest-led activity log (Unschooling) — auto-tagging activities to subjects `[P3]`
+- [x] Handwork project tracker (Waldorf) — materials, techniques, photos `[P3]`
+- [x] Practical life activities (Montessori) — life skill categories, mastery levels `[P3]`
 
 ### Verification
 

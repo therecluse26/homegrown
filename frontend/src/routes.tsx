@@ -63,6 +63,14 @@ const StudentSessionActivityLog = lazy(() => import("@/features/learning/student
 const StudentSessionLauncher = lazy(() => import("@/features/learning/student-session-launcher").then(m => ({ default: m.StudentSessionLauncher })));
 const Projects = lazy(() => import("@/features/learning/projects").then(m => ({ default: m.Projects })));
 const ToolAssignment = lazy(() => import("@/features/learning/tool-assignment").then(m => ({ default: m.ToolAssignment })));
+const NatureJournal = lazy(() => import("@/features/learning/nature-journal").then(m => ({ default: m.NatureJournal })));
+const TriviumTracker = lazy(() => import("@/features/learning/trivium-tracker").then(m => ({ default: m.TriviumTracker })));
+const RhythmPlanner = lazy(() => import("@/features/learning/rhythm-planner").then(m => ({ default: m.RhythmPlanner })));
+const ObservationLogs = lazy(() => import("@/features/learning/observation-logs").then(m => ({ default: m.ObservationLogs })));
+const HabitTracking = lazy(() => import("@/features/learning/habit-tracking").then(m => ({ default: m.HabitTracking })));
+const InterestLedLog = lazy(() => import("@/features/learning/interest-led-log").then(m => ({ default: m.InterestLedLog })));
+const HandworkProjects = lazy(() => import("@/features/learning/handwork-projects").then(m => ({ default: m.HandworkProjects })));
+const PracticalLife = lazy(() => import("@/features/learning/practical-life").then(m => ({ default: m.PracticalLife })));
 
 // Student
 const StudentDashboardPage = lazy(() => import("@/features/student/student-dashboard").then(m => ({ default: m.StudentDashboard })));
@@ -189,6 +197,15 @@ const routes: RouteObject[] = [
               { path: "learning/session", element: <StudentSessionLauncher /> },
               { path: "learning/projects", element: <Projects /> },
               { path: "learning/tools", element: <ToolAssignment /> },
+              // Methodology-specific tools [P3]
+              { path: "learning/nature-journal", element: <NatureJournal /> },
+              { path: "learning/trivium-tracker", element: <TriviumTracker /> },
+              { path: "learning/rhythm-planner", element: <RhythmPlanner /> },
+              { path: "learning/observation-logs", element: <ObservationLogs /> },
+              { path: "learning/habit-tracking", element: <HabitTracking /> },
+              { path: "learning/interest-led-log", element: <InterestLedLog /> },
+              { path: "learning/handwork-projects", element: <HandworkProjects /> },
+              { path: "learning/practical-life", element: <PracticalLife /> },
 
               // Marketplace
               { path: "marketplace", element: <MarketplaceBrowse />, errorElement: <RouteErrorBoundary /> },
