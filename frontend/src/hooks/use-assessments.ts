@@ -107,7 +107,7 @@ export function useCreateAssessment(studentId: string) {
     }) =>
       apiClient<AssessmentResponse>(
         `/v1/learning/students/${studentId}/assessments`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -139,7 +139,7 @@ export function useUpdateAssessment(studentId: string) {
     }) =>
       apiClient<AssessmentResponse>(
         `/v1/learning/students/${studentId}/assessments/${id}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({

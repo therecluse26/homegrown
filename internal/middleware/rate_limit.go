@@ -47,6 +47,9 @@ func RateLimit(deps rateLimitDeps, limit int, window time.Duration) echo.Middlew
 // resolveRateLimitIdentity returns the scope and identifier for rate limit key construction.
 // Authenticated users are scoped by user ID; unauthenticated requests by IP.
 // IP addresses are hashed before use — never stored or logged in plaintext. [CODING §5.2]
+
+
+
 func resolveRateLimitIdentity(c echo.Context) (scope, identifier string) {
 	auth, err := shared.GetAuthContext(c)
 	if err == nil {

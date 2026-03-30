@@ -96,10 +96,14 @@ export function SequenceView() {
   const [confirmUnlock, setConfirmUnlock] = useState<string | null>(null);
 
   const items = sequenceDef?.items ?? [];
-  const completions = (progress?.item_completions ?? {}) as Record<
-    string,
-    unknown
-  >;
+  // Backend returns item_completions as [{item_id, completed_at}] array.
+  // Convert to a map keyed by item_id for O(1) lookup.
+  const rawCompletions = progress?.item_completions;
+  const completions: Record<string, unknown> = Array.isArray(rawCompletions)
+    ? Object.fromEntries(
+        (rawCompletions as { item_id: string }[]).map((c) => [c.item_id, c]),
+      )
+    : ((rawCompletions ?? {}) as Record<string, unknown>);
   const completedCount = items.filter((item) => completions[item.id]).length;
   const progressPct =
     items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;

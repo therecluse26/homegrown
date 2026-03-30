@@ -203,7 +203,7 @@ export function RhythmPlanner() {
         description: descParts.join("\n"),
         subject_tags: ["rhythm", "planning"],
         tool_id: "rhythm-planner",
-        activity_date: weekStartDate || undefined,
+        activity_date: weekStartDate ? `${weekStartDate}T00:00:00Z` : undefined,
       },
       { onSuccess: () => { void navigate("/learning/activities"); } },
     );

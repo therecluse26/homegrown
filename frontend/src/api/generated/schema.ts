@@ -7398,6 +7398,7 @@ export interface components {
             email?: string;
             family_display_name?: string;
             family_id?: string;
+            is_platform_admin?: boolean;
             is_primary_parent?: boolean;
             parent_id?: string;
             subscription_tier?: string;

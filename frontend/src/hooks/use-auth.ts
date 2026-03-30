@@ -18,6 +18,7 @@ export function useAuth() {
     isAuthenticated: query.isSuccess && !!user,
     isParent: query.isSuccess && !!user?.parent_id,
     isPrimaryParent: !!user?.is_primary_parent,
+    isPlatformAdmin: !!user?.is_platform_admin,
     tier: user?.subscription_tier ?? "free",
     coppaStatus: user?.coppa_consent_status ?? "unknown",
     error: query.error,

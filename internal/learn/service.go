@@ -1492,8 +1492,13 @@ func (s *learningServiceImpl) GetQuizDef(ctx context.Context, quizDefID uuid.UUI
 			pointsVal = q.Points
 		}
 		var answerData json.RawMessage
-		if includeAnswers && q != nil {
-			answerData = q.AnswerData
+		if q != nil && len(q.AnswerData) > 0 {
+			if includeAnswers {
+				answerData = q.AnswerData
+			} else {
+				// Strip correct_answer but keep choices so students can see options.
+				answerData = stripCorrectAnswer(q.AnswerData)
+			}
 		}
 		var qType, content string
 		var autoScorable bool
@@ -1906,6 +1911,22 @@ func questionToSummary(q *QuestionModel) QuestionSummaryResponse {
 		AutoScorable:    q.AutoScorable,
 		MethodologyID:   q.MethodologyID,
 	}
+}
+
+// stripCorrectAnswer removes the correct_answer key from answer_data JSON
+// so students can see answer choices without the solution.
+func stripCorrectAnswer(raw json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return raw // not an object — return as-is
+	}
+	delete(m, "correct_answer")
+	delete(m, "correct")
+	out, err := json.Marshal(m)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 func quizDefToResponse(def *QuizDefModel) QuizDefResponse {

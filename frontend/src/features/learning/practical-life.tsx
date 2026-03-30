@@ -160,7 +160,7 @@ export function PracticalLife() {
         subject_tags: ["practical_life", "life_skills"],
         tool_id: "practical-life",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,
-        activity_date: entryDate || undefined,
+        activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
       },
       { onSuccess: () => { void navigate("/learning/activities"); } },
     );

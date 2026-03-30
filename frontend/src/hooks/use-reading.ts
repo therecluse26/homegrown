@@ -125,7 +125,7 @@ export function useCreateReadingItem() {
     }) =>
       apiClient<ReadingItemResponse>("/v1/learning/reading-items", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -170,7 +170,7 @@ export function useStartReading(studentId: string) {
     }) =>
       apiClient<ReadingProgressResponse>(
         `/v1/learning/students/${studentId}/reading`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -193,7 +193,7 @@ export function useUpdateReadingProgress(studentId: string) {
     }) =>
       apiClient<ReadingProgressResponse>(
         `/v1/learning/students/${studentId}/reading/${id}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -242,7 +242,7 @@ export function useCreateReadingList() {
     }) =>
       apiClient<{ id: string; name: string; created_at: string }>(
         "/v1/learning/reading-lists",
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -267,7 +267,7 @@ export function useUpdateReadingList() {
     }) =>
       apiClient<{ id: string; name: string }>(
         `/v1/learning/reading-lists/${id}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({

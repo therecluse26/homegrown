@@ -16,6 +16,7 @@ import {
   useReadingLists,
   useReadingProgress,
   useCreateReadingList,
+  useUpdateReadingProgress,
   type ReadingStatus,
 } from "@/hooks/use-reading";
 import { useMethodologyContext } from "@/features/auth/methodology-provider";
@@ -75,6 +76,7 @@ export function ReadingLists() {
     data: progressPages,
     isPending: progressLoading,
   } = useReadingProgress(effectiveStudent);
+  const updateProgress = useUpdateReadingProgress(effectiveStudent);
 
   const progressItems = progressPages?.pages.flatMap((p) => p.data) ?? [];
 
@@ -284,8 +286,23 @@ export function ReadingLists() {
                         {item.reading_item.author}
                       </p>
                     )}
-                    <div className="mt-1.5">
+                    <div className="mt-1.5 flex items-center gap-2">
                       <StatusBadge status={item.status} />
+                      <Select
+                        value={item.status}
+                        onChange={(e) =>
+                          updateProgress.mutate({
+                            id: item.id,
+                            status: e.target.value as ReadingStatus,
+                          })
+                        }
+                        className="!h-7 !py-0 !px-2 type-label-sm w-auto"
+                        aria-label={`Change status for ${item.reading_item.title}`}
+                      >
+                        <option value="to_read">To Read</option>
+                        <option value="in_progress">Reading</option>
+                        <option value="completed">Finished</option>
+                      </Select>
                     </div>
                   </div>
                 </Card>

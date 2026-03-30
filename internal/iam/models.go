@@ -401,6 +401,7 @@ type CurrentUserResponse struct {
 	DisplayName        string    `json:"display_name"`
 	Email              string    `json:"email"`
 	IsPrimaryParent    bool      `json:"is_primary_parent"`
+	IsPlatformAdmin    bool      `json:"is_platform_admin"`
 	SubscriptionTier   string    `json:"subscription_tier"`
 	CoppaConsentStatus string    `json:"coppa_consent_status"`
 	FamilyDisplayName  string    `json:"family_display_name"`

@@ -48,7 +48,7 @@ export function JournalEditor() {
         title: title.trim() || undefined,
         content: content.trim(),
         subject_tags: subjectTags.length > 0 ? subjectTags : undefined,
-        entry_date: entryDate || undefined,
+        entry_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
       },
       {
         onSuccess: () => {

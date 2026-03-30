@@ -170,7 +170,7 @@ export function HabitTracking() {
         description: `Habit check-in:\n${checkInLines}${parentNotes ? `\n\nNotes: ${parentNotes}` : ""}`,
         subject_tags: ["character_education"],
         tool_id: "habit-tracking",
-        activity_date: entryDate || undefined,
+        activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
       },
       { onSuccess: () => { void navigate("/learning/activities"); } },
     );

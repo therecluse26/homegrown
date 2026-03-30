@@ -69,7 +69,7 @@ export function useCreateAssignment(studentId: string) {
     }) =>
       apiClient<AssignmentResponse>(
         `/v1/learning/students/${studentId}/assignments`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -92,7 +92,7 @@ export function useUpdateAssignment(studentId: string) {
     }) =>
       apiClient<AssignmentResponse>(
         `/v1/learning/students/${studentId}/assignments/${id}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({

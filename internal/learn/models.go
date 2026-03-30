@@ -1,6 +1,7 @@
 package learn
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"strings"
 	"time"
@@ -608,20 +609,25 @@ func (a *StringArray) Scan(src any) error {
 	return nil
 }
 
-// Value implements driver.Valuer.
-func (a StringArray) Value() (any, error) {
+// Value implements driver.Valuer. Serializes to PostgreSQL array literal.
+func (a StringArray) Value() (driver.Value, error) {
 	if len(a) == 0 {
 		return "{}", nil
 	}
+	// Quote elements that contain special chars (commas, braces, quotes, backslashes, spaces).
 	var b strings.Builder
 	b.WriteByte('{')
 	for i, v := range a {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteByte('"')
-		b.WriteString(v)
-		b.WriteByte('"')
+		if strings.ContainsAny(v, `,"{}\ `) {
+			b.WriteByte('"')
+			b.WriteString(strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), `"`, `\"`))
+			b.WriteByte('"')
+		} else {
+			b.WriteString(v)
+		}
 	}
 	b.WriteByte('}')
 	return b.String(), nil

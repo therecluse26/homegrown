@@ -113,7 +113,7 @@ export function useCreateActivityDef() {
     }) =>
       apiClient<ActivityDefResponse>("/v1/learning/activity-defs", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -182,7 +182,7 @@ export function useLogActivity(studentId: string) {
     }) =>
       apiClient<ActivityLogResponse>(
         `/v1/learning/students/${studentId}/activities`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -212,7 +212,7 @@ export function useUpdateActivityLog(studentId: string) {
     }) =>
       apiClient<ActivityLogResponse>(
         `/v1/learning/students/${studentId}/activities/${id}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({

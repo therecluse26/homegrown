@@ -8,6 +8,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   isParent: boolean;
   isPrimaryParent: boolean;
+  isPlatformAdmin: boolean;
   tier: string;
   coppaStatus: string;
 };

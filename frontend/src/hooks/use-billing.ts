@@ -39,7 +39,7 @@ export function useVerifyMicroCharge() {
     mutationFn: (amount_cents: number) =>
       apiClient<void>("/v1/billing/micro-charge/verify", {
         method: "POST",
-        body: JSON.stringify({ amount_cents }),
+        body: { amount_cents },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["billing", "micro-charge"] });

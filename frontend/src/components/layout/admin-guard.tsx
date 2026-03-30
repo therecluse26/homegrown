@@ -3,7 +3,7 @@ import { useAuthContext } from "@/features/auth/auth-provider";
 import { Spinner } from "@/components/ui";
 
 export function AdminGuard() {
-  const { isLoading, isAuthenticated } = useAuthContext();
+  const { isLoading, isAuthenticated, isPlatformAdmin } = useAuthContext();
 
   if (isLoading) {
     return (
@@ -17,12 +17,7 @@ export function AdminGuard() {
     return <Navigate to="/auth/login" replace />;
   }
 
-  // TODO: Check is_platform_admin once backend adds this field to CurrentUserResponse.
-  // For now, all authenticated users can access admin routes during development.
-  // In production, the backend enforces admin-only access via middleware.
-  const isAdmin = true;
-
-  if (!isAdmin) {
+  if (!isPlatformAdmin) {
     return <Navigate to="/" replace />;
   }
 

@@ -281,7 +281,7 @@ export function useAdminSuspendUser() {
     mutationFn: ({ userId, reason }: { userId: string; reason: string }) =>
       apiClient<void>(`/v1/admin/users/${userId}/suspend`, {
         method: "POST",
-        body: JSON.stringify({ reason }),
+        body: { reason },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
@@ -295,7 +295,7 @@ export function useAdminBanUser() {
     mutationFn: ({ userId, reason }: { userId: string; reason: string }) =>
       apiClient<void>(`/v1/admin/users/${userId}/ban`, {
         method: "POST",
-        body: JSON.stringify({ reason }),
+        body: { reason },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
@@ -360,7 +360,7 @@ export function useAdminTakeModerationAction() {
     }) =>
       apiClient<void>(`/v1/admin/moderation/queue/${itemId}/action`, {
         method: "POST",
-        body: JSON.stringify({ action, reason }),
+        body: { action, reason },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "moderation"] });
@@ -416,7 +416,7 @@ export function useUpdateFeatureFlag() {
     }) =>
       apiClient<FeatureFlag>(`/v1/admin/feature-flags/${id}`, {
         method: "PUT",
-        body: JSON.stringify(body),
+        body: body,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "flags"] });
@@ -435,7 +435,7 @@ export function useCreateFeatureFlag() {
     }) =>
       apiClient<FeatureFlag>("/v1/admin/feature-flags", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "flags"] });
@@ -483,7 +483,7 @@ export function useUpdateMethodologyConfig() {
         `/v1/admin/methodology-configs/${slug}`,
         {
           method: "PUT",
-          body: JSON.stringify(body),
+          body: body,
         },
       ),
     onSuccess: () => {
@@ -525,7 +525,7 @@ export function useAdminSafetyActions() {
     }) =>
       apiClient<ModActionResponse>("/v1/admin/safety/actions", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "safety"] });
@@ -560,7 +560,7 @@ export function useAdminResolveAppeal() {
     }) =>
       apiClient<void>(`/v1/admin/safety/appeals/${appealId}`, {
         method: "PATCH",
-        body: JSON.stringify({ status, resolution_text }),
+        body: { status, resolution_text },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "safety", "appeals"] });
@@ -598,7 +598,7 @@ export function useSubmitReport() {
     }) =>
       apiClient<ReportResponse>("/v1/safety/reports", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["safety", "my-reports"] });
@@ -627,7 +627,7 @@ export function useSubmitAppeal() {
     mutationFn: (cmd: { action_id: string; appeal_text: string }) =>
       apiClient<AppealResponse>("/v1/safety/appeals", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["safety", "my-appeals"] });

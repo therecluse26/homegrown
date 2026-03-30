@@ -310,7 +310,7 @@ export function useAddToCart() {
     mutationFn: (listingId: string) =>
       apiClient<void>("/v1/marketplace/cart/items", {
         method: "POST",
-        body: JSON.stringify({ listing_id: listingId }),
+        body: { listing_id: listingId },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketplace", "cart"] });
@@ -401,7 +401,7 @@ export function useCreateReview(listingId: string) {
     mutationFn: (cmd: CreateReviewCommand) =>
       apiClient<ReviewResponse>(
         `/v1/marketplace/listings/${listingId}/reviews`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketplace", "reviews", listingId] });
@@ -459,7 +459,7 @@ export function useCreateListing() {
     mutationFn: (cmd: CreateListingCommand) =>
       apiClient<ListingDetailResponse>("/v1/marketplace/listings", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketplace", "creator", "listings"] });
@@ -473,7 +473,7 @@ export function useUpdateListing(listingId: string) {
     mutationFn: (cmd: UpdateListingCommand) =>
       apiClient<ListingDetailResponse>(
         `/v1/marketplace/listings/${listingId}`,
-        { method: "PUT", body: JSON.stringify(cmd) },
+        { method: "PUT", body: cmd },
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketplace", "listing", listingId] });
@@ -534,7 +534,7 @@ export function useRegisterCreator() {
     }) =>
       apiClient<CreatorResponse>("/v1/marketplace/creators/register", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketplace", "creator"] });
@@ -612,7 +612,7 @@ export function useAddPayoutMethod() {
     }) =>
       apiClient<PayoutMethod>("/v1/marketplace/payouts/methods", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketplace", "payouts", "methods"] });
@@ -669,7 +669,7 @@ export function useSubmitVerification() {
     mutationFn: (cmd: { legal_name: string; tax_id: string }) =>
       apiClient<CreatorVerification>("/v1/marketplace/creator/verification", {
         method: "POST",
-        body: JSON.stringify(cmd),
+        body: cmd,
       }),
     onSuccess: () => {
       qc.invalidateQueries({
@@ -728,7 +728,7 @@ export function useRespondToReview() {
     mutationFn: ({ reviewId, response }: { reviewId: string; response: string }) =>
       apiClient<void>(`/v1/marketplace/reviews/${reviewId}/respond`, {
         method: "POST",
-        body: JSON.stringify({ response }),
+        body: { response },
       }),
     onSuccess: () => {
       qc.invalidateQueries({

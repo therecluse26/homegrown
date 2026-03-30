@@ -73,7 +73,7 @@ export function useUpdateVideoProgress(studentId: string) {
     }) =>
       apiClient<VideoProgressResponse>(
         `/v1/learning/students/${studentId}/video-progress`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({

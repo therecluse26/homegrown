@@ -91,7 +91,7 @@ export function useStartQuizSession(studentId: string) {
     mutationFn: (cmd: { quiz_def_id: string }) =>
       apiClient<QuizSessionResponse>(
         `/v1/learning/students/${studentId}/quiz-sessions`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -114,7 +114,7 @@ export function useUpdateQuizSession(studentId: string) {
     }) =>
       apiClient<QuizSessionResponse>(
         `/v1/learning/students/${studentId}/quiz-sessions/${sessionId}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({
@@ -141,7 +141,7 @@ export function useScoreQuiz(studentId: string) {
     }) =>
       apiClient<QuizSessionResponse>(
         `/v1/learning/students/${studentId}/quiz-sessions/${sessionId}/score`,
-        { method: "POST", body: JSON.stringify({ scores }) },
+        { method: "POST", body: { scores } },
       ),
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({

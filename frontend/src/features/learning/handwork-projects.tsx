@@ -126,7 +126,7 @@ export function HandworkProjects() {
         subject_tags: ["arts", "handwork"],
         tool_id: "handwork-projects",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,
-        activity_date: entryDate || undefined,
+        activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
       },
       { onSuccess: () => { void navigate("/learning/activities"); } },
     );

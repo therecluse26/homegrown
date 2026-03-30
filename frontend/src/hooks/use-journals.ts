@@ -88,7 +88,7 @@ export function useCreateJournalEntry(studentId: string) {
     }) =>
       apiClient<JournalEntryResponse>(
         `/v1/learning/students/${studentId}/journal`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -118,7 +118,7 @@ export function useUpdateJournalEntry(studentId: string) {
     }) =>
       apiClient<JournalEntryResponse>(
         `/v1/learning/students/${studentId}/journal/${id}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({

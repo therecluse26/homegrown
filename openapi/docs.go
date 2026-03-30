@@ -7342,6 +7342,9 @@ const docTemplate = `{
                 "family_id": {
                     "type": "string"
                 },
+                "is_platform_admin": {
+                    "type": "boolean"
+                },
                 "is_primary_parent": {
                     "type": "boolean"
                 },

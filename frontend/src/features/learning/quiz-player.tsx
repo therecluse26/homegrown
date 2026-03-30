@@ -29,6 +29,11 @@ import {
 
 // ─── Question renderers ──────────────────────────────────────────────────────
 
+interface ChoiceOption {
+  id: string;
+  text: string;
+}
+
 function MultipleChoiceQuestion({
   question,
   answer,
@@ -40,16 +45,20 @@ function MultipleChoiceQuestion({
   onAnswer: (value: unknown) => void;
   disabled: boolean;
 }) {
-  const options = (question.answer_data?.options as string[]) ?? [];
+  // Support both { choices: [{id, text}] } and { options: string[] } formats
+  const raw = question.answer_data?.choices ?? question.answer_data?.options ?? [];
+  const options: ChoiceOption[] = (raw as unknown[]).map((item, idx) =>
+    typeof item === "string" ? { id: String(idx), text: item } : (item as ChoiceOption),
+  );
   const selected = answer as string | undefined;
 
   return (
     <div className="space-y-2" role="radiogroup" aria-label={question.content}>
-      {options.map((option, idx) => (
+      {options.map((option) => (
         <label
-          key={idx}
+          key={option.id}
           className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-            selected === option
+            selected === option.id
               ? "bg-primary-container text-on-primary-container"
               : "bg-surface-container-low text-on-surface hover:bg-surface-container-high"
           } ${disabled ? "pointer-events-none opacity-60" : ""}`}
@@ -57,24 +66,24 @@ function MultipleChoiceQuestion({
           <input
             type="radio"
             name={`q-${question.question_id}`}
-            value={option}
-            checked={selected === option}
-            onChange={() => onAnswer(option)}
+            value={option.id}
+            checked={selected === option.id}
+            onChange={() => onAnswer(option.id)}
             disabled={disabled}
             className="sr-only"
           />
           <span
             className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-              selected === option
+              selected === option.id
                 ? "border-primary bg-primary"
                 : "border-outline"
             }`}
           >
-            {selected === option && (
+            {selected === option.id && (
               <span className="w-2.5 h-2.5 rounded-full bg-on-primary" />
             )}
           </span>
-          <span className="type-body-md">{option}</span>
+          <span className="type-body-md">{option.text}</span>
         </label>
       ))}
     </div>

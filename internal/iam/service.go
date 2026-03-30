@@ -107,6 +107,7 @@ func (s *IamServiceImpl) GetCurrentUser(ctx context.Context, auth *shared.AuthCo
 		DisplayName:        auth.DisplayName,
 		Email:              auth.Email,
 		IsPrimaryParent:    auth.IsPrimaryParent,
+		IsPlatformAdmin:    auth.IsPlatformAdmin,
 		SubscriptionTier:   string(auth.SubscriptionTier),
 		CoppaConsentStatus: auth.CoppaConsentStatus,
 		FamilyDisplayName:  family.DisplayName,

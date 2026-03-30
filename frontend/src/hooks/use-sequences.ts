@@ -86,7 +86,7 @@ export function useStartSequence(studentId: string) {
     mutationFn: (cmd: { sequence_def_id: string }) =>
       apiClient<SequenceProgressResponse>(
         `/v1/learning/students/${studentId}/sequence-progress`,
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
@@ -110,7 +110,7 @@ export function useUpdateSequenceProgress(studentId: string) {
     }) =>
       apiClient<SequenceProgressResponse>(
         `/v1/learning/students/${studentId}/sequence-progress/${progressId}`,
-        { method: "PATCH", body: JSON.stringify(cmd) },
+        { method: "PATCH", body: cmd },
       ),
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({

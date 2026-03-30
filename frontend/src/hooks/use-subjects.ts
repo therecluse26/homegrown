@@ -53,7 +53,7 @@ export function useCreateCustomSubject() {
     }) =>
       apiClient<CustomSubjectResponse>(
         "/v1/learning/taxonomy/custom",
-        { method: "POST", body: JSON.stringify(cmd) },
+        { method: "POST", body: cmd },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({
