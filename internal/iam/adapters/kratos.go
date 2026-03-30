@@ -85,6 +85,7 @@ func (a *KratosAdapterImpl) ValidateSession(ctx context.Context, sessionCookie s
 
 	return &shared.Session{
 		IdentityID: identityID,
+		SessionID:  whoami.ID, // Kratos session ID — for current-session detection [15-lifecycle §12]
 		Email:      whoami.Identity.Traits.Email, // PII — never log [CODING §5.2]
 	}, nil
 }
@@ -309,6 +310,7 @@ func (a *KratosAdapterImpl) InitiateAccountRecovery(ctx context.Context, email s
 // They MUST NOT be exported or used outside this file. [ARCH §4.2]
 
 type kratosWhoamiResponse struct {
+	ID       string           `json:"id"` // Kratos session ID
 	Active   bool             `json:"active"`
 	Identity kratosIdentityIn `json:"identity"`
 }

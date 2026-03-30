@@ -142,7 +142,8 @@ func Auth(deps authDeps) echo.MiddlewareFunc {
 				IsPlatformAdmin:    lookup.IsPlatformAdmin,
 				SubscriptionTier:   shared.ParseSubscriptionTier(lookup.Tier),
 				CoppaConsentStatus: lookup.ConsentStatus,
-				Email:              lookup.Email, // PII — not logged [CODING §5.2]
+				Email:              lookup.Email,      // PII — not logged [CODING §5.2]
+				SessionID:          session.SessionID, // for current-session detection [15-lifecycle §12]
 			}
 			shared.SetAuthContext(c, auth)
 

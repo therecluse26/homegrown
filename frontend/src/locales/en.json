@@ -333,6 +333,7 @@
   "sessions.time.minutes": "{count, plural, one {1 minute ago} other {{count} minutes ago}}",
   "sessions.time.hours": "{count, plural, one {1 hour ago} other {{count} hours ago}}",
   "sessions.time.days": "{count, plural, one {1 day ago} other {{count} days ago}}",
+  "sessions.unknownIp": "Unknown location",
 
   "dataExport.title": "Export Your Data",
   "dataExport.description": "Download a copy of your family's data. Exports include learning records, social activity, and settings.",

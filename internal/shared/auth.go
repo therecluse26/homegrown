@@ -10,6 +10,7 @@ import (
 // Email is present for service-layer use but MUST NOT be logged or serialized. [CODING §5.2]
 type Session struct {
 	IdentityID uuid.UUID
+	SessionID  string // Kratos session ID — used for current-session detection [15-lifecycle §12]
 	Email      string // PII — never log [CODING §5.2]
 }
 

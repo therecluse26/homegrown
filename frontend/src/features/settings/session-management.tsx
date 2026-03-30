@@ -14,13 +14,25 @@ import { useState, useEffect, useRef } from "react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function getDeviceIcon(device: string) {
-  const lower = device.toLowerCase();
-  if (lower.includes("mobile") || lower.includes("phone"))
+function getDeviceIcon(userAgent: string | null) {
+  if (!userAgent) return Globe;
+  const lower = userAgent.toLowerCase();
+  if (lower.includes("mobile") || lower.includes("phone") || lower.includes("android") || lower.includes("iphone"))
     return Smartphone;
-  if (lower.includes("desktop") || lower.includes("laptop"))
+  if (lower.includes("desktop") || lower.includes("laptop") || lower.includes("windows") || lower.includes("macintosh") || lower.includes("linux"))
     return Monitor;
   return Globe;
+}
+
+function parseDeviceLabel(userAgent: string | null, deviceType: string | null): string {
+  if (deviceType) return deviceType;
+  if (!userAgent) return "Unknown device";
+  // Extract browser name from user-agent
+  if (userAgent.includes("Firefox")) return "Firefox";
+  if (userAgent.includes("Edg/")) return "Edge";
+  if (userAgent.includes("Chrome")) return "Chrome";
+  if (userAgent.includes("Safari")) return "Safari";
+  return userAgent.slice(0, 40);
 }
 
 function formatRelativeTime(
@@ -122,9 +134,10 @@ export function SessionManagement() {
       ) : (
         <ul className="flex flex-col gap-3" role="list">
           {sessionList.map((session) => {
-            const DeviceIcon = getDeviceIcon(session.device);
+            const DeviceIcon = getDeviceIcon(session.user_agent);
+            const deviceLabel = parseDeviceLabel(session.user_agent, session.device_type);
             return (
-              <li key={session.id}>
+              <li key={session.session_id}>
                 <Card className="flex items-center justify-between">
                   <div className="flex items-start gap-3">
                     <Icon
@@ -136,7 +149,7 @@ export function SessionManagement() {
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="type-title-sm text-on-surface font-medium">
-                          {session.browser || session.device}
+                          {deviceLabel}
                         </p>
                         {session.is_current && (
                           <Badge variant="primary">
@@ -145,7 +158,7 @@ export function SessionManagement() {
                         )}
                       </div>
                       <p className="type-body-sm text-on-surface-variant">
-                        {session.ip_address} ·{" "}
+                        {session.ip_address ?? intl.formatMessage({ id: "sessions.unknownIp" })} ·{" "}
                         {formatRelativeTime(session.last_active, intl)}
                       </p>
                     </div>
@@ -154,7 +167,7 @@ export function SessionManagement() {
                     <Button
                       variant="tertiary"
                       size="sm"
-                      onClick={() => setRevokeTarget(session.id)}
+                      onClick={() => setRevokeTarget(session.session_id)}
                       className="text-error shrink-0"
                     >
                       <FormattedMessage id="sessions.revoke" />

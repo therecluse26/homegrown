@@ -633,7 +633,7 @@ Depends on Phase 4 auth context and layout.
 - [x] Verify: OAuth buttons present and functional `[P1]` _(OAuth component exists; no OIDC providers in dev Kratos config — buttons render when providers configured)_
 - [x] Verify: `npm run type-check` passes `[P1]`
 - [x] Verify: ToS/privacy acceptance required before registration completes `[P1]`
-- [ ] Verify: session management lists and revokes sessions correctly `[P1]` _(blocked: `/v1/auth/sessions` endpoint not registered — backend prerequisite)_
+- [x] Verify: session management lists and revokes sessions correctly `[P1]` _(verified: fixed frontend hooks to use correct `/v1/account/sessions` endpoints + backend GORM UUID scan bug + Kratos session ID propagation; Playwright-validated: sessions list with current-device badge, single revoke removes session, "log out all devices" leaves only current session; zero console errors — validated 2026-03-30)_
 - [x] Verify: password strength indicator updates reactively `[P1]`
 - [x] Verify: rate limiting shows countdown and re-enables login `[P1]` _(code review verified: login.tsx handles 429 with rateLimitCountdown state, 1s decrement timer, button disabled + message swap, i18n key present; cannot trigger in dev — Kratos kratos.yml has no rate_limits config, needs production config or upstream proxy — validated 2026-03-30)_
 - [x] Verify: email verification resend cooldown works `[P1]`

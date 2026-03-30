@@ -1041,14 +1041,18 @@ func main() {
 		},
 		// ListSessions: look up identity ID from parentID, then list Kratos sessions.
 		func(ctx context.Context, parentID uuid.UUID) ([]lifecycle.SessionInfo, error) {
-			var identityID uuid.UUID
+			var identityIDStr string
 			if err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
 				return tx.Table("iam_parents").
 					Select("kratos_identity_id").
 					Where("id = ?", parentID).
-					Scan(&identityID).Error
+					Scan(&identityIDStr).Error
 			}); err != nil {
 				return nil, err
+			}
+			identityID, err := uuid.Parse(identityIDStr)
+			if err != nil {
+				return nil, fmt.Errorf("lifecycle: invalid kratos identity ID for parent %s: %w", parentID, err)
 			}
 			kratosSessions, err := kratosAdapter.ListSessionsForIdentity(ctx, identityID)
 			if err != nil {
@@ -1071,14 +1075,18 @@ func main() {
 		},
 		// RevokeAllSessions: list sessions for identity, revoke all except current.
 		func(ctx context.Context, parentID uuid.UUID, currentSessionID string) (uint32, error) {
-			var identityID uuid.UUID
+			var identityIDStr string
 			if err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
 				return tx.Table("iam_parents").
 					Select("kratos_identity_id").
 					Where("id = ?", parentID).
-					Scan(&identityID).Error
+					Scan(&identityIDStr).Error
 			}); err != nil {
 				return 0, err
+			}
+			identityID, err := uuid.Parse(identityIDStr)
+			if err != nil {
+				return 0, fmt.Errorf("lifecycle: invalid kratos identity ID for parent %s: %w", parentID, err)
 			}
 			kratosSession, err := kratosAdapter.ListSessionsForIdentity(ctx, identityID)
 			if err != nil {
