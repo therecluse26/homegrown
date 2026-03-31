@@ -25,6 +25,15 @@ func NewPgFamilyRepository(db *gorm.DB) *PgFamilyRepository {
 	return &PgFamilyRepository{db: db}
 }
 
+// unscoped returns a clean DB session within the same transaction.
+// iam_families uses `id` as the family identifier — it has no `family_id` column.
+// ScopedTransaction adds `WHERE family_id = ?` which must be stripped. Session(NewDB)
+// must come AFTER WithContext so it triggers a fresh Statement on the next query call,
+// not before (WithContext would clone the stale conditions). [ADR-008]
+func (r *PgFamilyRepository) unscoped(ctx context.Context) *gorm.DB {
+	return r.db.WithContext(ctx).Session(&gorm.Session{NewDB: true})
+}
+
 func (r *PgFamilyRepository) Create(ctx context.Context, cmd CreateFamily) (*Family, error) {
 	model := &FamilyModel{
 		DisplayName:               cmd.DisplayName,
@@ -33,17 +42,15 @@ func (r *PgFamilyRepository) Create(ctx context.Context, cmd CreateFamily) (*Fam
 		SubscriptionTier:          "free",
 		CoppaConsentStatus:        string(CoppaConsentRegistered),
 	}
-	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
+	if err := r.unscoped(ctx).Create(model).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
 	}
 	return model.toDomain(), nil
 }
 
 func (r *PgFamilyRepository) FindByID(ctx context.Context, id uuid.UUID) (*Family, error) {
-	// NOT family-scoped — used by auth middleware and registration webhooks
-	// before FamilyScope is constructed. Caller MUST ensure RLS is handled. [§6]
 	var model FamilyModel
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&model).Error
+	err := r.unscoped(ctx).Where("id = ?", id).First(&model).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrFamilyNotFound
@@ -69,7 +76,7 @@ func (r *PgFamilyRepository) Update(ctx context.Context, scope *shared.FamilySco
 	}
 	updates["updated_at"] = time.Now()
 
-	if err := r.db.WithContext(ctx).Model(&FamilyModel{}).
+	if err := r.unscoped(ctx).Model(&FamilyModel{}).
 		Where("id = ?", scope.FamilyID()).
 		Updates(updates).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -78,9 +85,7 @@ func (r *PgFamilyRepository) Update(ctx context.Context, scope *shared.FamilySco
 }
 
 func (r *PgFamilyRepository) SetPrimaryParent(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID) error {
-	// NOT family-scoped — used during registration before FamilyScope exists.
-	// Caller MUST ensure RLS is handled (BypassRLSTransaction). [§6]
-	if err := r.db.WithContext(ctx).Model(&FamilyModel{}).
+	if err := r.unscoped(ctx).Model(&FamilyModel{}).
 		Where("id = ?", familyID).
 		Updates(map[string]interface{}{
 			"primary_parent_id": parentID,
@@ -104,7 +109,7 @@ func (r *PgFamilyRepository) UpdateConsentStatus(ctx context.Context, scope *sha
 		updates["coppa_consent_method"] = *method
 	}
 
-	if err := r.db.WithContext(ctx).Model(&FamilyModel{}).
+	if err := r.unscoped(ctx).Model(&FamilyModel{}).
 		Where("id = ?", scope.FamilyID()).
 		Updates(updates).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -118,7 +123,7 @@ func (r *PgFamilyRepository) SetMethodology(ctx context.Context, scope *shared.F
 	if err != nil {
 		return shared.ErrDatabase(err)
 	}
-	if err := r.db.WithContext(ctx).Model(&FamilyModel{}).
+	if err := r.unscoped(ctx).Model(&FamilyModel{}).
 		Where("id = ?", scope.FamilyID()).
 		Updates(map[string]interface{}{
 			"primary_methodology_slug":    primarySlug,
@@ -131,7 +136,7 @@ func (r *PgFamilyRepository) SetMethodology(ctx context.Context, scope *shared.F
 }
 
 func (r *PgFamilyRepository) SetDeletionRequested(ctx context.Context, scope *shared.FamilyScope, requestedAt *time.Time) error {
-	if err := r.db.WithContext(ctx).Model(&FamilyModel{}).
+	if err := r.unscoped(ctx).Model(&FamilyModel{}).
 		Where("id = ?", scope.FamilyID()).
 		Updates(map[string]interface{}{
 			"deletion_requested_at": requestedAt,

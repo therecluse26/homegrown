@@ -46,20 +46,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_notifications_idempotency
     ON notify_notifications (family_id, notification_type, ((metadata->>'source_event_id')))
     WHERE metadata->>'source_event_id' IS NOT NULL;
 
--- RLS policies [08-notify §3.3]
-ALTER TABLE notify_notifications ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY notify_notifications_family_select
-    ON notify_notifications FOR SELECT
-    USING (family_id = current_setting('app.current_family_id')::UUID);
-
-CREATE POLICY notify_notifications_family_update
-    ON notify_notifications FOR UPDATE
-    USING (family_id = current_setting('app.current_family_id')::UUID);
-
-CREATE POLICY notify_notifications_system_insert
-    ON notify_notifications FOR INSERT
-    WITH CHECK (true);
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- TABLE 2: notify_preferences — Per-type per-channel preference overrides [S§13.3]
@@ -90,20 +78,6 @@ CREATE TABLE IF NOT EXISTS notify_preferences (
 CREATE INDEX IF NOT EXISTS idx_notify_preferences_family
     ON notify_preferences (family_id);
 
--- RLS policies
-ALTER TABLE notify_preferences ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY notify_preferences_family_select
-    ON notify_preferences FOR SELECT
-    USING (family_id = current_setting('app.current_family_id')::UUID);
-
-CREATE POLICY notify_preferences_family_upsert
-    ON notify_preferences FOR INSERT
-    WITH CHECK (true);
-
-CREATE POLICY notify_preferences_family_update
-    ON notify_preferences FOR UPDATE
-    USING (family_id = current_setting('app.current_family_id')::UUID);
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- TABLE 3: notify_digests — Compiled digest snapshots (Phase 2) [ARCH §12]
@@ -125,12 +99,6 @@ CREATE INDEX IF NOT EXISTS idx_notify_digests_unsent
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_digests_family_period
     ON notify_digests (family_id, digest_type, period_start);
-
-ALTER TABLE notify_digests ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY notify_digests_system_all
-    ON notify_digests FOR ALL
-    USING (true);
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- TABLE 4: notify_email_status — Email bounce tracking [08-notify §21.6]

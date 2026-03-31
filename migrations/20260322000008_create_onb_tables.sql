@@ -106,22 +106,8 @@ CREATE TABLE onb_community_suggestions (
 CREATE INDEX idx_onb_community_family ON onb_community_suggestions(family_id);
 CREATE INDEX idx_onb_community_wizard ON onb_community_suggestions(wizard_id);
 
--- ─── RLS Policies ────────────────────────────────────────────────────────────
--- All onb_ tables contain user data and MUST have RLS. [CODING §3.2, 04-onboard §3.3]
-
-ALTER TABLE onb_wizard_progress ENABLE ROW LEVEL SECURITY;
-ALTER TABLE onb_roadmap_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE onb_starter_recommendations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE onb_community_suggestions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY onb_wizard_progress_family ON onb_wizard_progress
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-CREATE POLICY onb_roadmap_items_family ON onb_roadmap_items
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-CREATE POLICY onb_starter_recommendations_family ON onb_starter_recommendations
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-CREATE POLICY onb_community_suggestions_family ON onb_community_suggestions
-    USING (family_id = current_setting('app.current_family_id')::uuid);
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
 
 -- ─── Seed Methodology Onboarding & Community Config ──────────────────────────
 -- Populate onboarding_config and community_config JSONB on method_definitions
@@ -238,11 +224,6 @@ UPDATE method_definitions SET onboarding_config = '{
 }'::jsonb WHERE slug = 'unschooling';
 
 -- +goose Down
-
-DROP POLICY IF EXISTS onb_community_suggestions_family ON onb_community_suggestions;
-DROP POLICY IF EXISTS onb_starter_recommendations_family ON onb_starter_recommendations;
-DROP POLICY IF EXISTS onb_roadmap_items_family ON onb_roadmap_items;
-DROP POLICY IF EXISTS onb_wizard_progress_family ON onb_wizard_progress;
 
 DROP TABLE IF EXISTS onb_community_suggestions;
 DROP TABLE IF EXISTS onb_starter_recommendations;

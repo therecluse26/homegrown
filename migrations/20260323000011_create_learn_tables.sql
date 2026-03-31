@@ -579,70 +579,11 @@ CREATE TABLE learn_export_requests (
 
 CREATE INDEX idx_learn_export_requests_family ON learn_export_requests(family_id, created_at DESC);
 
--- ═══════════════════════════════════════════════════════════════════════════════
--- RLS Policies [06-learn §3.3]
--- ═══════════════════════════════════════════════════════════════════════════════
-
--- Layer 3: Family Tracking — standard family-scoped RLS
-ALTER TABLE learn_activity_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_activity_logs_family_policy ON learn_activity_logs
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_journal_entries ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_journal_entries_family_policy ON learn_journal_entries
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_progress_snapshots ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_progress_snapshots_family_policy ON learn_progress_snapshots
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_reading_progress ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_reading_progress_family_policy ON learn_reading_progress
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_assessment_results ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_assessment_results_family_policy ON learn_assessment_results
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_project_progress ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_project_progress_family_policy ON learn_project_progress
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_video_progress ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_video_progress_family_policy ON learn_video_progress
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_reading_lists ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_reading_lists_family_policy ON learn_reading_lists
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_custom_subjects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_custom_subjects_family_policy ON learn_custom_subjects
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_grading_scales ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_grading_scales_family_policy ON learn_grading_scales
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_export_requests ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_export_requests_family_policy ON learn_export_requests
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_quiz_sessions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_quiz_sessions_family_policy ON learn_quiz_sessions
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_sequence_progress ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_sequence_progress_family_policy ON learn_sequence_progress
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
-ALTER TABLE learn_student_assignments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY learn_student_assignments_family_policy ON learn_student_assignments
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- Layer 1: Published Content — NO RLS (publisher-based access at app level)
--- Layer 2: Artifact Links — NO RLS (shared across platform)
--- Platform: Subject Taxonomy — NO RLS (shared across platform)
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
+-- Layer 1: Published Content — no scoping needed (publisher-based access at app level)
+-- Layer 2: Artifact Links — no scoping needed (shared across platform)
+-- Platform: Subject Taxonomy — no scoping needed (shared across platform)
 
 -- +goose Down
 DROP TABLE IF EXISTS learn_reading_list_items CASCADE;

@@ -152,54 +152,10 @@ CREATE INDEX idx_iam_student_sessions_active ON iam_student_sessions(is_active, 
 -- each scoped transaction via shared.ScopedTransaction.
 --
 -- Unscoped operations (auth middleware lookups, registration webhooks) bypass RLS
--- via `SET LOCAL row_security = off` in shared.BypassRLSTransaction. [01-iam §11.1]
---
--- Without app.current_family_id set, current_setting returns NULL, and NULL::uuid
--- casts to NULL, making all USING policies evaluate to NULL (false) — blocking all rows.
--- This is the correct default-deny behavior.
-
-ALTER TABLE iam_families ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_parents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_students ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_co_parent_invites ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_coppa_audit_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_student_sessions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY iam_families_isolation ON iam_families
-    USING (id = current_setting('app.current_family_id', true)::uuid);
-
-CREATE POLICY iam_parents_isolation ON iam_parents
-    USING (family_id = current_setting('app.current_family_id', true)::uuid);
-
-CREATE POLICY iam_students_isolation ON iam_students
-    USING (family_id = current_setting('app.current_family_id', true)::uuid);
-
-CREATE POLICY iam_invites_isolation ON iam_co_parent_invites
-    USING (family_id = current_setting('app.current_family_id', true)::uuid);
-
-CREATE POLICY iam_coppa_audit_isolation ON iam_coppa_audit_log
-    USING (family_id = current_setting('app.current_family_id', true)::uuid);
-
-CREATE POLICY iam_student_sessions_isolation ON iam_student_sessions
-    USING (family_id = current_setting('app.current_family_id', true)::uuid);
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used. See specs/ARCHITECTURE.md for rationale.
 
 -- +goose Down
-
--- Drop RLS policies first
-DROP POLICY IF EXISTS iam_student_sessions_isolation ON iam_student_sessions;
-DROP POLICY IF EXISTS iam_coppa_audit_isolation ON iam_coppa_audit_log;
-DROP POLICY IF EXISTS iam_invites_isolation ON iam_co_parent_invites;
-DROP POLICY IF EXISTS iam_students_isolation ON iam_students;
-DROP POLICY IF EXISTS iam_parents_isolation ON iam_parents;
-DROP POLICY IF EXISTS iam_families_isolation ON iam_families;
-
--- Disable RLS
-ALTER TABLE iam_student_sessions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_coppa_audit_log DISABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_co_parent_invites DISABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_students DISABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_parents DISABLE ROW LEVEL SECURITY;
-ALTER TABLE iam_families DISABLE ROW LEVEL SECURITY;
 
 -- Drop tables in reverse dependency order
 DROP TABLE IF EXISTS iam_student_sessions;

@@ -70,20 +70,10 @@ CREATE TABLE plan_schedule_templates (
 CREATE INDEX idx_plan_schedule_templates_family
     ON plan_schedule_templates(family_id);
 
--- Row-Level Security [17-planning §3.2]
-ALTER TABLE plan_schedule_items ENABLE ROW LEVEL SECURITY;
-CREATE POLICY plan_schedule_items_family_scope ON plan_schedule_items
-    USING (family_id = current_setting('app.current_family_id')::UUID);
-
-ALTER TABLE plan_schedule_templates ENABLE ROW LEVEL SECURITY;
-CREATE POLICY plan_schedule_templates_family_scope ON plan_schedule_templates
-    USING (family_id = current_setting('app.current_family_id')::UUID);
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
 
 -- +goose Down
-DROP POLICY IF EXISTS plan_schedule_templates_family_scope ON plan_schedule_templates;
-ALTER TABLE plan_schedule_templates DISABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS plan_schedule_items_family_scope ON plan_schedule_items;
-ALTER TABLE plan_schedule_items DISABLE ROW LEVEL SECURITY;
 
 DROP INDEX IF EXISTS idx_plan_schedule_templates_family;
 DROP TABLE IF EXISTS plan_schedule_templates;

@@ -95,6 +95,14 @@ internal/{domain}/
 - ALL database queries MUST go through the domain's `repository.go`. No exceptions.
 - Repositories MUST accept a `FamilyScope` parameter on every user-data query.
   `FamilyScope` is defined in `internal/shared/family_scope.go`. `[ARCH §1.5]`
+- Family scoping is enforced via `ScopedTransaction` in `internal/shared/db.go`,
+  which automatically adds `WHERE family_id = ?` to every GORM query within the
+  transaction. **DO NOT use PostgreSQL Row-Level Security (RLS).** All data isolation
+  MUST happen at the Go/GORM level. `[ARCH ADR-008]`
+- Cross-family queries MUST use `BypassRLSTransaction` or `UnscopedTransaction`
+  with a comment explaining why unscoped access is required.
+- New tables with a `family_id` column are automatically scoped by
+  `ScopedTransaction` — no additional database-level configuration needed.
 - MUST NOT write raw SQL strings outside of migration files. Use GORM query builder.
 - MUST NOT call another domain's `repository.go` directly. Call its `service.go` instead.
 
@@ -365,7 +373,13 @@ and responsive behavior.
 - Column names: `snake_case`.
 - Enum type names: `{domain_prefix}_{noun}_enum` (e.g., `soc_visibility_enum`).
 
-### §4.2 Migration Rules
+### §4.2 Data Isolation
+
+- MUST NOT rely on PostgreSQL RLS for data isolation. Use `ScopedTransaction`
+  (`internal/shared/db.go`) which adds `WHERE family_id = ?` at the GORM level.
+  `[ARCH ADR-008]`
+
+### §4.3 Migration Rules
 
 - Migrations are **append-only**. MUST NOT edit or delete a committed migration file.
   If a schema change is needed, write a new migration.
@@ -377,7 +391,7 @@ and responsive behavior.
 - Migration files MUST follow goose naming conventions: `YYYYMMDDHHMMSS_description.sql`
   (placed in the `migrations/` directory).
 
-### §4.3 Index Policy
+### §4.4 Index Policy
 
 - Every foreign key column MUST have an index.
 - Every column used in a `WHERE` clause in a repository query MUST have an index (or be

@@ -33,17 +33,12 @@ func CreatePool(cfg *config.AppConfig) (*gorm.DB, error) {
 
 // ScopedTransaction executes fn within a family-scoped transaction.
 //
-// Sets `SET LOCAL app.current_family_id` for RLS enforcement. The local setting
-// is automatically cleared on commit or rollback. [ARCH §1.5, §5.2]
+// Adds `WHERE family_id = ?` to every GORM query within the transaction,
+// ensuring all reads and writes are restricted to the given family. [ARCH §1.5, §5.2, ADR-008]
 func ScopedTransaction(ctx context.Context, db *gorm.DB, scope FamilyScope, fn func(tx *gorm.DB) error) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// SET LOCAL is transaction-scoped — automatically reset on commit/rollback.
-		// The UUID type guarantees no SQL injection here.
-		setSQL := fmt.Sprintf("SET LOCAL app.current_family_id = '%s'", scope.FamilyID().String())
-		if err := tx.Exec(setSQL).Error; err != nil {
-			return fmt.Errorf("failed to set family scope: %w", err)
-		}
-		return fn(tx)
+		scopedTx := tx.Where("family_id = ?", scope.FamilyID())
+		return fn(scopedTx)
 	})
 }
 
@@ -61,22 +56,17 @@ func UnscopedTransaction(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) 
 	})
 }
 
-// BypassRLSTransaction executes fn in a transaction with row-level security disabled.
+// BypassRLSTransaction executes fn in a transaction WITHOUT family-scoped WHERE clauses.
 //
-// ONLY for exceptional cases where RLS cannot be satisfied because no family scope
-// is available and we must read or write across family boundaries:
+// Functionally identical to UnscopedTransaction, but the distinct name documents intent:
+// the caller explicitly needs cross-family access. ONLY for exceptional cases:
 //   - Auth middleware: finding parent by Kratos identity_id before FamilyScope exists
-//   - Registration webhooks: family does not exist yet, RLS would block INSERT+UPDATE
+//   - Registration webhooks: family does not exist yet
 //   - Post-login webhooks: looking up parent by Kratos ID, no family scope in context
 //
-// Every call site MUST have a comment explaining why RLS bypass is required. [01-iam §11.1]
+// Every call site MUST have a comment explaining why unscoped access is required. [01-iam §11.1]
 func BypassRLSTransaction(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Disable RLS for this transaction — required when no family scope is available.
-		// SET LOCAL is transaction-scoped; automatically reset on commit/rollback.
-		if err := tx.Exec("SET LOCAL row_security = off").Error; err != nil {
-			return fmt.Errorf("failed to disable row security: %w", err)
-		}
 		return fn(tx)
 	})
 }

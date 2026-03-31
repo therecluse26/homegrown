@@ -250,66 +250,8 @@ CREATE TABLE soc_event_rsvps (
 
 CREATE INDEX idx_soc_event_rsvps_event ON soc_event_rsvps(event_id, status);
 
--- ═══════════════════════════════════════════════════════════════════════════════
--- RLS Policies [05-social §3.3]
--- ═══════════════════════════════════════════════════════════════════════════════
-
--- soc_profiles: owner can read/write their own profile.
-ALTER TABLE soc_profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_profiles_owner_policy ON soc_profiles
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_friendships: either participant can read/modify.
-ALTER TABLE soc_friendships ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_friendships_participant_policy ON soc_friendships
-    USING (
-        requester_family_id = current_setting('app.current_family_id')::uuid
-        OR accepter_family_id = current_setting('app.current_family_id')::uuid
-    );
-
--- soc_blocks: only the blocker can see their blocks (silent blocking).
-ALTER TABLE soc_blocks ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_blocks_blocker_policy ON soc_blocks
-    USING (blocker_family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_posts: family-scoped for writes; reads handled at application level.
-ALTER TABLE soc_posts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_posts_family_policy ON soc_posts
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_comments: family-scoped for writes; reads via post visibility.
-ALTER TABLE soc_comments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_comments_family_policy ON soc_comments
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_post_likes: family-scoped.
-ALTER TABLE soc_post_likes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_post_likes_family_policy ON soc_post_likes
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_conversation_participants: family-scoped.
-ALTER TABLE soc_conversation_participants ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_conv_participants_family_policy ON soc_conversation_participants
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_messages: sender family-scoped for writes.
-ALTER TABLE soc_messages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_messages_sender_policy ON soc_messages
-    USING (sender_family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_groups: NO RLS — membership-based access at application level.
--- soc_events: NO RLS — discoverable events visible to non-friends.
-
--- soc_group_members: family-scoped.
-ALTER TABLE soc_group_members ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_group_members_family_policy ON soc_group_members
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- soc_event_rsvps: family-scoped.
-ALTER TABLE soc_event_rsvps ENABLE ROW LEVEL SECURITY;
-CREATE POLICY soc_event_rsvps_family_policy ON soc_event_rsvps
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
 
 -- +goose Down
 DROP TABLE IF EXISTS soc_event_rsvps CASCADE;

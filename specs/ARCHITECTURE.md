@@ -165,7 +165,7 @@ Every selection references the spec requirement it satisfies, names rejected alt
 - **PostGIS**: Location-based discovery with coarse-grained geometry `[S§7.8]`
 - **Full-text search**: `tsvector` + `pg_trgm` for Phase 1 search `[S§14]`
 - **Arrays**: Multi-tag storage (methodology tags, subject tags) `[S§9.2]`
-- **Row-level security (RLS)**: Defense-in-depth for family data isolation `[S§16.2]`
+- **Transactions**: GORM-level family scoping via `ScopedTransaction` for data isolation `[S§16.2]`
 
 **Rejected alternatives**:
 - **MySQL**: No JSONB, no PostGIS, weaker full-text search. PostgreSQL is strictly superior for this use case.
@@ -474,7 +474,7 @@ Pipeline stages:
               │ • JSONB     │ │ • Jobs   │  │ • OIDC      │  │ • Postmark    │
               │ • PostGIS   │ │ • Pub/sub│  │ • MFA       │  │ • Thorn Safer │
               │ • FTS       │ │ • Feed   │  │ • Sessions  │  │ • Rekognition │
-              │ • RLS       │ │          │  │             │  │ • R2          │
+              │ • Scoped TX │ │          │  │             │  │ • R2          │
               └─────────────┘ └──────────┘  └─────────────┘  └───────────────┘
 ```
 
@@ -640,7 +640,7 @@ The shared kernel is strictly limited to:
 |------|----------|
 | `shared/family_scope.go` | `FamilyScope` type for privacy-enforcing queries |
 | `shared/types.go` | Type aliases (`FamilyID`, `UserID`, `StudentID`, etc.) |
-| `shared/db.go` | Database pool and transaction helpers |
+| `shared/db.go` | Database pool, `ScopedTransaction` (GORM-level family scoping), `BypassRLSTransaction`, `UnscopedTransaction` |
 | `shared/cache.go` | `Cache` port interface + generic `CacheGet[T]`/`CacheSet[T]` helpers |
 | `shared/redis.go` | Redis-backed `Cache` implementation (`redisCache`; factory: `CreateCache`) |
 | `shared/auth.go` | `SessionValidator` port — auth provider abstraction (Kratos wired in 01-iam) |
@@ -1394,7 +1394,7 @@ CREATE TABLE learn_quiz_defs (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Layer 3: Family-scoped quiz taking (RLS-protected)
+-- Layer 3: Family-scoped quiz taking (scoped via ScopedTransaction)
 CREATE TABLE learn_quiz_sessions (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id       UUID NOT NULL REFERENCES iam_families(id),
@@ -3840,7 +3840,7 @@ Overrides provided via CDK context (`cdk.json` or `--context` flag).
 
 | OWASP Risk | Go/Echo Mitigation |
 |------------|---------------------|
-| **A01: Broken Access Control** | Family-scoped queries via `FamilyScope` helper (§6.2). Every handler receives `AuthContext` with verified `family_id`. Permission middleware enforces role checks. |
+| **A01: Broken Access Control** | Family-scoped queries via `ScopedTransaction` which adds `WHERE family_id = ?` to every GORM query (§6.2, ADR-008). Every handler receives `AuthContext` with verified `family_id`. Permission middleware enforces role checks. |
 | **A02: Cryptographic Failures** | Passwords handled by Ory Kratos (Argon2id). Sensitive data encrypted at rest via PostgreSQL `pgcrypto`. All transit encrypted via TLS. |
 | **A03: Injection** | GORM parameterized queries prevent SQL injection. Go's type system prevents most injection vectors. User input validated via struct binding with `validator` tags. |
 | **A04: Insecure Design** | Privacy-by-architecture (§1.5). COPPA consent state machine (§6.3). No public user content by design. |
@@ -4036,34 +4036,33 @@ Key note for §15.6 Learning: Video transcoding is a background job in the exist
 
 ### ADR-008: Family-Scoped Data Isolation
 
-**Status**: Accepted
+**Status**: Accepted (revised 2026-03-31 — GORM-only, no RLS)
 
 **Context**: The platform handles children's data subject to COPPA `[S§17.2]`. Cross-family data leaks would be both a privacy violation and a regulatory violation. The spec mandates family data ownership `[S§16.2]`.
 
-**Decision**: Enforce family-scoped data isolation at the architecture level through a Go interface/helper that requires `family_id` on all data-access queries, plus PostgreSQL Row-Level Security as defense-in-depth.
+**Decision**: Enforce family-scoped data isolation **exclusively at the GORM level** via `ScopedTransaction` in `internal/shared/db.go`. `ScopedTransaction` wraps every family-data operation in a database transaction with `WHERE family_id = ?` automatically added to every GORM query within the callback.
+
+**DO NOT use PostgreSQL Row-Level Security (RLS).** All family scoping MUST happen in Go via `ScopedTransaction`. RLS was originally considered as defense-in-depth, but PostgreSQL silently skips RLS for table owners — and the application's DB user owns all tables. This made RLS a false safety net. GORM-level scoping is explicit, testable, and always enforced regardless of DB role configuration.
 
 **Consequences**:
-- **Positive**: Cross-family data access is structurally impossible without explicit opt-in. Go tooling catches missing family_id filters via interface enforcement. RLS provides database-level enforcement even if application logic has a bug. COPPA compliance is enforced by architecture, not by developer discipline.
-- **Negative**: Every query includes a `family_id` filter, even when not logically necessary (e.g., platform-wide analytics). Social features (friends, groups) require explicit cross-family data paths.
-- **Mitigation**: Social cross-family queries use separate, explicitly-defined repository functions that document why cross-family access is needed. Analytics queries use separate read-only database roles that bypass RLS.
+- **Positive**: Cross-family data access is structurally impossible without explicit opt-in. `ScopedTransaction` is the single enforcement point — easy to audit and test. No dependency on PostgreSQL role configuration for correctness. COPPA compliance is enforced by architecture, not by developer discipline.
+- **Negative**: Every query includes a `family_id` filter, even when not logically necessary (e.g., platform-wide analytics). Social features (friends, groups) require explicit cross-family data paths. No database-level fallback if application code has a bug.
+- **Mitigation**: Social cross-family queries use `BypassRLSTransaction` or `UnscopedTransaction` with mandatory comments explaining why. The single-enforcement-point design makes it easy to grep for and audit all unscoped access. Integration tests verify family isolation.
+
+**Transaction helpers** (`internal/shared/db.go`):
+- `ScopedTransaction(ctx, db, scope, fn)` — adds `WHERE family_id = ?` to all queries in `fn`
+- `UnscopedTransaction(ctx, db, fn)` — no family filter (auth lookups, background jobs)
+- `BypassRLSTransaction(ctx, db, fn)` — same as unscoped; distinct name documents intent (cross-family access)
 
 ```go
-// internal/shared/family_scope.go
+// internal/shared/db.go
 
-// FamilyScope enforces family-scoped database access.
-type FamilyScope struct {
-    FamilyID uuid.UUID
-}
-
-// ApplyScope adds a family_id WHERE clause to a GORM query.
-func (s FamilyScope) ApplyScope(db *gorm.DB) *gorm.DB {
-    return db.Where("family_id = ?", s.FamilyID)
-}
-
-// FamilyScopedRepository defines the interface for family-scoped data access.
-type FamilyScopedRepository[T any] interface {
-    FindByFamily(ctx context.Context, scope FamilyScope) ([]T, error)
-    FindByIDAndFamily(ctx context.Context, id uuid.UUID, scope FamilyScope) (*T, error)
+// ScopedTransaction adds WHERE family_id = ? to every GORM query in fn.
+func ScopedTransaction(ctx context.Context, db *gorm.DB, scope FamilyScope, fn func(tx *gorm.DB) error) error {
+    return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+        scopedTx := tx.Where("family_id = ?", scope.FamilyID())
+        return fn(scopedTx)
+    })
 }
 ```
 
@@ -4156,7 +4155,7 @@ WHERE f1.requester_family_id = $1  -- current user
 **Consequences**:
 - **Positive**: Phase 1 delivers the platform's core value from launch — methodology-scoped interactive learning, not just logging. Marketplace content is consumable in-platform, not just downloadable. Supervised student views create a genuine student-facing product.
 - **Negative**: Phase 1 scope increases significantly (~72 learn endpoints vs ~12 previously). Video transcoding pipeline requires FFmpeg integration in the media domain. Student sessions add an auth pathway (scoped JWT) alongside the existing Kratos parent auth.
-- **Mitigation**: New tables follow the existing three-layer pattern (Layer 1 publisher-scoped, Layer 3 family-scoped with RLS). Assessment engine reuses the methodology-as-configuration pattern — quiz availability is driven by `method_tool_activations`, not code branches. Video transcoding is a background job in the existing `asynq` queue. Student sessions are parent-initiated and COPPA-compliant within the existing consent framework.
+- **Mitigation**: New tables follow the existing three-layer pattern (Layer 1 publisher-scoped, Layer 3 family-scoped via `ScopedTransaction`). Assessment engine reuses the methodology-as-configuration pattern — quiz availability is driven by `method_tool_activations`, not code branches. Video transcoding is a background job in the existing `asynq` queue. Student sessions are parent-initiated and COPPA-compliant within the existing consent framework.
 
 **Revision trigger**: None. This is a scope decision that aligns Phase 1 with the product's core value proposition.
 

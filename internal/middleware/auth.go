@@ -82,31 +82,23 @@ func Auth(deps authDeps) echo.MiddlewareFunc {
 			db := deps.GetDB()
 
 			// Step 3: JOIN-query to build AuthContext.
-			// RLS bypassed via SET LOCAL row_security = off — no family scope is available
-			// yet (we're finding the parent by Kratos identity_id). [01-iam §11.1]
+			// No family scope available yet — finding parent by Kratos identity_id. [01-iam §11.1]
 			var lookup authLookup
-			err = db.WithContext(c.Request().Context()).Transaction(func(tx *gorm.DB) error {
-				// Bypass RLS: auth middleware runs before FamilyScope is constructed.
-				if execErr := tx.Exec("SET LOCAL row_security = off").Error; execErr != nil {
-					return execErr
-				}
-				result := tx.Raw(`
-					SELECT
-						p.id           AS parent_id,
-						p.family_id    AS family_id,
-						p.kratos_identity_id AS identity_id,
-						p.display_name AS display_name,
-						p.email        AS email,
-						p.is_primary   AS is_primary,
-						p.is_platform_admin AS is_platform_admin,
-						f.subscription_tier AS tier,
-						f.coppa_consent_status AS consent_status
-					FROM iam_parents p
-					JOIN iam_families f ON f.id = p.family_id
-					WHERE p.kratos_identity_id = ?
-				`, session.IdentityID).Scan(&lookup)
-				return result.Error
-			})
+			err = db.WithContext(c.Request().Context()).Raw(`
+				SELECT
+					p.id           AS parent_id,
+					p.family_id    AS family_id,
+					p.kratos_identity_id AS identity_id,
+					p.display_name AS display_name,
+					p.email        AS email,
+					p.is_primary   AS is_primary,
+					p.is_platform_admin AS is_platform_admin,
+					f.subscription_tier AS tier,
+					f.coppa_consent_status AS consent_status
+				FROM iam_parents p
+				JOIN iam_families f ON f.id = p.family_id
+				WHERE p.kratos_identity_id = ?
+			`, session.IdentityID).Scan(&lookup).Error
 			if err != nil {
 				slog.Error("auth middleware: db error", "error", err)
 				return shared.ErrUnauthorized()

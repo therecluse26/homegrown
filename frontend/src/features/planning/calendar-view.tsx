@@ -53,6 +53,16 @@ function isSameDay(a: Date, b: Date): boolean {
   return formatDate(a) === formatDate(b);
 }
 
+/** Convert "HH:MM:SS" or "HH:MM" to 12-hour "h:MM AM/PM" format. */
+function formatTime(raw: string): string {
+  const parts = raw.split(":");
+  const hour = parseInt(parts[0] ?? "0", 10);
+  const min = parts[1] ?? "00";
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${display}:${min} ${suffix}`;
+}
+
 // ─── Source color config ────────────────────────────────────────────────────
 
 const SOURCE_STYLES: Record<
@@ -101,7 +111,7 @@ function CalendarItemCard({ item }: { item: CalendarItem }) {
       <Icon icon={style.icon} size="xs" className="shrink-0" />
       <span className="truncate flex-1">{item.title}</span>
       {item.start_time && (
-        <span className="shrink-0 opacity-75">{item.start_time}</span>
+        <span className="shrink-0 opacity-75">{formatTime(item.start_time)}</span>
       )}
       {item.is_completed && (
         <Icon icon={CheckCircle2} size="xs" className="shrink-0 opacity-60" />
@@ -242,8 +252,8 @@ function DayDetailView({
                       <div className="flex items-center gap-2 shrink-0 type-label-sm text-on-surface-variant">
                         {item.start_time && (
                           <span>
-                            {item.start_time}
-                            {item.end_time && ` – ${item.end_time}`}
+                            {formatTime(item.start_time)}
+                            {item.end_time && ` – ${formatTime(item.end_time)}`}
                           </span>
                         )}
                         {item.is_completed && (
@@ -456,7 +466,7 @@ export function CalendarView() {
     if (viewMode === "day") {
       return {
         start: formatDate(selectedDate),
-        end: formatDate(selectedDate),
+        end: formatDate(addDays(selectedDate, 1)),
       };
     }
     return {

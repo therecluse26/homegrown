@@ -254,30 +254,8 @@ CREATE TABLE IF NOT EXISTS mkt_curated_section_items (
 
 CREATE INDEX IF NOT EXISTS idx_mkt_curated_section_items_section ON mkt_curated_section_items(section_id);
 
--- ═══════════════════════════════════════════════════════════════════════════════
--- RLS Policies [CODING §4.1, 00-core §8]
--- ═══════════════════════════════════════════════════════════════════════════════
-
--- Cart items: family-scoped read/write
-ALTER TABLE mkt_cart_items ENABLE ROW LEVEL SECURITY;
-CREATE POLICY cart_items_family_scope ON mkt_cart_items
-    USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- Purchases: family-scoped read, system-write
-ALTER TABLE mkt_purchases ENABLE ROW LEVEL SECURITY;
-CREATE POLICY purchases_family_read ON mkt_purchases
-    FOR SELECT USING (family_id = current_setting('app.current_family_id')::uuid);
-
--- Reviews: read-all (public), write-family (own reviews only)
-ALTER TABLE mkt_reviews ENABLE ROW LEVEL SECURITY;
-CREATE POLICY reviews_read_all ON mkt_reviews
-    FOR SELECT USING (true);
-CREATE POLICY reviews_write_family ON mkt_reviews
-    FOR INSERT WITH CHECK (family_id = current_setting('app.current_family_id')::uuid);
-CREATE POLICY reviews_update_family ON mkt_reviews
-    FOR UPDATE USING (family_id = current_setting('app.current_family_id')::uuid);
-CREATE POLICY reviews_delete_family ON mkt_reviews
-    FOR DELETE USING (family_id = current_setting('app.current_family_id')::uuid);
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- SEED DATA: Built-in curated sections [S§9.3]
@@ -305,13 +283,6 @@ ON CONFLICT (slug) DO NOTHING;
 
 
 -- +goose Down
-DROP POLICY IF EXISTS reviews_delete_family ON mkt_reviews;
-DROP POLICY IF EXISTS reviews_update_family ON mkt_reviews;
-DROP POLICY IF EXISTS reviews_write_family ON mkt_reviews;
-DROP POLICY IF EXISTS reviews_read_all ON mkt_reviews;
-DROP POLICY IF EXISTS purchases_family_read ON mkt_purchases;
-DROP POLICY IF EXISTS cart_items_family_scope ON mkt_cart_items;
-
 DROP TABLE IF EXISTS mkt_curated_section_items;
 DROP TABLE IF EXISTS mkt_curated_sections;
 DROP TABLE IF EXISTS mkt_cart_items;

@@ -24,17 +24,8 @@ CREATE TABLE search_index_state (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ═══════════════════════════════════════════════════════════════════════════════
--- RLS Policies [12-search §3.3]
--- ═══════════════════════════════════════════════════════════════════════════════
--- search_index_state: system role only (background jobs manage sync state).
--- Phase 2 table — RLS defined in Phase 1 migration for forward compatibility.
-ALTER TABLE search_index_state ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY search_index_state_system_all
-    ON search_index_state FOR ALL
-    WITH CHECK (current_setting('app.role') = 'system');
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
 
 -- +goose Down
-DROP POLICY IF EXISTS search_index_state_system_all ON search_index_state;
 DROP TABLE IF EXISTS search_index_state;

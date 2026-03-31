@@ -103,25 +103,10 @@ INSERT INTO lifecycle_retention_policies (data_category, retention_days, applies
     ('purchase_records',  365 * 7, 'family',  'Transaction and purchase history (legal minimum)'),
     ('export_archives',   7,       'family',  'Generated data export archives');
 
--- Row-Level Security [15-data-lifecycle §3.2]
--- Export requests: family-scoped
-ALTER TABLE lifecycle_export_requests ENABLE ROW LEVEL SECURITY;
-CREATE POLICY lifecycle_export_requests_family_scope ON lifecycle_export_requests
-    USING (family_id = current_setting('app.current_family_id')::UUID);
-
--- Deletion requests: family-scoped
-ALTER TABLE lifecycle_deletion_requests ENABLE ROW LEVEL SECURITY;
-CREATE POLICY lifecycle_deletion_requests_family_scope ON lifecycle_deletion_requests
-    USING (family_id = current_setting('app.current_family_id')::UUID);
-
--- Recovery requests: NOT family-scoped (pre-auth, no session)
--- No RLS policy — always accessed via BypassRLSTransaction.
+-- Family scoping is enforced at the GORM level via ScopedTransaction (ADR-008).
+-- PostgreSQL RLS is NOT used.
 
 -- +goose Down
-DROP POLICY IF EXISTS lifecycle_deletion_requests_family_scope ON lifecycle_deletion_requests;
-ALTER TABLE lifecycle_deletion_requests DISABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS lifecycle_export_requests_family_scope ON lifecycle_export_requests;
-ALTER TABLE lifecycle_export_requests DISABLE ROW LEVEL SECURITY;
 
 DROP TABLE IF EXISTS lifecycle_retention_policies;
 DROP TABLE IF EXISTS lifecycle_recovery_requests;

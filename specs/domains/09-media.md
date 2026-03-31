@@ -178,7 +178,7 @@ CREATE TABLE media_uploads (
 CREATE INDEX idx_media_uploads_family_context
     ON media_uploads(family_id, context);
 
--- FK index on uploaded_by [CODING §4.3]
+-- FK index on uploaded_by [CODING §4.4]
 CREATE INDEX idx_media_uploads_uploaded_by
     ON media_uploads(uploaded_by);
 
