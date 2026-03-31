@@ -34,15 +34,15 @@ import (
 // All seed row IDs are hardcoded so the seeder is idempotent across runs.
 const (
 	// IAM
-	seedFamilyID    = "01900000-0000-7000-8000-000000000001"
-	friendFamilyID  = "01900000-0000-7000-8000-000000000002"
+	seedFamilyID     = "01900000-0000-7000-8000-000000000001"
+	friendFamilyID   = "01900000-0000-7000-8000-000000000002"
 	platformFamilyID = "01900000-0000-7000-8000-000000000003"
-	seedParentID    = "01900000-0000-7000-8000-000000000011"
-	friendParentID  = "01900000-0000-7000-8000-000000000012"
-	adminParentID   = "01900000-0000-7000-8000-000000000013"
-	emmaStudentID   = "01900000-0000-7000-8000-000000000021"
-	jamesStudentID  = "01900000-0000-7000-8000-000000000022"
-	coppaAuditID    = "01900000-0000-7000-8000-000000000031"
+	seedParentID     = "01900000-0000-7000-8000-000000000011"
+	friendParentID   = "01900000-0000-7000-8000-000000000012"
+	adminParentID    = "01900000-0000-7000-8000-000000000013"
+	emmaStudentID    = "01900000-0000-7000-8000-000000000021"
+	jamesStudentID   = "01900000-0000-7000-8000-000000000022"
+	coppaAuditID     = "01900000-0000-7000-8000-000000000031"
 
 	// IAM Extended
 	coParentInviteID  = "01900000-0000-7000-8000-000000000032"
@@ -211,7 +211,7 @@ const (
 	complyStdTest1ID       = "01900000-0000-7000-8000-000000000860"
 
 	// Discovery
-	discQuizDefID    = "01900000-0000-7000-8000-000000000960"
+	discQuizDefID     = "01900000-0000-7000-8000-000000000960"
 	discQuizResult1ID = "01900000-0000-7000-8000-000000000961"
 
 	// Planning
@@ -1606,10 +1606,10 @@ func seedDiscovery(db *gorm.DB) error {
 		}
 		recommendations := []map[string]any{
 			{
-				"slug":               "charlotte-mason",
-				"display_name":       "Charlotte Mason",
-				"score_percentage":   90,
-				"explanation":        "Charlotte Mason methodology aligns beautifully with your approach — living books, nature study, and narration.",
+				"slug":             "charlotte-mason",
+				"display_name":     "Charlotte Mason",
+				"score_percentage": 90,
+				"explanation":      "Charlotte Mason methodology aligns beautifully with your approach — living books, nature study, and narration.",
 			},
 		}
 
@@ -1861,11 +1861,11 @@ func seedAdminDomain(db *gorm.DB) error {
 	return bypassRLS(db, func(tx *gorm.DB) error {
 		// Feature flags (5 flags, all created by admin parent)
 		type flagRow struct {
-			id         string
-			key        string
-			enabled    bool
-			rollout    *int
-			desc       string
+			id      string
+			key     string
+			enabled bool
+			rollout *int
+			desc    string
 		}
 		r50 := 50
 		r100 := 100
@@ -2116,16 +2116,16 @@ func seedComply(db *gorm.DB) error {
 		}
 
 		// 9. Portfolio items (3 items from different source types)
-		actDate := now.AddDate(0, 0, -1).Format("2006-01-02")    // actLog1 date
+		actDate := now.AddDate(0, 0, -1).Format("2006-01-02")     // actLog1 date
 		journalDate := now.AddDate(0, 0, -3).Format("2006-01-02") // journal2 date
 		assessDate := now.AddDate(0, 0, -30).Format("2006-01-02") // complyAssess1 date
 		portfolioItems := []struct {
-			id          string
-			sourceType  string
-			sourceID    string
-			title       string
-			order       int
-			cachedDate  string
+			id         string
+			sourceType string
+			sourceID   string
+			title      string
+			order      int
+			cachedDate string
 		}{
 			{complyPortfolioItem1ID, "activity", actLog1ID,
 				"Nature Walk — Creek Trail", 1, actDate},

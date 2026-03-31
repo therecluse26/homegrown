@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
 import {
@@ -18,6 +19,7 @@ import {
   Lightbulb,
   Scissors,
   Home,
+  type LucideIcon,
 } from "lucide-react";
 import {
   Button,
@@ -164,27 +166,25 @@ function QuickAction({
   );
 }
 
-// ─── Methodology-specific tool definitions ────────────────────────────────────
+// ─── Tool registry: slug → UI metadata (icon + route) ────────────────────────
+// The *backend* controls which tools are active for a family's methodology.
+// This registry only maps slugs to frontend-specific rendering data.
 
-const METHODOLOGY_TOOLS: Record<string, { icon: typeof Leaf; labelId: string; to: string }[]> = {
-  "charlotte-mason": [
-    { icon: Leaf,     labelId: "methodologyTools.natureJournal.title",   to: "/learning/nature-journal" },
-    { icon: Heart,    labelId: "methodologyTools.habitTracking.title",    to: "/learning/habit-tracking" },
-  ],
-  "classical": [
-    { icon: Columns3, labelId: "methodologyTools.triviumTracker.title",  to: "/learning/trivium-tracker" },
-  ],
-  "waldorf": [
-    { icon: Music,    labelId: "methodologyTools.rhythmPlanner.title",   to: "/learning/rhythm-planner" },
-    { icon: Scissors, labelId: "methodologyTools.handworkProjects.title",to: "/learning/handwork-projects" },
-  ],
-  "montessori": [
-    { icon: Eye,      labelId: "methodologyTools.observationLogs.title", to: "/learning/observation-logs" },
-    { icon: Home,     labelId: "methodologyTools.practicalLife.title",   to: "/learning/practical-life" },
-  ],
-  "unschooling": [
-    { icon: Lightbulb,labelId: "methodologyTools.interestLedLog.title",  to: "/learning/interest-led-log" },
-  ],
+const TOOL_REGISTRY: Record<string, { icon: LucideIcon; to: string }> = {
+  "activities":        { icon: ClipboardList, to: "/learning/activities" },
+  "journaling":        { icon: PenTool,       to: "/learning/journals" },
+  "reading-lists":     { icon: BookMarked,    to: "/learning/reading-lists" },
+  "progress-tracking": { icon: BarChart3,     to: "/learning/progress/select" },
+  "tests-grades":      { icon: GraduationCap, to: "/learning/grades" },
+  "projects":          { icon: BookOpen,      to: "/learning/projects" },
+  "nature-journals":   { icon: Leaf,          to: "/learning/nature-journal" },
+  "trivium-tracker":   { icon: Columns3,      to: "/learning/trivium-tracker" },
+  "rhythm-planner":    { icon: Music,         to: "/learning/rhythm-planner" },
+  "observation-logs":  { icon: Eye,           to: "/learning/observation-logs" },
+  "habit-tracking":    { icon: Heart,         to: "/learning/habit-tracking" },
+  "interest-led-logs": { icon: Lightbulb,     to: "/learning/interest-led-log" },
+  "handwork-tracker":  { icon: Scissors,      to: "/learning/handwork-projects" },
+  "practical-life":    { icon: Home,          to: "/learning/practical-life" },
 };
 
 // ─── Main dashboard ─────────────────────────────────────────────────────────
@@ -193,9 +193,21 @@ export function LearningDashboard() {
   const intl = useIntl();
   const { tier } = useAuth();
   const { data: students, isPending: studentsLoading } = useStudents();
-  const { toolLabel, primarySlug } = useMethodologyContext();
+  const { tools, toolLabel, isLoading: methodologyLoading } = useMethodologyContext();
 
-  const methodologyTools = primarySlug ? (METHODOLOGY_TOOLS[primarySlug] ?? []) : [];
+  // Derive the navigable tool list from backend-provided active tools
+  const navigableTools = useMemo(
+    () =>
+      tools
+        .filter((t) => t.slug != null && TOOL_REGISTRY[t.slug] != null)
+        .map((t) => ({
+          slug: t.slug!,
+          icon: TOOL_REGISTRY[t.slug!]!.icon,
+          to: TOOL_REGISTRY[t.slug!]!.to,
+          label: toolLabel(t.slug!, t.display_name ?? t.slug!),
+        })),
+    [tools, toolLabel],
+  );
 
   return (
     <div className="mx-auto max-w-content-narrow space-y-8">
@@ -206,63 +218,35 @@ export function LearningDashboard() {
         </h1>
       </div>
 
-      {/* Quick actions grid */}
+      {/* Tools grid — driven by the family's active methodology */}
       <section>
         <h2 className="type-title-md text-on-surface font-semibold mb-4">
           <FormattedMessage id="learning.quickActions" />
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <QuickAction
-            icon={ClipboardList}
-            label={toolLabel("activities", intl.formatMessage({ id: "learning.action.logActivity" }))}
-            to="/learning/activities"
-          />
-          <QuickAction
-            icon={PenTool}
-            label={toolLabel("journaling", intl.formatMessage({ id: "learning.action.journal" }))}
-            to="/learning/journals"
-          />
-          <QuickAction
-            icon={BookMarked}
-            label={toolLabel("reading-lists", intl.formatMessage({ id: "learning.action.reading" }))}
-            to="/learning/reading-lists"
-          />
-          <QuickAction
-            icon={BarChart3}
-            label={toolLabel("progress-tracking", intl.formatMessage({ id: "learning.action.progress" }))}
-            to="/learning/progress/select"
-          />
-          <QuickAction
-            icon={GraduationCap}
-            label={toolLabel("tests-grades", intl.formatMessage({ id: "learning.action.grades" }))}
-            to="/learning/grades"
-          />
-          <QuickAction
-            icon={Plus}
-            label={intl.formatMessage({ id: "learning.action.addNew" })}
-            to="/learning/activities?new=1"
-          />
-        </div>
-      </section>
-
-      {/* Methodology-specific tools */}
-      {methodologyTools.length > 0 && (
-        <section aria-label={intl.formatMessage({ id: "methodologyTools.dashboard.title" })}>
-          <h2 className="type-title-md text-on-surface font-semibold mb-4">
-            <FormattedMessage id="methodologyTools.dashboard.title" />
-          </h2>
+        {methodologyLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {methodologyTools.map(tool => (
+            {Array.from({ length: 6 }, (_, i) => (
+              <Skeleton key={i} height="h-24" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {navigableTools.map((tool) => (
               <QuickAction
-                key={tool.to}
+                key={tool.slug}
                 icon={tool.icon}
-                label={intl.formatMessage({ id: tool.labelId })}
+                label={tool.label}
                 to={tool.to}
               />
             ))}
+            <QuickAction
+              icon={Plus}
+              label={intl.formatMessage({ id: "learning.action.addNew" })}
+              to="/learning/activities?new=1"
+            />
           </div>
-        </section>
-      )}
+        )}
+      </section>
 
       {/* Methodology guidance */}
       <ParentEducationPanel
