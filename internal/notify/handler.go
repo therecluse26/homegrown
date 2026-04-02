@@ -49,6 +49,9 @@ func (h *Handler) listNotifications(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.ListNotifications(c.Request().Context(), params, &scope)
 	if err != nil {
@@ -100,6 +103,9 @@ func (h *Handler) markAllRead(c echo.Context) error {
 	var req MarkAllReadRequest
 	if err := c.Bind(&req); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&req); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	count, err := h.svc.MarkAllRead(c.Request().Context(), &scope, req.Category)

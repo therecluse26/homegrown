@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"gorm.io/gorm"
 )
 
 // eventPublisher is a narrow interface for publishing domain events.
@@ -26,6 +27,7 @@ type mediaServiceImpl struct {
 	events   eventPublisher
 	jobs     shared.JobEnqueuer
 	config   *MediaConfig
+	db       *gorm.DB // for lifecycle deletion transactions [09-media §14]
 }
 
 // NewMediaService constructs a MediaService with all dependencies. [09-media §5.1]
@@ -37,6 +39,7 @@ func NewMediaService(
 	events eventPublisher,
 	jobs shared.JobEnqueuer,
 	config *MediaConfig,
+	db *gorm.DB,
 ) MediaService {
 	return &mediaServiceImpl{
 		uploads:  uploads,
@@ -46,6 +49,7 @@ func NewMediaService(
 		events:   events,
 		jobs:     jobs,
 		config:   config,
+		db:       db,
 	}
 }
 
@@ -271,6 +275,30 @@ func (s *mediaServiceImpl) ReprocessUpload(ctx context.Context, scope shared.Fam
 	}
 
 	return nil
+}
+
+// ─── Lifecycle Handlers ──────────────────────────────────────────────────────
+
+// HandleFamilyDeletionScheduled deletes all media data for a family.
+// Uses BypassRLSTransaction since lifecycle deletion operates without user auth context.
+// Cascades: processing jobs → transcode jobs → uploads (FK ordering). [09-media §14]
+func (s *mediaServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		// Processing and transcode jobs reference uploads via upload_id (no family_id column).
+		// Use a subquery to find upload IDs for this family.
+		uploadIDSubquery := tx.Model(&Upload{}).Select("id").Where("family_id = ?", familyID)
+
+		if err := tx.Where("upload_id IN (?)", uploadIDSubquery).Delete(&ProcessingJob{}).Error; err != nil {
+			return fmt.Errorf("media: delete processing jobs: %w", err)
+		}
+		if err := tx.Where("upload_id IN (?)", uploadIDSubquery).Delete(&TranscodeJob{}).Error; err != nil {
+			return fmt.Errorf("media: delete transcode jobs: %w", err)
+		}
+		if err := tx.Where("family_id = ?", familyID).Delete(&Upload{}).Error; err != nil {
+			return fmt.Errorf("media: delete uploads: %w", err)
+		}
+		return nil
+	})
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

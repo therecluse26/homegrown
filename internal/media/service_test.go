@@ -23,7 +23,7 @@ func defaultMediaConfig() *MediaConfig {
 func TestRequestUpload_success(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	storageAdapter.presignedPutFn = func(_ context.Context, key string, _ uint64, _ string, _ uint32) (string, error) {
 		return "https://s3.example.com/presigned/" + key, nil
@@ -69,7 +69,7 @@ func TestRequestUpload_success(t *testing.T) {
 }
 
 func TestRequestUpload_invalid_content_type(t *testing.T) {
-	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	_, err := svc.RequestUpload(context.Background(), &RequestUploadInput{
 		FamilyID:    uuid.Must(uuid.NewV7()),
@@ -86,7 +86,7 @@ func TestRequestUpload_invalid_content_type(t *testing.T) {
 }
 
 func TestRequestUpload_file_too_large(t *testing.T) {
-	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	_, err := svc.RequestUpload(context.Background(), &RequestUploadInput{
 		FamilyID:    uuid.Must(uuid.NewV7()),
@@ -105,7 +105,7 @@ func TestRequestUpload_file_too_large(t *testing.T) {
 func TestRequestUpload_storage_error(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	storageAdapter.presignedPutFn = func(_ context.Context, _ string, _ uint64, _ string, _ uint32) (string, error) {
 		return "", errors.New("S3 error")
@@ -128,7 +128,7 @@ func TestRequestUpload_storage_error(t *testing.T) {
 func TestRequestUpload_sanitizes_filename(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	var capturedInput *CreateUploadRow
 	storageAdapter.presignedPutFn = func(_ context.Context, _ string, _ uint64, _ string, _ uint32) (string, error) {
@@ -170,7 +170,7 @@ func TestConfirmUpload_success(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
 	procJobRepo := newMockProcessingJobRepository()
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(uploadRepo, procJobRepo, storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, procJobRepo, storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	familyID := uuid.Must(uuid.NewV7())
 	uploadID := uuid.Must(uuid.NewV7())
@@ -221,7 +221,7 @@ func TestConfirmUpload_success(t *testing.T) {
 
 func TestConfirmUpload_not_found(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, _ uuid.UUID) (*Upload, error) {
 		return nil, &MediaError{Err: ErrUploadNotFound}
@@ -235,7 +235,7 @@ func TestConfirmUpload_not_found(t *testing.T) {
 
 func TestConfirmUpload_not_pending(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, id uuid.UUID) (*Upload, error) {
 		return &Upload{ID: id, Status: UploadStatusPublished, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
@@ -249,7 +249,7 @@ func TestConfirmUpload_not_pending(t *testing.T) {
 
 func TestConfirmUpload_expired(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	expired := time.Now().Add(-1 * time.Hour)
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, id uuid.UUID) (*Upload, error) {
@@ -265,7 +265,7 @@ func TestConfirmUpload_expired(t *testing.T) {
 func TestConfirmUpload_object_not_in_storage(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	expiresAt := time.Now().Add(1 * time.Hour)
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, id uuid.UUID) (*Upload, error) {
@@ -285,7 +285,7 @@ func TestConfirmUpload_object_not_in_storage(t *testing.T) {
 
 func TestGetUpload_published_with_cdn_urls(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	familyID := uuid.Must(uuid.NewV7())
 	publishedAt := time.Now()
@@ -331,7 +331,7 @@ func TestGetUpload_published_with_cdn_urls(t *testing.T) {
 
 func TestGetUpload_processing_has_no_urls(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, id uuid.UUID) (*Upload, error) {
 		return &Upload{
@@ -355,7 +355,7 @@ func TestGetUpload_processing_has_no_urls(t *testing.T) {
 func TestGetUpload_marketplace_uses_presigned(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, id uuid.UUID) (*Upload, error) {
 		return &Upload{
@@ -385,7 +385,7 @@ func TestGetUpload_marketplace_uses_presigned(t *testing.T) {
 
 func TestGetUpload_published_no_variants(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, id uuid.UUID) (*Upload, error) {
 		return &Upload{
@@ -418,7 +418,7 @@ func TestGetUpload_published_no_variants(t *testing.T) {
 
 func TestGetUpload_not_found(t *testing.T) {
 	uploadRepo := newMockUploadRepository()
-	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(uploadRepo, newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	uploadRepo.findByIDFn = func(_ context.Context, _ shared.FamilyScope, _ uuid.UUID) (*Upload, error) {
 		return nil, &MediaError{Err: ErrUploadNotFound}
@@ -433,7 +433,7 @@ func TestGetUpload_not_found(t *testing.T) {
 // ─── ValidateAttachment Tests ─────────────────────────────────────────────────
 
 func TestValidateAttachment_valid(t *testing.T) {
-	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 	err := svc.ValidateAttachment(context.Background(), UploadContextJournalImage, "image/jpeg", 5*mb)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -441,7 +441,7 @@ func TestValidateAttachment_valid(t *testing.T) {
 }
 
 func TestValidateAttachment_invalid(t *testing.T) {
-	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), newMockObjectStorageAdapter(), newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 	err := svc.ValidateAttachment(context.Background(), UploadContextProfilePhoto, "video/mp4", 1*mb)
 	if !errors.Is(err, ErrInvalidFileType) {
 		t.Errorf("expected ErrInvalidFileType, got %v", err)
@@ -452,7 +452,7 @@ func TestValidateAttachment_invalid(t *testing.T) {
 
 func TestPresignedGet_success(t *testing.T) {
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	storageAdapter.presignedGetFn = func(_ context.Context, key string, _ uint32) (string, error) {
 		return "https://s3.example.com/signed/" + key, nil
@@ -469,7 +469,7 @@ func TestPresignedGet_success(t *testing.T) {
 
 func TestPresignedGet_storage_error(t *testing.T) {
 	storageAdapter := newMockObjectStorageAdapter()
-	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig())
+	svc := NewMediaService(newMockUploadRepository(), newMockProcessingJobRepository(), storageAdapter, newMockSafetyScanAdapter(), newMockEventBus(), &shared.NoopJobEnqueuer{}, defaultMediaConfig(), nil)
 
 	storageAdapter.presignedGetFn = func(_ context.Context, _ string, _ uint32) (string, error) {
 		return "", errors.New("S3 error")

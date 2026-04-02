@@ -207,6 +207,9 @@ func (h *Handler) getCreatorListings(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query params")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.GetCreatorListings(c.Request().Context(), cc.CreatorID, params)
 	if err != nil {
@@ -506,6 +509,9 @@ func (h *Handler) browseListings(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query params")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.BrowseListings(c.Request().Context(), params)
 	if err != nil {
@@ -614,7 +620,7 @@ func (h *Handler) createCheckout(c echo.Context) error {
 	if err != nil {
 		return mapMktError(err)
 	}
-	return c.JSON(http.StatusOK, resp)
+	return c.JSON(http.StatusCreated, resp)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -629,6 +635,9 @@ func (h *Handler) getPurchases(c echo.Context) error {
 	var params PurchaseQueryParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query params")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.GetPurchases(c.Request().Context(), scope, params)
@@ -784,7 +793,7 @@ func (h *Handler) requestPayout(c echo.Context) error {
 	if err != nil {
 		return mapMktError(err)
 	}
-	return c.JSON(http.StatusOK, resp)
+	return c.JSON(http.StatusCreated, resp)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -799,6 +808,9 @@ func (h *Handler) getListingReviews(c echo.Context) error {
 	var params ReviewQueryParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query params")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.GetListingReviews(c.Request().Context(), listingID, params)

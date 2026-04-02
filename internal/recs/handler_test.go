@@ -8,10 +8,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
 )
+
+type echoValidator struct{ v *validator.Validate }
+
+func (cv *echoValidator) Validate(i any) error { return cv.v.Struct(i) }
 
 // ─── Mock RecsService ─────────────────────────────────────────────────────────
 
@@ -67,6 +72,7 @@ var _ RecsService = (*mockRecsService)(nil)
 
 func setupRecsHandlerTest(svc RecsService) (*echo.Echo, *Handler) {
 	e := echo.New()
+	e.Validator = &echoValidator{v: validator.New()}
 	e.HTTPErrorHandler = shared.HTTPErrorHandler
 	return e, NewHandler(svc)
 }

@@ -6,9 +6,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
 )
+
+type echoValidator struct{ v *validator.Validate }
+
+func (cv *echoValidator) Validate(i any) error { return cv.v.Struct(i) }
 
 // stubRateLimitDeps satisfies the rateLimitDeps interface for handler tests.
 type stubRateLimitDeps struct{}
@@ -17,6 +22,7 @@ func (stubRateLimitDeps) GetCache() shared.Cache { return nil }
 
 func setupHandlerTest(svc SearchService) (*echo.Echo, *Handler) {
 	e := echo.New()
+	e.Validator = &echoValidator{v: validator.New()}
 	e.HTTPErrorHandler = shared.HTTPErrorHandler
 	h := NewHandler(svc, stubRateLimitDeps{})
 	return e, h

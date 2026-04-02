@@ -430,7 +430,7 @@ func (s *ComplianceServiceImpl) AddPortfolioItems(ctx context.Context, studentID
 	// Fetch display data from learn:: and build item rows
 	rows := make([]CreatePortfolioItemRow, 0, len(cmd.Items))
 	for i, item := range cmd.Items {
-		data, err := s.learnSvc.GetPortfolioItemData(ctx, item.SourceType, item.SourceID)
+		data, err := s.learnSvc.GetPortfolioItemData(ctx, scope.FamilyID(), item.SourceType, item.SourceID)
 		if err != nil {
 			return nil, err
 		}

@@ -571,12 +571,12 @@ func (s *stubIamService) GetStudentName(ctx context.Context, studentID uuid.UUID
 // ─── stubLearningService ──────────────────────────────────────────────────────
 
 type stubLearningService struct {
-	getPortfolioItemDataFn func(ctx context.Context, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error)
+	getPortfolioItemDataFn func(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error)
 }
 
-func (s *stubLearningService) GetPortfolioItemData(ctx context.Context, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error) {
+func (s *stubLearningService) GetPortfolioItemData(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error) {
 	if s.getPortfolioItemDataFn != nil {
-		return s.getPortfolioItemDataFn(ctx, sourceType, sourceID)
+		return s.getPortfolioItemDataFn(ctx, familyID, sourceType, sourceID)
 	}
 	panic("stubLearningService.GetPortfolioItemData not stubbed")
 }

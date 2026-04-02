@@ -1197,6 +1197,17 @@ type AssignmentResponse struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
+// --- Cross-Domain Summary Types -----------------------------------------------
+
+// PortfolioItemSummary is a minimal summary of a learn domain entity,
+// consumed by comply:: for portfolio item display. [06-learn §15, 14-comply §9.2]
+type PortfolioItemSummary struct {
+	Title       string
+	Description *string
+	Subject     *string
+	Date        time.Time
+}
+
 // --- Layer 3: Instance Responses --------------------------------------------
 
 // ActivityLogResponse is the activity log response. [S§8.1.1]

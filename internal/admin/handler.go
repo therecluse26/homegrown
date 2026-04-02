@@ -259,6 +259,9 @@ func (h *Handler) updateFlag(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(input); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	flag, err := h.svc.UpdateFlag(c.Request().Context(), auth, key, &input)
 	if err != nil {
@@ -370,6 +373,9 @@ func (h *Handler) updateMethodologyConfig(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(input); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	config, err := h.svc.UpdateMethodologyConfig(c.Request().Context(), auth, slug, &input)
 	if err != nil {
@@ -430,6 +436,9 @@ func (h *Handler) resolveRecoveryRequest(c echo.Context) error {
 	var input ResolveRecoveryInput
 	if err := c.Bind(&input); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(input); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	if err := h.svc.ResolveRecoveryRequest(c.Request().Context(), auth, requestID, input.Approved); err != nil {

@@ -42,6 +42,7 @@ services:
       DSN: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
       SERVE_PUBLIC_BASE_URL: http://localhost:4933
       SERVE_ADMIN_BASE_URL: http://localhost:4934
+      KRATOS_WEBHOOK_SECRET: ${KRATOS_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
     ports:
       - "4933:4433"   # Public API
       - "4934:4434"   # Admin API
@@ -67,6 +68,7 @@ services:
     environment:
       DSN: postgres://homegrown:homegrown@postgres:5432/kratos_agent?sslmode=disable
       LOG_LEVEL: warning
+      KRATOS_WEBHOOK_SECRET: ${KRATOS_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
     command: serve --config /etc/kratos/kratos.yml --dev --watch-courier
     volumes:
       - ./kratos:/etc/kratos
@@ -75,6 +77,12 @@ services:
       - "4936:4434"   # Admin API (agent)
     extra_hosts:
       - "host.docker.internal:172.30.0.1"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:4434/health/alive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   kratos-migrate:
     image: oryd/kratos:v1.3

@@ -39,16 +39,16 @@ func NewIamAdapter(
 
 // learnAdapter implements LearningServiceForComply using raw functions.
 type learnAdapter struct {
-	getPortfolioItemData func(ctx context.Context, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error)
+	getPortfolioItemData func(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error)
 }
 
-func (a *learnAdapter) GetPortfolioItemData(ctx context.Context, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error) {
-	return a.getPortfolioItemData(ctx, sourceType, sourceID)
+func (a *learnAdapter) GetPortfolioItemData(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error) {
+	return a.getPortfolioItemData(ctx, familyID, sourceType, sourceID)
 }
 
 // NewLearnAdapter creates a LearningServiceForComply adapter from raw functions.
 func NewLearnAdapter(
-	getPortfolioItemData func(ctx context.Context, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error),
+	getPortfolioItemData func(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error),
 ) LearningServiceForComply {
 	return &learnAdapter{getPortfolioItemData: getPortfolioItemData}
 }

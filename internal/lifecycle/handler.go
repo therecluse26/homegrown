@@ -53,6 +53,9 @@ func (h *Handler) requestExport(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&req); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	exportID, err := h.svc.RequestExport(c.Request().Context(), auth, &scope, &req)
 	if err != nil {

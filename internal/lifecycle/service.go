@@ -350,18 +350,22 @@ func (s *LifecycleServiceImpl) processSingleDeletion(ctx context.Context, req De
 		return
 	}
 
+	// Track whether all steps (pre-handlers + handlers) succeed. [P1-3]
+	allSucceeded := true
+
 	// Revoke all Kratos sessions for the family.
 	if err := s.iamSvc.RevokeFamilySessions(ctx, req.FamilyID); err != nil {
 		slog.Error("lifecycle: revoke family sessions", "family_id", req.FamilyID, "error", err)
+		allSucceeded = false
 	}
 
 	// Cancel subscriptions.
 	if err := s.billingSvc.CancelFamilySubscriptions(ctx, req.FamilyID); err != nil {
 		slog.Error("lifecycle: cancel subscriptions", "family_id", req.FamilyID, "error", err)
+		allSucceeded = false
 	}
 
 	// Call each DeletionHandler.
-	allSucceeded := true
 	for _, h := range s.deletionHandlers {
 		var handlerErr error
 		switch req.DeletionType {

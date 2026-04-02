@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -419,8 +420,8 @@ func (s *socialServiceImpl) ListFriends(ctx context.Context, scope *shared.Famil
 	return results, nil
 }
 
-func (s *socialServiceImpl) ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error) {
-	friendships, err := s.friendshipRepo.ListIncoming(ctx, scope.FamilyID())
+func (s *socialServiceImpl) ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error) {
+	friendships, err := s.friendshipRepo.ListIncoming(ctx, scope.FamilyID(), offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -442,8 +443,8 @@ func (s *socialServiceImpl) ListIncomingRequests(ctx context.Context, scope *sha
 	return results, nil
 }
 
-func (s *socialServiceImpl) ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error) {
-	friendships, err := s.friendshipRepo.ListOutgoing(ctx, scope.FamilyID())
+func (s *socialServiceImpl) ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error) {
+	friendships, err := s.friendshipRepo.ListOutgoing(ctx, scope.FamilyID(), offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1925,6 +1926,75 @@ func (s *socialServiceImpl) ListEvents(ctx context.Context, auth *shared.AuthCon
 
 		creatorName, _ := s.iam.GetFamilyDisplayName(ctx, e.CreatorFamilyID)
 		rsvp, _ := s.rsvpRepo.FindByEventAndFamily(ctx, e.ID, auth.FamilyID)
+		var myRSVP *string
+		if rsvp != nil {
+			myRSVP = &rsvp.Status
+		}
+
+		results = append(results, EventDetailResponse{
+			EventSummaryResponse: EventSummaryResponse{
+				ID:                e.ID,
+				Title:             e.Title,
+				EventDate:         e.EventDate,
+				EndDate:           e.EndDate,
+				LocationName:      e.LocationName,
+				LocationRegion:    e.LocationRegion,
+				IsVirtual:         e.IsVirtual,
+				CreatorFamilyName: creatorName,
+				Capacity:          e.Capacity,
+				Visibility:        e.Visibility,
+				Status:            e.Status,
+				AttendeeCount:     e.AttendeeCount,
+				MyRSVP:            myRSVP,
+			},
+			CreatorFamilyID: e.CreatorFamilyID,
+			GroupID:         e.GroupID,
+			Description:     e.Description,
+			VirtualURL:      e.VirtualURL,
+			MethodologyName: s.methodologyDisplayName(ctx, e.MethodologySlug),
+			CreatedAt:       e.CreatedAt,
+		})
+	}
+	return results, nil
+}
+
+func (s *socialServiceImpl) ListEventsForDateRange(ctx context.Context, auth *shared.AuthContext, start, end time.Time) ([]EventDetailResponse, error) {
+	friendIDs, err := s.friendshipRepo.ListFriendFamilyIDs(ctx, auth.FamilyID)
+	if err != nil {
+		return nil, err
+	}
+	groupIDs, err := s.groupMemberRepo.ListGroupsByFamily(ctx, auth.FamilyID)
+	if err != nil {
+		return nil, err
+	}
+
+	events, err := s.eventRepo.ListVisibleInDateRange(ctx, auth.FamilyID, friendIDs, groupIDs, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]EventDetailResponse, 0, len(events))
+	for _, e := range events {
+		if e.CreatorFamilyID != auth.FamilyID {
+			blocked, err := s.blockRepo.IsEitherBlocked(ctx, auth.FamilyID, e.CreatorFamilyID)
+			if err != nil {
+				return nil, fmt.Errorf("check block status for event %s: %w", e.ID, err)
+			}
+			if blocked {
+				continue
+			}
+		}
+
+		creatorName, err := s.iam.GetFamilyDisplayName(ctx, e.CreatorFamilyID)
+		if err != nil {
+			slog.Warn("failed to get creator display name for event", "event_id", e.ID, "error", err)
+			creatorName = "" // degrade gracefully — name is cosmetic
+		}
+		rsvp, err := s.rsvpRepo.FindByEventAndFamily(ctx, e.ID, auth.FamilyID)
+		if err != nil {
+			slog.Warn("failed to get RSVP for event", "event_id", e.ID, "error", err)
+			rsvp = nil // degrade gracefully — RSVP is optional enrichment
+		}
 		var myRSVP *string
 		if rsvp != nil {
 			myRSVP = &rsvp.Status

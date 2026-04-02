@@ -198,6 +198,12 @@ func (r *PgScheduleItemRepository) DeleteAllByFamily(ctx context.Context, scope 
 	})
 }
 
+func (r *PgScheduleItemRepository) DeleteByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error {
+	return shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Where("student_id = ?", studentID).Delete(&ScheduleItem{}).Error
+	})
+}
+
 func (r *PgScheduleItemRepository) ListAllByFamily(ctx context.Context, scope *shared.FamilyScope) ([]ScheduleItem, error) {
 	var items []ScheduleItem
 	err := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {

@@ -1,5 +1,13 @@
 package billing
 
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+)
+
 // ─── Background Task Definitions (Phase 2) [10-billing §12] ─────────────────
 
 // AggregatePayoutsPayload is the job payload for monthly payout aggregation.
@@ -13,3 +21,47 @@ func (AggregatePayoutsPayload) TaskType() string { return "billing:aggregate_pay
 type ExecutePayoutsPayload struct{}
 
 func (ExecutePayoutsPayload) TaskType() string { return "billing:execute_payouts" }
+
+// RegisterTaskHandlers registers asynq task handlers for billing background jobs.
+// Called from main.go during worker setup. [10-billing §12]
+func RegisterTaskHandlers(worker shared.JobWorker, payoutRepo PayoutRepository, adapter SubscriptionPaymentAdapter) {
+	worker.Handle("billing:aggregate_payouts", func(ctx context.Context, _ []byte) error {
+		// Phase 2 stub: aggregate creator earnings into bill_payouts rows.
+		// Full implementation requires iterating bill_creator_earnings + grouping by creator.
+		slog.Warn("billing: aggregate_payouts job invoked (Phase 2 — no-op)")
+		return nil
+	})
+
+	worker.Handle("billing:execute_payouts", func(ctx context.Context, _ []byte) error {
+		// BypassRLSTransaction: payouts are system-level cross-family operations run by background worker.
+		pending, err := payoutRepo.FindPending(ctx, 50)
+		if err != nil {
+			slog.Error("billing: execute_payouts find pending", "error", err)
+			return err
+		}
+		if len(pending) == 0 {
+			slog.Info("billing: execute_payouts — no pending payouts")
+			return nil
+		}
+		var failCount int
+		for _, p := range pending {
+			result, createErr := adapter.CreatePayout(ctx, p.CreatorID.String(), p.AmountCents, p.Currency, nil)
+			if createErr != nil {
+				failCount++
+				slog.Error("billing: execute payout failed", "payout_id", p.ID, "error", createErr)
+				if _, statusErr := payoutRepo.UpdateStatus(ctx, p.ID, "failed", nil); statusErr != nil {
+					slog.Error("billing: failed to mark payout as failed", "payout_id", p.ID, "error", statusErr)
+				}
+				continue
+			}
+			if _, statusErr := payoutRepo.UpdateStatus(ctx, p.ID, "processing", &result.ID); statusErr != nil {
+				slog.Error("billing: failed to mark payout as processing — payout may be re-processed", "payout_id", p.ID, "external_id", result.ID, "error", statusErr)
+			}
+		}
+		slog.Info("billing: execute_payouts completed", "total", len(pending), "failed", failCount)
+		if failCount > 0 {
+			return fmt.Errorf("billing: %d of %d payouts failed", failCount, len(pending))
+		}
+		return nil
+	})
+}

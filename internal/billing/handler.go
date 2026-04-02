@@ -83,6 +83,9 @@ func (h *Handler) listTransactions(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.ListTransactions(c.Request().Context(), params, scope)
 	if err != nil {
@@ -326,6 +329,9 @@ func (h *Handler) listInvoices(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.ListInvoices(c.Request().Context(), params, scope)
 	if err != nil {
@@ -344,6 +350,9 @@ func (h *Handler) listPayouts(c echo.Context) error {
 	var params PayoutListParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.ListPayouts(c.Request().Context(), params, creator.CreatorID)

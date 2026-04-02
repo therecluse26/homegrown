@@ -168,6 +168,9 @@ type PlanningService interface {
 
 	// DeleteData removes all plan_ data for the family. [17-planning §14.2]
 	DeleteData(ctx context.Context, scope *shared.FamilyScope) error
+
+	// DeleteStudentData removes schedule items for a specific student. [17-planning §14.3]
+	DeleteStudentData(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -210,6 +213,9 @@ type ScheduleItemRepository interface {
 	Delete(ctx context.Context, scope *shared.FamilyScope, id uuid.UUID) error
 
 	DeleteAllByFamily(ctx context.Context, scope *shared.FamilyScope) error
+
+	// DeleteByStudent deletes all schedule items for a specific student. [17-planning §14.3]
+	DeleteByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error
 
 	ListAllByFamily(ctx context.Context, scope *shared.FamilyScope) ([]ScheduleItem, error)
 }

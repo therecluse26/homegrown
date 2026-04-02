@@ -112,6 +112,9 @@ func (h *Handler) handlePostLogin(c echo.Context) error {
 	if err := c.Bind(&payload); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&payload); err != nil {
+		return shared.ValidationError(err)
+	}
 	if err := h.svc.HandlePostLogin(c.Request().Context(), payload); err != nil {
 		return mapIamError(err)
 	}

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
@@ -92,14 +93,22 @@ func (m *mockPlanningService) ExportData(_ context.Context, _ *shared.FamilyScop
 func (m *mockPlanningService) DeleteData(_ context.Context, _ *shared.FamilyScope) error {
 	return nil
 }
+func (m *mockPlanningService) DeleteStudentData(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) error {
+	return nil
+}
 
 // Compile-time check.
 var _ PlanningService = (*mockPlanningService)(nil)
 
 // ─── Test Helpers ─────────────────────────────────────────────────────────────
 
+type echoValidator struct{ v *validator.Validate }
+
+func (cv *echoValidator) Validate(i any) error { return cv.v.Struct(i) }
+
 func setupPlanHandlerTest(svc PlanningService) (*echo.Echo, *Handler) {
 	e := echo.New()
+	e.Validator = &echoValidator{v: validator.New()}
 	e.HTTPErrorHandler = shared.HTTPErrorHandler
 	return e, NewHandler(svc)
 }

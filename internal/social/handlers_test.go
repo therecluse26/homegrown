@@ -66,8 +66,8 @@ type mockSocialService struct {
 	blockFamilyFn         func(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
 	unblockFamilyFn       func(ctx context.Context, auth *shared.AuthContext, targetFamilyID uuid.UUID) error
 	listFriendsFn         func(ctx context.Context, scope *shared.FamilyScope, cursor *uuid.UUID, limit int) ([]FriendResponse, error)
-	listIncomingFn        func(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
-	listOutgoingFn        func(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
+	listIncomingFn        func(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error)
+	listOutgoingFn        func(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error)
 	listBlocksFn          func(ctx context.Context, scope *shared.FamilyScope) ([]BlockedFamilyResponse, error)
 
 	// Posts
@@ -212,16 +212,16 @@ func (m *mockSocialService) ListFriends(ctx context.Context, scope *shared.Famil
 	panic("unexpected call to ListFriends")
 }
 
-func (m *mockSocialService) ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error) {
+func (m *mockSocialService) ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error) {
 	if m.listIncomingFn != nil {
-		return m.listIncomingFn(ctx, scope)
+		return m.listIncomingFn(ctx, scope, offset, limit)
 	}
 	panic("unexpected call to ListIncomingRequests")
 }
 
-func (m *mockSocialService) ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error) {
+func (m *mockSocialService) ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error) {
 	if m.listOutgoingFn != nil {
-		return m.listOutgoingFn(ctx, scope)
+		return m.listOutgoingFn(ctx, scope, offset, limit)
 	}
 	panic("unexpected call to ListOutgoingRequests")
 }
@@ -521,6 +521,10 @@ func (m *mockSocialService) ListEvents(ctx context.Context, auth *shared.AuthCon
 		return m.listEventsFn(ctx, auth, offset, limit)
 	}
 	panic("unexpected call to ListEvents")
+}
+
+func (m *mockSocialService) ListEventsForDateRange(_ context.Context, _ *shared.AuthContext, _, _ time.Time) ([]EventDetailResponse, error) {
+	return []EventDetailResponse{}, nil
 }
 
 // ─── Discovery ───────────────────────────────────────────────────────────────

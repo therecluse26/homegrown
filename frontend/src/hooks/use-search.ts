@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+// Hand-written until search swag annotations produce matching generated types.
+// Tracked: specs/gaps_03_31_26.md §FE-6
 
 export interface FamilySearchResult {
   family_id: string;

@@ -82,6 +82,10 @@ func (m *mockMediaService) ReprocessUpload(ctx context.Context, scope shared.Fam
 	panic("ReprocessUpload not mocked")
 }
 
+func (m *mockMediaService) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
 // ─── Mock UploadRepository ────────────────────────────────────────────────────
 
 type mockUploadRepository struct {

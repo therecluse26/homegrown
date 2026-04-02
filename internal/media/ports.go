@@ -44,6 +44,12 @@ type MediaService interface {
 	// ReprocessUpload re-enqueues an existing upload for processing. (Phase 2)
 	// Returns ErrNotFound if the upload does not belong to the family.
 	ReprocessUpload(ctx context.Context, scope shared.FamilyScope, id uuid.UUID) error
+
+	// ─── Lifecycle Handlers ─────────────────────────────────────────────
+
+	// HandleFamilyDeletionScheduled deletes all media data for a family.
+	// Cascades through processing jobs and transcode jobs before uploads. [09-media §14]
+	HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────

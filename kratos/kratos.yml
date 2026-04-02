@@ -45,7 +45,7 @@ selfservice:
                   type: api_key
                   config:
                     name: X-Webhook-Secret
-                    value: dev-webhook-secret-change-in-production
+                    value: ${KRATOS_WEBHOOK_SECRET}
                     in: header
 
     login:
@@ -63,7 +63,7 @@ selfservice:
                   type: api_key
                   config:
                     name: X-Webhook-Secret
-                    value: dev-webhook-secret-change-in-production
+                    value: ${KRATOS_WEBHOOK_SECRET}
                     in: header
 
     verification:
@@ -90,7 +90,7 @@ identity:
 session:
   lifespan: 720h
   cookie:
-    same_site: Lax
+    same_site: Strict
 
 courier:
   smtp:

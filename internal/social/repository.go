@@ -131,11 +131,12 @@ func (r *PgFriendshipRepository) ListFriends(ctx context.Context, familyID uuid.
 }
 
 // CROSS-FAMILY: lists incoming pending requests.
-func (r *PgFriendshipRepository) ListIncoming(ctx context.Context, familyID uuid.UUID) ([]Friendship, error) {
+func (r *PgFriendshipRepository) ListIncoming(ctx context.Context, familyID uuid.UUID, offset, limit int) ([]Friendship, error) {
 	var friendships []Friendship
 	err := r.db.WithContext(ctx).
 		Where("accepter_family_id = ? AND status = 'pending'", familyID).
 		Order("created_at DESC").
+		Offset(offset).Limit(limit).
 		Find(&friendships).Error
 	if err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -144,11 +145,12 @@ func (r *PgFriendshipRepository) ListIncoming(ctx context.Context, familyID uuid
 }
 
 // CROSS-FAMILY: lists outgoing pending requests.
-func (r *PgFriendshipRepository) ListOutgoing(ctx context.Context, familyID uuid.UUID) ([]Friendship, error) {
+func (r *PgFriendshipRepository) ListOutgoing(ctx context.Context, familyID uuid.UUID, offset, limit int) ([]Friendship, error) {
 	var friendships []Friendship
 	err := r.db.WithContext(ctx).
 		Where("requester_family_id = ? AND status = 'pending'", familyID).
 		Order("created_at DESC").
+		Offset(offset).Limit(limit).
 		Find(&friendships).Error
 	if err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -1026,6 +1028,30 @@ func (r *PgEventRepository) ListVisible(ctx context.Context, familyID uuid.UUID,
 	err := query.Where(conditions).
 		Order("event_date ASC").
 		Offset(offset).Limit(limit).
+		Find(&events).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return events, nil
+}
+
+func (r *PgEventRepository) ListVisibleInDateRange(ctx context.Context, familyID uuid.UUID, friendIDs []uuid.UUID, groupIDs []uuid.UUID, start, end time.Time) ([]Event, error) {
+	query := r.db.WithContext(ctx).Where("status = 'active'").
+		Where("event_date >= ? AND event_date <= ?", start, end)
+
+	conditions := r.db.Where("creator_family_id = ?", familyID)
+	if len(friendIDs) > 0 {
+		conditions = conditions.Or("creator_family_id IN ? AND visibility = 'friends'", friendIDs)
+	}
+	if len(groupIDs) > 0 {
+		conditions = conditions.Or("group_id IN ? AND visibility = 'group'", groupIDs)
+	}
+	conditions = conditions.Or("visibility = 'discoverable'")
+
+	var events []Event
+	err := query.Where(conditions).
+		Order("event_date ASC").
+		Limit(500).
 		Find(&events).Error
 	if err != nil {
 		return nil, shared.ErrDatabase(err)

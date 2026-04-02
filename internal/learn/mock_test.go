@@ -577,6 +577,9 @@ func (m *mockLearningService) HandleStudentCreated(context.Context, uuid.UUID, u
 func (m *mockLearningService) HandleStudentDeleted(context.Context, uuid.UUID, uuid.UUID) error {
 	return nil
 }
+func (m *mockLearningService) GetPortfolioItemSummary(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*PortfolioItemSummary, error) {
+	return &PortfolioItemSummary{Title: "mock"}, nil
+}
 func (m *mockLearningService) HandleFamilyDeletionScheduled(context.Context, uuid.UUID) error {
 	return nil
 }

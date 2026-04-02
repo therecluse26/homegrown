@@ -104,6 +104,10 @@ func (s *stubScheduleItemRepo) DeleteAllByFamily(ctx context.Context, scope *sha
 	return nil
 }
 
+func (s *stubScheduleItemRepo) DeleteByStudent(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID) error {
+	return nil
+}
+
 func (s *stubScheduleItemRepo) ListAllByFamily(ctx context.Context, scope *shared.FamilyScope) ([]ScheduleItem, error) {
 	if s.listAllByFamilyFn != nil {
 		return s.listAllByFamilyFn(ctx, scope)

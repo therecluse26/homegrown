@@ -112,7 +112,7 @@ func IsValidExplorationFrequency(s string) bool {
 type RecommendationListParams struct {
 	Type   *string `query:"type"`
 	Cursor *string `query:"cursor"`
-	Limit  *int64  `query:"limit"`
+	Limit  *int64  `query:"limit" validate:"omitempty,min=1,max=50"`
 }
 
 // StudentRecommendationParams holds query parameters for GET /v1/recommendations/students/:student_id.
@@ -120,7 +120,7 @@ type StudentRecommendationParams struct {
 	StudentID uuid.UUID `param:"student_id"`
 	Type      *string   `query:"type"`
 	Cursor    *string   `query:"cursor"`
-	Limit     *int64    `query:"limit"`
+	Limit     *int64    `query:"limit" validate:"omitempty,min=1,max=50"`
 }
 
 // UpdatePreferencesCommand is the request body for PATCH /v1/recommendations/preferences.

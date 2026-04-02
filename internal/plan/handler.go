@@ -290,6 +290,9 @@ func (h *Handler) listScheduleItems(c echo.Context) error {
 	if err := c.Bind(&pagination); err != nil {
 		return shared.ErrBadRequest("invalid pagination parameters")
 	}
+	if err := c.Validate(&pagination); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	result, err := h.svc.ListScheduleItems(c.Request().Context(), auth, &scope, query, &pagination)
 	if err != nil {
@@ -363,6 +366,9 @@ func (h *Handler) updateScheduleItem(c echo.Context) error {
 	var input UpdateScheduleItemInput
 	if err := c.Bind(&input); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&input); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	if err := h.svc.UpdateScheduleItem(c.Request().Context(), auth, &scope, itemID, input); err != nil {
@@ -467,6 +473,9 @@ func (h *Handler) logAsActivity(c echo.Context) error {
 	var input LogAsActivityInput
 	if err := c.Bind(&input); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&input); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	activityID, err := h.svc.LogAsActivity(c.Request().Context(), auth, &scope, itemID, input)
@@ -573,6 +582,9 @@ func (h *Handler) updateTemplate(c echo.Context) error {
 	var input UpdateTemplateInput
 	if err := c.Bind(&input); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&input); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	if err := h.svc.UpdateTemplate(c.Request().Context(), auth, &scope, templateID, input); err != nil {

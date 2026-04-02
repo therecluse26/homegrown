@@ -1948,7 +1948,7 @@ type QuizDefRepository interface {
     FindByID(ctx context.Context, quizDefID uuid.UUID) (*QuizDefModel, error)
     Update(ctx context.Context, def *QuizDefModel) error
     ListQuestions(ctx context.Context, quizDefID uuid.UUID) ([]QuizQuestionModel, error)
-    ReplaceQuestions(ctx context.Context, quizDefID uuid.UUID, questions []QuizQuestionModel) error
+    SetQuestions(ctx context.Context, quizDefID uuid.UUID, questions []QuizQuestionModel) error
 }
 
 // QuizSessionRepository manages quiz session persistence. [S§8.1.9]
@@ -1966,7 +1966,7 @@ type SequenceDefRepository interface {
     FindByID(ctx context.Context, defID uuid.UUID) (*SequenceDefModel, error)
     Update(ctx context.Context, def *SequenceDefModel) error
     ListItems(ctx context.Context, defID uuid.UUID) ([]SequenceItemModel, error)
-    ReplaceItems(ctx context.Context, defID uuid.UUID, items []SequenceItemModel) error
+    SetItems(ctx context.Context, defID uuid.UUID, items []SequenceItemModel) error
 }
 
 // SequenceProgressRepository manages sequence progress persistence. [S§8.1.12]
@@ -2027,6 +2027,7 @@ type MediaAdapter interface {
 // IamServiceForLearn — consumer-defined interface for IAM lookups. [CODING §8.1]
 type IamServiceForLearn interface {
     StudentBelongsToFamily(ctx context.Context, studentID uuid.UUID, familyID uuid.UUID) (bool, error)
+    GetStudentName(ctx context.Context, studentID uuid.UUID) (string, error)
 }
 
 // MethodServiceForLearn — consumer-defined interface for methodology tool resolution. [CODING §8.1]

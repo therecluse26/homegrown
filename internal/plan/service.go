@@ -686,6 +686,18 @@ func (s *PlanningServiceImpl) DeleteData(
 	return nil
 }
 
+// DeleteStudentData removes schedule items for a specific student. [17-planning §14.3]
+func (s *PlanningServiceImpl) DeleteStudentData(
+	ctx context.Context,
+	scope *shared.FamilyScope,
+	studentID uuid.UUID,
+) error {
+	if err := s.scheduleRepo.DeleteByStudent(ctx, scope, studentID); err != nil {
+		return fmt.Errorf("plan: delete student data: %w", err)
+	}
+	return nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure Helpers
 // ═══════════════════════════════════════════════════════════════════════════════

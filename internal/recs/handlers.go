@@ -57,6 +57,9 @@ func (h *Handler) getRecommendations(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.GetRecommendations(c.Request().Context(), &scope, params)
 	if err != nil {
@@ -95,6 +98,9 @@ func (h *Handler) getStudentRecommendations(c echo.Context) error {
 	var params StudentRecommendationParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
 	}
 	params.StudentID = studentID
 
@@ -248,6 +254,9 @@ func (h *Handler) updatePreferences(c echo.Context) error {
 	var cmd UpdatePreferencesCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.UpdatePreferences(c.Request().Context(), &scope, cmd)

@@ -134,6 +134,9 @@ func (h *Handler) createActivityDef(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.CreateActivityDef(c.Request().Context(), cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -194,6 +197,9 @@ func (h *Handler) updateActivityDef(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateActivityDef(c.Request().Context(), defID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -230,6 +236,9 @@ func (h *Handler) logActivity(c echo.Context) error {
 	var cmd LogActivityCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.LogActivity(c.Request().Context(), &scope, studentID, cmd)
 	if err != nil {
@@ -312,6 +321,9 @@ func (h *Handler) updateActivityLog(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateActivityLog(c.Request().Context(), &scope, studentID, logID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -344,6 +356,9 @@ func (h *Handler) createReadingItem(c echo.Context) error {
 	var cmd CreateReadingItemCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.CreateReadingItem(c.Request().Context(), cmd)
 	if err != nil {
@@ -398,6 +413,9 @@ func (h *Handler) updateReadingItem(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateReadingItem(c.Request().Context(), itemID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -419,6 +437,9 @@ func (h *Handler) startReading(c echo.Context) error {
 	var cmd StartReadingCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.StartReading(c.Request().Context(), &scope, studentID, cmd)
 	if err != nil {
@@ -471,6 +492,9 @@ func (h *Handler) updateReadingProgress(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateReadingProgress(c.Request().Context(), &scope, studentID, progressID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -492,6 +516,9 @@ func (h *Handler) createJournalEntry(c echo.Context) error {
 	var cmd CreateJournalEntryCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.CreateJournalEntry(c.Request().Context(), &scope, studentID, cmd)
 	if err != nil {
@@ -577,6 +604,9 @@ func (h *Handler) updateJournalEntry(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateJournalEntry(c.Request().Context(), &scope, studentID, entryID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -613,6 +643,9 @@ func (h *Handler) createReadingList(c echo.Context) error {
 	var cmd CreateReadingListCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.CreateReadingList(c.Request().Context(), &scope, cmd)
 	if err != nil {
@@ -661,6 +694,9 @@ func (h *Handler) updateReadingList(c echo.Context) error {
 	var cmd UpdateReadingListCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.UpdateReadingList(c.Request().Context(), &scope, listID, cmd)
 	if err != nil {
@@ -719,6 +755,9 @@ func (h *Handler) createCustomSubject(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.CreateCustomSubject(c.Request().Context(), &scope, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -732,6 +771,9 @@ func (h *Handler) linkArtifacts(c echo.Context) error {
 	var cmd CreateArtifactLinkCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.LinkArtifacts(c.Request().Context(), cmd)
 	if err != nil {
@@ -869,6 +911,9 @@ func (h *Handler) requestDataExport(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.RequestDataExport(c.Request().Context(), &scope, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -929,6 +974,9 @@ func (h *Handler) createQuestion(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.CreateQuestion(c.Request().Context(), cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -980,6 +1028,9 @@ func (h *Handler) updateQuestion(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateQuestion(c.Request().Context(), questionID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -993,6 +1044,9 @@ func (h *Handler) createQuizDef(c echo.Context) error {
 	var cmd CreateQuizDefCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.CreateQuizDef(c.Request().Context(), cmd)
 	if err != nil {
@@ -1023,6 +1077,9 @@ func (h *Handler) updateQuizDef(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateQuizDef(c.Request().Context(), defID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -1044,6 +1101,9 @@ func (h *Handler) startQuizSession(c echo.Context) error {
 	var cmd StartQuizSessionCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.StartQuizSession(c.Request().Context(), &scope, studentID, cmd)
 	if err != nil {
@@ -1089,6 +1149,9 @@ func (h *Handler) updateQuizSession(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateQuizSession(c.Request().Context(), &scope, studentID, sessionID, cmd)
 	if err != nil {
 		return mapLearningError(err)
@@ -1112,6 +1175,9 @@ func (h *Handler) scoreQuizSession(c echo.Context) error {
 	var cmd ScoreQuizCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.ScoreQuizSession(c.Request().Context(), &scope, studentID, sessionID, cmd)
 	if err != nil {
@@ -1157,6 +1223,9 @@ func (h *Handler) updateSequenceDef(c echo.Context) error {
 	var cmd UpdateSequenceDefCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.UpdateSequenceDef(c.Request().Context(), defID, cmd)
 	if err != nil {
@@ -1226,6 +1295,9 @@ func (h *Handler) updateSequenceProgress(c echo.Context) error {
 	var cmd UpdateSequenceProgressCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.UpdateSequenceProgress(c.Request().Context(), &scope, studentID, progressID, cmd)
 	if err != nil {
@@ -1312,6 +1384,9 @@ func (h *Handler) updateAssignment(c echo.Context) error {
 	var cmd UpdateAssignmentCommand
 	if err := c.Bind(&cmd); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 	resp, err := h.svc.UpdateAssignment(c.Request().Context(), &scope, studentID, assignmentID, cmd)
 	if err != nil {

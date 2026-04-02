@@ -71,6 +71,9 @@ func (h *Handler) search(c echo.Context) error {
 	if bindErr := c.Bind(&params); bindErr != nil {
 		return shared.ErrBadRequest("invalid query parameters")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	if params.Q == "" {
 		return shared.ErrValidation("q is required")
@@ -111,6 +114,9 @@ func (h *Handler) autocomplete(c echo.Context) error {
 	var params AutocompleteParams
 	if bindErr := c.Bind(&params); bindErr != nil {
 		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	if params.Q == "" {

@@ -232,6 +232,9 @@ func (h *Handler) adminUpdateReport(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.AdminUpdateReport(c.Request().Context(), auth, id, cmd)
 	if err != nil {
@@ -278,6 +281,9 @@ func (h *Handler) adminReviewFlag(c echo.Context) error {
 	var cmd ReviewFlagCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.AdminReviewFlag(c.Request().Context(), auth, id, cmd)

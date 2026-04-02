@@ -31,8 +31,8 @@ type SocialService interface {
 
 	// ─── Friend Queries ─────────────────────────────────────────────────
 	ListFriends(ctx context.Context, scope *shared.FamilyScope, cursor *uuid.UUID, limit int) ([]FriendResponse, error)
-	ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
-	ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope) ([]FriendRequestResponse, error)
+	ListIncomingRequests(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error)
+	ListOutgoingRequests(ctx context.Context, scope *shared.FamilyScope, offset, limit int) ([]FriendRequestResponse, error)
 	ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockedFamilyResponse, error)
 
 	// ─── Post Commands ──────────────────────────────────────────────────
@@ -97,6 +97,8 @@ type SocialService interface {
 	// ─── Event Queries ──────────────────────────────────────────────────
 	GetEvent(ctx context.Context, auth *shared.AuthContext, eventID uuid.UUID) (*EventDetailResponse, error)
 	ListEvents(ctx context.Context, auth *shared.AuthContext, offset, limit int) ([]EventDetailResponse, error)
+	// ListEventsForDateRange returns visible events within a date range. [17-planning §9.1]
+	ListEventsForDateRange(ctx context.Context, auth *shared.AuthContext, start, end time.Time) ([]EventDetailResponse, error)
 
 	// ─── Event Handlers (no auth context) ───────────────────────────────
 	HandleFamilyCreated(ctx context.Context, familyID uuid.UUID) error
@@ -162,10 +164,10 @@ type FriendshipRepository interface {
 	ListFriendFamilyIDs(ctx context.Context, familyID uuid.UUID) ([]uuid.UUID, error)
 	// CROSS-FAMILY: lists friends using cursor pagination (cursor = last friendship UUID).
 	ListFriendsCursor(ctx context.Context, familyID uuid.UUID, cursor *uuid.UUID, limit int) ([]Friendship, error)
-	// CROSS-FAMILY: lists incoming pending requests for a family.
-	ListIncoming(ctx context.Context, familyID uuid.UUID) ([]Friendship, error)
-	// CROSS-FAMILY: lists outgoing pending requests for a family.
-	ListOutgoing(ctx context.Context, familyID uuid.UUID) ([]Friendship, error)
+	// CROSS-FAMILY: lists incoming pending requests for a family (paginated).
+	ListIncoming(ctx context.Context, familyID uuid.UUID, offset, limit int) ([]Friendship, error)
+	// CROSS-FAMILY: lists outgoing pending requests for a family (paginated).
+	ListOutgoing(ctx context.Context, familyID uuid.UUID, offset, limit int) ([]Friendship, error)
 	// CROSS-FAMILY: checks if two families are friends (accepted).
 	AreFriends(ctx context.Context, familyA, familyB uuid.UUID) (bool, error)
 	// DeleteBetween removes friendship between two families (for unfriend/block).
@@ -289,6 +291,8 @@ type EventRepository interface {
 	Update(ctx context.Context, event *Event) error
 	// CROSS-FAMILY: lists events visible to a family (friends, groups, discoverable), paginated.
 	ListVisible(ctx context.Context, familyID uuid.UUID, friendIDs []uuid.UUID, groupIDs []uuid.UUID, offset, limit int) ([]Event, error)
+	// CROSS-FAMILY: lists visible events within a date range (for calendar integration). [17-planning §9.1]
+	ListVisibleInDateRange(ctx context.Context, familyID uuid.UUID, friendIDs []uuid.UUID, groupIDs []uuid.UUID, start, end time.Time) ([]Event, error)
 	// ListDiscoverable lists events with 'discoverable' visibility, filtered by methodology/location. [05-social §15]
 	ListDiscoverable(ctx context.Context, methodologySlug *string, locationRegion *string) ([]Event, error)
 	IncrementAttendeeCount(ctx context.Context, id uuid.UUID) error

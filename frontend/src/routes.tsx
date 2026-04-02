@@ -115,6 +115,11 @@ const ListingVersionHistory = lazy(() => import("@/features/marketplace/listing-
 const PricingPage = lazy(() => import("@/features/billing/pricing-page").then(m => ({ default: m.PricingPage })));
 const PaymentMethods = lazy(() => import("@/features/billing/payment-methods").then(m => ({ default: m.PaymentMethods })));
 const TransactionHistory = lazy(() => import("@/features/billing/transaction-history").then(m => ({ default: m.TransactionHistory })));
+const SubscriptionManagement = lazy(() => import("@/features/billing/subscription-management").then(m => ({ default: m.SubscriptionManagement })));
+const InvoiceHistory = lazy(() => import("@/features/billing/invoice-history").then(m => ({ default: m.InvoiceHistory })));
+
+// Recommendations
+const RecommendationsPage = lazy(() => import("@/features/recommendations/recommendations-page").then(m => ({ default: m.RecommendationsPage })));
 
 // Search
 const SearchResults = lazy(() => import("@/features/search/search-results").then(m => ({ default: m.SearchResults })));
@@ -233,6 +238,8 @@ const routes: RouteObject[] = [
               { path: "billing", element: <PricingPage />, errorElement: <RouteErrorBoundary /> },
               { path: "billing/payment-methods", element: <PaymentMethods /> },
               { path: "billing/transactions", element: <TransactionHistory /> },
+              { path: "billing/subscription", element: <SubscriptionManagement /> },
+              { path: "billing/invoices", element: <InvoiceHistory /> },
 
               // Settings
               { path: "settings", element: <FamilySettings />, errorElement: <RouteErrorBoundary /> },
@@ -249,6 +256,9 @@ const routes: RouteObject[] = [
               { path: "settings/privacy", element: <PrivacyControls /> },
               { path: "settings/account/mfa", element: <MfaSetup /> },
               { path: "settings/subscription/manage", element: <SubscriptionManager /> },
+
+              // Recommendations
+              { path: "recommendations", element: <RecommendationsPage />, errorElement: <RouteErrorBoundary /> },
 
               // Search
               { path: "search", element: <SearchResults />, errorElement: <RouteErrorBoundary /> },

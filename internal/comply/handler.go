@@ -143,6 +143,9 @@ func (h *Handler) upsertFamilyConfig(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.UpsertFamilyConfig(c.Request().Context(), cmd, scope)
 	if err != nil {
@@ -230,6 +233,9 @@ func (h *Handler) createSchedule(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.CreateSchedule(c.Request().Context(), cmd, scope)
 	if err != nil {
@@ -291,6 +297,9 @@ func (h *Handler) updateSchedule(c echo.Context) error {
 	var cmd UpdateScheduleCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.UpdateSchedule(c.Request().Context(), id, cmd, scope)
@@ -364,6 +373,9 @@ func (h *Handler) recordAttendance(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.RecordAttendance(c.Request().Context(), studentID, cmd, scope)
 	if err != nil {
@@ -400,6 +412,9 @@ func (h *Handler) bulkRecordAttendance(c echo.Context) error {
 	var cmd BulkRecordAttendanceCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.BulkRecordAttendance(c.Request().Context(), studentID, cmd, scope)
@@ -440,6 +455,9 @@ func (h *Handler) listAttendance(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.ListAttendance(c.Request().Context(), studentID, params, scope)
 	if err != nil {
@@ -475,6 +493,9 @@ func (h *Handler) getAttendanceSummary(c echo.Context) error {
 	var params AttendanceSummaryParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.GetAttendanceSummary(c.Request().Context(), studentID, params, scope)
@@ -517,6 +538,9 @@ func (h *Handler) updateAttendance(c echo.Context) error {
 	var cmd UpdateAttendanceCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.UpdateAttendance(c.Request().Context(), studentID, attendanceID, cmd, scope)
@@ -593,6 +617,9 @@ func (h *Handler) createAssessment(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.CreateAssessment(c.Request().Context(), studentID, cmd, scope)
 	if err != nil {
@@ -631,6 +658,9 @@ func (h *Handler) listAssessments(c echo.Context) error {
 	var params AssessmentListParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ErrValidation(err.Error())
 	}
 
 	resp, err := h.svc.ListAssessments(c.Request().Context(), studentID, params, scope)
@@ -673,6 +703,9 @@ func (h *Handler) updateAssessment(c echo.Context) error {
 	var cmd UpdateAssessmentCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.UpdateAssessment(c.Request().Context(), studentID, assessmentID, cmd, scope)
@@ -748,6 +781,9 @@ func (h *Handler) createTestScore(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.CreateTestScore(c.Request().Context(), studentID, cmd, scope)
 	if err != nil {
@@ -783,6 +819,9 @@ func (h *Handler) listTestScores(c echo.Context) error {
 	var params TestListParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ErrValidation(err.Error())
 	}
 
 	resp, err := h.svc.ListTestScores(c.Request().Context(), studentID, params, scope)
@@ -825,6 +864,9 @@ func (h *Handler) updateTestScore(c echo.Context) error {
 	var cmd UpdateTestScoreCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.UpdateTestScore(c.Request().Context(), studentID, testID, cmd, scope)
@@ -900,6 +942,9 @@ func (h *Handler) createPortfolio(c echo.Context) error {
 	var cmd CreatePortfolioCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.CreatePortfolio(c.Request().Context(), studentID, cmd, scope)
@@ -1007,6 +1052,9 @@ func (h *Handler) addPortfolioItems(c echo.Context) error {
 	var cmd AddPortfolioItemsCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.AddPortfolioItems(c.Request().Context(), studentID, portfolioID, cmd, scope)
@@ -1147,6 +1195,9 @@ func (h *Handler) createTranscript(c echo.Context) error {
 	var cmd CreateTranscriptCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.CreateTranscript(c.Request().Context(), studentID, cmd, scope)
@@ -1358,6 +1409,9 @@ func (h *Handler) createCourse(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 
 	resp, err := h.svc.CreateCourse(c.Request().Context(), studentID, cmd, scope)
 	if err != nil {
@@ -1395,6 +1449,9 @@ func (h *Handler) listCourses(c echo.Context) error {
 	var params CourseListParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ErrValidation(err.Error())
 	}
 
 	resp, err := h.svc.ListCourses(c.Request().Context(), studentID, params, scope)
@@ -1437,6 +1494,9 @@ func (h *Handler) updateCourse(c echo.Context) error {
 	var cmd UpdateCourseCommand
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.UpdateCourse(c.Request().Context(), studentID, courseID, cmd, scope)
@@ -1511,6 +1571,9 @@ func (h *Handler) calculateGPA(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid query parameters")
 	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ErrValidation(err.Error())
+	}
 
 	resp, err := h.svc.CalculateGPA(c.Request().Context(), studentID, params, scope)
 	if err != nil {
@@ -1546,6 +1609,9 @@ func (h *Handler) calculateGPAWhatIf(c echo.Context) error {
 	var params GpaWhatIfParams
 	if err := c.Bind(&params); err != nil {
 		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
 	}
 
 	resp, err := h.svc.CalculateGPAWhatIf(c.Request().Context(), studentID, params, scope)

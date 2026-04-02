@@ -197,6 +197,12 @@ type LearningService interface {
 	// GetVideoProgress returns video progress for a student.
 	GetVideoProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, videoDefID uuid.UUID) (VideoProgressResponse, error)
 
+	// ─── Cross-Domain Queries ───────────────────────────────────────────
+
+	// GetPortfolioItemSummary returns summary data for a learning activity or journal entry,
+	// used by comply:: domain for portfolio item display. [06-learn §15, 14-comply §9.2]
+	GetPortfolioItemSummary(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemSummary, error)
+
 	// ─── Event Handlers (no auth context) ───────────────────────────────
 
 	// HandleStudentCreated handles StudentCreated event — initialize student learning defaults.

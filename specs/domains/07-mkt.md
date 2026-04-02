@@ -692,7 +692,7 @@ Create a Hyperswitch payment session for cart items and redirect to checkout.
 - **Auth**: `AuthContext`
 - **Body**: `CreateCheckoutCommand {}` (empty — uses current cart contents)
 - **Validation**: Cart must not be empty, all cart items must still be published
-- **Response**: `200 OK` → `{ checkout_url: string, payment_session_id: string }`
+- **Response**: `201 Created` → `{ checkout_url: string, payment_session_id: string }`
 - **Side effects**: Calls `PaymentAdapter.CreatePayment()` with split rules per listing. `[§11]`
 - **Error codes**: `400` (empty cart), `409` (stale cart — items unpublished), `502` (payment provider)
 
@@ -799,7 +799,7 @@ Request a payout of accumulated earnings via Hyperswitch payout API.
 
 - **Auth**: `RequireCreator`
 - **Validation**: `onboarding_status` must be `active`, minimum payout threshold met
-- **Response**: `200 OK` → `{ payout_id: string, amount_cents: int64, status: string }`
+- **Response**: `201 Created` → `{ payout_id: string, amount_cents: int64, status: string }`
 - **Side effects**: Calls `PaymentAdapter.CreatePayout()`
 
 ##### `POST /v1/marketplace/publishers/:publisher_id/members`

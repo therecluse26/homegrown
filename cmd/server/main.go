@@ -14,6 +14,8 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -511,7 +513,7 @@ func main() {
 	mediaSvc := media.NewMediaService(
 		mediaUploadRepo, mediaProcJobRepo,
 		mediaStorage, mediaSafety,
-		eventBus, jobs, mediaCfg,
+		eventBus, jobs, mediaCfg, db,
 	)
 
 	// ── Step 7f: Wire mkt:: domain ──────────────────────────────────────────────
@@ -741,7 +743,9 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseCompleted{}), notify.NewPurchaseCompletedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(mkt.PurchaseRefunded{}), notify.NewPurchaseRefundedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(mkt.CreatorOnboarded{}), notify.NewCreatorOnboardedHandler(notifySvc))
-	// DEFERRED: safety::ContentFlagged — safety:: domain not implemented
+	// safety:: events → notify + mkt
+	eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), notify.NewContentFlaggedHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), mkt.NewContentFlaggedHandler(mktSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.CoParentAdded{}), notify.NewCoParentAddedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), notify.NewFamilyDeletionScheduledHandler(notifySvc))
 
@@ -934,10 +938,20 @@ func main() {
 		iamSvc.GetStudentName,
 	)
 
-	// Learn adapter for comply: stub — portfolio item data loading deferred until PDF rendering. [14-comply §9.2]
+	// Learn adapter for comply: bridges learn:: activity data into portfolio items. [14-comply §9.2]
+	// Delegates to learn service instead of raw SQL — respects bounded context. [SS2.7, SS8.1]
 	learnForComply := comply.NewLearnAdapter(
-		func(_ context.Context, _ string, _ uuid.UUID) (*comply.PortfolioItemData, error) {
-			return nil, fmt.Errorf("comply: learn adapter not yet implemented (PDF rendering deferred)")
+		func(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*comply.PortfolioItemData, error) {
+			summary, err := learnSvc.GetPortfolioItemSummary(ctx, familyID, sourceType, sourceID)
+			if err != nil {
+				return nil, err
+			}
+			return &comply.PortfolioItemData{
+				Title:       summary.Title,
+				Description: summary.Description,
+				Subject:     summary.Subject,
+				Date:        summary.Date,
+			}, nil
 		},
 	)
 
@@ -1002,13 +1016,41 @@ func main() {
 		},
 	)
 
-	// Media adapter for comply: stub — server-side PDF upload deferred until gofpdf integration. [14-comply §9.2]
+	// Media adapter for comply: bridges media:: for server-side PDF upload + presigned download. [14-comply §9.2]
 	mediaForComply := comply.NewMediaAdapter(
-		func(_ context.Context, _ uuid.UUID, _ string, _ string, _ string, _ []byte) (*uuid.UUID, error) {
-			return nil, fmt.Errorf("comply: media adapter not yet implemented (PDF upload deferred)")
+		// RequestUpload: server-side upload via object storage + create upload record.
+		func(ctx context.Context, familyID uuid.UUID, uploadContext string, filename string, contentType string, data []byte) (*uuid.UUID, error) {
+			scope := shared.NewFamilyScopeFromID(familyID)
+			uploadID := uuid.New()
+			storageKey := fmt.Sprintf("comply/%s/%s/%s", familyID, uploadID, filename)
+			if err := mediaStorage.PutObject(ctx, storageKey, data, contentType); err != nil {
+				return nil, fmt.Errorf("comply: media upload put: %w", err)
+			}
+			// Create upload record so the file is tracked and discoverable.
+			upload, err := mediaUploadRepo.Create(ctx, scope, &media.CreateUploadRow{
+				ID:               uploadID,
+				OriginalFilename: filename,
+				ContentType:      contentType,
+				StorageKey:       storageKey,
+				Context:          media.UploadContext(uploadContext),
+				ExpiresAt:        time.Now().Add(365 * 24 * time.Hour), // PDFs don't expire
+			})
+			if err != nil {
+				return nil, fmt.Errorf("comply: media upload record: %w", err)
+			}
+			// Mark as published (server-side upload bypasses normal processing pipeline).
+			if _, err := mediaUploadRepo.UpdateStatus(ctx, upload.ID, media.UploadStatusPublished, nil); err != nil {
+				slog.Error("comply: media upload status update", "upload_id", upload.ID, "error", err)
+			}
+			return &uploadID, nil
 		},
-		func(_ context.Context, _ uuid.UUID) (string, error) {
-			return "", fmt.Errorf("comply: media adapter not yet implemented (presigned URL deferred)")
+		// PresignedGet: look up storage key by upload ID, then generate presigned URL.
+		func(ctx context.Context, uploadID uuid.UUID) (string, error) {
+			upload, err := mediaUploadRepo.FindByIDUnscoped(ctx, uploadID)
+			if err != nil {
+				return "", fmt.Errorf("comply: media presigned lookup: %w", err)
+			}
+			return mediaSvc.PresignedGet(ctx, upload.StorageKey, 3600)
 		},
 	)
 
@@ -1120,12 +1162,25 @@ func main() {
 		},
 	)
 
+	// Declare plan deletion adapter early; svc is set after plan:: is wired (Step 7o).
+	planDeletion := &lifecyclePlanDeletion{}
+
 	lifecycleSvc := lifecycle.NewLifecycleService(
 		lifecycleExportRepo, lifecycleDeletionRepo, lifecycleRecoveryRepo,
 		iamForLifecycle, billingForLifecycle,
 		eventBus, jobs,
-		[]lifecycle.ExportHandler{},   // domain export handlers — registered at startup in Phase 2
-		[]lifecycle.DeletionHandler{}, // domain deletion handlers — registered at startup in Phase 2
+		[]lifecycle.ExportHandler{}, // domain export handlers — Phase 2 (deferred)
+		[]lifecycle.DeletionHandler{
+			&lifecycleLearnDeletion{svc: learnSvc},
+			&lifecycleSocialDeletion{svc: socialSvc},
+			&lifecycleMktDeletion{svc: mktSvc},
+			&lifecycleNotifyDeletion{svc: notifySvc},
+			&lifecycleBillingDeletion{svc: billingSvc},
+			&lifecycleComplyDeletion{svc: complySvc},
+			&lifecycleRecsDeletion{svc: recsSvc},
+			&lifecycleMediaDeletion{svc: mediaSvc},
+			planDeletion, // svc set after plan:: is wired (below)
+		},
 	)
 
 	// Subscribe lifecycle to family deletion events.
@@ -1147,7 +1202,11 @@ func main() {
 		kratosPublicURL:       cfg.AuthPublicURL,
 		objectStorageEndpoint: cfg.ObjectStorageEndpoint,
 	}
-	jobsForAdmin := &adminJobInspectorStub{}
+	queueInspector, err := admin.NewAsynqQueueInspector(cfg.RedisURL)
+	if err != nil {
+		slog.Warn("queue inspector unavailable; admin job status will be empty", "error", err)
+	}
+	jobsForAdmin := &adminJobInspectorAdapter{inspector: queueInspector}
 
 	adminSvc := admin.NewAdminService(
 		adminFlagRepo, adminAuditRepo, cache,
@@ -1229,13 +1288,16 @@ func main() {
 			return resp.ID, nil
 		},
 	)
-	complyForPlan := &planComplyStub{}
-	socialForPlan := &planSocialStub{}
+	complyForPlan := &planComplyAdapter{complySvc: complySvc, iamSvc: iamSvc}
+	socialForPlan := &planSocialAdapter{socialSvc: socialSvc}
 
 	planSvc := plan.NewPlanningService(
 		planRepo, planTemplateRepo,
 		iamForPlan, learnForPlan, complyForPlan, socialForPlan,
 	)
+
+	// Complete deferred plan deletion adapter wiring (declared before lifecycle service).
+	planDeletion.svc = planSvc
 
 	// Register plan:: event subscriptions [17-planning §16]
 	eventBus.Subscribe(reflect.TypeOf(social.EventCancelled{}), plan.NewEventCancelledHandler(planSvc))
@@ -1295,6 +1357,8 @@ func main() {
 		complyPortfolioRepo, complyPortfolioItemRepo, complyTranscriptRepo, complyCourseRepo,
 		iamForComply, discoverForComply, mediaForComply, eventBus,
 	)
+	lifecycle.RegisterTaskHandlers(worker, lifecycleSvc)
+	billing.RegisterTaskHandlers(worker, billPayoutRepo, billAdapter)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
 			slog.Error("job worker error", "error", startErr)
@@ -1906,33 +1970,235 @@ func pingObjectStorage(ctx context.Context, endpoint string) admin.ComponentHeal
 	return admin.ComponentHealth{Name: "r2", Status: "healthy", LatencyMs: &latency}
 }
 
-type adminJobInspectorStub struct{}
-
-func (adminJobInspectorStub) GetQueueStatus(_ context.Context) (*admin.JobStatusResponse, error) {
-	return &admin.JobStatusResponse{Queues: []admin.QueueStatus{}}, nil
-}
-func (adminJobInspectorStub) GetDeadLetterJobs(_ context.Context, _ *shared.PaginationParams) ([]admin.DeadLetterJob, error) {
-	return []admin.DeadLetterJob{}, nil
-}
-func (adminJobInspectorStub) RetryDeadLetterJob(_ context.Context, _ string) error {
-	return admin.ErrDeadLetterNotFound
+// adminJobInspectorAdapter bridges admin.QueueInspector → admin.JobInspector. [16-admin §11.2]
+type adminJobInspectorAdapter struct {
+	inspector *admin.AsynqQueueInspector
 }
 
-// ─── Plan Domain Adapter Stubs ──────────────────────────────────────────────
-// Remaining stubs for comply:: and social:: calendar aggregation methods.
-// Full implementations deferred until those domains expose the required methods.
+func (a *adminJobInspectorAdapter) GetQueueStatus(ctx context.Context) (*admin.JobStatusResponse, error) {
+	if a.inspector == nil {
+		return &admin.JobStatusResponse{Queues: []admin.QueueStatus{}}, nil
+	}
+	queues, deadCount, err := a.inspector.GetQueues(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &admin.JobStatusResponse{
+		DeadLetterCount: deadCount,
+		Queues:          make([]admin.QueueStatus, len(queues)),
+	}
+	for i, q := range queues {
+		result.Queues[i] = admin.QueueStatus(q)
+	}
+	return result, nil
+}
+
+func (a *adminJobInspectorAdapter) GetDeadLetterJobs(ctx context.Context, pagination *shared.PaginationParams) ([]admin.DeadLetterJob, error) {
+	if a.inspector == nil {
+		return []admin.DeadLetterJob{}, nil
+	}
+	offset := 0
+	limit := 20
+	if pagination != nil {
+		limit = pagination.EffectiveLimit()
+		// Dead-letter jobs use offset-based pagination; cursor encodes the offset.
+		if pagination.Cursor != nil {
+			if parsed, parseErr := strconv.Atoi(*pagination.Cursor); parseErr == nil && parsed >= 0 {
+				offset = parsed
+			}
+		}
+	}
+	jobs, err := a.inspector.GetDeadLetterJobs(ctx, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]admin.DeadLetterJob, len(jobs))
+	for i, j := range jobs {
+		result[i] = admin.DeadLetterJob(j)
+	}
+	return result, nil
+}
+
+func (a *adminJobInspectorAdapter) RetryDeadLetterJob(ctx context.Context, jobID string) error {
+	if a.inspector == nil {
+		return admin.ErrDeadLetterNotFound
+	}
+	// jobID format is "queue:id"; parse to find the correct queue.
+	queue := "default"
+	id := jobID
+	if idx := strings.LastIndex(jobID, ":"); idx > 0 {
+		queue = jobID[:idx]
+		id = jobID[idx+1:]
+	}
+	return a.inspector.RetryDeadLetterJob(ctx, queue, id)
+}
+
+// ─── Lifecycle Deletion Handler Adapters ─────────────────────────────────────
+// Each adapter bridges a domain service to the lifecycle.DeletionHandler interface,
+// enabling coordinated family/student data deletion. [15-data-lifecycle §7]
+
+type lifecycleLearnDeletion struct{ svc learn.LearningService }
+
+func (a *lifecycleLearnDeletion) DomainName() string { return "learning" }
+func (a *lifecycleLearnDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleLearnDeletion) DeleteStudentData(ctx context.Context, familyID uuid.UUID, studentID uuid.UUID) error {
+	return a.svc.HandleStudentDeleted(ctx, familyID, studentID)
+}
+
+type lifecycleSocialDeletion struct{ svc social.SocialService }
+
+func (a *lifecycleSocialDeletion) DomainName() string { return "social" }
+func (a *lifecycleSocialDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleSocialDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // social has no student-specific data
+}
+
+type lifecycleMktDeletion struct{ svc mkt.MarketplaceService }
+
+func (a *lifecycleMktDeletion) DomainName() string { return "marketplace" }
+func (a *lifecycleMktDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleMktDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // marketplace has no student-specific data
+}
+
+type lifecycleNotifyDeletion struct{ svc notify.NotificationService }
+
+func (a *lifecycleNotifyDeletion) DomainName() string { return "notifications" }
+func (a *lifecycleNotifyDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, notify.FamilyDeletionScheduledEvent{FamilyID: familyID})
+}
+func (a *lifecycleNotifyDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // notifications has no student-specific data
+}
+
+type lifecycleBillingDeletion struct{ svc billing.BillingService }
+
+func (a *lifecycleBillingDeletion) DomainName() string { return "billing" }
+func (a *lifecycleBillingDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, billing.FamilyDeletionScheduledEvent{FamilyID: familyID})
+}
+func (a *lifecycleBillingDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // billing has no student-specific data
+}
+
+type lifecycleComplyDeletion struct{ svc comply.ComplianceService }
+
+func (a *lifecycleComplyDeletion) DomainName() string { return "compliance" }
+func (a *lifecycleComplyDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, &comply.FamilyDeletionScheduledEvent{FamilyID: familyID})
+}
+func (a *lifecycleComplyDeletion) DeleteStudentData(ctx context.Context, familyID uuid.UUID, studentID uuid.UUID) error {
+	return a.svc.HandleStudentDeleted(ctx, &comply.StudentDeletedEvent{StudentID: studentID, FamilyID: familyID})
+}
+
+type lifecycleRecsDeletion struct{ svc recs.RecsService }
+
+func (a *lifecycleRecsDeletion) DomainName() string { return "recommendations" }
+func (a *lifecycleRecsDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletion(ctx, shared.NewFamilyID(familyID))
+}
+func (a *lifecycleRecsDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // recommendations are family-level, not student-specific
+}
+
+type lifecycleMediaDeletion struct{ svc media.MediaService }
+
+func (a *lifecycleMediaDeletion) DomainName() string { return "media" }
+func (a *lifecycleMediaDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleMediaDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // media uploads are family-scoped, not student-specific
+}
+
+// lifecyclePlanDeletion bridges plan:: into lifecycle deletion.
+// The svc field is set after plan:: is wired (plan:: depends on comply:: and social::,
+// which are wired after lifecycle::). The adapter is only called at deletion time,
+// well after all services are fully wired.
+type lifecyclePlanDeletion struct{ svc plan.PlanningService }
+
+func (a *lifecyclePlanDeletion) DomainName() string { return "planning" }
+func (a *lifecyclePlanDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	return a.svc.DeleteData(ctx, &scope)
+}
+func (a *lifecyclePlanDeletion) DeleteStudentData(ctx context.Context, familyID uuid.UUID, studentID uuid.UUID) error {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	return a.svc.DeleteStudentData(ctx, &scope, studentID)
+}
+
+// ─── Plan Domain Cross-Domain Adapters ──────────────────────────────────────
+// Bridge comply:: and social:: into the plan domain's consumer-defined interfaces.
 // [17-planning §8]
 
-type planComplyStub struct{}
-
-func (planComplyStub) GetAttendanceRange(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time, _ *uuid.UUID) ([]plan.AttendanceSummary, error) {
-	return []plan.AttendanceSummary{}, nil
+type planComplyAdapter struct {
+	complySvc comply.ComplianceService
+	iamSvc    iam.IamService
 }
 
-type planSocialStub struct{}
+func (a *planComplyAdapter) GetAttendanceRange(ctx context.Context, _ *shared.AuthContext, scope *shared.FamilyScope, start, end time.Time, studentID *uuid.UUID) ([]plan.AttendanceSummary, error) {
+	params := comply.AttendanceListParams{
+		StartDate: start,
+		EndDate:   end,
+	}
 
-func (planSocialStub) GetEventsForCalendar(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _, _ time.Time) ([]plan.EventSummary, error) {
-	return []plan.EventSummary{}, nil
+	var studentIDs []uuid.UUID
+	if studentID != nil {
+		studentIDs = []uuid.UUID{*studentID}
+	} else {
+		students, err := a.iamSvc.ListStudents(ctx, scope)
+		if err != nil {
+			return nil, fmt.Errorf("plan comply adapter: list students: %w", err)
+		}
+		for _, s := range students {
+			studentIDs = append(studentIDs, s.ID)
+		}
+	}
+
+	var results []plan.AttendanceSummary
+	for _, sid := range studentIDs {
+		resp, err := a.complySvc.ListAttendance(ctx, sid, params, *scope)
+		if err != nil {
+			continue // skip students with no attendance data
+		}
+		for _, r := range resp.Records {
+			results = append(results, plan.AttendanceSummary{
+				ID:        r.ID,
+				Date:      r.AttendanceDate,
+				StudentID: &sid,
+				Status:    r.Status,
+			})
+		}
+	}
+	return results, nil
+}
+
+type planSocialAdapter struct {
+	socialSvc social.SocialService
+}
+
+func (a *planSocialAdapter) GetEventsForCalendar(ctx context.Context, auth *shared.AuthContext, _ *shared.FamilyScope, start, end time.Time) ([]plan.EventSummary, error) {
+	events, err := a.socialSvc.ListEventsForDateRange(ctx, auth, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("plan social adapter: list events: %w", err)
+	}
+	results := make([]plan.EventSummary, 0, len(events))
+	for _, e := range events {
+		results = append(results, plan.EventSummary{
+			ID:        e.ID,
+			Title:     e.Title,
+			Date:      e.EventDate,
+			Location:  e.LocationName,
+			RSVPStatus: e.MyRSVP,
+		})
+	}
+	return results, nil
 }
 
 // gracefulShutdown listens for SIGINT/SIGTERM and shuts the server down cleanly.

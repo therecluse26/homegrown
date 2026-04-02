@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/billing"
 	"github.com/homegrown-academy/homegrown-academy/internal/iam"
 	"github.com/homegrown-academy/homegrown-academy/internal/learn"
@@ -285,9 +286,30 @@ func (h *CreatorOnboardedHandler) Handle(ctx context.Context, event shared.Domai
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ContentFlaggedHandler handles safety.ContentFlagged events.
-// DEFERRED: safety:: domain not implemented. When activated, register in main.go:
-//
-//	eventBus.Subscribe(reflect.TypeOf(safety.ContentFlagged{}), notify.NewContentFlaggedHandler(notifySvc))
+// Uses consumer-defined interface to avoid circular dependency with safety::. [08-notify §17.3]
+type ContentFlaggedHandler struct{ svc NotificationService }
+
+// NewContentFlaggedHandler creates a new ContentFlaggedHandler.
+func NewContentFlaggedHandler(svc NotificationService) *ContentFlaggedHandler {
+	return &ContentFlaggedHandler{svc: svc}
+}
+
+func (h *ContentFlaggedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	type contentFlagged interface {
+		GetContentKey() string
+		GetFamilyID() uuid.UUID
+		GetFlagType() string
+	}
+	e, ok := event.(contentFlagged)
+	if !ok {
+		return fmt.Errorf("notify.ContentFlaggedHandler: unexpected event %s", event.EventName())
+	}
+	return h.svc.HandleContentFlagged(ctx, ContentFlaggedEvent{
+		FamilyID:    e.GetFamilyID(),
+		ContentType: "flagged_content",
+		Reason:      e.GetFlagType(),
+	})
+}
 
 // ─── iam:: Event Handlers ─────────────────────────────────────────────────────
 

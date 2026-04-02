@@ -22,7 +22,7 @@ type IamServiceForComply interface {
 // LearningServiceForComply is a consumer-defined interface for cross-domain reads from learn::.
 // Used by portfolio item selection to fetch cached display data.
 type LearningServiceForComply interface {
-	GetPortfolioItemData(ctx context.Context, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error)
+	GetPortfolioItemData(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemData, error)
 }
 
 // DiscoveryServiceForComply is a consumer-defined interface for cross-domain reads from discover::.

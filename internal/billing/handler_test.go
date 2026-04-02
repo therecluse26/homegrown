@@ -9,10 +9,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
 )
+
+type echoValidator struct{ v *validator.Validate }
+
+func (cv *echoValidator) Validate(i any) error { return cv.v.Struct(i) }
 
 // ─── Mock BillingService ──────────────────────────────────────────────────────
 
@@ -103,6 +108,7 @@ var _ BillingService = (*mockBillingService)(nil)
 
 func setupBillingHandlerTest(svc BillingService) (*echo.Echo, *Handler) {
 	e := echo.New()
+	e.Validator = &echoValidator{v: validator.New()}
 	e.HTTPErrorHandler = shared.HTTPErrorHandler
 	// nil db: only used by listPayouts via RequireCreator, not tested here.
 	h := NewHandler(svc, "test-secret", nil)

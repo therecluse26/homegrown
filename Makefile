@@ -67,11 +67,17 @@ type-check:
 migrate:
 	$(GOOSE) -dir migrations postgres "$(DATABASE_URL)" up
 
-# Reset the database (drop + recreate + migrate)
+# Reset the database + dev Kratos (drop + recreate + migrate)
 db-reset:
 	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'homegrown' AND pid <> pg_backend_pid();"
 	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS homegrown;"
 	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE homegrown;"
+	docker compose stop kratos
+	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'kratos' AND pid <> pg_backend_pid();"
+	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS kratos;"
+	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE kratos;"
+	docker compose run --rm kratos-migrate
+	docker compose up -d --force-recreate kratos
 	$(MAKE) migrate
 
 # ─── Code Generation ─────────────────────────────────────────────────
@@ -113,18 +119,25 @@ seed:
 seed-full: seed
 	$(GO) run ./cmd/seed-full/ --db $(DB)
 
-# Full agent database reset: drop → recreate → migrate → seed
+# Full agent reset: drop → recreate app DB + Kratos DB → migrate Kratos schema → seed
 agent-db-reset:
 	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'homegrown_agent' AND pid <> pg_backend_pid();"
 	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS homegrown_agent;"
 	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE homegrown_agent;"
+	docker compose stop kratos_agent
+	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS kratos_agent;"
+	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE kratos_agent;"
+	docker compose run --rm -e DSN="postgres://homegrown:homegrown@postgres:5432/kratos_agent?sslmode=disable" kratos-migrate
+	docker compose up -d --force-recreate kratos_agent
 	$(MAKE) seed
 
 # Wipe and reinitialise only the agent Kratos identity store.
 agent-kratos-reset:
+	docker compose stop kratos_agent
 	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS kratos_agent;"
 	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE kratos_agent;"
-	docker compose restart kratos_agent
+	docker compose run --rm -e DSN="postgres://homegrown:homegrown@postgres:5432/kratos_agent?sslmode=disable" kratos-migrate
+	docker compose up -d --force-recreate kratos_agent
 
 # Start the API server on port 15180 pointed at the agent database.
 agent-server:

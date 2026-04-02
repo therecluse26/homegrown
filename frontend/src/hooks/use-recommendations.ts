@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+// Hand-written until recs swag annotations produce matching generated types.
+// Tracked: specs/gaps_03_31_26.md §FE-6
 
 export interface Recommendation {
   id: string;

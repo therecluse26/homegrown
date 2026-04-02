@@ -217,6 +217,9 @@ func (h *Handler) updateStudentMethodology(c echo.Context) error {
 	if err := c.Bind(&cmd); err != nil {
 		return shared.ErrBadRequest("invalid request body")
 	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
 	resp, err := h.svc.UpdateStudentMethodology(c.Request().Context(), &scope, studentID, cmd)
 	if err != nil {
 		return mapMethodError(err)

@@ -252,7 +252,8 @@ func (h *Handler) listIncomingRequests(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := h.svc.ListIncomingRequests(c.Request().Context(), &scope)
+	offset, limit := parsePagination(c)
+	resp, err := h.svc.ListIncomingRequests(c.Request().Context(), &scope, offset, limit)
 	if err != nil {
 		return mapSocialError(err)
 	}
@@ -264,7 +265,8 @@ func (h *Handler) listOutgoingRequests(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := h.svc.ListOutgoingRequests(c.Request().Context(), &scope)
+	offset, limit := parsePagination(c)
+	resp, err := h.svc.ListOutgoingRequests(c.Request().Context(), &scope, offset, limit)
 	if err != nil {
 		return mapSocialError(err)
 	}

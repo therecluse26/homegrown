@@ -2507,6 +2507,49 @@ func (s *learningServiceImpl) HandleStudentDeleted(ctx context.Context, familyID
 	})
 }
 
+// GetPortfolioItemSummary returns summary data for an activity log or journal entry.
+// Used by comply:: domain for portfolio item display. Uses BypassRLSTransaction
+// since the caller (comply adapter) has familyID but no auth context. [06-learn §15]
+func (s *learningServiceImpl) GetPortfolioItemSummary(ctx context.Context, familyID uuid.UUID, sourceType string, sourceID uuid.UUID) (*PortfolioItemSummary, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	var summary PortfolioItemSummary
+	err := shared.ScopedTransaction(ctx, s.db, scope, func(tx *gorm.DB) error {
+		switch sourceType {
+		case "activity_log":
+			var log ActivityLogModel
+			if err := tx.Where("id = ?", sourceID).First(&log).Error; err != nil {
+				return err
+			}
+			summary.Title = log.Title
+			summary.Description = log.Description
+			summary.Date = log.ActivityDate
+			if len(log.SubjectTags) > 0 {
+				summary.Subject = &log.SubjectTags[0]
+			}
+		case "journal_entry":
+			var entry JournalEntryModel
+			if err := tx.Where("id = ?", sourceID).First(&entry).Error; err != nil {
+				return err
+			}
+			if entry.Title != nil {
+				summary.Title = *entry.Title
+			} else {
+				summary.Title = entry.EntryType
+			}
+			summary.Description = &entry.Content
+			summary.Date = entry.EntryDate
+		default:
+			summary.Title = sourceType + " " + sourceID.String()
+			summary.Date = time.Now()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
 func (s *learningServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
 	// No-op for learn:: — data exports are handled by lifecycle:: domain.
 	return nil

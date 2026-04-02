@@ -1321,7 +1321,7 @@ func TestAddPortfolioItems_CachesDisplayData(t *testing.T) {
 		},
 	}
 	learnSvc := &stubLearningService{
-		getPortfolioItemDataFn: func(_ context.Context, _ string, _ uuid.UUID) (*PortfolioItemData, error) {
+		getPortfolioItemDataFn: func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*PortfolioItemData, error) {
 			return &PortfolioItemData{
 				Title:   "Math Activity",
 				Date:    time.Date(2025, 3, 10, 0, 0, 0, 0, time.UTC),
@@ -1399,7 +1399,7 @@ func TestAddPortfolioItems_RejectsSourceNotFound(t *testing.T) {
 		},
 	}
 	learnSvc := &stubLearningService{
-		getPortfolioItemDataFn: func(_ context.Context, _ string, _ uuid.UUID) (*PortfolioItemData, error) {
+		getPortfolioItemDataFn: func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*PortfolioItemData, error) {
 			return nil, nil // not found
 		},
 	}
