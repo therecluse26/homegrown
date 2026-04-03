@@ -170,9 +170,10 @@ func (m *mockActionRepo) CountSince(ctx context.Context, since string) (int64, e
 }
 
 type mockAccountStatusRepo struct {
-	getOrCreateFn   func(ctx context.Context, familyID uuid.UUID) (*AccountStatusRow, error)
-	updateFn        func(ctx context.Context, familyID uuid.UUID, updates AccountStatusUpdate) (*AccountStatusRow, error)
-	countByStatusFn func(ctx context.Context, status string) (int64, error)
+	getOrCreateFn            func(ctx context.Context, familyID uuid.UUID) (*AccountStatusRow, error)
+	updateFn                 func(ctx context.Context, familyID uuid.UUID, updates AccountStatusUpdate) (*AccountStatusRow, error)
+	countByStatusFn          func(ctx context.Context, status string) (int64, error)
+	findExpiredSuspensionsFn func(ctx context.Context) ([]AccountStatusRow, error)
 }
 
 func newMockAccountStatusRepo() *mockAccountStatusRepo { return &mockAccountStatusRepo{} }
@@ -194,6 +195,12 @@ func (m *mockAccountStatusRepo) CountByStatus(ctx context.Context, status string
 		return m.countByStatusFn(ctx, status)
 	}
 	return 0, nil
+}
+func (m *mockAccountStatusRepo) FindExpiredSuspensions(ctx context.Context) ([]AccountStatusRow, error) {
+	if m.findExpiredSuspensionsFn != nil {
+		return m.findExpiredSuspensionsFn(ctx)
+	}
+	return nil, nil
 }
 
 type mockAppealRepo struct {
@@ -420,6 +427,21 @@ type mockSafetyService struct {
 	recordBotSignalFn       func(ctx context.Context, familyID, parentID uuid.UUID, signal BotSignalType, details json.RawMessage) error
 	handleCsamDetectionFn   func(ctx context.Context, uploadID, familyID uuid.UUID, result *CsamScanResult) error
 	adminEscalateToCsamFn   func(ctx context.Context, auth *shared.AuthContext, flagID uuid.UUID, cmd EscalateCsamCommand) error
+
+	// Phase 2
+	expireSuspensionsFn          func(ctx context.Context) error
+	getParentalControlsFn        func(ctx context.Context, scope shared.FamilyScope) ([]ParentalControlResponse, error)
+	upsertParentalControlFn      func(ctx context.Context, scope shared.FamilyScope, cmd UpsertParentalControlCommand) (*ParentalControlResponse, error)
+	deleteParentalControlFn      func(ctx context.Context, scope shared.FamilyScope, controlID uuid.UUID) error
+	listAdminRolesFn             func(ctx context.Context, auth *shared.AuthContext) ([]AdminRoleResponse, error)
+	createAdminRoleFn            func(ctx context.Context, auth *shared.AuthContext, cmd CreateAdminRoleCommand) (*AdminRoleResponse, error)
+	assignAdminRoleFn            func(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID, cmd AssignAdminRoleCommand) (*AdminRoleAssignmentResponse, error)
+	revokeAdminRoleFn            func(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID, parentID uuid.UUID) error
+	listAdminRoleAssignmentsFn   func(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID) ([]AdminRoleAssignmentResponse, error)
+	getParentPermissionsFn       func(ctx context.Context, parentID uuid.UUID) ([]string, error)
+	analyzeTextForGroomingFn     func(ctx context.Context, contentType string, contentID uuid.UUID, authorFamilyID uuid.UUID, text string) (*GroomingAnalysisResult, error)
+	adminListGroomingScoresFn    func(ctx context.Context, auth *shared.AuthContext, p shared.PaginationParams) (*shared.PaginatedResponse[GroomingScoreResponse], error)
+	adminReviewGroomingScoreFn   func(ctx context.Context, auth *shared.AuthContext, scoreID uuid.UUID, cmd ReviewGroomingScoreCommand) (*GroomingScoreResponse, error)
 }
 
 func (m *mockSafetyService) ListMyReports(ctx context.Context, scope shared.FamilyScope, p shared.PaginationParams) (*shared.PaginatedResponse[ReportResponse], error) {
@@ -571,6 +593,223 @@ func (m *mockSafetyService) AdminEscalateToCsam(ctx context.Context, auth *share
 		return m.adminEscalateToCsamFn(ctx, auth, flagID, cmd)
 	}
 	return nil
+}
+func (m *mockSafetyService) ExpireSuspensions(ctx context.Context) error {
+	if m.expireSuspensionsFn != nil {
+		return m.expireSuspensionsFn(ctx)
+	}
+	return nil
+}
+func (m *mockSafetyService) GetParentalControls(ctx context.Context, scope shared.FamilyScope) ([]ParentalControlResponse, error) {
+	if m.getParentalControlsFn != nil {
+		return m.getParentalControlsFn(ctx, scope)
+	}
+	return nil, nil
+}
+func (m *mockSafetyService) UpsertParentalControl(ctx context.Context, scope shared.FamilyScope, cmd UpsertParentalControlCommand) (*ParentalControlResponse, error) {
+	if m.upsertParentalControlFn != nil {
+		return m.upsertParentalControlFn(ctx, scope, cmd)
+	}
+	panic("UpsertParentalControl not mocked")
+}
+func (m *mockSafetyService) DeleteParentalControl(ctx context.Context, scope shared.FamilyScope, controlID uuid.UUID) error {
+	if m.deleteParentalControlFn != nil {
+		return m.deleteParentalControlFn(ctx, scope, controlID)
+	}
+	return nil
+}
+func (m *mockSafetyService) ListAdminRoles(ctx context.Context, auth *shared.AuthContext) ([]AdminRoleResponse, error) {
+	if m.listAdminRolesFn != nil {
+		return m.listAdminRolesFn(ctx, auth)
+	}
+	return nil, nil
+}
+func (m *mockSafetyService) CreateAdminRole(ctx context.Context, auth *shared.AuthContext, cmd CreateAdminRoleCommand) (*AdminRoleResponse, error) {
+	if m.createAdminRoleFn != nil {
+		return m.createAdminRoleFn(ctx, auth, cmd)
+	}
+	panic("CreateAdminRole not mocked")
+}
+func (m *mockSafetyService) AssignAdminRole(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID, cmd AssignAdminRoleCommand) (*AdminRoleAssignmentResponse, error) {
+	if m.assignAdminRoleFn != nil {
+		return m.assignAdminRoleFn(ctx, auth, roleID, cmd)
+	}
+	panic("AssignAdminRole not mocked")
+}
+func (m *mockSafetyService) RevokeAdminRole(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID, parentID uuid.UUID) error {
+	if m.revokeAdminRoleFn != nil {
+		return m.revokeAdminRoleFn(ctx, auth, roleID, parentID)
+	}
+	return nil
+}
+func (m *mockSafetyService) ListAdminRoleAssignments(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID) ([]AdminRoleAssignmentResponse, error) {
+	if m.listAdminRoleAssignmentsFn != nil {
+		return m.listAdminRoleAssignmentsFn(ctx, auth, roleID)
+	}
+	return nil, nil
+}
+func (m *mockSafetyService) GetParentPermissions(ctx context.Context, parentID uuid.UUID) ([]string, error) {
+	if m.getParentPermissionsFn != nil {
+		return m.getParentPermissionsFn(ctx, parentID)
+	}
+	return nil, nil
+}
+func (m *mockSafetyService) AnalyzeTextForGrooming(ctx context.Context, contentType string, contentID uuid.UUID, authorFamilyID uuid.UUID, text string) (*GroomingAnalysisResult, error) {
+	if m.analyzeTextForGroomingFn != nil {
+		return m.analyzeTextForGroomingFn(ctx, contentType, contentID, authorFamilyID, text)
+	}
+	return &GroomingAnalysisResult{Score: 0.0, ModelVersion: "mock-v1", Flagged: false}, nil
+}
+func (m *mockSafetyService) AdminListGroomingScores(ctx context.Context, auth *shared.AuthContext, p shared.PaginationParams) (*shared.PaginatedResponse[GroomingScoreResponse], error) {
+	if m.adminListGroomingScoresFn != nil {
+		return m.adminListGroomingScoresFn(ctx, auth, p)
+	}
+	return &shared.PaginatedResponse[GroomingScoreResponse]{Data: []GroomingScoreResponse{}}, nil
+}
+func (m *mockSafetyService) AdminReviewGroomingScore(ctx context.Context, auth *shared.AuthContext, scoreID uuid.UUID, cmd ReviewGroomingScoreCommand) (*GroomingScoreResponse, error) {
+	if m.adminReviewGroomingScoreFn != nil {
+		return m.adminReviewGroomingScoreFn(ctx, auth, scoreID, cmd)
+	}
+	panic("AdminReviewGroomingScore not mocked")
+}
+
+// ─── Phase 2 Mock Repositories ──────────────────────────────────────────────────
+
+type mockParentalControlRepo struct {
+	listByFamilyFn func(ctx context.Context, familyID uuid.UUID) ([]ParentalControl, error)
+	upsertFn       func(ctx context.Context, control *ParentalControl) error
+	deleteFn       func(ctx context.Context, familyID uuid.UUID, controlID uuid.UUID) error
+}
+
+func newMockParentalControlRepo() *mockParentalControlRepo { return &mockParentalControlRepo{} }
+
+func (m *mockParentalControlRepo) ListByFamily(ctx context.Context, familyID uuid.UUID) ([]ParentalControl, error) {
+	if m.listByFamilyFn != nil {
+		return m.listByFamilyFn(ctx, familyID)
+	}
+	return nil, nil
+}
+func (m *mockParentalControlRepo) Upsert(ctx context.Context, control *ParentalControl) error {
+	if m.upsertFn != nil {
+		return m.upsertFn(ctx, control)
+	}
+	return nil
+}
+func (m *mockParentalControlRepo) Delete(ctx context.Context, familyID uuid.UUID, controlID uuid.UUID) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, familyID, controlID)
+	}
+	return nil
+}
+
+type mockAdminRoleRepo struct {
+	listFn     func(ctx context.Context) ([]AdminRole, error)
+	findByIDFn func(ctx context.Context, roleID uuid.UUID) (*AdminRole, error)
+	createFn   func(ctx context.Context, role *AdminRole) error
+}
+
+func newMockAdminRoleRepo() *mockAdminRoleRepo { return &mockAdminRoleRepo{} }
+
+func (m *mockAdminRoleRepo) List(ctx context.Context) ([]AdminRole, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx)
+	}
+	return nil, nil
+}
+func (m *mockAdminRoleRepo) FindByID(ctx context.Context, roleID uuid.UUID) (*AdminRole, error) {
+	if m.findByIDFn != nil {
+		return m.findByIDFn(ctx, roleID)
+	}
+	panic("AdminRoleRepo.FindByID not mocked")
+}
+func (m *mockAdminRoleRepo) Create(ctx context.Context, role *AdminRole) error {
+	if m.createFn != nil {
+		return m.createFn(ctx, role)
+	}
+	return nil
+}
+
+type mockAdminRoleAssignRepo struct {
+	listByRoleFn   func(ctx context.Context, roleID uuid.UUID) ([]AdminRoleAssignment, error)
+	listByParentFn func(ctx context.Context, parentID uuid.UUID) ([]AdminRoleAssignment, error)
+	createFn       func(ctx context.Context, assignment *AdminRoleAssignment) error
+	deleteFn       func(ctx context.Context, roleID uuid.UUID, parentID uuid.UUID) error
+}
+
+func newMockAdminRoleAssignRepo() *mockAdminRoleAssignRepo { return &mockAdminRoleAssignRepo{} }
+
+func (m *mockAdminRoleAssignRepo) ListByRole(ctx context.Context, roleID uuid.UUID) ([]AdminRoleAssignment, error) {
+	if m.listByRoleFn != nil {
+		return m.listByRoleFn(ctx, roleID)
+	}
+	return nil, nil
+}
+func (m *mockAdminRoleAssignRepo) ListByParent(ctx context.Context, parentID uuid.UUID) ([]AdminRoleAssignment, error) {
+	if m.listByParentFn != nil {
+		return m.listByParentFn(ctx, parentID)
+	}
+	return nil, nil
+}
+func (m *mockAdminRoleAssignRepo) Create(ctx context.Context, assignment *AdminRoleAssignment) error {
+	if m.createFn != nil {
+		return m.createFn(ctx, assignment)
+	}
+	return nil
+}
+func (m *mockAdminRoleAssignRepo) Delete(ctx context.Context, roleID uuid.UUID, parentID uuid.UUID) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, roleID, parentID)
+	}
+	return nil
+}
+
+type mockGroomingScoreRepo struct {
+	createFn       func(ctx context.Context, score *GroomingScore) error
+	findByIDFn     func(ctx context.Context, scoreID uuid.UUID) (*GroomingScore, error)
+	listFlaggedFn  func(ctx context.Context, pagination shared.PaginationParams) ([]GroomingScore, error)
+	markReviewedFn func(ctx context.Context, scoreID uuid.UUID, reviewedBy uuid.UUID) error
+}
+
+func newMockGroomingScoreRepo() *mockGroomingScoreRepo { return &mockGroomingScoreRepo{} }
+
+func (m *mockGroomingScoreRepo) Create(ctx context.Context, score *GroomingScore) error {
+	if m.createFn != nil {
+		return m.createFn(ctx, score)
+	}
+	return nil
+}
+func (m *mockGroomingScoreRepo) FindByID(ctx context.Context, scoreID uuid.UUID) (*GroomingScore, error) {
+	if m.findByIDFn != nil {
+		return m.findByIDFn(ctx, scoreID)
+	}
+	panic("GroomingScoreRepo.FindByID not mocked")
+}
+func (m *mockGroomingScoreRepo) ListFlagged(ctx context.Context, p shared.PaginationParams) ([]GroomingScore, error) {
+	if m.listFlaggedFn != nil {
+		return m.listFlaggedFn(ctx, p)
+	}
+	return nil, nil
+}
+func (m *mockGroomingScoreRepo) MarkReviewed(ctx context.Context, scoreID uuid.UUID, reviewedBy uuid.UUID) error {
+	if m.markReviewedFn != nil {
+		return m.markReviewedFn(ctx, scoreID, reviewedBy)
+	}
+	return nil
+}
+
+// ─── Mock GroomingDetector ──────────────────────────────────────────────────────
+
+type mockGroomingDetector struct {
+	analyzeFn func(ctx context.Context, text string) (*GroomingAnalysisResult, error)
+}
+
+func newMockGroomingDetector() *mockGroomingDetector { return &mockGroomingDetector{} }
+
+func (m *mockGroomingDetector) Analyze(ctx context.Context, text string) (*GroomingAnalysisResult, error) {
+	if m.analyzeFn != nil {
+		return m.analyzeFn(ctx, text)
+	}
+	return &GroomingAnalysisResult{Score: 0.0, ModelVersion: "mock-v1", Flagged: false}, nil
 }
 
 // ─── Mock ThornAdapter ──────────────────────────────────────────────────────────

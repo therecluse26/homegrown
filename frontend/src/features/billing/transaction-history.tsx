@@ -7,7 +7,7 @@ import {
   Icon,
   Skeleton,
 } from "@/components/ui";
-import { useTransactions, type Transaction } from "@/hooks/use-subscription";
+import { useTransactions } from "@/hooks/use-subscription";
 import { useState, useEffect, useRef } from "react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ function formatCurrency(cents: number, currency: string): string {
   }).format(cents / 100);
 }
 
-type FilterType = "all" | Transaction["type"];
+type FilterType = "all" | "subscription" | "purchase" | "payout" | "refund";
 
 const FILTER_OPTIONS: { value: FilterType; labelId: string }[] = [
   { value: "all", labelId: "billing.transactions.filter.all" },
@@ -28,7 +28,7 @@ const FILTER_OPTIONS: { value: FilterType; labelId: string }[] = [
   { value: "payout", labelId: "billing.transactions.filter.payout" },
 ];
 
-function getStatusVariant(status: Transaction["status"]): "primary" | "secondary" | "error" {
+function getStatusVariant(status: string | undefined): "primary" | "secondary" | "error" {
   switch (status) {
     case "completed":
       return "primary";
@@ -178,12 +178,12 @@ export function TransactionHistory() {
                     <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant="secondary">
                         <FormattedMessage
-                          id={`billing.transactions.type.${tx.type}`}
+                          id={`billing.transactions.type.${tx.transaction_type ?? "unknown"}`}
                         />
                       </Badge>
                       <Badge variant={getStatusVariant(tx.status)}>
                         <FormattedMessage
-                          id={`billing.transactions.status.${tx.status}`}
+                          id={`billing.transactions.status.${tx.status ?? "unknown"}`}
                         />
                       </Badge>
                       <span className="type-body-sm text-on-surface-variant">
@@ -198,13 +198,13 @@ export function TransactionHistory() {
                 </div>
                 <p
                   className={`type-title-sm font-medium shrink-0 ${
-                    tx.type === "refund" || tx.type === "payout"
+                    tx.transaction_type === "refund" || tx.transaction_type === "payout"
                       ? "text-primary"
                       : "text-on-surface"
                   }`}
                 >
-                  {tx.type === "refund" ? "-" : ""}
-                  {formatCurrency(tx.amount_cents, tx.currency)}
+                  {tx.transaction_type === "refund" ? "-" : ""}
+                  {formatCurrency(tx.amount_cents ?? 0, tx.currency ?? "usd")}
                 </p>
               </Card>
             </li>

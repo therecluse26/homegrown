@@ -116,6 +116,9 @@ func (m *mockMarketplaceService) RequestPayout(_ context.Context, _ uuid.UUID) (
 func (m *mockMarketplaceService) HandleContentFlagged(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
+func (m *mockMarketplaceService) ArchiveListingByContentKey(_ context.Context, _, _ string) error {
+	return nil
+}
 func (m *mockMarketplaceService) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
 	return nil
 }

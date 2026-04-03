@@ -68,10 +68,11 @@ func RegisterTaskHandlers(
 	prefRepo PreferenceRepository,
 	anonRepo AnonymizedInteractionRepository,
 	anonymizationSecret string,
+	eventBus *shared.EventBus,
 ) {
 	worker.Handle(TaskTypePurgeStaleSignals, handlePurgeStaleSignalsTask(signalRepo))
 	worker.Handle(TaskTypeAnonymizeInteractions, handleAnonymizeInteractionsTask(db, signalRepo, anonRepo, anonymizationSecret))
-	worker.Handle(TaskTypeComputeRecommendations, handleComputeRecommendationsTask(db, signalRepo, recRepo, feedbackRepo, popularityRepo, prefRepo))
+	worker.Handle(TaskTypeComputeRecommendations, handleComputeRecommendationsTask(db, signalRepo, recRepo, feedbackRepo, popularityRepo, prefRepo, eventBus))
 	worker.Handle(TaskTypeAggregatePopularity, handleAggregatePopularityTask(db, popularityRepo))
 }
 
@@ -322,6 +323,7 @@ func handleComputeRecommendationsTask(
 	feedbackRepo FeedbackRepository,
 	popularityRepo PopularityRepository,
 	prefRepo PreferenceRepository,
+	eventBus *shared.EventBus,
 ) shared.JobHandler {
 	return func(ctx context.Context, payload []byte) error {
 		var task ComputeRecommendationsPayload
@@ -478,6 +480,16 @@ func handleComputeRecommendationsTask(
 					continue
 				}
 				totalCreated += created
+
+				// Notify the family that new recommendations are ready. [13-recs §12]
+				if eventBus != nil && created > 0 {
+					if err := eventBus.Publish(ctx, RecommendationsGenerated{
+						FamilyID: family.ID,
+						Count:    created,
+					}); err != nil {
+						slog.Error("recs: publish recommendations_generated event", "family_id", family.ID, "error", err)
+					}
+				}
 			}
 		}
 

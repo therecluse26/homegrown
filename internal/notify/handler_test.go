@@ -183,6 +183,9 @@ func (m *handlerMockService) HandleSubscriptionCancelled(_ context.Context, _ Su
 func (m *handlerMockService) HandlePayoutCompleted(_ context.Context, _ PayoutCompletedEvent) error {
 	return nil
 }
+func (m *handlerMockService) HandleRecommendationsReady(_ context.Context, _ RecommendationsReadyEvent) error {
+	return nil
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Group L: HTTP Handler Tests [08-notify §4]

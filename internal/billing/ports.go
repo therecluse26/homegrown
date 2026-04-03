@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
@@ -166,6 +167,37 @@ type SubscriptionPaymentAdapter interface {
 type IamServiceForBilling interface {
 	// GetFamilyPrimaryEmail returns the primary parent's email and family display name.
 	GetFamilyPrimaryEmail(ctx context.Context, familyID uuid.UUID) (email string, displayName string, err error)
+}
+
+// MktServiceForBilling provides marketplace sales data for payout aggregation.
+// Consumer-defined interface — avoids circular import with mkt package. [ARCH §4.4]
+type MktServiceForBilling interface {
+	// GetAllCreatorSales returns aggregated sales per creator for a billing period.
+	GetAllCreatorSales(ctx context.Context, from, to time.Time) ([]CreatorEarningSummary, error)
+}
+
+// CreatorEarningSummary is the billing-side view of aggregated creator earnings.
+type CreatorEarningSummary struct {
+	CreatorID            uuid.UUID
+	TotalPayoutCents     int64
+	PurchaseCount        int32
+	RefundDeductionCents int64
+}
+
+// MktAdapter implements MktServiceForBilling via function closures wired in main.go.
+type MktAdapter struct {
+	getAllCreatorSalesFn func(ctx context.Context, from, to time.Time) ([]CreatorEarningSummary, error)
+}
+
+// NewMktAdapter creates a new MktAdapter from closure functions.
+func NewMktAdapter(
+	getAllCreatorSales func(ctx context.Context, from, to time.Time) ([]CreatorEarningSummary, error),
+) *MktAdapter {
+	return &MktAdapter{getAllCreatorSalesFn: getAllCreatorSales}
+}
+
+func (a *MktAdapter) GetAllCreatorSales(ctx context.Context, from, to time.Time) ([]CreatorEarningSummary, error) {
+	return a.getAllCreatorSalesFn(ctx, from, to)
 }
 
 // ─── Mirror Event Types ─────────────────────────────────────────────────────

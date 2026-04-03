@@ -57,6 +57,7 @@ type MarketplaceService interface {
 
 	// Event handlers (cross-domain reactions)
 	HandleContentFlagged(ctx context.Context, listingID uuid.UUID, reason string) error
+	ArchiveListingByContentKey(ctx context.Context, contentKey, reason string) error
 	HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
 
 	// ─── Query side (read, no side effects) ─────────────────────────────
@@ -144,6 +145,7 @@ type ListingRepository interface {
 type ListingFileRepository interface {
 	Create(ctx context.Context, cmd CreateListingFile) (*MktListingFile, error)
 	GetByID(ctx context.Context, listingID, fileID uuid.UUID) (*MktListingFile, error)
+	FindByStorageKey(ctx context.Context, storageKey string) (*MktListingFile, error)
 	ListByListing(ctx context.Context, listingID uuid.UUID) ([]MktListingFile, error)
 	Delete(ctx context.Context, fileID uuid.UUID) error
 }
@@ -164,6 +166,7 @@ type PurchaseRepository interface {
 	GetByPaymentSessionID(ctx context.Context, sessionID string) (*MktPurchase, error)
 	SetRefund(ctx context.Context, purchaseID uuid.UUID, refundID string, refundAmountCents int32) error
 	GetCreatorSales(ctx context.Context, creatorID uuid.UUID, from, to time.Time) ([]SalesRow, error)
+	GetAllCreatorSales(ctx context.Context, from, to time.Time) ([]CreatorSalesAggregate, error)
 	DeleteByFamily(ctx context.Context, familyID uuid.UUID) error
 }
 

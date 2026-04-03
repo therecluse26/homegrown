@@ -90,6 +90,9 @@ func newTestHarness() *testHarness {
 		h.reportRepo, h.flagRepo, h.actionRepo, h.accountRepo,
 		h.appealRepo, h.ncmecRepo, h.botSignalRepo,
 		h.iamService, h.cache, h.events, h.jobs, scanner, cfg,
+		newMockParentalControlRepo(), newMockAdminRoleRepo(),
+		newMockAdminRoleAssignRepo(), newMockGroomingScoreRepo(),
+		newMockGroomingDetector(),
 	)
 
 	return h

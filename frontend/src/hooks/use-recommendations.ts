@@ -1,25 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
+import type { components } from "@/api/generated/schema";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-// Hand-written until recs swag annotations produce matching generated types.
-// Tracked: specs/gaps_03_31_26.md §FE-6
+// ─── Type aliases (from generated schema) ──────────────────────────────────
 
-export interface Recommendation {
-  id: string;
-  type: "content" | "activity" | "resource";
-  title: string;
-  description: string;
-  reason: string;
-  ai_generated: boolean;
-  category: string;
-  link?: string;
-}
-
-export interface RecommendationPreferences {
-  blocked_categories: string[];
-  show_ai_recommendations: boolean;
-}
+export type RecommendationListResponse =
+  components["schemas"]["recs.RecommendationListResponse"];
+export type Recommendation =
+  components["schemas"]["recs.RecommendationResponse"];
+export type RecommendationPreferences =
+  components["schemas"]["recs.RecommendationPreferencesResponse"];
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
@@ -27,7 +17,8 @@ export function useRecommendations() {
   return useQuery({
     queryKey: ["recommendations"],
     queryFn: () =>
-      apiClient<Recommendation[]>("/v1/recommendations"),
+      apiClient<RecommendationListResponse>("/v1/recommendations"),
+    select: (data) => data.recommendations ?? [],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }

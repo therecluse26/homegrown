@@ -118,6 +118,13 @@ func (m *mockListingFileRepo) ListByListing(ctx context.Context, listingID uuid.
 	args := m.Called(ctx, listingID)
 	return args.Get(0).([]MktListingFile), args.Error(1)
 }
+func (m *mockListingFileRepo) FindByStorageKey(ctx context.Context, storageKey string) (*MktListingFile, error) {
+	args := m.Called(ctx, storageKey)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*MktListingFile), args.Error(1)
+}
 func (m *mockListingFileRepo) Delete(ctx context.Context, fileID uuid.UUID) error {
 	return m.Called(ctx, fileID).Error(0)
 }

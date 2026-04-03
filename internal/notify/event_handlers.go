@@ -11,6 +11,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
+	"github.com/homegrown-academy/homegrown-academy/internal/recs"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
 )
@@ -430,5 +431,28 @@ func (h *PayoutCompletedHandler) Handle(ctx context.Context, event shared.Domain
 		PayoutID:    e.PayoutID,
 		AmountCents: e.AmountCents,
 		Currency:    e.Currency,
+	})
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Recs Event Handlers [13-recs §12, P3-1]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// RecommendationsGeneratedHandler handles recs.RecommendationsGenerated events.
+// Notifies the family that new recommendations are available.
+type RecommendationsGeneratedHandler struct{ svc NotificationService }
+
+func NewRecommendationsGeneratedHandler(svc NotificationService) *RecommendationsGeneratedHandler {
+	return &RecommendationsGeneratedHandler{svc: svc}
+}
+
+func (h *RecommendationsGeneratedHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(recs.RecommendationsGenerated)
+	if !ok {
+		return fmt.Errorf("notify.RecommendationsGeneratedHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleRecommendationsReady(ctx, RecommendationsReadyEvent{
+		FamilyID: e.FamilyID,
+		Count:    e.Count,
 	})
 }

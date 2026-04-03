@@ -29,6 +29,11 @@ var (
 	ErrSameAdminAppeal  = errors.New("appeal must be reviewed by a different admin")
 	ErrFlagAlreadyReviewed = errors.New("flag has already been reviewed")
 
+	// Phase 2 sentinel errors
+	ErrParentalControlNotFound = errors.New("parental control not found")
+	ErrAdminRoleNotFound       = errors.New("admin role not found")
+	ErrGroomingScoreNotFound   = errors.New("grooming score not found")
+
 	// Re-exported domain errors for convenience.
 	ErrInvalidReportTransition = domain.ErrInvalidReportTransition
 	ErrAccountBanned           = domain.ErrAccountBanned
@@ -66,6 +71,12 @@ func (e *SafetyError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "account_banned", Message: "Account is banned", StatusCode: http.StatusForbidden}
 	case errors.Is(e.Err, ErrInvalidActionType):
 		return &shared.AppError{Code: "invalid_action_type", Message: "Invalid action for current state", StatusCode: http.StatusUnprocessableEntity}
+	case errors.Is(e.Err, ErrParentalControlNotFound):
+		return &shared.AppError{Code: "parental_control_not_found", Message: "Parental control not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, ErrAdminRoleNotFound):
+		return &shared.AppError{Code: "admin_role_not_found", Message: "Admin role not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, ErrGroomingScoreNotFound):
+		return &shared.AppError{Code: "grooming_score_not_found", Message: "Grooming score not found", StatusCode: http.StatusNotFound}
 	default:
 		return shared.ErrInternal(e)
 	}

@@ -30,6 +30,11 @@ func (h *Handler) Register(authGroup *echo.Group, adminGroup *echo.Group) {
 	g.POST("/appeals", h.submitAppeal)
 	g.GET("/appeals/:id", h.getMyAppeal)
 
+	// Phase 2: Parental controls (user-facing)
+	g.GET("/parental-controls", h.getParentalControls)
+	g.PUT("/parental-controls", h.upsertParentalControl)
+	g.DELETE("/parental-controls/:id", h.deleteParentalControl)
+
 	// Admin routes
 	a := adminGroup.Group("/safety")
 	a.GET("/reports", h.adminListReports)
@@ -47,6 +52,17 @@ func (h *Handler) Register(authGroup *echo.Group, adminGroup *echo.Group) {
 	a.GET("/appeals", h.adminListAppeals)
 	a.PATCH("/appeals/:id", h.adminResolveAppeal)
 	a.GET("/dashboard", h.adminDashboard)
+
+	// Phase 2: Admin roles
+	a.GET("/roles", h.adminListRoles)
+	a.POST("/roles", h.adminCreateRole)
+	a.POST("/roles/:role_id/assign", h.adminAssignRole)
+	a.DELETE("/roles/:role_id/assignments/:parent_id", h.adminRevokeRole)
+	a.GET("/roles/:role_id/assignments", h.adminListRoleAssignments)
+
+	// Phase 2: Grooming scores
+	a.GET("/grooming-scores", h.adminListGroomingScores)
+	a.PATCH("/grooming-scores/:id", h.adminReviewGroomingScore)
 }
 
 // ─── User-Facing Endpoints ──────────────────────────────────────────────────────
@@ -522,6 +538,220 @@ func (h *Handler) adminDashboard(c echo.Context) error {
 	}
 
 	resp, err := h.svc.AdminDashboard(c.Request().Context(), auth)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// ─── Phase 2: Parental Controls ─────────────────────────────────────────────────
+
+// GET /v1/safety/parental-controls
+func (h *Handler) getParentalControls(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return shared.ErrUnauthorized()
+	}
+	scope := shared.NewFamilyScopeFromAuth(auth)
+
+	resp, err := h.svc.GetParentalControls(c.Request().Context(), scope)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// PUT /v1/safety/parental-controls
+func (h *Handler) upsertParentalControl(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return shared.ErrUnauthorized()
+	}
+	scope := shared.NewFamilyScopeFromAuth(auth)
+
+	var cmd UpsertParentalControlCommand
+	if err := c.Bind(&cmd); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+
+	resp, err := h.svc.UpsertParentalControl(c.Request().Context(), scope, cmd)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// DELETE /v1/safety/parental-controls/:id
+func (h *Handler) deleteParentalControl(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return shared.ErrUnauthorized()
+	}
+	scope := shared.NewFamilyScopeFromAuth(auth)
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid control ID")
+	}
+
+	if err := h.svc.DeleteParentalControl(c.Request().Context(), scope, id); err != nil {
+		return mapSafetyError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── Phase 2: Admin Roles ───────────────────────────────────────────────────────
+
+// GET /v1/admin/safety/roles
+func (h *Handler) adminListRoles(c echo.Context) error {
+	auth, err := requireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	resp, err := h.svc.ListAdminRoles(c.Request().Context(), auth)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// POST /v1/admin/safety/roles
+func (h *Handler) adminCreateRole(c echo.Context) error {
+	auth, err := requireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	var cmd CreateAdminRoleCommand
+	if err := c.Bind(&cmd); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+
+	resp, err := h.svc.CreateAdminRole(c.Request().Context(), auth, cmd)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+// POST /v1/admin/safety/roles/:role_id/assign
+func (h *Handler) adminAssignRole(c echo.Context) error {
+	auth, err := requireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	roleID, err := uuid.Parse(c.Param("role_id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid role ID")
+	}
+
+	var cmd AssignAdminRoleCommand
+	if err := c.Bind(&cmd); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+
+	resp, err := h.svc.AssignAdminRole(c.Request().Context(), auth, roleID, cmd)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+// DELETE /v1/admin/safety/roles/:role_id/assignments/:parent_id
+func (h *Handler) adminRevokeRole(c echo.Context) error {
+	auth, err := requireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	roleID, err := uuid.Parse(c.Param("role_id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid role ID")
+	}
+
+	parentID, err := uuid.Parse(c.Param("parent_id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid parent ID")
+	}
+
+	if err := h.svc.RevokeAdminRole(c.Request().Context(), auth, roleID, parentID); err != nil {
+		return mapSafetyError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// GET /v1/admin/safety/roles/:role_id/assignments
+func (h *Handler) adminListRoleAssignments(c echo.Context) error {
+	auth, err := requireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	roleID, err := uuid.Parse(c.Param("role_id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid role ID")
+	}
+
+	resp, err := h.svc.ListAdminRoleAssignments(c.Request().Context(), auth, roleID)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// ─── Phase 2: Grooming Scores ───────────────────────────────────────────────────
+
+// GET /v1/admin/safety/grooming-scores
+func (h *Handler) adminListGroomingScores(c echo.Context) error {
+	auth, err := requireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	var pagination shared.PaginationParams
+	if err := c.Bind(&pagination); err != nil {
+		return shared.ErrBadRequest("invalid pagination")
+	}
+
+	resp, err := h.svc.AdminListGroomingScores(c.Request().Context(), auth, pagination)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// PATCH /v1/admin/safety/grooming-scores/:id
+func (h *Handler) adminReviewGroomingScore(c echo.Context) error {
+	auth, err := requireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid grooming score ID")
+	}
+
+	var cmd ReviewGroomingScoreCommand
+	if err := c.Bind(&cmd); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+
+	resp, err := h.svc.AdminReviewGroomingScore(c.Request().Context(), auth, id, cmd)
 	if err != nil {
 		return mapSafetyError(err)
 	}

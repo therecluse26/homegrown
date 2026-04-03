@@ -2029,12 +2029,46 @@ func (s *socialServiceImpl) ListEventsForDateRange(ctx context.Context, auth *sh
 
 // ─── Discovery (Phase 2) ────────────────────────────────────────────────────
 
-// DiscoverFamilies returns families with location_visible=true. [05-social §15]
-// Phase 2: PostGIS radius queries not yet wired; returns non-blocked location-visible families
-// filtered by methodology if provided.
-func (s *socialServiceImpl) DiscoverFamilies(_ context.Context, _ *shared.FamilyScope, _ DiscoverFamiliesQuery) ([]DiscoverableFamilyResponse, error) {
-	// Phase 2 stub: PostGIS proximity queries require iam:: location_point support.
-	return []DiscoverableFamilyResponse{}, nil
+// DiscoverFamilies discovers families in the same region. [05-social §15]
+// Uses region-based matching (not GPS/PostGIS) per privacy constraints [CODING §5].
+// Excludes blocked families bidirectionally.
+func (s *socialServiceImpl) DiscoverFamilies(ctx context.Context, scope *shared.FamilyScope, query DiscoverFamiliesQuery) ([]DiscoverableFamilyResponse, error) {
+	// IAM handles region lookup + query in one cross-domain call.
+	// DiscoverFamiliesByRegion looks up the requester's location_region, then queries
+	// for other families in the same region, optionally filtered by methodology.
+	limit := 20
+	candidates, err := s.iam.DiscoverFamiliesByRegion(ctx, scope.FamilyID(), query.MethodologySlug, limit)
+	if err != nil {
+		return nil, fmt.Errorf("social: discover families by region: %w", err)
+	}
+
+	if len(candidates) == 0 {
+		return []DiscoverableFamilyResponse{}, nil
+	}
+
+	// Filter out blocked families bidirectionally.
+	result := make([]DiscoverableFamilyResponse, 0, len(candidates))
+	for _, c := range candidates {
+		blocked, bErr := s.blockRepo.IsBlocked(ctx, scope.FamilyID(), c.FamilyID)
+		if bErr != nil {
+			slog.Warn("social: block check failed during discovery", "error", bErr)
+			continue
+		}
+		if blocked {
+			continue
+		}
+		reverseBlocked, bErr := s.blockRepo.IsBlocked(ctx, c.FamilyID, scope.FamilyID())
+		if bErr != nil {
+			slog.Warn("social: reverse block check failed during discovery", "error", bErr)
+			continue
+		}
+		if reverseBlocked {
+			continue
+		}
+		result = append(result, c)
+	}
+
+	return result, nil
 }
 
 // DiscoverEvents returns discoverable events filtered by methodology/location. [05-social §15]
@@ -2107,16 +2141,92 @@ func (s *socialServiceImpl) HandleFamilyCreated(ctx context.Context, familyID uu
 	return s.CreateProfile(ctx, familyID)
 }
 
-// Event handler stubs — full implementation deferred to M3. [05-social §5]
+// ─── Cross-Domain Event Handlers (M3) ───────────────────────────────────────
+
 func (s *socialServiceImpl) HandleCoParentAdded(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	// No social-side action needed when a co-parent is added.
 	return nil
 }
 
-func (s *socialServiceImpl) HandleCoParentRemoved(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+// HandleCoParentRemoved reassigns posts authored by the removed co-parent to the family's
+// primary parent so the content is preserved but no longer linked to a departed account.
+// Uses BypassRLSTransaction since event handlers run without FamilyScope. [05-social §17.4]
+func (s *socialServiceImpl) HandleCoParentRemoved(ctx context.Context, familyID uuid.UUID, removedParentID uuid.UUID) error {
+	// Look up the family's primary parent to reassign posts.
+	var primaryParentID *uuid.UUID
+	if err := s.db.WithContext(ctx).Raw(
+		`SELECT primary_parent_id FROM iam_families WHERE id = ?`, familyID,
+	).Scan(&primaryParentID).Error; err != nil {
+		slog.Error("social: co-parent removed — failed to look up primary parent", "family_id", familyID, "error", err)
+		return nil // non-fatal — posts retain the old author_parent_id
+	}
+	if primaryParentID == nil || *primaryParentID == removedParentID {
+		// Primary parent is being removed (unusual) or no primary set — nothing to reassign to.
+		slog.Warn("social: co-parent removed — cannot reassign posts (no valid primary parent)", "family_id", familyID)
+		return nil
+	}
+
+	result := s.db.WithContext(ctx).Exec(
+		`UPDATE soc_posts SET author_parent_id = ? WHERE family_id = ? AND author_parent_id = ?`,
+		*primaryParentID, familyID, removedParentID,
+	)
+	if result.Error != nil {
+		slog.Error("social: co-parent removed — failed to reassign posts", "family_id", familyID, "error", result.Error)
+		return nil
+	}
+	if result.RowsAffected > 0 {
+		slog.Info("social: reassigned posts from removed co-parent", "family_id", familyID, "reassigned", result.RowsAffected)
+	}
 	return nil
 }
 
-func (s *socialServiceImpl) HandleMilestoneAchieved(_ context.Context, _ uuid.UUID, _ MilestoneData) error {
+// HandleMilestoneAchieved creates an automatic milestone post on the family's feed
+// when a student achieves a milestone in learn::. [05-social §17.4]
+func (s *socialServiceImpl) HandleMilestoneAchieved(ctx context.Context, familyID uuid.UUID, milestone MilestoneData) error {
+	// Look up primary parent to attribute the auto-generated post.
+	var primaryParentID *uuid.UUID
+	if err := s.db.WithContext(ctx).Raw(
+		`SELECT primary_parent_id FROM iam_families WHERE id = ?`, familyID,
+	).Scan(&primaryParentID).Error; err != nil || primaryParentID == nil {
+		slog.Warn("social: milestone achieved — no primary parent, skipping auto-post", "family_id", familyID)
+		return nil
+	}
+
+	content := fmt.Sprintf("%s achieved a milestone: %s", milestone.StudentName, milestone.Description)
+	post := &Post{
+		FamilyID:       familyID,
+		AuthorParentID: *primaryParentID,
+		PostType:       "milestone",
+		Content:        &content,
+		Attachments:    json.RawMessage("[]"),
+		Visibility:     domain.VisibilityFriends,
+	}
+
+	scope := shared.NewFamilyScopeFromID(familyID)
+	if err := shared.ScopedTransaction(ctx, s.db, scope, func(tx *gorm.DB) error {
+		repo := &PgPostRepository{db: tx}
+		return repo.Create(ctx, post)
+	}); err != nil {
+		slog.Error("social: milestone post creation failed", "family_id", familyID, "error", err)
+		return nil // non-fatal
+	}
+
+	// Fan-out to friends' feeds.
+	_ = s.jobs.Enqueue(ctx, FanOutPostPayload{
+		PostID:   post.ID,
+		FamilyID: post.FamilyID,
+		ScoreMs:  float64(post.CreatedAt.UnixMilli()),
+	})
+
+	_ = s.eventBus.Publish(ctx, PostCreated{
+		PostID:      post.ID,
+		FamilyID:    post.FamilyID,
+		PostType:    post.PostType,
+		Content:     post.Content,
+		Attachments: post.Attachments,
+	})
+
+	slog.Info("social: milestone post created", "family_id", familyID, "post_id", post.ID)
 	return nil
 }
 

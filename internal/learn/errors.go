@@ -132,6 +132,20 @@ func (e *LearningError) toAppError() *shared.AppError {
 	case errors.Is(e.Err, domain.ErrVideoProgressNotFound):
 		return &shared.AppError{Code: "video_progress_not_found", Message: "Video progress not found", StatusCode: http.StatusNotFound}
 
+	// ─── Phase 2: Assessment/Project/Grading ──────────────��─────
+	case errors.Is(e.Err, domain.ErrAssessmentDefNotFound):
+		return &shared.AppError{Code: "assessment_def_not_found", Message: "Assessment definition not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, domain.ErrAssessmentResultNotFound):
+		return &shared.AppError{Code: "assessment_result_not_found", Message: "Assessment result not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, domain.ErrProjectDefNotFound):
+		return &shared.AppError{Code: "project_def_not_found", Message: "Project definition not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, domain.ErrProjectProgressNotFound):
+		return &shared.AppError{Code: "project_progress_not_found", Message: "Project progress not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, domain.ErrGradingScaleNotFound):
+		return &shared.AppError{Code: "grading_scale_not_found", Message: "Grading scale not found", StatusCode: http.StatusNotFound}
+	case errors.Is(e.Err, domain.ErrInvalidProjectStatusTransition):
+		return &shared.AppError{Code: "invalid_project_status", Message: "Invalid project status transition", StatusCode: http.StatusUnprocessableEntity}
+
 	default:
 		// Check for structured error types
 		var invalidEntryType *domain.ErrInvalidEntryType

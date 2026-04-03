@@ -1,142 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
+import type { components } from "@/api/generated/schema";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-// Hand-written until search swag annotations produce matching generated types.
-// Tracked: specs/gaps_03_31_26.md §FE-6
+// ─── Type aliases (from generated schema) ──────────────────────────────────
 
-export interface FamilySearchResult {
-  family_id: string;
-  display_name: string;
-  methodology_name?: string;
-  location_region?: string;
-  is_friend: boolean;
-  relevance: number;
-}
+export type FamilySearchResult =
+  components["schemas"]["search.FamilySearchResult"];
+export type GroupSearchResult =
+  components["schemas"]["search.GroupSearchResult"];
+export type EventSearchResult =
+  components["schemas"]["search.EventSearchResult"];
+export type PostSearchResult =
+  components["schemas"]["search.PostSearchResult"];
+export type ListingSearchResult =
+  components["schemas"]["search.ListingSearchResult"];
+export type ActivitySearchResult =
+  components["schemas"]["search.ActivitySearchResult"];
+export type JournalSearchResult =
+  components["schemas"]["search.JournalSearchResult"];
+export type ReadingItemSearchResult =
+  components["schemas"]["search.ReadingItemSearchResult"];
+export type SearchResult = components["schemas"]["search.SearchResult"];
+export type FacetBucket = components["schemas"]["search.FacetBucket"];
+export type FacetCounts = components["schemas"]["search.FacetCounts"];
+export type SearchResponse = components["schemas"]["search.SearchResponse"];
+export type AutocompleteSuggestion =
+  components["schemas"]["search.AutocompleteSuggestion"];
+export type AutocompleteResponse =
+  components["schemas"]["search.AutocompleteResponse"];
 
-export interface GroupSearchResult {
-  group_id: string;
-  name: string;
-  description?: string;
-  member_count: number;
-  methodology_name?: string;
-  relevance: number;
-}
-
-export interface EventSearchResult {
-  event_id: string;
-  title: string;
-  description?: string;
-  event_date: string;
-  location_name?: string;
-  is_virtual: boolean;
-  visibility: string;
-  attendee_count: number;
-  relevance: number;
-}
-
-export interface PostSearchResult {
-  post_id: string;
-  content_snippet: string;
-  author_family_id: string;
-  author_display_name: string;
-  group_name?: string;
-  created_at: string;
-  relevance: number;
-}
-
-export interface ListingSearchResult {
-  listing_id: string;
-  title: string;
-  description_snippet: string;
-  price_cents: number;
-  content_type: string;
-  rating_avg?: number;
-  rating_count: number;
-  publisher_name: string;
-  methodology_tags: string[];
-  subject_tags: string[];
-  published_at: string;
-  relevance: number;
-}
-
-export interface ActivitySearchResult {
-  activity_id: string;
-  title: string;
-  description?: string;
-  student_id: string;
-  student_name: string;
-  activity_date: string;
-  subject_tags: string[];
-  relevance: number;
-}
-
-export interface JournalSearchResult {
-  journal_id: string;
-  title: string;
-  content_snippet: string;
-  student_id: string;
-  student_name: string;
-  entry_date: string;
-  entry_type: string;
-  relevance: number;
-}
-
-export interface ReadingItemSearchResult {
-  reading_item_id: string;
-  title: string;
-  author?: string;
-  description?: string;
-  student_id: string;
-  student_name: string;
-  status: string;
-  relevance: number;
-}
-
-export interface SearchResult {
-  type: string;
-  family?: FamilySearchResult;
-  group?: GroupSearchResult;
-  event?: EventSearchResult;
-  post?: PostSearchResult;
-  listing?: ListingSearchResult;
-  activity?: ActivitySearchResult;
-  journal?: JournalSearchResult;
-  reading_item?: ReadingItemSearchResult;
-}
-
-export interface FacetBucket {
-  value: string;
-  display_name: string;
-  count: number;
-}
-
-export interface FacetCounts {
-  methodology_tags: FacetBucket[];
-  subject_tags: FacetBucket[];
-  content_type: FacetBucket[];
-  worldview_tags: FacetBucket[];
-  price_ranges: FacetBucket[];
-  rating_ranges: FacetBucket[];
-}
-
-export interface SearchResponse {
-  results: SearchResult[];
-  total_count: number;
-  facets?: FacetCounts;
-  next_cursor?: string;
-}
-
-export interface AutocompleteSuggestion {
-  text: string;
-  entity_type: string;
-  entity_id: string;
-  score: number;
-}
-
-export interface AutocompleteResponse {
-  suggestions: AutocompleteSuggestion[];
-}
+// ─── Local types (not returned by API) ──────────────────────────────────────
 
 export type SearchScope = "social" | "marketplace" | "learning";
 

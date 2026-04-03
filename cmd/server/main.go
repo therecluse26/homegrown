@@ -46,7 +46,9 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/plan"
 	"github.com/homegrown-academy/homegrown-academy/internal/recs"
 	"github.com/homegrown-academy/homegrown-academy/internal/safety"
+	safetyadapters "github.com/homegrown-academy/homegrown-academy/internal/safety/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/search"
+	searchadapters "github.com/homegrown-academy/homegrown-academy/internal/search/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/homegrown-academy/homegrown-academy/internal/social"
 	"gorm.io/gorm"
@@ -443,6 +445,50 @@ func main() {
 				DisplayName: row.DisplayName,
 			}, nil
 		},
+		// DiscoverFamiliesByRegion — cross-family region-based discovery. [05-social §15, P2-4]
+		// Looks up the requester's location_region, then queries iam_families for matches.
+		// Uses region-based matching (not GPS/PostGIS) per privacy constraints [CODING §5].
+		func(ctx context.Context, requesterFamilyID uuid.UUID, methodologySlug *string, limit int) ([]social.DiscoverableFamilyResponse, error) {
+			type familyRow struct {
+				ID                     uuid.UUID
+				DisplayName            string
+				LocationRegion         *string
+				PrimaryMethodologySlug string
+			}
+			// First get requester's region.
+			var requester familyRow
+			if err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				return tx.Table("iam_families").
+					Select("id, display_name, location_region").
+					Where("id = ?", requesterFamilyID).
+					Scan(&requester).Error
+			}); err != nil || requester.LocationRegion == nil || *requester.LocationRegion == "" {
+				return []social.DiscoverableFamilyResponse{}, nil
+			}
+			// Query families in the same region.
+			var rows []familyRow
+			if err := shared.BypassRLSTransaction(ctx, db, func(tx *gorm.DB) error {
+				q := tx.Table("iam_families").
+					Select("id, display_name, location_region, primary_methodology_slug").
+					Where("location_region = ? AND id != ?", *requester.LocationRegion, requesterFamilyID)
+				if methodologySlug != nil {
+					q = q.Where("(primary_methodology_slug = ? OR ? = ANY(secondary_methodology_slugs))", *methodologySlug, *methodologySlug)
+				}
+				return q.Limit(limit).Find(&rows).Error
+			}); err != nil {
+				return nil, err
+			}
+			result := make([]social.DiscoverableFamilyResponse, len(rows))
+			for i, r := range rows {
+				result[i] = social.DiscoverableFamilyResponse{
+					FamilyID:         r.ID,
+					DisplayName:      r.DisplayName,
+					LocationRegion:   r.LocationRegion,
+					MethodologyNames: []string{r.PrimaryMethodologySlug},
+				}
+			}
+			return result, nil
+		},
 	)
 
 	methodForSocial := social.NewMethodAdapter(
@@ -567,6 +613,11 @@ func main() {
 	learnAssignmentRepo := learn.NewPgAssignmentRepository(db)
 	learnVideoDefRepo := learn.NewPgVideoDefRepository(db)
 	learnVideoProgressRepo := learn.NewPgVideoProgressRepository(db)
+	learnAssessmentDefRepo := learn.NewPgAssessmentDefRepository(db)
+	learnProjectDefRepo := learn.NewPgProjectDefRepository(db)
+	learnAssessmentResultRepo := learn.NewPgAssessmentResultRepository(db)
+	learnProjectProgressRepo := learn.NewPgProjectProgressRepository(db)
+	learnGradingScaleRepo := learn.NewPgGradingScaleRepository(db)
 
 	iamForLearn := learn.NewIamAdapter(
 		// StudentBelongsToFamily — construct FamilyScope and try GetStudent
@@ -644,6 +695,9 @@ func main() {
 		learnQuizSessionRepo, learnSequenceDefRepo,
 		learnSequenceProgressRepo, learnAssignmentRepo,
 		learnVideoDefRepo, learnVideoProgressRepo,
+		learnAssessmentDefRepo, learnProjectDefRepo,
+		learnAssessmentResultRepo, learnProjectProgressRepo,
+		learnGradingScaleRepo,
 		iamForLearn, methodForLearn,
 		learn.NewMktAdapter(
 			func(ctx context.Context, callerID, publisherID uuid.UUID) (bool, error) {
@@ -836,10 +890,20 @@ func main() {
 	safetyCfg := safety.DefaultSafetyConfig()
 	textScanner := safety.NewTextScanner(safetyCfg)
 
+	// Phase 2 repos + adapters
+	safetyParentalControlRepo := safety.NewPgParentalControlRepository(db)
+	safetyAdminRoleRepo := safety.NewPgAdminRoleRepository(db)
+	safetyAdminRoleAssignRepo := safety.NewPgAdminRoleAssignmentRepository(db)
+	safetyGroomingScoreRepo := safety.NewPgGroomingScoreRepository(db)
+	groomingDetector := safetyadapters.NewKeywordGroomingDetector()
+
 	safetySvc := safety.NewSafetyService(
 		safetyReportRepo, safetyFlagRepo, safetyActionRepo, safetyAccountRepo,
 		safetyAppealRepo, safetyNcmecRepo, safetyBotRepo,
 		iamForSafety, cache, eventBus, jobs, textScanner, safetyCfg,
+		safetyParentalControlRepo, safetyAdminRoleRepo,
+		safetyAdminRoleAssignRepo, safetyGroomingScoreRepo,
+		groomingDetector,
 	)
 
 	// Register safety:: event subscriptions
@@ -859,7 +923,17 @@ func main() {
 	searchLearnRepo := search.NewPgLearningSearchRepository(db)
 	searchAutoRepo := search.NewPgAutocompleteRepository(db)
 
-	searchSvc := search.NewSearchService(searchSocialRepo, searchMktRepo, searchLearnRepo, searchAutoRepo)
+	// Typesense adapter: use real HTTP adapter if TYPESENSE_URL is configured, otherwise noop.
+	var typesenseAdapter search.TypesenseAdapter
+	if tsURL := os.Getenv("TYPESENSE_URL"); tsURL != "" {
+		tsKey := os.Getenv("TYPESENSE_API_KEY")
+		typesenseAdapter = searchadapters.NewHttpTypesenseAdapter(tsURL, tsKey)
+		slog.Info("search: Typesense adapter configured", "url", tsURL)
+	} else {
+		typesenseAdapter = &searchadapters.NoopTypesenseAdapter{}
+	}
+
+	searchSvc := search.NewSearchService(searchSocialRepo, searchMktRepo, searchLearnRepo, searchAutoRepo, typesenseAdapter)
 
 	// Register search:: event subscriptions (Phase 1 — all no-ops)
 	eventBus.Subscribe(reflect.TypeOf(social.PostCreated{}), search.NewPostCreatedHandler(searchSvc))
@@ -910,6 +984,7 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(mkt.ListingPublished{}), recs.NewListingPublishedHandler(recsSvc))
 	eventBus.Subscribe(reflect.TypeOf(iam.FamilyDeletionScheduled{}), recs.NewFamilyDeletionScheduledHandler(recsSvc))
 	eventBus.Subscribe(reflect.TypeOf(method.MethodologyConfigUpdated{}), recs.NewMethodologyConfigUpdatedHandler(recsSvc))
+	eventBus.Subscribe(reflect.TypeOf(recs.RecommendationsGenerated{}), notify.NewRecommendationsGeneratedHandler(notifySvc))
 
 	// ── Step 7m: Wire comply:: domain ──────────────────────────────────────────────
 	// comply:: is the compliance & reporting domain. It tracks attendance, assessments,
@@ -1162,14 +1237,25 @@ func main() {
 		},
 	)
 
-	// Declare plan deletion adapter early; svc is set after plan:: is wired (Step 7o).
+	// Declare plan adapters early; svc is set after plan:: is wired (Step 7o).
 	planDeletion := &lifecyclePlanDeletion{}
+	planExport := &lifecyclePlanExport{}
 
 	lifecycleSvc := lifecycle.NewLifecycleService(
 		lifecycleExportRepo, lifecycleDeletionRepo, lifecycleRecoveryRepo,
 		iamForLifecycle, billingForLifecycle,
 		eventBus, jobs,
-		[]lifecycle.ExportHandler{}, // domain export handlers — Phase 2 (deferred)
+		[]lifecycle.ExportHandler{
+			&lifecycleLearnExport{svc: learnSvc},
+			&lifecycleSocialExport{svc: socialSvc},
+			&lifecycleMktExport{svc: mktSvc},
+			&lifecycleMediaExport{svc: mediaSvc},
+			&lifecycleNotifyExport{svc: notifySvc},
+			&lifecycleBillingExport{svc: billingSvc},
+			&lifecycleComplyExport{svc: complySvc},
+			&lifecycleRecsExport{svc: recsSvc},
+			planExport, // svc set after plan:: is wired (below)
+		},
 		[]lifecycle.DeletionHandler{
 			&lifecycleLearnDeletion{svc: learnSvc},
 			&lifecycleSocialDeletion{svc: socialSvc},
@@ -1218,8 +1304,6 @@ func main() {
 	// ── Step 7o: Wire plan:: domain ────────────────────────────────────────────
 	// plan:: is the planning & scheduling domain. It aggregates schedule items,
 	// activities, attendance, and events into a unified calendar view. [17-planning §1]
-	// Cross-domain adapters are stubbed until learn::, comply::, and social::
-	// expose the required calendar-aggregation methods.
 	planRepo := plan.NewPgScheduleItemRepository(db)
 	planTemplateRepo := plan.NewPgScheduleTemplateRepository(db)
 
@@ -1296,8 +1380,9 @@ func main() {
 		iamForPlan, learnForPlan, complyForPlan, socialForPlan,
 	)
 
-	// Complete deferred plan deletion adapter wiring (declared before lifecycle service).
+	// Complete deferred plan adapter wiring (declared before lifecycle service).
 	planDeletion.svc = planSvc
+	planExport.svc = planSvc
 
 	// Register plan:: event subscriptions [17-planning §16]
 	eventBus.Subscribe(reflect.TypeOf(social.EventCancelled{}), plan.NewEventCancelledHandler(planSvc))
@@ -1346,11 +1431,15 @@ func main() {
 	media.RegisterMediaWorkers(worker, mediaUploadRepo, mediaProcJobRepo, mediaTranscodeRepo, mediaStorage, mediaSafety, eventBus, jobs)
 	learn.RegisterLearnWorkers(worker, learnSvc)
 	notify.RegisterTaskHandlers(worker, emailAdapter)
-	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, safety.LoggingThornAdapter{}, jobs)
+	safetyManualReviewRepo := safety.NewPgManualReviewRepository(db)
+	safetyNcmecPendingRepo := safety.NewPgNcmecPendingReportRepository(db)
+	manualReviewThornAdapter := safety.NewManualReviewThornAdapter(safetyManualReviewRepo, safetyNcmecPendingRepo)
+	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, manualReviewThornAdapter, jobs, safetySvc)
 	recs.RegisterTaskHandlers(worker, db,
 		recSignalRepo, recRecRepo, recFeedbackRepo,
 		recPopularityRepo, recPrefRepo, recAnonRepo,
 		cfg.RecsAnonymizationSecret,
+		eventBus,
 	)
 	comply.RegisterTaskHandlers(worker, db,
 		complyStateConfigRepo, complyFamilyConfigRepo, complyAttendanceRepo,
@@ -1358,7 +1447,23 @@ func main() {
 		iamForComply, discoverForComply, mediaForComply, eventBus,
 	)
 	lifecycle.RegisterTaskHandlers(worker, lifecycleSvc)
-	billing.RegisterTaskHandlers(worker, billPayoutRepo, billAdapter)
+	billingMktAdapter := billing.NewMktAdapter(func(ctx context.Context, from, to time.Time) ([]billing.CreatorEarningSummary, error) {
+		rows, err := mktPurchaseRepo.GetAllCreatorSales(ctx, from, to)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]billing.CreatorEarningSummary, len(rows))
+		for i, r := range rows {
+			out[i] = billing.CreatorEarningSummary{
+				CreatorID:            r.CreatorID,
+				TotalPayoutCents:     r.TotalPayoutCents,
+				PurchaseCount:        r.PurchaseCount,
+				RefundDeductionCents: r.RefundDeductionCents,
+			}
+		}
+		return out, nil
+	})
+	billing.RegisterTaskHandlers(worker, billPayoutRepo, billAdapter, billingMktAdapter)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
 			slog.Error("job worker error", "error", startErr)
@@ -2031,6 +2136,148 @@ func (a *adminJobInspectorAdapter) RetryDeadLetterJob(ctx context.Context, jobID
 		id = jobID[idx+1:]
 	}
 	return a.inspector.RetryDeadLetterJob(ctx, queue, id)
+}
+
+// ─── Lifecycle Export Handler Adapters ────────────────────────────────────────
+// Each adapter bridges a domain service to the lifecycle.ExportHandler interface,
+// serializing family data as JSON files for GDPR Art. 20 data portability. [15-data-lifecycle §7]
+
+type lifecycleLearnExport struct{ svc learn.LearningService }
+
+func (a *lifecycleLearnExport) DomainName() string { return "learning" }
+func (a *lifecycleLearnExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	lists, _ := a.svc.ListReadingLists(ctx, &scope)
+	export := struct {
+		ReadingLists any `json:"reading_lists"`
+	}{ReadingLists: lists}
+	data, err := json.Marshal(export)
+	if err != nil {
+		return nil, fmt.Errorf("learn: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "learning.json", Content: data}}, nil
+}
+
+type lifecycleSocialExport struct{ svc social.SocialService }
+
+func (a *lifecycleSocialExport) DomainName() string { return "social" }
+func (a *lifecycleSocialExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	friends, _ := a.svc.ListFriends(ctx, &scope, nil, 1000)
+	groups, _ := a.svc.ListMyGroups(ctx, &scope)
+	export := struct {
+		Friends any `json:"friends"`
+		Groups  any `json:"groups"`
+	}{Friends: friends, Groups: groups}
+	data, err := json.Marshal(export)
+	if err != nil {
+		return nil, fmt.Errorf("social: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "social.json", Content: data}}, nil
+}
+
+type lifecycleMktExport struct{ svc mkt.MarketplaceService }
+
+func (a *lifecycleMktExport) DomainName() string { return "marketplace" }
+func (a *lifecycleMktExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	cart, _ := a.svc.GetCart(ctx, scope)
+	purchases, _ := a.svc.GetPurchases(ctx, scope, mkt.PurchaseQueryParams{})
+	export := struct {
+		Cart      any `json:"cart"`
+		Purchases any `json:"purchases"`
+	}{Cart: cart, Purchases: purchases}
+	data, err := json.Marshal(export)
+	if err != nil {
+		return nil, fmt.Errorf("mkt: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "marketplace.json", Content: data}}, nil
+}
+
+type lifecycleMediaExport struct{ svc media.MediaService }
+
+func (a *lifecycleMediaExport) DomainName() string { return "media" }
+func (a *lifecycleMediaExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	uploads, _ := a.svc.ListUploads(ctx, familyID, 10000, nil)
+	data, err := json.Marshal(uploads)
+	if err != nil {
+		return nil, fmt.Errorf("media: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "media.json", Content: data}}, nil
+}
+
+type lifecycleNotifyExport struct{ svc notify.NotificationService }
+
+func (a *lifecycleNotifyExport) DomainName() string { return "notifications" }
+func (a *lifecycleNotifyExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	prefs, _ := a.svc.GetPreferences(ctx, &scope)
+	notifications, _ := a.svc.ListNotifications(ctx, notify.NotificationListParams{}, &scope)
+	export := struct {
+		Preferences   any `json:"preferences"`
+		Notifications any `json:"notifications"`
+	}{Preferences: prefs, Notifications: notifications}
+	data, err := json.Marshal(export)
+	if err != nil {
+		return nil, fmt.Errorf("notify: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "notifications.json", Content: data}}, nil
+}
+
+type lifecycleBillingExport struct{ svc billing.BillingService }
+
+func (a *lifecycleBillingExport) DomainName() string { return "billing" }
+func (a *lifecycleBillingExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	sub, _ := a.svc.GetSubscription(ctx, scope)
+	txns, _ := a.svc.ListTransactions(ctx, billing.TransactionListParams{}, scope)
+	export := struct {
+		Subscription any `json:"subscription"`
+		Transactions any `json:"transactions"`
+	}{Subscription: sub, Transactions: txns}
+	data, err := json.Marshal(export)
+	if err != nil {
+		return nil, fmt.Errorf("billing: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "billing.json", Content: data}}, nil
+}
+
+type lifecycleComplyExport struct{ svc comply.ComplianceService }
+
+func (a *lifecycleComplyExport) DomainName() string { return "compliance" }
+func (a *lifecycleComplyExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	cfg, _ := a.svc.GetFamilyConfig(ctx, scope)
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("comply: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "compliance.json", Content: data}}, nil
+}
+
+type lifecycleRecsExport struct{ svc recs.RecsService }
+
+func (a *lifecycleRecsExport) DomainName() string { return "recommendations" }
+func (a *lifecycleRecsExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	prefs, _ := a.svc.GetPreferences(ctx, &scope)
+	data, err := json.Marshal(prefs)
+	if err != nil {
+		return nil, fmt.Errorf("recs: marshal export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "recommendations.json", Content: data}}, nil
+}
+
+type lifecyclePlanExport struct{ svc plan.PlanningService }
+
+func (a *lifecyclePlanExport) DomainName() string { return "planning" }
+func (a *lifecyclePlanExport) ExportFamilyData(ctx context.Context, familyID uuid.UUID, _ lifecycle.ExportFormat) ([]lifecycle.ExportFile, error) {
+	scope := shared.NewFamilyScopeFromID(familyID)
+	data, err := a.svc.ExportData(ctx, &scope)
+	if err != nil {
+		return nil, fmt.Errorf("plan: export: %w", err)
+	}
+	return []lifecycle.ExportFile{{Filename: "planning.json", Content: data}}, nil
 }
 
 // ─── Lifecycle Deletion Handler Adapters ─────────────────────────────────────

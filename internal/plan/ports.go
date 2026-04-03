@@ -109,6 +109,16 @@ type PlanningService interface {
 		studentID *uuid.UUID,
 	) (string, error)
 
+	// GetCalendarPDF generates a PDF export of the calendar for a date range. [17-planning §13.2]
+	GetCalendarPDF(
+		ctx context.Context,
+		auth *shared.AuthContext,
+		scope *shared.FamilyScope,
+		start time.Time,
+		end time.Time,
+		studentID *uuid.UUID,
+	) ([]byte, error)
+
 	// === Schedule Templates [17-planning §11.3] ===
 
 	// CreateTemplate creates a new schedule template.

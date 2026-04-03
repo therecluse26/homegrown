@@ -68,6 +68,51 @@ type LearningService interface {
 	// RequestDataExport requests an async data export.
 	RequestDataExport(ctx context.Context, scope *shared.FamilyScope, cmd RequestExportCommand) (ExportRequestResponse, error)
 
+	// ─── Assessment Def Commands (Layer 1 — Phase 2) ────────────────────
+
+	// CreateAssessmentDef creates an assessment definition. Publisher membership required.
+	CreateAssessmentDef(ctx context.Context, cmd CreateAssessmentDefCommand) (AssessmentDefResponse, error)
+	// UpdateAssessmentDef updates an assessment definition. Publisher membership required.
+	UpdateAssessmentDef(ctx context.Context, defID uuid.UUID, cmd UpdateAssessmentDefCommand) (AssessmentDefResponse, error)
+	// DeleteAssessmentDef soft-deletes an assessment definition. Publisher membership required.
+	DeleteAssessmentDef(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error
+
+	// ─── Project Def Commands (Layer 1 — Phase 2) ────────────────────────
+
+	// CreateProjectDef creates a project definition. Publisher membership required.
+	CreateProjectDef(ctx context.Context, cmd CreateProjectDefCommand) (ProjectDefResponse, error)
+	// UpdateProjectDef updates a project definition. Publisher membership required.
+	UpdateProjectDef(ctx context.Context, defID uuid.UUID, cmd UpdateProjectDefCommand) (ProjectDefResponse, error)
+	// DeleteProjectDef soft-deletes a project definition. Publisher membership required.
+	DeleteProjectDef(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error
+
+	// ─── Assessment Result Commands (Layer 3 — Phase 2) ──────────────────
+
+	// RecordAssessmentResult records an assessment result for a student.
+	RecordAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd RecordAssessmentResultCommand) (AssessmentResultResponse, error)
+	// UpdateAssessmentResult updates an assessment result.
+	UpdateAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID, cmd UpdateAssessmentResultCommand) (AssessmentResultResponse, error)
+	// DeleteAssessmentResult deletes an assessment result.
+	DeleteAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) error
+
+	// ─── Project Progress Commands (Layer 3 — Phase 2) ──────────────────
+
+	// StartProject starts tracking a project for a student.
+	StartProject(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd StartProjectCommand) (ProjectProgressResponse, error)
+	// UpdateProjectProgress updates project progress.
+	UpdateProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID, cmd UpdateProjectProgressCommand) (ProjectProgressResponse, error)
+	// DeleteProjectProgress deletes project progress.
+	DeleteProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) error
+
+	// ─── Grading Scale Commands (Layer 3 — Phase 2) ─────────────────────
+
+	// CreateGradingScale creates a grading scale for the family.
+	CreateGradingScale(ctx context.Context, scope *shared.FamilyScope, cmd CreateGradingScaleCommand) (GradingScaleResponse, error)
+	// UpdateGradingScale updates a grading scale.
+	UpdateGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID, cmd UpdateGradingScaleCommand) (GradingScaleResponse, error)
+	// DeleteGradingScale deletes a grading scale.
+	DeleteGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) error
+
 	// ─── Assessment Engine Commands (Layer 1 + Layer 3) ─────────────────
 
 	// CreateQuestion creates a question. Publisher membership required.
@@ -170,6 +215,33 @@ type LearningService interface {
 
 	// GetExportRequest returns export request status.
 	GetExportRequest(ctx context.Context, scope *shared.FamilyScope, exportID uuid.UUID) (ExportRequestResponse, error)
+
+	// ─── Assessment/Project/Grading Queries (Phase 2) ──────────────────
+
+	// ListAssessmentDefs lists assessment definitions with filtering.
+	ListAssessmentDefs(ctx context.Context, query AssessmentDefQuery) (PaginatedResponse[AssessmentDefSummaryResponse], error)
+	// GetAssessmentDef returns a single assessment definition.
+	GetAssessmentDef(ctx context.Context, defID uuid.UUID) (AssessmentDefResponse, error)
+
+	// ListProjectDefs lists project definitions with filtering.
+	ListProjectDefs(ctx context.Context, query ProjectDefQuery) (PaginatedResponse[ProjectDefSummaryResponse], error)
+	// GetProjectDef returns a single project definition.
+	GetProjectDef(ctx context.Context, defID uuid.UUID) (ProjectDefResponse, error)
+
+	// ListAssessmentResults lists assessment results for a student.
+	ListAssessmentResults(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query AssessmentResultQuery) (PaginatedResponse[AssessmentResultResponse], error)
+	// GetAssessmentResult returns a single assessment result.
+	GetAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) (AssessmentResultResponse, error)
+
+	// ListProjectProgress lists project progress for a student.
+	ListProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query ProjectProgressQuery) (PaginatedResponse[ProjectProgressResponse], error)
+	// GetProjectProgress returns project progress by ID.
+	GetProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) (ProjectProgressResponse, error)
+
+	// ListGradingScales lists the family's grading scales.
+	ListGradingScales(ctx context.Context, scope *shared.FamilyScope) ([]GradingScaleResponse, error)
+	// GetGradingScale returns a grading scale by ID.
+	GetGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) (GradingScaleResponse, error)
 
 	// ─── Assessment Engine Queries ──────────────────────────────────────
 
@@ -295,6 +367,24 @@ type VideoDefRepository interface {
 	Update(ctx context.Context, def *VideoDefModel) error
 }
 
+// AssessmentDefRepository manages assessment definition persistence. [06-learn §6]
+type AssessmentDefRepository interface {
+	Create(ctx context.Context, def *AssessmentDefModel) error
+	FindByID(ctx context.Context, defID uuid.UUID) (*AssessmentDefModel, error)
+	List(ctx context.Context, query *AssessmentDefQuery) ([]AssessmentDefModel, error)
+	Update(ctx context.Context, def *AssessmentDefModel) error
+	SoftDelete(ctx context.Context, defID uuid.UUID) error
+}
+
+// ProjectDefRepository manages project definition persistence. [06-learn §6]
+type ProjectDefRepository interface {
+	Create(ctx context.Context, def *ProjectDefModel) error
+	FindByID(ctx context.Context, defID uuid.UUID) (*ProjectDefModel, error)
+	List(ctx context.Context, query *ProjectDefQuery) ([]ProjectDefModel, error)
+	Update(ctx context.Context, def *ProjectDefModel) error
+	SoftDelete(ctx context.Context, defID uuid.UUID) error
+}
+
 // ─── Layer 3: Instance Repositories (FamilyScope required) ──────────────────
 
 // ActivityLogRepository manages activity log persistence. [06-learn §6]
@@ -392,6 +482,35 @@ type AssignmentRepository interface {
 type VideoProgressRepository interface {
 	Upsert(ctx context.Context, scope *shared.FamilyScope, progress *VideoProgressModel) error
 	FindByStudentAndVideo(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, videoDefID uuid.UUID) (*VideoProgressModel, error)
+}
+
+// AssessmentResultRepository manages assessment result persistence. [06-learn §6]
+type AssessmentResultRepository interface {
+	Create(ctx context.Context, scope *shared.FamilyScope, result *AssessmentResultModel) error
+	FindByID(ctx context.Context, scope *shared.FamilyScope, resultID uuid.UUID) (*AssessmentResultModel, error)
+	ListByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query *AssessmentResultQuery) ([]AssessmentResultModel, error)
+	Update(ctx context.Context, scope *shared.FamilyScope, result *AssessmentResultModel) error
+	Delete(ctx context.Context, scope *shared.FamilyScope, resultID uuid.UUID) error
+}
+
+// ProjectProgressRepository manages project progress persistence. [06-learn §6]
+type ProjectProgressRepository interface {
+	Create(ctx context.Context, scope *shared.FamilyScope, progress *ProjectProgressModel) error
+	FindByID(ctx context.Context, scope *shared.FamilyScope, progressID uuid.UUID) (*ProjectProgressModel, error)
+	ListByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query *ProjectProgressQuery) ([]ProjectProgressModel, error)
+	Update(ctx context.Context, scope *shared.FamilyScope, progress *ProjectProgressModel) error
+	Delete(ctx context.Context, scope *shared.FamilyScope, progressID uuid.UUID) error
+}
+
+// GradingScaleRepository manages grading scale persistence. [06-learn §6]
+type GradingScaleRepository interface {
+	Create(ctx context.Context, scope *shared.FamilyScope, scale *GradingScaleModel) error
+	FindByID(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) (*GradingScaleModel, error)
+	ListByFamily(ctx context.Context, scope *shared.FamilyScope) ([]GradingScaleModel, error)
+	Update(ctx context.Context, scope *shared.FamilyScope, scale *GradingScaleModel) error
+	Delete(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) error
+	// ClearDefault clears the default flag on all grading scales for a family.
+	ClearDefault(ctx context.Context, scope *shared.FamilyScope) error
 }
 
 // ─── Platform Repositories (no FamilyScope) ─────────────────────────────────

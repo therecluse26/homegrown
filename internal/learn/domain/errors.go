@@ -128,6 +128,17 @@ var (
 	ErrSequenceNoItems          = errors.New("sequence must have at least one item")
 )
 
+// ─── Assessment/Project/Grading Errors (Phase 2) ────────────────────────────
+
+var (
+	ErrAssessmentDefNotFound    = errors.New("assessment definition not found")
+	ErrAssessmentResultNotFound = errors.New("assessment result not found")
+	ErrProjectDefNotFound       = errors.New("project definition not found")
+	ErrProjectProgressNotFound  = errors.New("project progress not found")
+	ErrGradingScaleNotFound     = errors.New("grading scale not found")
+	ErrInvalidProjectStatusTransition = errors.New("invalid project status transition")
+)
+
 // ─── Assignment Errors ──────────────────────────────────────────────────────
 
 var (

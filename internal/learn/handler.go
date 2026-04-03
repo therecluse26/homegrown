@@ -125,6 +125,41 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	// Video Progress (Layer 3 — student-scoped)
 	learn.PATCH("/students/:studentId/video-progress", h.updateVideoProgress)
 	learn.GET("/students/:studentId/video-progress/:videoDefId", h.getVideoProgress)
+
+	// Assessment Definitions (Layer 1 — Phase 2)
+	learn.POST("/assessment-defs", h.createAssessmentDef)
+	learn.GET("/assessment-defs", h.listAssessmentDefs)
+	learn.GET("/assessment-defs/:id", h.getAssessmentDef)
+	learn.PATCH("/assessment-defs/:id", h.updateAssessmentDef)
+	learn.DELETE("/assessment-defs/:id", h.deleteAssessmentDef)
+
+	// Project Definitions (Layer 1 — Phase 2)
+	learn.POST("/project-defs", h.createProjectDef)
+	learn.GET("/project-defs", h.listProjectDefs)
+	learn.GET("/project-defs/:id", h.getProjectDef)
+	learn.PATCH("/project-defs/:id", h.updateProjectDef)
+	learn.DELETE("/project-defs/:id", h.deleteProjectDef)
+
+	// Assessment Results (Layer 3 — student-scoped, Phase 2)
+	learn.POST("/students/:studentId/assessments", h.recordAssessmentResult)
+	learn.GET("/students/:studentId/assessments", h.listAssessmentResults)
+	learn.GET("/students/:studentId/assessments/:id", h.getAssessmentResult)
+	learn.PATCH("/students/:studentId/assessments/:id", h.updateAssessmentResult)
+	learn.DELETE("/students/:studentId/assessments/:id", h.deleteAssessmentResult)
+
+	// Project Progress (Layer 3 — student-scoped, Phase 2)
+	learn.POST("/students/:studentId/projects", h.startProject)
+	learn.GET("/students/:studentId/projects", h.listProjectProgress)
+	learn.GET("/students/:studentId/projects/:id", h.getProjectProgress)
+	learn.PATCH("/students/:studentId/projects/:id", h.updateProjectProgress)
+	learn.DELETE("/students/:studentId/projects/:id", h.deleteProjectProgress)
+
+	// Grading Scales (Layer 3 — family-scoped, Phase 2)
+	learn.POST("/grading-scales", h.createGradingScale)
+	learn.GET("/grading-scales", h.listGradingScales)
+	learn.GET("/grading-scales/:id", h.getGradingScale)
+	learn.PATCH("/grading-scales/:id", h.updateGradingScale)
+	learn.DELETE("/grading-scales/:id", h.deleteGradingScale)
 }
 
 // ─── Activity Definition Handlers ───────────────────────────────────────────
@@ -1519,4 +1554,528 @@ func parseLimit(s string) int64 {
 		return 50
 	}
 	return n
+}
+
+// ─── Assessment Definition Handlers (Phase 2) ───────────────────────────────
+
+func (h *Handler) createAssessmentDef(c echo.Context) error {
+	var cmd CreateAssessmentDefCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	cmd.CallerID = auth.ParentID
+	resp, err := h.svc.CreateAssessmentDef(c.Request().Context(), cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+func (h *Handler) listAssessmentDefs(c echo.Context) error {
+	query := AssessmentDefQuery{
+		Limit: parseLimit(c.QueryParam("limit")),
+	}
+	if s := c.QueryParam("subject"); s != "" {
+		query.Subject = &s
+	}
+	if st := c.QueryParam("scoring_type"); st != "" {
+		query.ScoringType = &st
+	}
+	if p := c.QueryParam("publisher_id"); p != "" {
+		if id, err := uuid.Parse(p); err == nil {
+			query.PublisherID = &id
+		}
+	}
+	if s := c.QueryParam("search"); s != "" {
+		query.Search = &s
+	}
+	if cur := c.QueryParam("cursor"); cur != "" {
+		if id, err := uuid.Parse(cur); err == nil {
+			query.Cursor = &id
+		}
+	}
+	resp, err := h.svc.ListAssessmentDefs(c.Request().Context(), query)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) getAssessmentDef(c echo.Context) error {
+	defID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	resp, err := h.svc.GetAssessmentDef(c.Request().Context(), defID)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) updateAssessmentDef(c echo.Context) error {
+	defID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	var cmd UpdateAssessmentDefCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	cmd.CallerID = auth.ParentID
+	resp, err := h.svc.UpdateAssessmentDef(c.Request().Context(), defID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) deleteAssessmentDef(c echo.Context) error {
+	defID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeleteAssessmentDef(c.Request().Context(), defID, auth.ParentID); err != nil {
+		return mapLearningError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── Project Definition Handlers (Phase 2) ───────────────────────────────────
+
+func (h *Handler) createProjectDef(c echo.Context) error {
+	var cmd CreateProjectDefCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	cmd.CallerID = auth.ParentID
+	resp, err := h.svc.CreateProjectDef(c.Request().Context(), cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+func (h *Handler) listProjectDefs(c echo.Context) error {
+	query := ProjectDefQuery{
+		Limit: parseLimit(c.QueryParam("limit")),
+	}
+	if s := c.QueryParam("subject"); s != "" {
+		query.Subject = &s
+	}
+	if p := c.QueryParam("publisher_id"); p != "" {
+		if id, err := uuid.Parse(p); err == nil {
+			query.PublisherID = &id
+		}
+	}
+	if s := c.QueryParam("search"); s != "" {
+		query.Search = &s
+	}
+	if cur := c.QueryParam("cursor"); cur != "" {
+		if id, err := uuid.Parse(cur); err == nil {
+			query.Cursor = &id
+		}
+	}
+	resp, err := h.svc.ListProjectDefs(c.Request().Context(), query)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) getProjectDef(c echo.Context) error {
+	defID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	resp, err := h.svc.GetProjectDef(c.Request().Context(), defID)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) updateProjectDef(c echo.Context) error {
+	defID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	var cmd UpdateProjectDefCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	cmd.CallerID = auth.ParentID
+	resp, err := h.svc.UpdateProjectDef(c.Request().Context(), defID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) deleteProjectDef(c echo.Context) error {
+	defID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeleteProjectDef(c.Request().Context(), defID, auth.ParentID); err != nil {
+		return mapLearningError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── Assessment Result Handlers (Phase 2) ────────────────────────────────────
+
+func (h *Handler) recordAssessmentResult(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var cmd RecordAssessmentResultCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	resp, err := h.svc.RecordAssessmentResult(c.Request().Context(), &scope, studentID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+func (h *Handler) listAssessmentResults(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	query := AssessmentResultQuery{
+		Limit: parseLimit(c.QueryParam("limit")),
+	}
+	if d := c.QueryParam("assessment_def_id"); d != "" {
+		if id, err := uuid.Parse(d); err == nil {
+			query.AssessmentDefID = &id
+		}
+	}
+	if cur := c.QueryParam("cursor"); cur != "" {
+		if id, err := uuid.Parse(cur); err == nil {
+			query.Cursor = &id
+		}
+	}
+	resp, err := h.svc.ListAssessmentResults(c.Request().Context(), &scope, studentID, query)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) getAssessmentResult(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	resultID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	resp, err := h.svc.GetAssessmentResult(c.Request().Context(), &scope, studentID, resultID)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) updateAssessmentResult(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	resultID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var cmd UpdateAssessmentResultCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	resp, err := h.svc.UpdateAssessmentResult(c.Request().Context(), &scope, studentID, resultID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) deleteAssessmentResult(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	resultID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeleteAssessmentResult(c.Request().Context(), &scope, studentID, resultID); err != nil {
+		return mapLearningError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── Project Progress Handlers (Phase 2) ─────────────────────────────────────
+
+func (h *Handler) startProject(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var cmd StartProjectCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	resp, err := h.svc.StartProject(c.Request().Context(), &scope, studentID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+func (h *Handler) listProjectProgress(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	query := ProjectProgressQuery{
+		Limit: parseLimit(c.QueryParam("limit")),
+	}
+	if s := c.QueryParam("status"); s != "" {
+		query.Status = &s
+	}
+	if d := c.QueryParam("project_def_id"); d != "" {
+		if id, err := uuid.Parse(d); err == nil {
+			query.ProjectDefID = &id
+		}
+	}
+	if cur := c.QueryParam("cursor"); cur != "" {
+		if id, err := uuid.Parse(cur); err == nil {
+			query.Cursor = &id
+		}
+	}
+	resp, err := h.svc.ListProjectProgress(c.Request().Context(), &scope, studentID, query)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) getProjectProgress(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	progressID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	resp, err := h.svc.GetProjectProgress(c.Request().Context(), &scope, studentID, progressID)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) updateProjectProgress(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	progressID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var cmd UpdateProjectProgressCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	resp, err := h.svc.UpdateProjectProgress(c.Request().Context(), &scope, studentID, progressID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) deleteProjectProgress(c echo.Context) error {
+	studentID, err := uuid.Parse(c.Param("studentId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid student id")
+	}
+	progressID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeleteProjectProgress(c.Request().Context(), &scope, studentID, progressID); err != nil {
+		return mapLearningError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── Grading Scale Handlers (Phase 2) ────────────────────────────────────────
+
+func (h *Handler) createGradingScale(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var cmd CreateGradingScaleCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	resp, err := h.svc.CreateGradingScale(c.Request().Context(), &scope, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusCreated, resp)
+}
+
+func (h *Handler) listGradingScales(c echo.Context) error {
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	resp, err := h.svc.ListGradingScales(c.Request().Context(), &scope)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) getGradingScale(c echo.Context) error {
+	scaleID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	resp, err := h.svc.GetGradingScale(c.Request().Context(), &scope, scaleID)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) updateGradingScale(c echo.Context) error {
+	scaleID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var cmd UpdateGradingScaleCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	resp, err := h.svc.UpdateGradingScale(c.Request().Context(), &scope, scaleID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) deleteGradingScale(c echo.Context) error {
+	scaleID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeleteGradingScale(c.Request().Context(), &scope, scaleID); err != nil {
+		return mapLearningError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }

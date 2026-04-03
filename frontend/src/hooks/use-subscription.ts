@@ -1,54 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
+import type { components } from "@/api/generated/schema";
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-// Hand-written until billing swag annotations produce matching generated types.
-// Tracked: specs/gaps_03_31_26.md §FE-6
+// ─── Type aliases (from generated schema) ──────────────────────────────────
 
-export type BillingInterval = "monthly" | "annual";
+export type Subscription =
+  components["schemas"]["billing.SubscriptionResponse"];
+export type Transaction =
+  components["schemas"]["billing.TransactionResponse"];
+export type TransactionListResponse =
+  components["schemas"]["billing.TransactionListResponse"];
+export type PaymentMethod =
+  components["schemas"]["billing.PaymentMethodResponse"];
+export type ChangePlanRequest =
+  components["schemas"]["billing.UpdateSubscriptionCommand"];
 
-export interface Subscription {
-  id: string;
-  plan_id: string;
-  plan_name: string;
-  tier: "free" | "plus" | "premium";
-  interval: BillingInterval;
-  status: "active" | "cancelled" | "past_due" | "trialing";
-  current_period_start: string;
-  current_period_end: string;
-  cancel_at_period_end: boolean;
-  cancelled_at: string | null;
-  amount_cents: number;
-  currency: string;
-}
-
-export interface ChangePlanRequest {
-  plan_id: string;
-  interval: BillingInterval;
-}
-
-export interface PaymentMethod {
-  id: string;
-  type: "card" | "bank_account";
-  brand: string;
-  last4: string;
-  exp_month: number;
-  exp_year: number;
-  is_default: boolean;
-}
-
-export interface Transaction {
-  id: string;
-  type: "subscription" | "purchase" | "payout" | "refund";
-  status: "completed" | "pending" | "failed" | "refunded";
-  amount_cents: number;
-  currency: string;
-  description: string;
-  created_at: string;
-}
+// ─── Local filter type (not returned by API) ────────────────────────────────
 
 export interface TransactionFilters {
-  type?: Transaction["type"];
+  type?: string;
   from?: string;
   to?: string;
   page?: number;
@@ -68,8 +38,8 @@ export function useChangePlan() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: ChangePlanRequest) =>
-      apiClient<Subscription>("/v1/billing/subscription/change", {
-        method: "POST",
+      apiClient<Subscription>("/v1/billing/subscription", {
+        method: "PATCH",
         body,
       }),
     onSuccess: () => {
@@ -83,8 +53,8 @@ export function useCancelSubscription() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiClient<void>("/v1/billing/subscription/cancel", {
-        method: "POST",
+      apiClient<void>("/v1/billing/subscription", {
+        method: "DELETE",
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["billing"] });
@@ -157,7 +127,7 @@ export function useTransactions(filters?: TransactionFilters) {
       if (filters?.to) params.set("to", filters.to);
       if (filters?.page) params.set("page", String(filters.page));
       const qs = params.toString();
-      return apiClient<{ transactions: Transaction[]; total: number }>(
+      return apiClient<TransactionListResponse>(
         `/v1/billing/transactions${qs ? `?${qs}` : ""}`,
       );
     },

@@ -12,7 +12,7 @@ GOOSE := $(GOBIN)/goose
 
 DATABASE_URL ?= postgres://homegrown:homegrown@localhost:5932/homegrown
 
-.PHONY: default dev dev-api dev-web docker-up docker-down check lint test type-check \
+.PHONY: default dev dev-api dev-web docker-up docker-down check check-full lint test type-check a11y \
         migrate db-reset seed seed-full agent-db-reset agent-kratos-reset agent-server \
         openapi generate-types full-generate audit install-tools install-hooks
 
@@ -60,6 +60,13 @@ test:
 # Run TypeScript type checker (zero errors required)
 type-check:
 	cd frontend && npm run type-check
+
+# Run all quality gates plus a11y tests (requires Playwright browsers)
+check-full: check a11y
+
+# Run Playwright accessibility tests (requires Vite dev server running)
+a11y:
+	cd frontend && npx playwright test e2e/a11y.spec.ts
 
 # ─── Database ─────────────────────────────────────────────────────────
 

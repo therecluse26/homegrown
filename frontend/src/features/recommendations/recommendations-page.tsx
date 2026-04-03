@@ -26,27 +26,36 @@ import {
 
 // ─── Type badge config ──────────────────────────────────────────────────────
 
-type RecommendationType = Recommendation["type"];
-
 const TYPE_CONFIG: Record<
-  RecommendationType,
+  string,
   { icon: typeof BookOpen; badgeVariant: "primary" | "secondary" | "success"; labelId: string }
 > = {
-  content: {
+  marketplace_content: {
     icon: BookOpen,
     badgeVariant: "primary",
     labelId: "recommendations.type.content",
   },
-  activity: {
+  activity_idea: {
     icon: Lightbulb,
     badgeVariant: "secondary",
     labelId: "recommendations.type.activity",
   },
-  resource: {
+  reading_suggestion: {
     icon: Package,
     badgeVariant: "success",
     labelId: "recommendations.type.resource",
   },
+  community_group: {
+    icon: Sparkles,
+    badgeVariant: "primary",
+    labelId: "recommendations.type.community",
+  },
+};
+
+const DEFAULT_CONFIG = {
+  icon: BookOpen,
+  badgeVariant: "primary" as const,
+  labelId: "recommendations.type.content",
 };
 
 // ─── Recommendation card ────────────────────────────────────────────────────
@@ -60,7 +69,8 @@ function RecommendationCard({
   const dismiss = useDismissRecommendation();
   const blockCategory = useBlockCategory();
 
-  const config = TYPE_CONFIG[recommendation.type];
+  const recType = recommendation.recommendation_type ?? "marketplace_content";
+  const config = TYPE_CONFIG[recType] ?? DEFAULT_CONFIG;
 
   return (
     <Card className="flex flex-col gap-3">
@@ -73,9 +83,9 @@ function RecommendationCard({
             </span>
           </Badge>
           <Badge variant="default">
-            {recommendation.category}
+            {recommendation.source_signal}
           </Badge>
-          {recommendation.ai_generated && (
+          {recommendation.is_suggestion && (
             <Badge variant="warning">
               <span className="flex items-center gap-1">
                 <Icon icon={Sparkles} size="xs" aria-hidden />
@@ -88,35 +98,23 @@ function RecommendationCard({
 
       <div className="flex-1 min-w-0">
         <h3 className="type-title-sm text-on-surface font-medium mb-1">
-          {recommendation.title}
+          {recommendation.target_entity_label}
         </h3>
         <p className="type-body-sm text-on-surface-variant mb-2">
-          {recommendation.description}
-        </p>
-        <p className="type-body-sm text-on-surface-variant italic">
-          {recommendation.reason}
+          {recommendation.source_label}
         </p>
       </div>
 
       <div className="flex items-center gap-2 pt-1">
-        {recommendation.link && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => window.open(recommendation.link, "_blank", "noopener")}
-          >
-            <FormattedMessage id="recommendations.viewLink" />
-          </Button>
-        )}
         <Button
           variant="tertiary"
           size="sm"
           leadingIcon={<Icon icon={X} size="xs" aria-hidden />}
-          onClick={() => dismiss.mutate(recommendation.id)}
+          onClick={() => dismiss.mutate(recommendation.id ?? "")}
           loading={dismiss.isPending}
           aria-label={intl.formatMessage(
             { id: "recommendations.dismiss.label" },
-            { title: recommendation.title },
+            { title: recommendation.target_entity_label },
           )}
         >
           <FormattedMessage id="recommendations.dismiss" />
@@ -125,11 +123,11 @@ function RecommendationCard({
           variant="tertiary"
           size="sm"
           leadingIcon={<Icon icon={Ban} size="xs" aria-hidden />}
-          onClick={() => blockCategory.mutate(recommendation.category)}
+          onClick={() => blockCategory.mutate(recType)}
           loading={blockCategory.isPending}
           aria-label={intl.formatMessage(
             { id: "recommendations.blockCategory.label" },
-            { category: recommendation.category },
+            { category: recType },
           )}
         >
           <FormattedMessage id="recommendations.blockCategory" />
@@ -232,29 +230,29 @@ export function RecommendationsPage() {
       content: <RecommendationList recommendations={recommendations} />,
     },
     {
-      id: "content",
+      id: "marketplace_content",
       label: intl.formatMessage({ id: "recommendations.filter.content" }),
       content: (
         <RecommendationList
-          recommendations={recommendations.filter((r) => r.type === "content")}
+          recommendations={recommendations.filter((r) => r.recommendation_type === "marketplace_content")}
         />
       ),
     },
     {
-      id: "activity",
+      id: "activity_idea",
       label: intl.formatMessage({ id: "recommendations.filter.activity" }),
       content: (
         <RecommendationList
-          recommendations={recommendations.filter((r) => r.type === "activity")}
+          recommendations={recommendations.filter((r) => r.recommendation_type === "activity_idea")}
         />
       ),
     },
     {
-      id: "resource",
+      id: "reading_suggestion",
       label: intl.formatMessage({ id: "recommendations.filter.resource" }),
       content: (
         <RecommendationList
-          recommendations={recommendations.filter((r) => r.type === "resource")}
+          recommendations={recommendations.filter((r) => r.recommendation_type === "reading_suggestion")}
         />
       ),
     },

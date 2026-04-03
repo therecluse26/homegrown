@@ -71,7 +71,7 @@ export function SearchSuggestions({
           const selected = suggestions[activeIndex];
           if (activeIndex >= 0 && selected) {
             e.preventDefault();
-            onSelect(selected.text);
+            onSelect(selected.text ?? "");
           }
         }
           break;
@@ -129,7 +129,7 @@ export function SearchSuggestions({
                   ? "bg-surface-container-high"
                   : "hover:bg-surface-container-low"
               }`}
-              onClick={() => onSelect(suggestion.text)}
+              onClick={() => onSelect(suggestion.text ?? "")}
               onMouseEnter={() => setActiveIndex(index)}
             >
               <Icon
@@ -141,11 +141,11 @@ export function SearchSuggestions({
                 {suggestion.text}
               </span>
               <Badge
-                variant={ENTITY_VARIANT[suggestion.entity_type] ?? "default"}
+                variant={ENTITY_VARIANT[suggestion.entity_type ?? ""] ?? "default"}
               >
                 {intl.formatMessage({
-                  id: `search.entityType.${suggestion.entity_type}`,
-                  defaultMessage: suggestion.entity_type,
+                  id: `search.entityType.${suggestion.entity_type ?? "unknown"}`,
+                  defaultMessage: suggestion.entity_type ?? "",
                 })}
               </Badge>
             </li>

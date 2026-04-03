@@ -435,6 +435,26 @@ func (s *PlanningServiceImpl) GetPrintView(
 	return renderPrintHTML(start, end, items), nil
 }
 
+func (s *PlanningServiceImpl) GetCalendarPDF(
+	ctx context.Context,
+	_ *shared.AuthContext,
+	scope *shared.FamilyScope,
+	start time.Time,
+	end time.Time,
+	studentID *uuid.UUID,
+) ([]byte, error) {
+	if err := validateDateRange(start, end); err != nil {
+		return nil, err
+	}
+
+	items, err := s.scheduleRepo.ListByDateRange(ctx, scope, start, end, studentID)
+	if err != nil {
+		return nil, fmt.Errorf("plan: list schedule items: %w", err)
+	}
+
+	return renderCalendarPDF(start, end, items)
+}
+
 // ─── Schedule Templates [17-planning §11.3] ─────────────────────────────────
 
 func (s *PlanningServiceImpl) CreateTemplate(

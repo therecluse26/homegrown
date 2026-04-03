@@ -46,6 +46,27 @@ type SafetyService interface {
 	RecordBotSignal(ctx context.Context, familyID uuid.UUID, parentID uuid.UUID, signal BotSignalType, details json.RawMessage) error
 	HandleCsamDetection(ctx context.Context, uploadID uuid.UUID, familyID uuid.UUID, scanResult *CsamScanResult) error
 	AdminEscalateToCsam(ctx context.Context, auth *shared.AuthContext, flagID uuid.UUID, cmd EscalateCsamCommand) error
+
+	// ─── Phase 2: Expire Suspensions ────────────────────────────────
+	ExpireSuspensions(ctx context.Context) error
+
+	// ─── Phase 2: Parental Controls ─────────────────────────────────
+	GetParentalControls(ctx context.Context, scope shared.FamilyScope) ([]ParentalControlResponse, error)
+	UpsertParentalControl(ctx context.Context, scope shared.FamilyScope, cmd UpsertParentalControlCommand) (*ParentalControlResponse, error)
+	DeleteParentalControl(ctx context.Context, scope shared.FamilyScope, controlID uuid.UUID) error
+
+	// ─── Phase 2: Admin Roles ───────────────────────────────────────
+	ListAdminRoles(ctx context.Context, auth *shared.AuthContext) ([]AdminRoleResponse, error)
+	CreateAdminRole(ctx context.Context, auth *shared.AuthContext, cmd CreateAdminRoleCommand) (*AdminRoleResponse, error)
+	AssignAdminRole(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID, cmd AssignAdminRoleCommand) (*AdminRoleAssignmentResponse, error)
+	RevokeAdminRole(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID, parentID uuid.UUID) error
+	ListAdminRoleAssignments(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID) ([]AdminRoleAssignmentResponse, error)
+	GetParentPermissions(ctx context.Context, parentID uuid.UUID) ([]string, error)
+
+	// ─── Phase 2: Grooming Detection ────────────────────────────────
+	AnalyzeTextForGrooming(ctx context.Context, contentType string, contentID uuid.UUID, authorFamilyID uuid.UUID, text string) (*GroomingAnalysisResult, error)
+	AdminListGroomingScores(ctx context.Context, auth *shared.AuthContext, pagination shared.PaginationParams) (*shared.PaginatedResponse[GroomingScoreResponse], error)
+	AdminReviewGroomingScore(ctx context.Context, auth *shared.AuthContext, scoreID uuid.UUID, cmd ReviewGroomingScoreCommand) (*GroomingScoreResponse, error)
 }
 
 // ─── Repository Interfaces ──────────────────────────────────────────────────────
@@ -87,6 +108,7 @@ type AccountStatusRepository interface {
 	GetOrCreate(ctx context.Context, familyID uuid.UUID) (*AccountStatusRow, error)
 	Update(ctx context.Context, familyID uuid.UUID, updates AccountStatusUpdate) (*AccountStatusRow, error)
 	CountByStatus(ctx context.Context, status string) (int64, error)
+	FindExpiredSuspensions(ctx context.Context) ([]AccountStatusRow, error)
 }
 
 // AppealRepository defines persistence operations for safety_appeals. [11-safety §6.5]
@@ -114,6 +136,50 @@ type BotSignalRepository interface {
 	CountRecent(ctx context.Context, parentID uuid.UUID, withinMinutes uint32) (int64, error)
 }
 
+// ManualReviewRepository defines persistence operations for safety_manual_review_queue. [11-safety §7.1, CRIT-1]
+type ManualReviewRepository interface {
+	Create(ctx context.Context, item *ManualReviewItem) error
+	FindPending(ctx context.Context, limit int) ([]ManualReviewItem, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string, reviewerNotes *string, reviewedBy *uuid.UUID) error
+}
+
+// NcmecPendingReportRepository defines persistence operations for safety_ncmec_pending_reports. [11-safety §7.1, CRIT-1]
+type NcmecPendingReportRepository interface {
+	Create(ctx context.Context, report *NcmecPendingReport) error
+	FindQueued(ctx context.Context) ([]NcmecPendingReport, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
+}
+
+// ParentalControlRepository defines persistence operations for safety_parental_controls. [11-safety §14.3]
+type ParentalControlRepository interface {
+	ListByFamily(ctx context.Context, familyID uuid.UUID) ([]ParentalControl, error)
+	Upsert(ctx context.Context, control *ParentalControl) error
+	Delete(ctx context.Context, familyID uuid.UUID, controlID uuid.UUID) error
+}
+
+// AdminRoleRepository defines persistence operations for safety_admin_roles. [11-safety §9.3]
+type AdminRoleRepository interface {
+	List(ctx context.Context) ([]AdminRole, error)
+	FindByID(ctx context.Context, roleID uuid.UUID) (*AdminRole, error)
+	Create(ctx context.Context, role *AdminRole) error
+}
+
+// AdminRoleAssignmentRepository defines persistence operations for safety_admin_role_assignments. [11-safety §9.3]
+type AdminRoleAssignmentRepository interface {
+	ListByRole(ctx context.Context, roleID uuid.UUID) ([]AdminRoleAssignment, error)
+	ListByParent(ctx context.Context, parentID uuid.UUID) ([]AdminRoleAssignment, error)
+	Create(ctx context.Context, assignment *AdminRoleAssignment) error
+	Delete(ctx context.Context, roleID uuid.UUID, parentID uuid.UUID) error
+}
+
+// GroomingScoreRepository defines persistence operations for safety_grooming_scores. [11-safety §14.2]
+type GroomingScoreRepository interface {
+	Create(ctx context.Context, score *GroomingScore) error
+	FindByID(ctx context.Context, scoreID uuid.UUID) (*GroomingScore, error)
+	ListFlagged(ctx context.Context, pagination shared.PaginationParams) ([]GroomingScore, error)
+	MarkReviewed(ctx context.Context, scoreID uuid.UUID, reviewedBy uuid.UUID) error
+}
+
 // ─── Adapter Interfaces ─────────────────────────────────────────────────────────
 
 // ThornAdapter wraps the Thorn Safer API for CSAM detection and NCMEC reporting. [11-safety §7.1]
@@ -126,6 +192,12 @@ type ThornAdapter interface {
 // RekognitionAdapter wraps AWS Rekognition's DetectModerationLabels API. [11-safety §7.2]
 type RekognitionAdapter interface {
 	DetectModerationLabels(ctx context.Context, storageKey string) (*ModerationResult, error)
+}
+
+// GroomingDetector wraps ML-based grooming behavior detection. [11-safety §14.2]
+// Phase 2: pluggable adapter (noop in dev, Comprehend/Perspective in production).
+type GroomingDetector interface {
+	Analyze(ctx context.Context, text string) (*GroomingAnalysisResult, error)
 }
 
 // IamServiceForSafety is the consumer-defined interface for iam:: methods needed by safety::. [CODING §8.2]

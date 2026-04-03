@@ -69,6 +69,9 @@ type NotificationService interface {
 	HandleCoParentAdded(ctx context.Context, event CoParentAddedEvent) error
 	HandleFamilyDeletionScheduled(ctx context.Context, event FamilyDeletionScheduledEvent) error
 
+	// recs:: events
+	HandleRecommendationsReady(ctx context.Context, event RecommendationsReadyEvent) error
+
 	// billing:: events (Phase 2 stubs)
 	HandleSubscriptionCreated(ctx context.Context, event SubscriptionCreatedEvent) error
 	HandleSubscriptionChanged(ctx context.Context, event SubscriptionChangedEvent) error
@@ -244,4 +247,10 @@ type CreatorOnboardedEvent struct {
 	CreatorID uuid.UUID
 	ParentID  uuid.UUID
 	StoreName string
+}
+
+// RecommendationsReadyEvent mirrors recs.RecommendationsGenerated.
+type RecommendationsReadyEvent struct {
+	FamilyID uuid.UUID
+	Count    int64
 }

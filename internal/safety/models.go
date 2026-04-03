@@ -1,7 +1,10 @@
 package safety
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -170,6 +173,154 @@ func (s *BotSignal) BeforeCreate(_ *gorm.DB) error {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.Must(uuid.NewV7())
 	}
+	return nil
+}
+
+// ManualReviewItem maps to the safety_manual_review_queue table. [11-safety §7.1, CRIT-1]
+type ManualReviewItem struct {
+	ID            uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	StorageKey    string     `gorm:"not null"`
+	ReviewType    string     `gorm:"not null;default:csam_scan"`
+	Status        string     `gorm:"not null;default:pending"`
+	ReviewerNotes *string
+	ReviewedBy    *uuid.UUID `gorm:"type:uuid"`
+	ReviewedAt    *time.Time
+	CreatedAt     time.Time  `gorm:"not null;autoCreateTime"`
+}
+
+func (ManualReviewItem) TableName() string { return "safety_manual_review_queue" }
+
+// NcmecPendingReport maps to the safety_ncmec_pending_reports table. [11-safety §7.1, CRIT-1]
+type NcmecPendingReport struct {
+	ID                uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	UploadID          uuid.UUID  `gorm:"type:uuid;not null"`
+	UploaderFamilyID  uuid.UUID  `gorm:"type:uuid;not null"`
+	UploaderParentID  uuid.UUID  `gorm:"type:uuid;not null"`
+	EvidenceKey       string     `gorm:"not null"`
+	CsamHash          *string
+	Confidence        *float64   `gorm:"type:numeric(5,4)"`
+	MatchedDatabase   *string
+	UploadTimestamp   time.Time  `gorm:"not null"`
+	Status            string     `gorm:"not null;default:queued"`
+	Notes             *string
+	FiledAt           *time.Time
+	CreatedAt         time.Time  `gorm:"not null;autoCreateTime"`
+}
+
+func (NcmecPendingReport) TableName() string { return "safety_ncmec_pending_reports" }
+
+// ─── Phase 2 Models ─────────────────────────────────────────────────────────────
+
+// ParentalControl maps to the safety_parental_controls table. [11-safety §14.3]
+type ParentalControl struct {
+	ID          uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	FamilyID    uuid.UUID       `gorm:"type:uuid;not null"`
+	ControlType string          `gorm:"type:text;not null"`
+	Enabled     bool            `gorm:"not null;default:true"`
+	Settings    json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
+	CreatedAt   time.Time       `gorm:"type:timestamptz;not null"`
+	UpdatedAt   time.Time       `gorm:"type:timestamptz;not null"`
+}
+
+func (ParentalControl) TableName() string { return "safety_parental_controls" }
+
+func (p *ParentalControl) BeforeCreate(_ *gorm.DB) error {
+	if p.ID == uuid.Nil {
+		p.ID = uuid.Must(uuid.NewV7())
+	}
+	return nil
+}
+
+// AdminRole maps to the safety_admin_roles table. [11-safety §9.3]
+type AdminRole struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey"`
+	Name        string    `gorm:"type:text;not null;uniqueIndex"`
+	Description *string   `gorm:"type:text"`
+	Permissions StringArray `gorm:"type:text[];not null;default:'{}'"`
+	CreatedAt   time.Time `gorm:"type:timestamptz;not null"`
+	UpdatedAt   time.Time `gorm:"type:timestamptz;not null"`
+}
+
+func (AdminRole) TableName() string { return "safety_admin_roles" }
+
+func (r *AdminRole) BeforeCreate(_ *gorm.DB) error {
+	if r.ID == uuid.Nil {
+		r.ID = uuid.Must(uuid.NewV7())
+	}
+	return nil
+}
+
+// AdminRoleAssignment maps to the safety_admin_role_assignments table. [11-safety §9.3]
+type AdminRoleAssignment struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	ParentID  uuid.UUID  `gorm:"type:uuid;not null"`
+	RoleID    uuid.UUID  `gorm:"type:uuid;not null"`
+	GrantedBy *uuid.UUID `gorm:"type:uuid"`
+	CreatedAt time.Time  `gorm:"type:timestamptz;not null"`
+}
+
+func (AdminRoleAssignment) TableName() string { return "safety_admin_role_assignments" }
+
+func (a *AdminRoleAssignment) BeforeCreate(_ *gorm.DB) error {
+	if a.ID == uuid.Nil {
+		a.ID = uuid.Must(uuid.NewV7())
+	}
+	return nil
+}
+
+// GroomingScore maps to the safety_grooming_scores table. [11-safety §14.2]
+type GroomingScore struct {
+	ID             uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	ContentType    string     `gorm:"type:text;not null"`
+	ContentID      uuid.UUID  `gorm:"type:uuid;not null"`
+	AuthorFamilyID uuid.UUID  `gorm:"type:uuid;not null"`
+	Score          float64    `gorm:"type:numeric(5,4);not null"`
+	ModelVersion   string     `gorm:"type:text;not null"`
+	Flagged        bool       `gorm:"not null;default:false"`
+	Reviewed       bool       `gorm:"not null;default:false"`
+	ReviewedBy     *uuid.UUID `gorm:"type:uuid"`
+	ReviewedAt     *time.Time `gorm:"type:timestamptz"`
+	CreatedAt      time.Time  `gorm:"type:timestamptz;not null"`
+}
+
+func (GroomingScore) TableName() string { return "safety_grooming_scores" }
+
+func (g *GroomingScore) BeforeCreate(_ *gorm.DB) error {
+	if g.ID == uuid.Nil {
+		g.ID = uuid.Must(uuid.NewV7())
+	}
+	return nil
+}
+
+// StringArray implements driver.Valuer and sql.Scanner for PostgreSQL TEXT[].
+type StringArray []string
+
+func (a StringArray) Value() (driver.Value, error) {
+	if a == nil {
+		return "{}", nil
+	}
+	return "{" + strings.Join(a, ",") + "}", nil
+}
+
+func (a *StringArray) Scan(src any) error {
+	if src == nil {
+		*a = nil
+		return nil
+	}
+	s, ok := src.(string)
+	if !ok {
+		b, ok2 := src.([]byte)
+		if !ok2 {
+			return fmt.Errorf("StringArray.Scan: unsupported type %T", src)
+		}
+		s = string(b)
+	}
+	s = strings.Trim(s, "{}")
+	if s == "" {
+		*a = StringArray{}
+		return nil
+	}
+	*a = strings.Split(s, ",")
 	return nil
 }
 
@@ -388,6 +539,83 @@ type AppealFilter struct {
 	Status *string `query:"status"`
 }
 
+// ─── Phase 2 Request Types ──────────────────────────────────────────────────────
+
+// UpsertParentalControlCommand is the request body for PUT /v1/safety/parental-controls. [11-safety §14.3]
+type UpsertParentalControlCommand struct {
+	ControlType string          `json:"control_type" validate:"required"`
+	Enabled     bool            `json:"enabled"`
+	Settings    json.RawMessage `json:"settings" validate:"required"`
+}
+
+// CreateAdminRoleCommand is the request body for POST /v1/admin/safety/roles. [11-safety §9.3]
+type CreateAdminRoleCommand struct {
+	Name        string   `json:"name" validate:"required,min=2,max=50"`
+	Description *string  `json:"description,omitempty"`
+	Permissions []string `json:"permissions" validate:"required,min=1"`
+}
+
+// AssignAdminRoleCommand is the request body for POST /v1/admin/safety/roles/:role_id/assign. [11-safety §9.3]
+type AssignAdminRoleCommand struct {
+	ParentID uuid.UUID `json:"parent_id" validate:"required"`
+}
+
+// ReviewGroomingScoreCommand is the request body for PATCH /v1/admin/safety/grooming-scores/:id. [11-safety §14.2]
+type ReviewGroomingScoreCommand struct {
+	ActionTaken bool `json:"action_taken"`
+}
+
+// ─── Phase 2 Response Types ─────────────────────────────────────────────────────
+
+// ParentalControlResponse is the parental control response. [11-safety §14.3]
+type ParentalControlResponse struct {
+	ID          uuid.UUID       `json:"id"`
+	ControlType string          `json:"control_type"`
+	Enabled     bool            `json:"enabled"`
+	Settings    json.RawMessage `json:"settings"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+// AdminRoleResponse is the admin role response. [11-safety §9.3]
+type AdminRoleResponse struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description,omitempty"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// AdminRoleAssignmentResponse is the admin role assignment response. [11-safety §9.3]
+type AdminRoleAssignmentResponse struct {
+	ID        uuid.UUID  `json:"id"`
+	ParentID  uuid.UUID  `json:"parent_id"`
+	RoleID    uuid.UUID  `json:"role_id"`
+	RoleName  string     `json:"role_name"`
+	GrantedBy *uuid.UUID `json:"granted_by,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// GroomingScoreResponse is the grooming score response. [11-safety §14.2]
+type GroomingScoreResponse struct {
+	ID             uuid.UUID  `json:"id"`
+	ContentType    string     `json:"content_type"`
+	ContentID      uuid.UUID  `json:"content_id"`
+	AuthorFamilyID uuid.UUID  `json:"author_family_id"`
+	Score          float64    `json:"score"`
+	ModelVersion   string     `json:"model_version"`
+	Flagged        bool       `json:"flagged"`
+	Reviewed       bool       `json:"reviewed"`
+	ReviewedBy     *uuid.UUID `json:"reviewed_by,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// GroomingAnalysisResult is the result from the ML grooming detection adapter. [11-safety §14.2]
+type GroomingAnalysisResult struct {
+	Score        float64 `json:"score"`
+	ModelVersion string  `json:"model_version"`
+	Flagged      bool    `json:"flagged"`
+}
+
 // ─── Internal / Adapter Types ───────────────────────────────────────────────────
 
 // CsamScanResult is the CSAM scan result from Thorn Safer. [11-safety §8.4]
@@ -396,7 +624,7 @@ type CsamScanResult struct {
 	Hash                 *string
 	Confidence           *float64
 	MatchedDatabase      *string
-	// RequiresManualReview is set by LoggingThornAdapter when real Thorn integration
+	// RequiresManualReview is set by ManualReviewThornAdapter when real Thorn integration
 	// is unavailable. Callers should queue a manual review task.
 	RequiresManualReview bool
 }

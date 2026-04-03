@@ -27,6 +27,13 @@ type safetyServiceImpl struct {
 	jobs          shared.JobEnqueuer
 	textScanner   *TextScanner
 	config        SafetyConfig
+
+	// Phase 2 dependencies
+	parentalControlRepo ParentalControlRepository
+	adminRoleRepo       AdminRoleRepository
+	adminRoleAssignRepo AdminRoleAssignmentRepository
+	groomingScoreRepo   GroomingScoreRepository
+	groomingDetector    GroomingDetector
 }
 
 // NewSafetyService creates a new SafetyService.
@@ -44,21 +51,31 @@ func NewSafetyService(
 	jobs shared.JobEnqueuer,
 	textScanner *TextScanner,
 	config SafetyConfig,
+	parentalControlRepo ParentalControlRepository,
+	adminRoleRepo AdminRoleRepository,
+	adminRoleAssignRepo AdminRoleAssignmentRepository,
+	groomingScoreRepo GroomingScoreRepository,
+	groomingDetector GroomingDetector,
 ) SafetyService {
 	return &safetyServiceImpl{
-		reportRepo:    reportRepo,
-		flagRepo:      flagRepo,
-		actionRepo:    actionRepo,
-		accountRepo:   accountRepo,
-		appealRepo:    appealRepo,
-		ncmecRepo:     ncmecRepo,
-		botSignalRepo: botSignalRepo,
-		iamService:    iamService,
-		cache:         cache,
-		events:        events,
-		jobs:          jobs,
-		textScanner:   textScanner,
-		config:        config,
+		reportRepo:          reportRepo,
+		flagRepo:            flagRepo,
+		actionRepo:          actionRepo,
+		accountRepo:         accountRepo,
+		appealRepo:          appealRepo,
+		ncmecRepo:           ncmecRepo,
+		botSignalRepo:       botSignalRepo,
+		iamService:          iamService,
+		cache:               cache,
+		events:              events,
+		jobs:                jobs,
+		textScanner:         textScanner,
+		config:              config,
+		parentalControlRepo: parentalControlRepo,
+		adminRoleRepo:       adminRoleRepo,
+		adminRoleAssignRepo: adminRoleAssignRepo,
+		groomingScoreRepo:   groomingScoreRepo,
+		groomingDetector:    groomingDetector,
 	}
 }
 
@@ -1012,3 +1029,340 @@ func (CsamReportPayload) TaskType() string { return "safety:csam_report" }
 type CheckCsamHashUpdatePayload struct{}
 
 func (CheckCsamHashUpdatePayload) TaskType() string { return "safety:check_csam_hash_update" }
+
+// ─── Phase 2: Expire Suspensions ─────────────────────────────────────────────
+
+// ExpireSuspensions proactively expires all overdue suspensions. [11-safety §12.3]
+func (s *safetyServiceImpl) ExpireSuspensions(ctx context.Context) error {
+	expired, err := s.accountRepo.FindExpiredSuspensions(ctx)
+	if err != nil {
+		return fmt.Errorf("find expired suspensions: %w", err)
+	}
+
+	if len(expired) == 0 {
+		return nil
+	}
+
+	status := "active"
+	for _, acct := range expired {
+		if _, err := s.accountRepo.Update(ctx, acct.FamilyID, AccountStatusUpdate{
+			Status:              &status,
+			SuspendedAt:         nil,
+			SuspensionExpiresAt: nil,
+			SuspensionReason:    nil,
+		}); err != nil {
+			slog.Error("failed to expire suspension", "family_id", acct.FamilyID, "error", err)
+			continue
+		}
+		_ = s.cache.Delete(ctx, accountCacheKey(acct.FamilyID))
+		slog.Info("expired suspension", "family_id", acct.FamilyID)
+	}
+
+	return nil
+}
+
+// ─── Phase 2: Parental Controls ──────────────────────────────────────────────
+
+// GetParentalControls lists all parental controls for the family. [11-safety §14.3]
+func (s *safetyServiceImpl) GetParentalControls(ctx context.Context, scope shared.FamilyScope) ([]ParentalControlResponse, error) {
+	controls, err := s.parentalControlRepo.ListByFamily(ctx, scope.FamilyID())
+	if err != nil {
+		return nil, fmt.Errorf("list parental controls: %w", err)
+	}
+
+	result := make([]ParentalControlResponse, len(controls))
+	for i, c := range controls {
+		result[i] = parentalControlToResponse(&c)
+	}
+	return result, nil
+}
+
+// UpsertParentalControl creates or updates a parental control setting. [11-safety §14.3]
+func (s *safetyServiceImpl) UpsertParentalControl(ctx context.Context, scope shared.FamilyScope, cmd UpsertParentalControlCommand) (*ParentalControlResponse, error) {
+	// Try to find existing control of this type for this family.
+	controls, err := s.parentalControlRepo.ListByFamily(ctx, scope.FamilyID())
+	if err != nil {
+		return nil, fmt.Errorf("list parental controls: %w", err)
+	}
+
+	var existing *ParentalControl
+	for i := range controls {
+		if controls[i].ControlType == cmd.ControlType {
+			existing = &controls[i]
+			break
+		}
+	}
+
+	if existing != nil {
+		existing.Enabled = cmd.Enabled
+		existing.Settings = cmd.Settings
+		existing.UpdatedAt = time.Now()
+		if err := s.parentalControlRepo.Upsert(ctx, existing); err != nil {
+			return nil, fmt.Errorf("upsert parental control: %w", err)
+		}
+		resp := parentalControlToResponse(existing)
+		return &resp, nil
+	}
+
+	control := &ParentalControl{
+		FamilyID:    scope.FamilyID(),
+		ControlType: cmd.ControlType,
+		Enabled:     cmd.Enabled,
+		Settings:    cmd.Settings,
+	}
+	if err := s.parentalControlRepo.Upsert(ctx, control); err != nil {
+		return nil, fmt.Errorf("create parental control: %w", err)
+	}
+	resp := parentalControlToResponse(control)
+	return &resp, nil
+}
+
+// DeleteParentalControl removes a parental control setting. [11-safety §14.3]
+func (s *safetyServiceImpl) DeleteParentalControl(ctx context.Context, scope shared.FamilyScope, controlID uuid.UUID) error {
+	if err := s.parentalControlRepo.Delete(ctx, scope.FamilyID(), controlID); err != nil {
+		return fmt.Errorf("delete parental control: %w", err)
+	}
+	return nil
+}
+
+func parentalControlToResponse(c *ParentalControl) ParentalControlResponse {
+	return ParentalControlResponse{
+		ID:          c.ID,
+		ControlType: c.ControlType,
+		Enabled:     c.Enabled,
+		Settings:    c.Settings,
+		UpdatedAt:   c.UpdatedAt,
+	}
+}
+
+// ─── Phase 2: Admin Roles ────────────────────────────────────────────────────
+
+// ListAdminRoles returns all available admin roles. [11-safety §9.3]
+func (s *safetyServiceImpl) ListAdminRoles(ctx context.Context, _ *shared.AuthContext) ([]AdminRoleResponse, error) {
+	roles, err := s.adminRoleRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list admin roles: %w", err)
+	}
+	result := make([]AdminRoleResponse, len(roles))
+	for i, r := range roles {
+		result[i] = adminRoleToResponse(&r)
+	}
+	return result, nil
+}
+
+// CreateAdminRole creates a new admin role. [11-safety §9.3]
+func (s *safetyServiceImpl) CreateAdminRole(ctx context.Context, _ *shared.AuthContext, cmd CreateAdminRoleCommand) (*AdminRoleResponse, error) {
+	role := &AdminRole{
+		Name:        cmd.Name,
+		Description: cmd.Description,
+		Permissions: StringArray(cmd.Permissions),
+	}
+	if err := s.adminRoleRepo.Create(ctx, role); err != nil {
+		return nil, fmt.Errorf("create admin role: %w", err)
+	}
+	resp := adminRoleToResponse(role)
+	return &resp, nil
+}
+
+// AssignAdminRole assigns an admin role to a parent. [11-safety §9.3]
+func (s *safetyServiceImpl) AssignAdminRole(ctx context.Context, auth *shared.AuthContext, roleID uuid.UUID, cmd AssignAdminRoleCommand) (*AdminRoleAssignmentResponse, error) {
+	// Verify role exists.
+	role, err := s.adminRoleRepo.FindByID(ctx, roleID)
+	if err != nil {
+		return nil, err
+	}
+
+	assignment := &AdminRoleAssignment{
+		ParentID:  cmd.ParentID,
+		RoleID:    roleID,
+		GrantedBy: &auth.ParentID,
+	}
+	if err := s.adminRoleAssignRepo.Create(ctx, assignment); err != nil {
+		return nil, fmt.Errorf("assign admin role: %w", err)
+	}
+
+	return &AdminRoleAssignmentResponse{
+		ID:        assignment.ID,
+		ParentID:  assignment.ParentID,
+		RoleID:    assignment.RoleID,
+		RoleName:  role.Name,
+		GrantedBy: assignment.GrantedBy,
+		CreatedAt: assignment.CreatedAt,
+	}, nil
+}
+
+// RevokeAdminRole removes an admin role assignment. [11-safety §9.3]
+func (s *safetyServiceImpl) RevokeAdminRole(ctx context.Context, _ *shared.AuthContext, roleID uuid.UUID, parentID uuid.UUID) error {
+	return s.adminRoleAssignRepo.Delete(ctx, roleID, parentID)
+}
+
+// ListAdminRoleAssignments lists all assignments for a role. [11-safety §9.3]
+func (s *safetyServiceImpl) ListAdminRoleAssignments(ctx context.Context, _ *shared.AuthContext, roleID uuid.UUID) ([]AdminRoleAssignmentResponse, error) {
+	// Verify role exists.
+	role, err := s.adminRoleRepo.FindByID(ctx, roleID)
+	if err != nil {
+		return nil, err
+	}
+
+	assignments, err := s.adminRoleAssignRepo.ListByRole(ctx, roleID)
+	if err != nil {
+		return nil, fmt.Errorf("list role assignments: %w", err)
+	}
+
+	result := make([]AdminRoleAssignmentResponse, len(assignments))
+	for i, a := range assignments {
+		result[i] = AdminRoleAssignmentResponse{
+			ID:        a.ID,
+			ParentID:  a.ParentID,
+			RoleID:    a.RoleID,
+			RoleName:  role.Name,
+			GrantedBy: a.GrantedBy,
+			CreatedAt: a.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+// GetParentPermissions returns the aggregated permissions for a parent. [11-safety §9.3]
+func (s *safetyServiceImpl) GetParentPermissions(ctx context.Context, parentID uuid.UUID) ([]string, error) {
+	assignments, err := s.adminRoleAssignRepo.ListByParent(ctx, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("list parent assignments: %w", err)
+	}
+
+	permSet := make(map[string]struct{})
+	for _, a := range assignments {
+		role, err := s.adminRoleRepo.FindByID(ctx, a.RoleID)
+		if err != nil {
+			continue
+		}
+		for _, p := range role.Permissions {
+			permSet[p] = struct{}{}
+		}
+	}
+
+	perms := make([]string, 0, len(permSet))
+	for p := range permSet {
+		perms = append(perms, p)
+	}
+	return perms, nil
+}
+
+func adminRoleToResponse(r *AdminRole) AdminRoleResponse {
+	return AdminRoleResponse{
+		ID:          r.ID,
+		Name:        r.Name,
+		Description: r.Description,
+		Permissions: []string(r.Permissions),
+		CreatedAt:   r.CreatedAt,
+	}
+}
+
+// ─── Phase 2: Grooming Detection ─────────────────────────────────────────────
+
+// AnalyzeTextForGrooming runs ML grooming detection on text and records the score. [11-safety §14.2]
+func (s *safetyServiceImpl) AnalyzeTextForGrooming(ctx context.Context, contentType string, contentID uuid.UUID, authorFamilyID uuid.UUID, text string) (*GroomingAnalysisResult, error) {
+	result, err := s.groomingDetector.Analyze(ctx, text)
+	if err != nil {
+		return nil, fmt.Errorf("grooming analysis: %w", err)
+	}
+
+	score := &GroomingScore{
+		ContentType:    contentType,
+		ContentID:      contentID,
+		AuthorFamilyID: authorFamilyID,
+		Score:          result.Score,
+		ModelVersion:   result.ModelVersion,
+		Flagged:        result.Flagged,
+	}
+	if err := s.groomingScoreRepo.Create(ctx, score); err != nil {
+		slog.Error("failed to persist grooming score", "error", err)
+		// Don't fail the parent operation — recording is best-effort.
+	}
+
+	return result, nil
+}
+
+// AdminListGroomingScores lists flagged grooming scores for admin review. [11-safety §14.2]
+func (s *safetyServiceImpl) AdminListGroomingScores(ctx context.Context, _ *shared.AuthContext, pagination shared.PaginationParams) (*shared.PaginatedResponse[GroomingScoreResponse], error) {
+	scores, err := s.groomingScoreRepo.ListFlagged(ctx, pagination)
+	if err != nil {
+		return nil, fmt.Errorf("list grooming scores: %w", err)
+	}
+
+	limit := pagination.EffectiveLimit()
+	hasMore := len(scores) > limit
+	if hasMore {
+		scores = scores[:limit]
+	}
+
+	result := make([]GroomingScoreResponse, len(scores))
+	for i, gs := range scores {
+		result[i] = groomingScoreToResponse(&gs)
+	}
+
+	var nextCursor *string
+	if hasMore && len(scores) > 0 {
+		last := scores[len(scores)-1]
+		c := shared.EncodeCursor(last.ID, last.CreatedAt)
+		nextCursor = &c
+	}
+
+	return &shared.PaginatedResponse[GroomingScoreResponse]{
+		Data:       result,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
+}
+
+// AdminReviewGroomingScore marks a grooming score as reviewed. [11-safety §14.2]
+func (s *safetyServiceImpl) AdminReviewGroomingScore(ctx context.Context, auth *shared.AuthContext, scoreID uuid.UUID, cmd ReviewGroomingScoreCommand) (*GroomingScoreResponse, error) {
+	if err := s.groomingScoreRepo.MarkReviewed(ctx, scoreID, auth.ParentID); err != nil {
+		return nil, err
+	}
+
+	// If action taken, create a content flag for the original content.
+	if cmd.ActionTaken {
+		score, err := s.groomingScoreRepo.FindByID(ctx, scoreID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := s.flagRepo.Create(ctx, CreateContentFlagRow{
+			Source:         "grooming_detector",
+			TargetType:     score.ContentType,
+			TargetID:       score.ContentID,
+			TargetFamilyID: &score.AuthorFamilyID,
+			FlagType:       "grooming",
+			Confidence:     &score.Score,
+		}); err != nil {
+			slog.Error("failed to create grooming flag", "error", err)
+		}
+	}
+
+	score, err := s.groomingScoreRepo.FindByID(ctx, scoreID)
+	if err != nil {
+		return nil, err
+	}
+	resp := groomingScoreToResponse(score)
+	return &resp, nil
+}
+
+func groomingScoreToResponse(gs *GroomingScore) GroomingScoreResponse {
+	return GroomingScoreResponse{
+		ID:             gs.ID,
+		ContentType:    gs.ContentType,
+		ContentID:      gs.ContentID,
+		AuthorFamilyID: gs.AuthorFamilyID,
+		Score:          gs.Score,
+		ModelVersion:   gs.ModelVersion,
+		Flagged:        gs.Flagged,
+		Reviewed:       gs.Reviewed,
+		ReviewedBy:     gs.ReviewedBy,
+		CreatedAt:      gs.CreatedAt,
+	}
+}
+
+// ExpireSuspensionsPayload is the job payload for the expire suspensions job.
+type ExpireSuspensionsPayload struct{}
+
+func (ExpireSuspensionsPayload) TaskType() string { return "safety:expire_suspensions" }

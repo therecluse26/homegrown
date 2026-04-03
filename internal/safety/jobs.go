@@ -48,6 +48,14 @@ func (r *csamReportRunner) Run(ctx context.Context, reportID json.RawMessage) er
 		return fmt.Errorf("submit ncmec report: %w", err)
 	}
 
+	if result == nil {
+		// Adapter returned no result (noop/logging mode) — mark as pending.
+		if _, err := r.ncmecRepo.UpdateStatus(ctx, payload.NcmecReportID, "pending_manual", nil, nil); err != nil {
+			return fmt.Errorf("update ncmec report status: %w", err)
+		}
+		return nil
+	}
+
 	if _, err := r.ncmecRepo.UpdateStatus(ctx, payload.NcmecReportID, "submitted", &result.NcmecReportID, nil); err != nil {
 		return fmt.Errorf("update ncmec report status: %w", err)
 	}
@@ -87,6 +95,7 @@ func RegisterSafetyWorkers(
 	ncmecRepo NcmecReportRepository,
 	thorn ThornAdapter,
 	jobs shared.JobEnqueuer,
+	svc SafetyService,
 ) {
 	csam := &csamReportRunner{ncmecRepo: ncmecRepo, thorn: thorn}
 
@@ -100,5 +109,11 @@ func RegisterSafetyWorkers(
 	worker.Handle("safety:check_csam_hash_update", func(ctx context.Context, _ []byte) error {
 		slog.Info("checking CSAM hash database updates")
 		return hashCheck.Run(ctx)
+	})
+
+	// Phase 2: Proactively expire overdue suspensions [11-safety §14.1]
+	worker.Handle("safety:expire_suspensions", func(ctx context.Context, _ []byte) error {
+		slog.Info("running suspension expiry check")
+		return svc.ExpireSuspensions(ctx)
 	})
 }

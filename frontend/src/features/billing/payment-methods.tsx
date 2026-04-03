@@ -105,7 +105,7 @@ export function PaymentMethods() {
                         {method.brand}{" "}
                         <FormattedMessage
                           id="billing.paymentMethods.cardEnding"
-                          values={{ last4: method.last4 }}
+                          values={{ last4: method.last_four }}
                         />
                       </p>
                       {method.is_default && (
@@ -131,7 +131,7 @@ export function PaymentMethods() {
                       variant="tertiary"
                       size="sm"
                       onClick={() => {
-                        void setDefault.mutateAsync(method.id);
+                        void setDefault.mutateAsync(method.id ?? "");
                       }}
                       disabled={setDefault.isPending}
                     >
@@ -141,7 +141,7 @@ export function PaymentMethods() {
                   <Button
                     variant="tertiary"
                     size="sm"
-                    onClick={() => setRemoveTarget(method.id)}
+                    onClick={() => setRemoveTarget(method.id ?? null)}
                     className="text-error"
                   >
                     <Icon icon={Trash2} size="xs" aria-hidden />

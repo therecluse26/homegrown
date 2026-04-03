@@ -690,6 +690,14 @@ type SalesRow struct {
 	CreatedAt          time.Time
 }
 
+// CreatorSalesAggregate is the result of aggregating all creator sales in a period.
+type CreatorSalesAggregate struct {
+	CreatorID            uuid.UUID
+	TotalPayoutCents     int64
+	PurchaseCount        int32
+	RefundDeductionCents int64
+}
+
 type PublisherMemberRow struct {
 	CreatorID uuid.UUID
 	StoreName string

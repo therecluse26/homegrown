@@ -127,13 +127,15 @@ export function SubscriptionManagement() {
     );
   }
 
-  const nextBillingDate = intl.formatDate(sub.current_period_end, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const nextBillingDate = sub.current_period_end
+    ? intl.formatDate(sub.current_period_end, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "";
 
-  const billingAmount = formatCurrency(sub.amount_cents, sub.currency);
+  const billingAmount = formatCurrency(sub.amount_cents ?? 0, sub.currency ?? "usd");
 
   function handleCancel() {
     cancelMutation.mutate(undefined, {
@@ -169,8 +171,8 @@ export function SubscriptionManagement() {
               className="text-primary shrink-0"
             />
             <div>
-              <p className="type-title-md text-on-surface font-semibold">
-                {sub.plan_name}
+              <p className="type-title-md text-on-surface font-semibold capitalize">
+                {sub.tier}
               </p>
               <div className="flex items-center gap-2 mt-1">
                 <Badge variant={getTierVariant(sub.tier)}>
@@ -191,7 +193,7 @@ export function SubscriptionManagement() {
             <span className="type-body-sm text-on-surface-variant font-normal">
               {" / "}
               <FormattedMessage
-                id={`billing.subscription.interval.${sub.interval}`}
+                id={`billing.subscription.interval.${sub.billing_interval ?? "monthly"}`}
               />
             </span>
           </p>

@@ -77,7 +77,7 @@ export function SearchBar() {
     (suggestion: AutocompleteSuggestion) => {
       setIsOpen(false);
       setQuery("");
-      navigate(`/search?q=${encodeURIComponent(suggestion.text)}`);
+      navigate(`/search?q=${encodeURIComponent(suggestion.text ?? "")}`);
     },
     [navigate],
   );

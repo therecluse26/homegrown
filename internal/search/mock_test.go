@@ -142,6 +142,51 @@ func (s *stubAutocompleteRepo) AutocompleteLearning(ctx context.Context, familyS
 	return nil, nil
 }
 
+// ─── Typesense Adapter ──────────────────────────────────────────────────────
+
+type stubTypesenseAdapter struct {
+	indexDocumentFn    func(ctx context.Context, collection string, document map[string]any) error
+	removeDocumentFn   func(ctx context.Context, collection string, documentID string) error
+	bulkIndexFn        func(ctx context.Context, collection string, documents []map[string]any) (*BulkIndexResult, error)
+	searchFn           func(ctx context.Context, collection string, query *TypesenseSearchQuery) (*TypesenseSearchResponse, error)
+	collectionStatsFn  func(ctx context.Context, collection string) (*CollectionStats, error)
+}
+
+func (s *stubTypesenseAdapter) IndexDocument(ctx context.Context, collection string, document map[string]any) error {
+	if s.indexDocumentFn != nil {
+		return s.indexDocumentFn(ctx, collection, document)
+	}
+	return nil
+}
+
+func (s *stubTypesenseAdapter) RemoveDocument(ctx context.Context, collection string, documentID string) error {
+	if s.removeDocumentFn != nil {
+		return s.removeDocumentFn(ctx, collection, documentID)
+	}
+	return nil
+}
+
+func (s *stubTypesenseAdapter) BulkIndex(ctx context.Context, collection string, documents []map[string]any) (*BulkIndexResult, error) {
+	if s.bulkIndexFn != nil {
+		return s.bulkIndexFn(ctx, collection, documents)
+	}
+	return &BulkIndexResult{Indexed: len(documents)}, nil
+}
+
+func (s *stubTypesenseAdapter) Search(ctx context.Context, collection string, query *TypesenseSearchQuery) (*TypesenseSearchResponse, error) {
+	if s.searchFn != nil {
+		return s.searchFn(ctx, collection, query)
+	}
+	return &TypesenseSearchResponse{Hits: []map[string]any{}}, nil
+}
+
+func (s *stubTypesenseAdapter) CollectionStats(ctx context.Context, collection string) (*CollectionStats, error) {
+	if s.collectionStatsFn != nil {
+		return s.collectionStatsFn(ctx, collection)
+	}
+	return &CollectionStats{}, nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Test Helpers
 // ═══════════════════════════════════════════════════════════════════════════════

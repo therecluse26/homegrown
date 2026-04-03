@@ -330,6 +330,10 @@ type IamServiceForSocial interface {
 	GetParentDisplayName(ctx context.Context, parentID uuid.UUID) (string, error)
 	GetFamilyInfo(ctx context.Context, familyID uuid.UUID) (*SocialFamilyInfo, error)
 	GetParentInfo(ctx context.Context, parentID uuid.UUID) (*SocialParentInfo, error)
+	// DiscoverFamiliesByRegion looks up the requesting family's location_region from iam_families,
+	// then returns other families in the same region. Excludes the requester. Optionally filters
+	// by methodology slug. Returns empty if the requester has no region set. [05-social §15, P2-4]
+	DiscoverFamiliesByRegion(ctx context.Context, requesterFamilyID uuid.UUID, methodologySlug *string, limit int) ([]DiscoverableFamilyResponse, error)
 }
 
 // MethodServiceForSocial is the subset of method::MethodologyService that social:: needs.

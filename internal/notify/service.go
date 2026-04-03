@@ -713,8 +713,17 @@ func (s *NotificationServiceImpl) HandleCoParentAdded(ctx context.Context, event
 	})
 }
 
-func (s *NotificationServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ FamilyDeletionScheduledEvent) error {
-	return nil
+func (s *NotificationServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, event FamilyDeletionScheduledEvent) error {
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         event.FamilyID,
+		NotificationType: TypeFamilyDeletionScheduled,
+		Title:            TypeToTitleTemplate[TypeFamilyDeletionScheduled],
+		Body:             fmt.Sprintf("Your account is scheduled for deletion on %s", event.DeleteAfterDate.Format("January 2, 2006")),
+		ActionURL:        strPtr("/settings/family"),
+		Metadata: map[string]any{
+			"delete_after_date": event.DeleteAfterDate.Format(time.RFC3339),
+		},
+	})
 }
 
 func (s *NotificationServiceImpl) HandleSubscriptionCreated(ctx context.Context, event SubscriptionCreatedEvent) error {
@@ -773,6 +782,19 @@ func (s *NotificationServiceImpl) HandlePayoutCompleted(ctx context.Context, eve
 			"payout_id":    event.PayoutID.String(),
 			"amount_cents": event.AmountCents,
 			"currency":     event.Currency,
+		},
+	})
+}
+
+func (s *NotificationServiceImpl) HandleRecommendationsReady(ctx context.Context, event RecommendationsReadyEvent) error {
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         event.FamilyID,
+		NotificationType: TypeRecommendationsReady,
+		Title:            TypeToTitleTemplate[TypeRecommendationsReady],
+		Body:             fmt.Sprintf("We found %d new recommendations for your family", event.Count),
+		ActionURL:        strPtr("/recommendations"),
+		Metadata: map[string]any{
+			"count": event.Count,
 		},
 	})
 }

@@ -2,6 +2,7 @@ package plan
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -30,6 +31,7 @@ func (h *Handler) Register(auth *echo.Group) {
 	g.GET("/calendar/day/:date", h.getDayView)
 	g.GET("/calendar/week/:date", h.getWeekView)
 	g.GET("/calendar/print", h.getPrintView)
+	g.GET("/calendar/pdf", h.getCalendarPDF)
 
 	// Schedule items
 	g.POST("/schedule-items", h.createScheduleItem)
@@ -215,6 +217,50 @@ func (h *Handler) getPrintView(c echo.Context) error {
 		return mapPlanError(err)
 	}
 	return c.HTML(http.StatusOK, html)
+}
+
+// getCalendarPDF godoc
+//
+//	@Summary     Export calendar as PDF
+//	@Tags        planning
+//	@Produce     application/pdf
+//	@Security    BearerAuth
+//	@Param       start      query string true  "Start date (YYYY-MM-DD)"
+//	@Param       end        query string true  "End date (YYYY-MM-DD)"
+//	@Param       student_id query string false "Filter by student ID"
+//	@Success     200 {file}   []byte "PDF file"
+//	@Failure     400 {object} shared.AppError
+//	@Failure     401 {object} shared.AppError
+//	@Router      /planning/calendar/pdf [get]
+func (h *Handler) getCalendarPDF(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+
+	start, err := time.Parse("2006-01-02", c.QueryParam("start"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid start date, expected YYYY-MM-DD")
+	}
+	end, err := time.Parse("2006-01-02", c.QueryParam("end"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid end date, expected YYYY-MM-DD")
+	}
+
+	studentID := parseOptionalUUID(c.QueryParam("student_id"))
+
+	pdfBytes, err := h.svc.GetCalendarPDF(c.Request().Context(), auth, &scope, start, end, studentID)
+	if err != nil {
+		return mapPlanError(err)
+	}
+
+	filename := fmt.Sprintf("schedule_%s_%s.pdf", start.Format("2006-01-02"), end.Format("2006-01-02"))
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	return c.Blob(http.StatusOK, "application/pdf", pdfBytes)
 }
 
 // ─── Schedule Items ──────────────────────────────────────────────────────────

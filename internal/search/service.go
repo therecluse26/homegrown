@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ type searchServiceImpl struct {
 	marketplaceRepo  MarketplaceSearchRepository
 	learningRepo     LearningSearchRepository
 	autocompleteRepo AutocompleteRepository
+	typesense        TypesenseAdapter
 	backend          SearchBackend
 }
 
@@ -24,12 +26,14 @@ func NewSearchService(
 	marketplaceRepo MarketplaceSearchRepository,
 	learningRepo LearningSearchRepository,
 	autocompleteRepo AutocompleteRepository,
+	typesense TypesenseAdapter,
 ) SearchService {
 	return &searchServiceImpl{
 		socialRepo:       socialRepo,
 		marketplaceRepo:  marketplaceRepo,
 		learningRepo:     learningRepo,
 		autocompleteRepo: autocompleteRepo,
+		typesense:        typesense,
 		backend:          SearchBackendPostgresFts,
 	}
 }
@@ -282,14 +286,48 @@ func (s *searchServiceImpl) Autocomplete(ctx context.Context, auth *shared.AuthC
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Event Handlers — Phase 1 No-ops [12-search §9]
+// Event Handlers [12-search §9]
+// Phase 1: PostgreSQL FTS uses GENERATED ALWAYS search_vector columns, so
+// indexing is automatic. These handlers forward to Typesense for Phase 2.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func (s *searchServiceImpl) HandlePostCreated(_ context.Context, _ *PostCreated) error              { return nil }
-func (s *searchServiceImpl) HandleListingPublished(_ context.Context, _ *ListingPublished) error    { return nil }
-func (s *searchServiceImpl) HandleListingArchived(_ context.Context, _ *ListingArchived) error      { return nil }
-func (s *searchServiceImpl) HandleUploadPublished(_ context.Context, _ *UploadPublished) error      { return nil }
-func (s *searchServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error     { return nil }
+func (s *searchServiceImpl) HandlePostCreated(ctx context.Context, event *PostCreated) error {
+	return s.typesense.IndexDocument(ctx, "posts", map[string]any{
+		"id":        event.PostID.String(),
+		"family_id": event.FamilyID.String(),
+	})
+}
+
+func (s *searchServiceImpl) HandleListingPublished(ctx context.Context, event *ListingPublished) error {
+	return s.typesense.IndexDocument(ctx, "listings", map[string]any{
+		"id": event.ListingID.String(),
+	})
+}
+
+func (s *searchServiceImpl) HandleListingArchived(ctx context.Context, event *ListingArchived) error {
+	return s.typesense.RemoveDocument(ctx, "listings", event.ListingID.String())
+}
+
+func (s *searchServiceImpl) HandleUploadPublished(ctx context.Context, event *UploadPublished) error {
+	return s.typesense.IndexDocument(ctx, "uploads", map[string]any{
+		"id": event.UploadID.String(),
+	})
+}
+
+func (s *searchServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	// Remove all documents belonging to this family from Typesense collections.
+	for _, collection := range []string{"posts", "listings", "uploads"} {
+		if err := s.typesense.RemoveDocument(ctx, collection, familyID.String()); err != nil {
+			slog.Warn("search: failed to remove family data from Typesense",
+				"collection", collection,
+				"family_id", familyID,
+				"error", err,
+			)
+			// Continue removing from other collections — best effort.
+		}
+	}
+	return nil
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Helpers

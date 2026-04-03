@@ -58,7 +58,15 @@ func (h *Handler) Register(authGroup *echo.Group, hooksGroup *echo.Group) {
 
 // ─── Phase 1 Handlers ───────────────────────────────────────────────────────
 
-// getSubscription handles GET /v1/billing/subscription. [10-billing §4.1]
+// getSubscription godoc
+//
+// @Summary     Get current subscription
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} SubscriptionResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/subscription [get]
 func (h *Handler) getSubscription(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -72,7 +80,19 @@ func (h *Handler) getSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// listTransactions handles GET /v1/billing/transactions. [10-billing §4.1]
+// listTransactions godoc
+//
+// @Summary     List billing transactions
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Param       type query string false "Filter by type" Enums(subscription,purchase,payout,refund)
+// @Param       from query string false "Start date (ISO 8601)"
+// @Param       to   query string false "End date (ISO 8601)"
+// @Param       page query int    false "Page number"
+// @Success     200 {object} TransactionListResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/transactions [get]
 func (h *Handler) listTransactions(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -94,7 +114,17 @@ func (h *Handler) listTransactions(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// coppaVerify handles POST /v1/billing/coppa-verify. [10-billing §4.1]
+// coppaVerify godoc
+//
+// @Summary     Verify COPPA compliance
+// @Tags        billing
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body CoppaVerificationCommand true "COPPA verification"
+// @Success     200 {object} CoppaVerificationResult
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/coppa-verify [post]
 func (h *Handler) coppaVerify(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -134,7 +164,18 @@ func (h *Handler) hyperswitchWebhook(c echo.Context) error {
 
 // ─── Phase 2 Handlers ───────────────────────────────────────────────────────
 
-// createSubscription handles POST /v1/billing/subscription. [10-billing §4.2]
+// createSubscription godoc
+//
+// @Summary     Create a subscription
+// @Tags        billing
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body CreateSubscriptionCommand true "Create subscription"
+// @Success     201 {object} SubscriptionResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /billing/subscription [post]
 func (h *Handler) createSubscription(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -157,7 +198,17 @@ func (h *Handler) createSubscription(c echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
-// updateSubscription handles PATCH /v1/billing/subscription. [10-billing §4.2]
+// updateSubscription godoc
+//
+// @Summary     Update subscription plan
+// @Tags        billing
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body UpdateSubscriptionCommand true "Update subscription"
+// @Success     200 {object} SubscriptionResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/subscription [patch]
 func (h *Handler) updateSubscription(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -180,7 +231,15 @@ func (h *Handler) updateSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// cancelSubscription handles DELETE /v1/billing/subscription. [10-billing §4.2]
+// cancelSubscription godoc
+//
+// @Summary     Cancel subscription
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} SubscriptionResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/subscription [delete]
 func (h *Handler) cancelSubscription(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -195,7 +254,15 @@ func (h *Handler) cancelSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// reactivateSubscription handles POST /v1/billing/subscription/reactivate. [10-billing §4.2]
+// reactivateSubscription godoc
+//
+// @Summary     Reactivate cancelled subscription
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} SubscriptionResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/subscription/reactivate [post]
 func (h *Handler) reactivateSubscription(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -210,7 +277,15 @@ func (h *Handler) reactivateSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// pauseSubscription handles POST /v1/billing/subscription/pause. [10-billing §4.2]
+// pauseSubscription godoc
+//
+// @Summary     Pause subscription
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} SubscriptionResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/subscription/pause [post]
 func (h *Handler) pauseSubscription(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -225,7 +300,15 @@ func (h *Handler) pauseSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// resumeSubscription handles POST /v1/billing/subscription/resume. [10-billing §4.2]
+// resumeSubscription godoc
+//
+// @Summary     Resume paused subscription
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} SubscriptionResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/subscription/resume [post]
 func (h *Handler) resumeSubscription(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -240,7 +323,17 @@ func (h *Handler) resumeSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// estimateSubscription handles POST /v1/billing/subscription/estimate. [10-billing §4.2]
+// estimateSubscription godoc
+//
+// @Summary     Estimate subscription cost
+// @Tags        billing
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body EstimateSubscriptionQuery true "Estimate query"
+// @Success     200 {object} EstimateResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/subscription/estimate [post]
 func (h *Handler) estimateSubscription(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -262,7 +355,17 @@ func (h *Handler) estimateSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// attachPaymentMethod handles POST /v1/billing/payment-methods. [10-billing §4.2]
+// attachPaymentMethod godoc
+//
+// @Summary     Attach a payment method
+// @Tags        billing
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body AttachPaymentMethodCommand true "Attach payment method"
+// @Success     201 {object} PaymentMethodResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/payment-methods [post]
 func (h *Handler) attachPaymentMethod(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -285,7 +388,15 @@ func (h *Handler) attachPaymentMethod(c echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
-// listPaymentMethods handles GET /v1/billing/payment-methods. [10-billing §4.2]
+// listPaymentMethods godoc
+//
+// @Summary     List payment methods
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {array} PaymentMethodResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/payment-methods [get]
 func (h *Handler) listPaymentMethods(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -299,7 +410,15 @@ func (h *Handler) listPaymentMethods(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// detachPaymentMethod handles DELETE /v1/billing/payment-methods/:id. [10-billing §4.2]
+// detachPaymentMethod godoc
+//
+// @Summary     Remove a payment method
+// @Tags        billing
+// @Security    BearerAuth
+// @Param       id path string true "Payment method ID"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/payment-methods/{id} [delete]
 func (h *Handler) detachPaymentMethod(c echo.Context) error {
 	auth, err := middleware.RequirePrimaryParent(c)
 	if err != nil {
@@ -318,7 +437,18 @@ func (h *Handler) detachPaymentMethod(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// listInvoices handles GET /v1/billing/invoices. [10-billing §4.2]
+// listInvoices godoc
+//
+// @Summary     List invoices
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Param       status query string false "Filter by status"
+// @Param       cursor query string false "Pagination cursor"
+// @Param       limit  query int    false "Results per page"
+// @Success     200 {object} InvoiceListResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/invoices [get]
 func (h *Handler) listInvoices(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -340,7 +470,18 @@ func (h *Handler) listInvoices(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// listPayouts handles GET /v1/billing/payouts. [10-billing §4.2]
+// listPayouts godoc
+//
+// @Summary     List creator payouts
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Param       status query string false "Filter by status"
+// @Param       cursor query string false "Pagination cursor"
+// @Param       limit  query int    false "Results per page"
+// @Success     200 {object} PayoutListResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/payouts [get]
 func (h *Handler) listPayouts(c echo.Context) error {
 	creator, err := middleware.RequireCreator(c, h.db)
 	if err != nil {

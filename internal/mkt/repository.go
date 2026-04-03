@@ -539,6 +539,17 @@ func (r *PgListingFileRepository) GetByID(ctx context.Context, listingID, fileID
 	return &file, nil
 }
 
+func (r *PgListingFileRepository) FindByStorageKey(ctx context.Context, storageKey string) (*MktListingFile, error) {
+	var file MktListingFile
+	if err := r.db.WithContext(ctx).Where("storage_key = ?", storageKey).First(&file).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return &file, nil
+}
+
 func (r *PgListingFileRepository) ListByListing(ctx context.Context, listingID uuid.UUID) ([]MktListingFile, error) {
 	var files []MktListingFile
 	if err := r.db.WithContext(ctx).Where("listing_id = ?", listingID).Order("sort_order ASC").Find(&files).Error; err != nil {
@@ -718,6 +729,24 @@ func (r *PgPurchaseRepository) GetCreatorSales(ctx context.Context, creatorID uu
 	query = query.Where("p.created_at <= ?", to).Order("p.created_at DESC")
 
 	var rows []SalesRow
+	if err := query.Scan(&rows).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return rows, nil
+}
+
+func (r *PgPurchaseRepository) GetAllCreatorSales(ctx context.Context, from, to time.Time) ([]CreatorSalesAggregate, error) {
+	var rows []CreatorSalesAggregate
+	query := r.db.WithContext(ctx).
+		Table("mkt_purchases").
+		Select(`creator_id,
+			SUM(creator_payout_cents) as total_payout_cents,
+			COUNT(*)::int as purchase_count,
+			COALESCE(SUM(CASE WHEN refund_amount_cents > 0 THEN refund_amount_cents ELSE 0 END), 0) as refund_deduction_cents`).
+		Where("created_at >= ? AND created_at <= ?", from, to).
+		Group("creator_id").
+		Having("SUM(creator_payout_cents) > 0")
+
 	if err := query.Scan(&rows).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
 	}

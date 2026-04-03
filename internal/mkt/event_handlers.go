@@ -46,8 +46,8 @@ func (h *MethodologyConfigUpdatedHandler) Handle(ctx context.Context, event shar
 
 // ─── ContentFlaggedHandler ───────────────────────────────────────────────────
 
-// ContentFlaggedHandler handles safety.ContentFlagged by logging flagged content.
-// Auto-archiving via ArchiveListingByContentKey is not yet implemented. [07-mkt §17.4]
+// ContentFlaggedHandler handles safety.ContentFlagged by auto-archiving the
+// listing whose file matches the flagged content key. [07-mkt §17.4]
 type ContentFlaggedHandler struct {
 	svc MarketplaceService
 }
@@ -62,17 +62,12 @@ func (h *ContentFlaggedHandler) Handle(ctx context.Context, event shared.DomainE
 	if !ok {
 		return fmt.Errorf("mkt.ContentFlaggedHandler: unexpected event type %T", event)
 	}
-	slog.Info("mkt: content flagged — listing review pending",
+	slog.Info("mkt: content flagged — auto-archiving listing",
 		"content_key", e.GetContentKey(),
 		"flag_type", e.GetFlagType(),
 		"family_id", e.GetFamilyID(),
 	)
-	slog.Warn("mkt: ArchiveListingByContentKey not yet implemented — flagged listing not auto-archived",
-		"content_key", e.GetContentKey(),
-		"flag_type", e.GetFlagType(),
-		"family_id", e.GetFamilyID(),
-	)
-	return nil
+	return h.svc.ArchiveListingByContentKey(ctx, e.GetContentKey(), e.GetFlagType())
 }
 
 // ─── FamilyDeletionScheduledHandler ─────────────────────────────────────────

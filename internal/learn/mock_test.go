@@ -113,6 +113,41 @@ type mockLearningService struct {
 	// Video progress
 	updateVideoProgressFn func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd UpdateVideoProgressCommand) (VideoProgressResponse, error)
 	getVideoProgressFn    func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, videoDefID uuid.UUID) (VideoProgressResponse, error)
+
+	// Assessment defs (Phase 2)
+	createAssessmentDefFn func(ctx context.Context, cmd CreateAssessmentDefCommand) (AssessmentDefResponse, error)
+	updateAssessmentDefFn func(ctx context.Context, defID uuid.UUID, cmd UpdateAssessmentDefCommand) (AssessmentDefResponse, error)
+	deleteAssessmentDefFn func(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error
+	listAssessmentDefsFn  func(ctx context.Context, query AssessmentDefQuery) (PaginatedResponse[AssessmentDefSummaryResponse], error)
+	getAssessmentDefFn    func(ctx context.Context, defID uuid.UUID) (AssessmentDefResponse, error)
+
+	// Project defs (Phase 2)
+	createProjectDefFn func(ctx context.Context, cmd CreateProjectDefCommand) (ProjectDefResponse, error)
+	updateProjectDefFn func(ctx context.Context, defID uuid.UUID, cmd UpdateProjectDefCommand) (ProjectDefResponse, error)
+	deleteProjectDefFn func(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error
+	listProjectDefsFn  func(ctx context.Context, query ProjectDefQuery) (PaginatedResponse[ProjectDefSummaryResponse], error)
+	getProjectDefFn    func(ctx context.Context, defID uuid.UUID) (ProjectDefResponse, error)
+
+	// Assessment results (Phase 2)
+	recordAssessmentResultFn func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd RecordAssessmentResultCommand) (AssessmentResultResponse, error)
+	updateAssessmentResultFn func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID, cmd UpdateAssessmentResultCommand) (AssessmentResultResponse, error)
+	deleteAssessmentResultFn func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) error
+	listAssessmentResultsFn  func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query AssessmentResultQuery) (PaginatedResponse[AssessmentResultResponse], error)
+	getAssessmentResultFn    func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) (AssessmentResultResponse, error)
+
+	// Project progress (Phase 2)
+	startProjectFn          func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd StartProjectCommand) (ProjectProgressResponse, error)
+	updateProjectProgressFn func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID, cmd UpdateProjectProgressCommand) (ProjectProgressResponse, error)
+	deleteProjectProgressFn func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) error
+	listProjectProgressFn   func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query ProjectProgressQuery) (PaginatedResponse[ProjectProgressResponse], error)
+	getProjectProgressFn    func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) (ProjectProgressResponse, error)
+
+	// Grading scales (Phase 2)
+	createGradingScaleFn func(ctx context.Context, scope *shared.FamilyScope, cmd CreateGradingScaleCommand) (GradingScaleResponse, error)
+	updateGradingScaleFn func(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID, cmd UpdateGradingScaleCommand) (GradingScaleResponse, error)
+	deleteGradingScaleFn func(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) error
+	listGradingScalesFn  func(ctx context.Context, scope *shared.FamilyScope) ([]GradingScaleResponse, error)
+	getGradingScaleFn    func(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) (GradingScaleResponse, error)
 }
 
 func newMockLearningService() *mockLearningService {
@@ -567,6 +602,171 @@ func (m *mockLearningService) GetVideoProgress(ctx context.Context, scope *share
 		return m.getVideoProgressFn(ctx, scope, studentID, videoDefID)
 	}
 	panic("GetVideoProgress not mocked")
+}
+
+// ─── Assessment Def Methods (Phase 2) ────────────────────────────────────────
+
+func (m *mockLearningService) CreateAssessmentDef(ctx context.Context, cmd CreateAssessmentDefCommand) (AssessmentDefResponse, error) {
+	if m.createAssessmentDefFn != nil {
+		return m.createAssessmentDefFn(ctx, cmd)
+	}
+	panic("CreateAssessmentDef not mocked")
+}
+func (m *mockLearningService) UpdateAssessmentDef(ctx context.Context, defID uuid.UUID, cmd UpdateAssessmentDefCommand) (AssessmentDefResponse, error) {
+	if m.updateAssessmentDefFn != nil {
+		return m.updateAssessmentDefFn(ctx, defID, cmd)
+	}
+	panic("UpdateAssessmentDef not mocked")
+}
+func (m *mockLearningService) DeleteAssessmentDef(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error {
+	if m.deleteAssessmentDefFn != nil {
+		return m.deleteAssessmentDefFn(ctx, defID, callerID)
+	}
+	panic("DeleteAssessmentDef not mocked")
+}
+func (m *mockLearningService) ListAssessmentDefs(ctx context.Context, query AssessmentDefQuery) (PaginatedResponse[AssessmentDefSummaryResponse], error) {
+	if m.listAssessmentDefsFn != nil {
+		return m.listAssessmentDefsFn(ctx, query)
+	}
+	panic("ListAssessmentDefs not mocked")
+}
+func (m *mockLearningService) GetAssessmentDef(ctx context.Context, defID uuid.UUID) (AssessmentDefResponse, error) {
+	if m.getAssessmentDefFn != nil {
+		return m.getAssessmentDefFn(ctx, defID)
+	}
+	panic("GetAssessmentDef not mocked")
+}
+
+// ─── Project Def Methods (Phase 2) ──────────────────────────────────────────
+
+func (m *mockLearningService) CreateProjectDef(ctx context.Context, cmd CreateProjectDefCommand) (ProjectDefResponse, error) {
+	if m.createProjectDefFn != nil {
+		return m.createProjectDefFn(ctx, cmd)
+	}
+	panic("CreateProjectDef not mocked")
+}
+func (m *mockLearningService) UpdateProjectDef(ctx context.Context, defID uuid.UUID, cmd UpdateProjectDefCommand) (ProjectDefResponse, error) {
+	if m.updateProjectDefFn != nil {
+		return m.updateProjectDefFn(ctx, defID, cmd)
+	}
+	panic("UpdateProjectDef not mocked")
+}
+func (m *mockLearningService) DeleteProjectDef(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error {
+	if m.deleteProjectDefFn != nil {
+		return m.deleteProjectDefFn(ctx, defID, callerID)
+	}
+	panic("DeleteProjectDef not mocked")
+}
+func (m *mockLearningService) ListProjectDefs(ctx context.Context, query ProjectDefQuery) (PaginatedResponse[ProjectDefSummaryResponse], error) {
+	if m.listProjectDefsFn != nil {
+		return m.listProjectDefsFn(ctx, query)
+	}
+	panic("ListProjectDefs not mocked")
+}
+func (m *mockLearningService) GetProjectDef(ctx context.Context, defID uuid.UUID) (ProjectDefResponse, error) {
+	if m.getProjectDefFn != nil {
+		return m.getProjectDefFn(ctx, defID)
+	}
+	panic("GetProjectDef not mocked")
+}
+
+// ─── Assessment Result Methods (Phase 2) ─────────────────────────────────────
+
+func (m *mockLearningService) RecordAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd RecordAssessmentResultCommand) (AssessmentResultResponse, error) {
+	if m.recordAssessmentResultFn != nil {
+		return m.recordAssessmentResultFn(ctx, scope, studentID, cmd)
+	}
+	panic("RecordAssessmentResult not mocked")
+}
+func (m *mockLearningService) UpdateAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID, cmd UpdateAssessmentResultCommand) (AssessmentResultResponse, error) {
+	if m.updateAssessmentResultFn != nil {
+		return m.updateAssessmentResultFn(ctx, scope, studentID, resultID, cmd)
+	}
+	panic("UpdateAssessmentResult not mocked")
+}
+func (m *mockLearningService) DeleteAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) error {
+	if m.deleteAssessmentResultFn != nil {
+		return m.deleteAssessmentResultFn(ctx, scope, studentID, resultID)
+	}
+	panic("DeleteAssessmentResult not mocked")
+}
+func (m *mockLearningService) ListAssessmentResults(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query AssessmentResultQuery) (PaginatedResponse[AssessmentResultResponse], error) {
+	if m.listAssessmentResultsFn != nil {
+		return m.listAssessmentResultsFn(ctx, scope, studentID, query)
+	}
+	panic("ListAssessmentResults not mocked")
+}
+func (m *mockLearningService) GetAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) (AssessmentResultResponse, error) {
+	if m.getAssessmentResultFn != nil {
+		return m.getAssessmentResultFn(ctx, scope, studentID, resultID)
+	}
+	panic("GetAssessmentResult not mocked")
+}
+
+// ─── Project Progress Methods (Phase 2) ──────────────────────────────────────
+
+func (m *mockLearningService) StartProject(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd StartProjectCommand) (ProjectProgressResponse, error) {
+	if m.startProjectFn != nil {
+		return m.startProjectFn(ctx, scope, studentID, cmd)
+	}
+	panic("StartProject not mocked")
+}
+func (m *mockLearningService) UpdateProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID, cmd UpdateProjectProgressCommand) (ProjectProgressResponse, error) {
+	if m.updateProjectProgressFn != nil {
+		return m.updateProjectProgressFn(ctx, scope, studentID, progressID, cmd)
+	}
+	panic("UpdateProjectProgress not mocked")
+}
+func (m *mockLearningService) DeleteProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) error {
+	if m.deleteProjectProgressFn != nil {
+		return m.deleteProjectProgressFn(ctx, scope, studentID, progressID)
+	}
+	panic("DeleteProjectProgress not mocked")
+}
+func (m *mockLearningService) ListProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query ProjectProgressQuery) (PaginatedResponse[ProjectProgressResponse], error) {
+	if m.listProjectProgressFn != nil {
+		return m.listProjectProgressFn(ctx, scope, studentID, query)
+	}
+	panic("ListProjectProgress not mocked")
+}
+func (m *mockLearningService) GetProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) (ProjectProgressResponse, error) {
+	if m.getProjectProgressFn != nil {
+		return m.getProjectProgressFn(ctx, scope, studentID, progressID)
+	}
+	panic("GetProjectProgress not mocked")
+}
+
+// ─── Grading Scale Methods (Phase 2) ─────────────────────────────────────────
+
+func (m *mockLearningService) CreateGradingScale(ctx context.Context, scope *shared.FamilyScope, cmd CreateGradingScaleCommand) (GradingScaleResponse, error) {
+	if m.createGradingScaleFn != nil {
+		return m.createGradingScaleFn(ctx, scope, cmd)
+	}
+	panic("CreateGradingScale not mocked")
+}
+func (m *mockLearningService) UpdateGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID, cmd UpdateGradingScaleCommand) (GradingScaleResponse, error) {
+	if m.updateGradingScaleFn != nil {
+		return m.updateGradingScaleFn(ctx, scope, scaleID, cmd)
+	}
+	panic("UpdateGradingScale not mocked")
+}
+func (m *mockLearningService) DeleteGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) error {
+	if m.deleteGradingScaleFn != nil {
+		return m.deleteGradingScaleFn(ctx, scope, scaleID)
+	}
+	panic("DeleteGradingScale not mocked")
+}
+func (m *mockLearningService) ListGradingScales(ctx context.Context, scope *shared.FamilyScope) ([]GradingScaleResponse, error) {
+	if m.listGradingScalesFn != nil {
+		return m.listGradingScalesFn(ctx, scope)
+	}
+	panic("ListGradingScales not mocked")
+}
+func (m *mockLearningService) GetGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) (GradingScaleResponse, error) {
+	if m.getGradingScaleFn != nil {
+		return m.getGradingScaleFn(ctx, scope, scaleID)
+	}
+	panic("GetGradingScale not mocked")
 }
 
 // ─── Event Handler Stubs (Batch 9) ──────────────────────────────────────────

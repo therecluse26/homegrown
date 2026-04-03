@@ -8,7 +8,7 @@ import {
   Input,
   Skeleton,
 } from "@/components/ui";
-import { useTransactions, type Transaction } from "@/hooks/use-subscription";
+import { useTransactions } from "@/hooks/use-subscription";
 import { useState, useEffect, useRef } from "react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ const FILTER_OPTIONS: { value: InvoiceFilterType; labelId: string }[] = [
   { value: "purchase", labelId: "billing.invoice.filter.purchase" },
 ];
 
-function getStatusVariant(status: Transaction["status"]): "primary" | "secondary" | "error" {
+function getStatusVariant(status: string | undefined): "primary" | "secondary" | "error" {
   switch (status) {
     case "completed":
       return "primary";
@@ -103,7 +103,7 @@ export function InvoiceHistory() {
   // Client-side filter: only show subscription and purchase types (invoices)
   const allTx = transactions.data?.transactions ?? [];
   const invoiceList = allTx.filter(
-    (tx) => tx.type === "subscription" || tx.type === "purchase",
+    (tx) => tx.transaction_type === "subscription" || tx.transaction_type === "purchase",
   );
 
   return (
@@ -188,12 +188,12 @@ export function InvoiceHistory() {
                     <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant="secondary">
                         <FormattedMessage
-                          id={`billing.invoice.type.${tx.type}`}
+                          id={`billing.invoice.type.${tx.transaction_type ?? "unknown"}`}
                         />
                       </Badge>
                       <Badge variant={getStatusVariant(tx.status)}>
                         <FormattedMessage
-                          id={`billing.invoice.status.${tx.status}`}
+                          id={`billing.invoice.status.${tx.status ?? "unknown"}`}
                         />
                       </Badge>
                       <span className="type-body-sm text-on-surface-variant">
@@ -207,7 +207,7 @@ export function InvoiceHistory() {
                   </div>
                 </div>
                 <p className="type-title-sm text-on-surface font-medium shrink-0">
-                  {formatCurrency(tx.amount_cents, tx.currency)}
+                  {formatCurrency(tx.amount_cents ?? 0, tx.currency ?? "usd")}
                 </p>
               </Card>
             </li>

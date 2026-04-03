@@ -60,7 +60,7 @@ func newTestService() (*searchServiceImpl, *stubSocialRepo, *stubMarketplaceRepo
 	mkt := &stubMarketplaceRepo{}
 	learn := &stubLearningRepo{}
 	ac := &stubAutocompleteRepo{}
-	svc := NewSearchService(social, mkt, learn, ac).(*searchServiceImpl)
+	svc := NewSearchService(social, mkt, learn, ac, &stubTypesenseAdapter{}).(*searchServiceImpl)
 	return svc, social, mkt, learn, ac
 }
 

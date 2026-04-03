@@ -133,16 +133,45 @@ func (h *Handler) autocomplete(c echo.Context) error {
 
 // suggestions godoc
 //
-// @Summary     AI-powered search suggestions (Phase 3 — not yet available)
+// @Summary     Search suggestions based on autocomplete
 // @Tags        search
 // @Produce     json
 // @Security    BearerAuth
-// @Success     200 {object} map[string][]any
+// @Param       q     query string true  "Search query prefix"
+// @Param       scope query string false "Scope filter (marketplace, social, learning)"
+// @Success     200 {object} AutocompleteResponse
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
 // @Router      /search/suggestions [get]
-// GET /v1/search/suggestions — returns empty list until Typesense is wired. [12-search §4.3]
+// GET /v1/search/suggestions — delegates to Autocomplete service. [12-search §4.3]
 func (h *Handler) suggestions(c echo.Context) error {
-	// TODO(phase-3): wire Typesense suggestions query. Returning empty list for now.
-	return c.JSON(http.StatusOK, map[string]any{"suggestions": []any{}})
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+
+	var params AutocompleteParams
+	if bindErr := c.Bind(&params); bindErr != nil {
+		return shared.ErrBadRequest("invalid query parameters")
+	}
+	if err := c.Validate(&params); err != nil {
+		return shared.ValidationError(err)
+	}
+
+	if params.Q == "" {
+		return shared.ErrBadRequest("q is required")
+	}
+
+	resp, err := h.svc.Autocomplete(c.Request().Context(), auth, &scope, &params)
+	if err != nil {
+		return mapSearchError(err)
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }
 
 // mapSearchError maps any error to an Echo-compatible HTTP error.

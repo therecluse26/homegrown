@@ -7,6 +7,197 @@ definitions:
       version:
         type: string
     type: object
+  billing.AttachPaymentMethodCommand:
+    properties:
+      setup_intent_client_secret:
+        type: string
+    required:
+    - setup_intent_client_secret
+    type: object
+  billing.CoppaVerificationCommand:
+    properties:
+      payment_method_id:
+        type: string
+    required:
+    - payment_method_id
+    type: object
+  billing.CoppaVerificationResult:
+    properties:
+      charge_id:
+        type: string
+      refund_id:
+        type: string
+      verified:
+        type: boolean
+    type: object
+  billing.CreateSubscriptionCommand:
+    properties:
+      billing_interval:
+        enum:
+        - monthly
+        - annual
+        type: string
+      payment_method_id:
+        type: string
+    required:
+    - billing_interval
+    - payment_method_id
+    type: object
+  billing.EstimateResponse:
+    properties:
+      amount_cents:
+        type: integer
+      billing_interval:
+        type: string
+      currency:
+        type: string
+      next_billing_date:
+        type: string
+      proration_credits_cents:
+        type: integer
+      total_due_today_cents:
+        type: integer
+    type: object
+  billing.EstimateSubscriptionQuery:
+    properties:
+      billing_interval:
+        enum:
+        - monthly
+        - annual
+        type: string
+    required:
+    - billing_interval
+    type: object
+  billing.InvoiceListResponse:
+    properties:
+      invoices:
+        items:
+          $ref: '#/definitions/billing.InvoiceResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  billing.InvoiceResponse:
+    properties:
+      amount_cents:
+        type: integer
+      currency:
+        type: string
+      id:
+        type: string
+      paid_at:
+        type: string
+      pdf_url:
+        type: string
+      period_end:
+        type: string
+      period_start:
+        type: string
+      status:
+        type: string
+    type: object
+  billing.PaymentMethodResponse:
+    properties:
+      brand:
+        type: string
+      exp_month:
+        type: integer
+      exp_year:
+        type: integer
+      id:
+        type: string
+      is_default:
+        type: boolean
+      last_four:
+        type: string
+      method_type:
+        type: string
+    type: object
+  billing.PayoutListResponse:
+    properties:
+      next_cursor:
+        type: string
+      payouts:
+        items:
+          $ref: '#/definitions/billing.PayoutResponse'
+        type: array
+    type: object
+  billing.PayoutResponse:
+    properties:
+      amount_cents:
+        type: integer
+      created_at:
+        type: string
+      currency:
+        type: string
+      id:
+        type: string
+      period_end:
+        type: string
+      period_start:
+        type: string
+      processed_at:
+        type: string
+      purchase_count:
+        type: integer
+      refund_deduction_cents:
+        type: integer
+      status:
+        type: string
+    type: object
+  billing.SubscriptionResponse:
+    properties:
+      amount_cents:
+        type: integer
+      billing_interval:
+        type: string
+      cancel_at_period_end:
+        type: boolean
+      currency:
+        type: string
+      current_period_end:
+        type: string
+      status:
+        type: string
+      tier:
+        type: string
+    type: object
+  billing.TransactionListResponse:
+    properties:
+      next_cursor:
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/billing.TransactionResponse'
+        type: array
+    type: object
+  billing.TransactionResponse:
+    properties:
+      amount_cents:
+        type: integer
+      created_at:
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      status:
+        type: string
+      transaction_type:
+        type: string
+    type: object
+  billing.UpdateSubscriptionCommand:
+    properties:
+      billing_interval:
+        enum:
+        - monthly
+        - annual
+        type: string
+    required:
+    - billing_interval
+    type: object
   comply.AddPortfolioItemsCommand:
     properties:
       items:
@@ -2266,6 +2457,373 @@ paths:
       summary: Get current user
       tags:
       - auth
+  /billing/coppa-verify:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: COPPA verification
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/billing.CoppaVerificationCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.CoppaVerificationResult'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Verify COPPA compliance
+      tags:
+      - billing
+  /billing/invoices:
+    get:
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.InvoiceListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List invoices
+      tags:
+      - billing
+  /billing/payment-methods:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/billing.PaymentMethodResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List payment methods
+      tags:
+      - billing
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Attach payment method
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/billing.AttachPaymentMethodCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/billing.PaymentMethodResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Attach a payment method
+      tags:
+      - billing
+  /billing/payment-methods/{id}:
+    delete:
+      parameters:
+      - description: Payment method ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Remove a payment method
+      tags:
+      - billing
+  /billing/payouts:
+    get:
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.PayoutListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List creator payouts
+      tags:
+      - billing
+  /billing/subscription:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Cancel subscription
+      tags:
+      - billing
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get current subscription
+      tags:
+      - billing
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Update subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/billing.UpdateSubscriptionCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Update subscription plan
+      tags:
+      - billing
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Create subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/billing.CreateSubscriptionCommand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/billing.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Create a subscription
+      tags:
+      - billing
+  /billing/subscription/estimate:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Estimate query
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/billing.EstimateSubscriptionQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.EstimateResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Estimate subscription cost
+      tags:
+      - billing
+  /billing/subscription/pause:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Pause subscription
+      tags:
+      - billing
+  /billing/subscription/reactivate:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Reactivate cancelled subscription
+      tags:
+      - billing
+  /billing/subscription/resume:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Resume paused subscription
+      tags:
+      - billing
+  /billing/transactions:
+    get:
+      parameters:
+      - description: Filter by type
+        enum:
+        - subscription
+        - purchase
+        - payout
+        - refund
+        in: query
+        name: type
+        type: string
+      - description: Start date (ISO 8601)
+        in: query
+        name: from
+        type: string
+      - description: End date (ISO 8601)
+        in: query
+        name: to
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.TransactionListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List billing transactions
+      tags:
+      - billing
   /compliance/config:
     get:
       produces:
@@ -5076,6 +5634,43 @@ paths:
       summary: Get day view
       tags:
       - planning
+  /planning/calendar/pdf:
+    get:
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end
+        required: true
+        type: string
+      - description: Filter by student ID
+        in: query
+        name: student_id
+        type: string
+      produces:
+      - application/pdf
+      responses:
+        "200":
+          description: PDF file
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Export calendar as PDF
+      tags:
+      - planning
   /planning/calendar/print:
     get:
       parameters:
@@ -5914,19 +6509,34 @@ paths:
       - search
   /search/suggestions:
     get:
+      parameters:
+      - description: Search query prefix
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Scope filter (marketplace, social, learning)
+        in: query
+        name: scope
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              items: {}
-              type: array
-            type: object
+            $ref: '#/definitions/search.AutocompleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
       security:
       - BearerAuth: []
-      summary: AI-powered search suggestions (Phase 3 — not yet available)
+      summary: Search suggestions based on autocomplete
       tags:
       - search
   /student-session/me:

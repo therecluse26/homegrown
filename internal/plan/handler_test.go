@@ -66,6 +66,9 @@ func (m *mockPlanningService) GetScheduleItem(_ context.Context, _ *shared.AuthC
 func (m *mockPlanningService) GetPrintView(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ time.Time, _ time.Time, _ *uuid.UUID) (string, error) {
 	return "<html></html>", nil
 }
+func (m *mockPlanningService) GetCalendarPDF(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ time.Time, _ time.Time, _ *uuid.UUID) ([]byte, error) {
+	return []byte("%PDF-1.4"), nil
+}
 func (m *mockPlanningService) CreateTemplate(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ CreateTemplateInput) (uuid.UUID, error) {
 	return uuid.New(), nil
 }

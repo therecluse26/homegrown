@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
@@ -24,11 +25,44 @@ func (ExecutePayoutsPayload) TaskType() string { return "billing:execute_payouts
 
 // RegisterTaskHandlers registers asynq task handlers for billing background jobs.
 // Called from main.go during worker setup. [10-billing §12]
-func RegisterTaskHandlers(worker shared.JobWorker, payoutRepo PayoutRepository, adapter SubscriptionPaymentAdapter) {
+func RegisterTaskHandlers(worker shared.JobWorker, payoutRepo PayoutRepository, adapter SubscriptionPaymentAdapter, mktAdapter MktServiceForBilling) {
 	worker.Handle("billing:aggregate_payouts", func(ctx context.Context, _ []byte) error {
-		// Phase 2 stub: aggregate creator earnings into bill_payouts rows.
-		// Full implementation requires iterating bill_creator_earnings + grouping by creator.
-		slog.Warn("billing: aggregate_payouts job invoked (Phase 2 — no-op)")
+		// Aggregate previous month's creator sales into bill_payouts rows. [10-billing §12]
+		now := time.Now().UTC()
+		periodStart := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, time.UTC)
+		periodEnd := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Add(-time.Nanosecond)
+
+		earnings, err := mktAdapter.GetAllCreatorSales(ctx, periodStart, periodEnd)
+		if err != nil {
+			slog.Error("billing: aggregate_payouts failed to fetch creator sales", "error", err)
+			return err
+		}
+		if len(earnings) == 0 {
+			slog.Info("billing: aggregate_payouts — no creator sales for period", "period_start", periodStart, "period_end", periodEnd)
+			return nil
+		}
+
+		var created int
+		for _, e := range earnings {
+			netPayout := e.TotalPayoutCents - e.RefundDeductionCents
+			if netPayout <= 0 {
+				continue
+			}
+			if _, createErr := payoutRepo.Create(ctx, CreatePayoutRow{
+				CreatorID:            e.CreatorID,
+				AmountCents:          netPayout,
+				Currency:             "usd",
+				PeriodStart:          periodStart,
+				PeriodEnd:            periodEnd,
+				PurchaseCount:        e.PurchaseCount,
+				RefundDeductionCents: e.RefundDeductionCents,
+			}); createErr != nil {
+				slog.Error("billing: aggregate_payouts create failed", "creator_id", e.CreatorID, "error", createErr)
+				continue
+			}
+			created++
+		}
+		slog.Info("billing: aggregate_payouts completed", "payouts_created", created, "period_start", periodStart, "period_end", periodEnd)
 		return nil
 	})
 

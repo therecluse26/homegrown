@@ -123,8 +123,8 @@ export function SubscriptionManager() {
             {sub && (
               <div className="ml-8">
                 <div className="flex items-center gap-2 mb-2">
-                  <p className="type-headline-sm text-on-surface font-semibold">
-                    {sub.plan_name}
+                  <p className="type-headline-sm text-on-surface font-semibold capitalize">
+                    {sub.tier}
                   </p>
                   {isCancelled && (
                     <Badge variant="error">
@@ -138,13 +138,13 @@ export function SubscriptionManager() {
                 {!isFree && (
                   <>
                     <p className="type-body-sm text-on-surface-variant">
-                      {formatCurrency(sub.amount_cents, sub.currency)} / {sub.interval === "annual" ? intl.formatMessage({ id: "billing.pricing.annual" }).toLowerCase() : intl.formatMessage({ id: "billing.pricing.monthly" }).toLowerCase()}
+                      {formatCurrency(sub.amount_cents ?? 0, sub.currency ?? "usd")} / {sub.billing_interval === "annual" ? intl.formatMessage({ id: "billing.pricing.annual" }).toLowerCase() : intl.formatMessage({ id: "billing.pricing.monthly" }).toLowerCase()}
                     </p>
                     <div className="flex items-center gap-1 mt-2">
                       <Icon icon={Calendar} size="xs" className="text-on-surface-variant" aria-hidden />
                       <p className="type-body-sm text-on-surface-variant">
                         <FormattedMessage id="subscription.manager.nextBilling" />:{" "}
-                        {formatDate(sub.current_period_end, intl)}
+                        {sub.current_period_end ? formatDate(sub.current_period_end, intl) : "—"}
                       </p>
                     </div>
                   </>
@@ -160,7 +160,7 @@ export function SubscriptionManager() {
             <p className="type-body-sm text-on-surface">
               <FormattedMessage
                 id="subscription.manager.cancelledDescription"
-                values={{ date: formatDate(sub.current_period_end, intl) }}
+                values={{ date: sub.current_period_end ? formatDate(sub.current_period_end, intl) : "—" }}
               />
             </p>
           </div>

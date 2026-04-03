@@ -457,6 +457,14 @@ func (r *PgAccountStatusRepository) Update(_ context.Context, familyID uuid.UUID
 	return &row, nil
 }
 
+func (r *PgAccountStatusRepository) FindExpiredSuspensions(_ context.Context) ([]AccountStatusRow, error) {
+	var rows []AccountStatusRow
+	if err := r.db.Where("status = ? AND suspension_expires_at < ?", "suspended", time.Now()).Find(&rows).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return rows, nil
+}
+
 func (r *PgAccountStatusRepository) CountByStatus(_ context.Context, status string) (int64, error) {
 	var count int64
 	if err := r.db.Model(&AccountStatusRow{}).Where("status = ?", status).Count(&count).Error; err != nil {
@@ -697,4 +705,257 @@ func (r *PgBotSignalRepository) CountRecent(_ context.Context, parentID uuid.UUI
 		return 0, shared.ErrDatabase(err)
 	}
 	return count, nil
+}
+
+// ─── PgManualReviewRepository ────────────────────────────────────────────────
+
+// PgManualReviewRepository implements ManualReviewRepository using PostgreSQL/GORM. [11-safety §7.1, CRIT-1]
+type PgManualReviewRepository struct{ db *gorm.DB }
+
+func NewPgManualReviewRepository(db *gorm.DB) ManualReviewRepository {
+	return &PgManualReviewRepository{db: db}
+}
+
+func (r *PgManualReviewRepository) Create(ctx context.Context, item *ManualReviewItem) error {
+	if err := r.db.WithContext(ctx).Create(item).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgManualReviewRepository) FindPending(ctx context.Context, limit int) ([]ManualReviewItem, error) {
+	var items []ManualReviewItem
+	if err := r.db.WithContext(ctx).
+		Where("status = ?", "pending").
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&items).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return items, nil
+}
+
+func (r *PgManualReviewRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status string, reviewerNotes *string, reviewedBy *uuid.UUID) error {
+	updates := map[string]any{"status": status}
+	if reviewerNotes != nil {
+		updates["reviewer_notes"] = *reviewerNotes
+	}
+	if reviewedBy != nil {
+		updates["reviewed_by"] = *reviewedBy
+		now := time.Now()
+		updates["reviewed_at"] = now
+	}
+	if err := r.db.WithContext(ctx).Model(&ManualReviewItem{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+// ─── PgNcmecPendingReportRepository ─────────────────────────────────────────
+
+// PgNcmecPendingReportRepository implements NcmecPendingReportRepository using PostgreSQL/GORM. [11-safety §7.1, CRIT-1]
+type PgNcmecPendingReportRepository struct{ db *gorm.DB }
+
+func NewPgNcmecPendingReportRepository(db *gorm.DB) NcmecPendingReportRepository {
+	return &PgNcmecPendingReportRepository{db: db}
+}
+
+func (r *PgNcmecPendingReportRepository) Create(ctx context.Context, report *NcmecPendingReport) error {
+	if err := r.db.WithContext(ctx).Create(report).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgNcmecPendingReportRepository) FindQueued(ctx context.Context) ([]NcmecPendingReport, error) {
+	var reports []NcmecPendingReport
+	if err := r.db.WithContext(ctx).
+		Where("status = ?", "queued").
+		Order("created_at ASC").
+		Find(&reports).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return reports, nil
+}
+
+func (r *PgNcmecPendingReportRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error {
+	updates := map[string]any{"status": status}
+	if status == "filed" {
+		now := time.Now()
+		updates["filed_at"] = now
+	}
+	if err := r.db.WithContext(ctx).Model(&NcmecPendingReport{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+// ─── Phase 2: PgParentalControlRepository ────────────────────────────────────
+
+// PgParentalControlRepository implements ParentalControlRepository. [11-safety §14.3]
+type PgParentalControlRepository struct{ db *gorm.DB }
+
+func NewPgParentalControlRepository(db *gorm.DB) ParentalControlRepository {
+	return &PgParentalControlRepository{db: db}
+}
+
+func (r *PgParentalControlRepository) ListByFamily(_ context.Context, familyID uuid.UUID) ([]ParentalControl, error) {
+	var controls []ParentalControl
+	if err := r.db.Where("family_id = ?", familyID).Order("control_type ASC").Find(&controls).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return controls, nil
+}
+
+func (r *PgParentalControlRepository) Upsert(_ context.Context, control *ParentalControl) error {
+	if err := r.db.Save(control).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgParentalControlRepository) Delete(_ context.Context, familyID uuid.UUID, controlID uuid.UUID) error {
+	result := r.db.Where("id = ? AND family_id = ?", controlID, familyID).Delete(&ParentalControl{})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return &SafetyError{Err: ErrParentalControlNotFound}
+	}
+	return nil
+}
+
+// ─── Phase 2: PgAdminRoleRepository ──────────────────────────────────────────
+
+// PgAdminRoleRepository implements AdminRoleRepository. [11-safety §9.3]
+type PgAdminRoleRepository struct{ db *gorm.DB }
+
+func NewPgAdminRoleRepository(db *gorm.DB) AdminRoleRepository {
+	return &PgAdminRoleRepository{db: db}
+}
+
+func (r *PgAdminRoleRepository) List(_ context.Context) ([]AdminRole, error) {
+	var roles []AdminRole
+	if err := r.db.Order("name ASC").Find(&roles).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return roles, nil
+}
+
+func (r *PgAdminRoleRepository) FindByID(_ context.Context, roleID uuid.UUID) (*AdminRole, error) {
+	var role AdminRole
+	if err := r.db.Where("id = ?", roleID).First(&role).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &SafetyError{Err: ErrAdminRoleNotFound}
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return &role, nil
+}
+
+func (r *PgAdminRoleRepository) Create(_ context.Context, role *AdminRole) error {
+	if err := r.db.Create(role).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+// ─── Phase 2: PgAdminRoleAssignmentRepository ────────────────────────────────
+
+// PgAdminRoleAssignmentRepository implements AdminRoleAssignmentRepository. [11-safety §9.3]
+type PgAdminRoleAssignmentRepository struct{ db *gorm.DB }
+
+func NewPgAdminRoleAssignmentRepository(db *gorm.DB) AdminRoleAssignmentRepository {
+	return &PgAdminRoleAssignmentRepository{db: db}
+}
+
+func (r *PgAdminRoleAssignmentRepository) ListByRole(_ context.Context, roleID uuid.UUID) ([]AdminRoleAssignment, error) {
+	var assignments []AdminRoleAssignment
+	if err := r.db.Where("role_id = ?", roleID).Order("created_at ASC").Find(&assignments).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return assignments, nil
+}
+
+func (r *PgAdminRoleAssignmentRepository) ListByParent(_ context.Context, parentID uuid.UUID) ([]AdminRoleAssignment, error) {
+	var assignments []AdminRoleAssignment
+	if err := r.db.Where("parent_id = ?", parentID).Find(&assignments).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return assignments, nil
+}
+
+func (r *PgAdminRoleAssignmentRepository) Create(_ context.Context, assignment *AdminRoleAssignment) error {
+	if err := r.db.Create(assignment).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgAdminRoleAssignmentRepository) Delete(_ context.Context, roleID uuid.UUID, parentID uuid.UUID) error {
+	result := r.db.Where("role_id = ? AND parent_id = ?", roleID, parentID).Delete(&AdminRoleAssignment{})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	return nil
+}
+
+// ─── Phase 2: PgGroomingScoreRepository ──────────────────────────────────────
+
+// PgGroomingScoreRepository implements GroomingScoreRepository. [11-safety §14.2]
+type PgGroomingScoreRepository struct{ db *gorm.DB }
+
+func NewPgGroomingScoreRepository(db *gorm.DB) GroomingScoreRepository {
+	return &PgGroomingScoreRepository{db: db}
+}
+
+func (r *PgGroomingScoreRepository) Create(_ context.Context, score *GroomingScore) error {
+	if err := r.db.Create(score).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgGroomingScoreRepository) FindByID(_ context.Context, scoreID uuid.UUID) (*GroomingScore, error) {
+	var score GroomingScore
+	if err := r.db.Where("id = ?", scoreID).First(&score).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &SafetyError{Err: ErrGroomingScoreNotFound}
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return &score, nil
+}
+
+func (r *PgGroomingScoreRepository) ListFlagged(_ context.Context, pagination shared.PaginationParams) ([]GroomingScore, error) {
+	limit := pagination.EffectiveLimit()
+	q := r.db.Where("flagged = true").Order("created_at DESC, id DESC").Limit(limit + 1)
+	if pagination.Cursor != nil {
+		cursorID, cursorAt, err := shared.DecodeCursor(*pagination.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where("(created_at, id) < (?, ?)", cursorAt, cursorID)
+	}
+	var scores []GroomingScore
+	if err := q.Find(&scores).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return scores, nil
+}
+
+func (r *PgGroomingScoreRepository) MarkReviewed(_ context.Context, scoreID uuid.UUID, reviewedBy uuid.UUID) error {
+	now := time.Now()
+	result := r.db.Model(&GroomingScore{}).Where("id = ?", scoreID).Updates(map[string]any{
+		"reviewed":    true,
+		"reviewed_by": reviewedBy,
+		"reviewed_at": now,
+	})
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return &SafetyError{Err: ErrGroomingScoreNotFound}
+	}
+	return nil
 }

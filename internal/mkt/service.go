@@ -1028,6 +1028,18 @@ func (s *marketplaceServiceImpl) RequestPayout(ctx context.Context, creatorID uu
 // Event Handlers (cross-domain reactions) [07-mkt §18.4]
 // ═══════════════════════════════════════════════════════════════════════════════
 
+func (s *marketplaceServiceImpl) ArchiveListingByContentKey(ctx context.Context, contentKey, reason string) error {
+	file, err := s.listingFiles.FindByStorageKey(ctx, contentKey)
+	if err != nil {
+		return err
+	}
+	if file == nil {
+		slog.Warn("mkt: no listing file found for content key", "content_key", contentKey)
+		return nil
+	}
+	return s.HandleContentFlagged(ctx, file.ListingID, reason)
+}
+
 func (s *marketplaceServiceImpl) HandleContentFlagged(ctx context.Context, listingID uuid.UUID, reason string) error {
 	listing, err := s.listings.GetByID(ctx, listingID)
 	if err != nil {

@@ -177,11 +177,14 @@ func TestHandler_ErrorMapping(t *testing.T) {
 // Cycle 10: Suggestions Stub (#47)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func TestHandler_Suggestions_ReturnsEmptyList(t *testing.T) {
+func TestHandler_Suggestions_ValidQuery_200(t *testing.T) {
 	mockSvc := newMockSearchService()
+	mockSvc.autocompleteFn = func(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ *AutocompleteParams) (*AutocompleteResponse, error) {
+		return &AutocompleteResponse{Suggestions: []AutocompleteSuggestion{}}, nil
+	}
 	e, h := setupHandlerTest(mockSvc)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/search/suggestions", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/search/suggestions?q=test", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c)
@@ -193,6 +196,22 @@ func TestHandler_Suggestions_ReturnsEmptyList(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
 	}
+}
+
+func TestHandler_Suggestions_MissingQ_400(t *testing.T) {
+	mockSvc := newMockSearchService()
+	e, h := setupHandlerTest(mockSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/search/suggestions", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c)
+
+	err := h.suggestions(c)
+	if err == nil {
+		t.Fatal("expected error for missing q")
+	}
+	assertHTTPStatus(t, err, http.StatusBadRequest)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

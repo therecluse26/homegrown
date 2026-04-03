@@ -1423,3 +1423,434 @@ func (r *PgVideoProgressRepository) FindByStudentAndVideo(ctx context.Context, s
 	}
 	return &progress, nil
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Assessment Def Repository (Layer 1 — no FamilyScope)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type PgAssessmentDefRepository struct {
+	db *gorm.DB
+}
+
+func NewPgAssessmentDefRepository(db *gorm.DB) AssessmentDefRepository {
+	return &PgAssessmentDefRepository{db: db}
+}
+
+func (r *PgAssessmentDefRepository) Create(ctx context.Context, def *AssessmentDefModel) error {
+	if err := r.db.WithContext(ctx).Create(def).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgAssessmentDefRepository) FindByID(ctx context.Context, defID uuid.UUID) (*AssessmentDefModel, error) {
+	var def AssessmentDefModel
+	err := r.db.WithContext(ctx).Where("id = ? AND is_active = true", defID).First(&def).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &LearningError{Err: domain.ErrAssessmentDefNotFound}
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return &def, nil
+}
+
+func (r *PgAssessmentDefRepository) List(ctx context.Context, query *AssessmentDefQuery) ([]AssessmentDefModel, error) {
+	tx := r.db.WithContext(ctx).Where("is_active = true")
+
+	if query.Subject != nil {
+		tx = tx.Where("? = ANY(subject_tags)", *query.Subject)
+	}
+	if query.ScoringType != nil {
+		tx = tx.Where("scoring_type = ?", *query.ScoringType)
+	}
+	if query.PublisherID != nil {
+		tx = tx.Where("publisher_id = ?", *query.PublisherID)
+	}
+	if query.Search != nil {
+		tx = tx.Where("title ILIKE ?", "%"+*query.Search+"%")
+	}
+	if query.Cursor != nil {
+		tx = tx.Where("id > ?", *query.Cursor)
+	}
+
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	tx = tx.Order("id ASC").Limit(int(limit))
+
+	var defs []AssessmentDefModel
+	if err := tx.Find(&defs).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return defs, nil
+}
+
+func (r *PgAssessmentDefRepository) Update(ctx context.Context, def *AssessmentDefModel) error {
+	if err := r.db.WithContext(ctx).Save(def).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgAssessmentDefRepository) SoftDelete(ctx context.Context, defID uuid.UUID) error {
+	result := r.db.WithContext(ctx).Model(&AssessmentDefModel{}).Where("id = ?", defID).Update("is_active", false)
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return &LearningError{Err: domain.ErrAssessmentDefNotFound}
+	}
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Project Def Repository (Layer 1 — no FamilyScope)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type PgProjectDefRepository struct {
+	db *gorm.DB
+}
+
+func NewPgProjectDefRepository(db *gorm.DB) ProjectDefRepository {
+	return &PgProjectDefRepository{db: db}
+}
+
+func (r *PgProjectDefRepository) Create(ctx context.Context, def *ProjectDefModel) error {
+	if err := r.db.WithContext(ctx).Create(def).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgProjectDefRepository) FindByID(ctx context.Context, defID uuid.UUID) (*ProjectDefModel, error) {
+	var def ProjectDefModel
+	err := r.db.WithContext(ctx).Where("id = ? AND is_active = true", defID).First(&def).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &LearningError{Err: domain.ErrProjectDefNotFound}
+		}
+		return nil, shared.ErrDatabase(err)
+	}
+	return &def, nil
+}
+
+func (r *PgProjectDefRepository) List(ctx context.Context, query *ProjectDefQuery) ([]ProjectDefModel, error) {
+	tx := r.db.WithContext(ctx).Where("is_active = true")
+
+	if query.Subject != nil {
+		tx = tx.Where("? = ANY(subject_tags)", *query.Subject)
+	}
+	if query.PublisherID != nil {
+		tx = tx.Where("publisher_id = ?", *query.PublisherID)
+	}
+	if query.Search != nil {
+		tx = tx.Where("title ILIKE ?", "%"+*query.Search+"%")
+	}
+	if query.Cursor != nil {
+		tx = tx.Where("id > ?", *query.Cursor)
+	}
+
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	tx = tx.Order("id ASC").Limit(int(limit))
+
+	var defs []ProjectDefModel
+	if err := tx.Find(&defs).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return defs, nil
+}
+
+func (r *PgProjectDefRepository) Update(ctx context.Context, def *ProjectDefModel) error {
+	if err := r.db.WithContext(ctx).Save(def).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
+func (r *PgProjectDefRepository) SoftDelete(ctx context.Context, defID uuid.UUID) error {
+	result := r.db.WithContext(ctx).Model(&ProjectDefModel{}).Where("id = ?", defID).Update("is_active", false)
+	if result.Error != nil {
+		return shared.ErrDatabase(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return &LearningError{Err: domain.ErrProjectDefNotFound}
+	}
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Assessment Result Repository (Layer 3 — FamilyScope required)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type PgAssessmentResultRepository struct {
+	db *gorm.DB
+}
+
+func NewPgAssessmentResultRepository(db *gorm.DB) AssessmentResultRepository {
+	return &PgAssessmentResultRepository{db: db}
+}
+
+func (r *PgAssessmentResultRepository) Create(ctx context.Context, scope *shared.FamilyScope, result *AssessmentResultModel) error {
+	result.FamilyID = scope.FamilyID()
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Create(result).Error
+	})
+	if txErr != nil {
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+func (r *PgAssessmentResultRepository) FindByID(ctx context.Context, scope *shared.FamilyScope, resultID uuid.UUID) (*AssessmentResultModel, error) {
+	var result AssessmentResultModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Where("id = ?", resultID).First(&result).Error
+	})
+	if txErr != nil {
+		if errors.Is(txErr, gorm.ErrRecordNotFound) {
+			return nil, &LearningError{Err: domain.ErrAssessmentResultNotFound}
+		}
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return &result, nil
+}
+
+func (r *PgAssessmentResultRepository) ListByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query *AssessmentResultQuery) ([]AssessmentResultModel, error) {
+	var results []AssessmentResultModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		tx = tx.Where("student_id = ?", studentID)
+
+		if query.AssessmentDefID != nil {
+			tx = tx.Where("assessment_def_id = ?", *query.AssessmentDefID)
+		}
+		if query.DateFrom != nil {
+			tx = tx.Where("assessment_date >= ?", *query.DateFrom)
+		}
+		if query.DateTo != nil {
+			tx = tx.Where("assessment_date <= ?", *query.DateTo)
+		}
+		if query.Cursor != nil {
+			tx = tx.Where("id > ?", *query.Cursor)
+		}
+
+		limit := query.Limit
+		if limit <= 0 || limit > 100 {
+			limit = 25
+		}
+
+		return tx.Order("assessment_date DESC, id ASC").Limit(int(limit)).Find(&results).Error
+	})
+	if txErr != nil {
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return results, nil
+}
+
+func (r *PgAssessmentResultRepository) Update(ctx context.Context, scope *shared.FamilyScope, result *AssessmentResultModel) error {
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Save(result).Error
+	})
+	if txErr != nil {
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+func (r *PgAssessmentResultRepository) Delete(ctx context.Context, scope *shared.FamilyScope, resultID uuid.UUID) error {
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		result := tx.Where("id = ?", resultID).Delete(&AssessmentResultModel{})
+		if result.RowsAffected == 0 {
+			return domain.ErrAssessmentResultNotFound
+		}
+		return result.Error
+	})
+	if txErr != nil {
+		if errors.Is(txErr, domain.ErrAssessmentResultNotFound) {
+			return &LearningError{Err: domain.ErrAssessmentResultNotFound}
+		}
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Project Progress Repository (Layer 3 — FamilyScope required)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type PgProjectProgressRepository struct {
+	db *gorm.DB
+}
+
+func NewPgProjectProgressRepository(db *gorm.DB) ProjectProgressRepository {
+	return &PgProjectProgressRepository{db: db}
+}
+
+func (r *PgProjectProgressRepository) Create(ctx context.Context, scope *shared.FamilyScope, progress *ProjectProgressModel) error {
+	progress.FamilyID = scope.FamilyID()
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Create(progress).Error
+	})
+	if txErr != nil {
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+func (r *PgProjectProgressRepository) FindByID(ctx context.Context, scope *shared.FamilyScope, progressID uuid.UUID) (*ProjectProgressModel, error) {
+	var progress ProjectProgressModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Where("id = ?", progressID).First(&progress).Error
+	})
+	if txErr != nil {
+		if errors.Is(txErr, gorm.ErrRecordNotFound) {
+			return nil, &LearningError{Err: domain.ErrProjectProgressNotFound}
+		}
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return &progress, nil
+}
+
+func (r *PgProjectProgressRepository) ListByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query *ProjectProgressQuery) ([]ProjectProgressModel, error) {
+	var results []ProjectProgressModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		tx = tx.Where("student_id = ?", studentID)
+
+		if query.Status != nil {
+			tx = tx.Where("status = ?", *query.Status)
+		}
+		if query.ProjectDefID != nil {
+			tx = tx.Where("project_def_id = ?", *query.ProjectDefID)
+		}
+		if query.Cursor != nil {
+			tx = tx.Where("id > ?", *query.Cursor)
+		}
+
+		limit := query.Limit
+		if limit <= 0 || limit > 100 {
+			limit = 25
+		}
+
+		return tx.Order("created_at DESC, id ASC").Limit(int(limit)).Find(&results).Error
+	})
+	if txErr != nil {
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return results, nil
+}
+
+func (r *PgProjectProgressRepository) Update(ctx context.Context, scope *shared.FamilyScope, progress *ProjectProgressModel) error {
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Save(progress).Error
+	})
+	if txErr != nil {
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+func (r *PgProjectProgressRepository) Delete(ctx context.Context, scope *shared.FamilyScope, progressID uuid.UUID) error {
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		result := tx.Where("id = ?", progressID).Delete(&ProjectProgressModel{})
+		if result.RowsAffected == 0 {
+			return domain.ErrProjectProgressNotFound
+		}
+		return result.Error
+	})
+	if txErr != nil {
+		if errors.Is(txErr, domain.ErrProjectProgressNotFound) {
+			return &LearningError{Err: domain.ErrProjectProgressNotFound}
+		}
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Grading Scale Repository (Layer 3 — FamilyScope required)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type PgGradingScaleRepository struct {
+	db *gorm.DB
+}
+
+func NewPgGradingScaleRepository(db *gorm.DB) GradingScaleRepository {
+	return &PgGradingScaleRepository{db: db}
+}
+
+func (r *PgGradingScaleRepository) Create(ctx context.Context, scope *shared.FamilyScope, scale *GradingScaleModel) error {
+	scale.FamilyID = scope.FamilyID()
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Create(scale).Error
+	})
+	if txErr != nil {
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+func (r *PgGradingScaleRepository) FindByID(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) (*GradingScaleModel, error) {
+	var scale GradingScaleModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Where("id = ?", scaleID).First(&scale).Error
+	})
+	if txErr != nil {
+		if errors.Is(txErr, gorm.ErrRecordNotFound) {
+			return nil, &LearningError{Err: domain.ErrGradingScaleNotFound}
+		}
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return &scale, nil
+}
+
+func (r *PgGradingScaleRepository) ListByFamily(ctx context.Context, scope *shared.FamilyScope) ([]GradingScaleModel, error) {
+	var scales []GradingScaleModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Order("is_default DESC, name ASC").Find(&scales).Error
+	})
+	if txErr != nil {
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return scales, nil
+}
+
+func (r *PgGradingScaleRepository) Update(ctx context.Context, scope *shared.FamilyScope, scale *GradingScaleModel) error {
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Save(scale).Error
+	})
+	if txErr != nil {
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+func (r *PgGradingScaleRepository) Delete(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) error {
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		result := tx.Where("id = ?", scaleID).Delete(&GradingScaleModel{})
+		if result.RowsAffected == 0 {
+			return domain.ErrGradingScaleNotFound
+		}
+		return result.Error
+	})
+	if txErr != nil {
+		if errors.Is(txErr, domain.ErrGradingScaleNotFound) {
+			return &LearningError{Err: domain.ErrGradingScaleNotFound}
+		}
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}
+
+func (r *PgGradingScaleRepository) ClearDefault(ctx context.Context, scope *shared.FamilyScope) error {
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Model(&GradingScaleModel{}).Where("is_default = true").Update("is_default", false).Error
+	})
+	if txErr != nil {
+		return shared.ErrDatabase(txErr)
+	}
+	return nil
+}

@@ -10,10 +10,11 @@ import (
 // The adapter pattern allows social:: to consume iam:: without importing the iam package
 // directly, avoiding circular dependencies. Wired in cmd/server/main.go. [ARCH §4.2]
 type iamAdapter struct {
-	getFamilyDisplayName func(ctx context.Context, familyID uuid.UUID) (string, error)
-	getParentDisplayName func(ctx context.Context, parentID uuid.UUID) (string, error)
-	getFamilyInfo        func(ctx context.Context, familyID uuid.UUID) (*SocialFamilyInfo, error)
-	getParentInfo        func(ctx context.Context, parentID uuid.UUID) (*SocialParentInfo, error)
+	getFamilyDisplayName     func(ctx context.Context, familyID uuid.UUID) (string, error)
+	getParentDisplayName     func(ctx context.Context, parentID uuid.UUID) (string, error)
+	getFamilyInfo            func(ctx context.Context, familyID uuid.UUID) (*SocialFamilyInfo, error)
+	getParentInfo            func(ctx context.Context, parentID uuid.UUID) (*SocialParentInfo, error)
+	discoverFamiliesByRegion func(ctx context.Context, requesterFamilyID uuid.UUID, methodologySlug *string, limit int) ([]DiscoverableFamilyResponse, error)
 }
 
 func (a *iamAdapter) GetFamilyDisplayName(ctx context.Context, familyID uuid.UUID) (string, error) {
@@ -32,17 +33,23 @@ func (a *iamAdapter) GetParentInfo(ctx context.Context, parentID uuid.UUID) (*So
 	return a.getParentInfo(ctx, parentID)
 }
 
+func (a *iamAdapter) DiscoverFamiliesByRegion(ctx context.Context, requesterFamilyID uuid.UUID, methodologySlug *string, limit int) ([]DiscoverableFamilyResponse, error) {
+	return a.discoverFamiliesByRegion(ctx, requesterFamilyID, methodologySlug, limit)
+}
+
 // NewIamAdapter creates an IamServiceForSocial adapter from raw functions.
 func NewIamAdapter(
 	getFamilyDisplayName func(ctx context.Context, familyID uuid.UUID) (string, error),
 	getParentDisplayName func(ctx context.Context, parentID uuid.UUID) (string, error),
 	getFamilyInfo func(ctx context.Context, familyID uuid.UUID) (*SocialFamilyInfo, error),
 	getParentInfo func(ctx context.Context, parentID uuid.UUID) (*SocialParentInfo, error),
+	discoverFamiliesByRegion func(ctx context.Context, requesterFamilyID uuid.UUID, methodologySlug *string, limit int) ([]DiscoverableFamilyResponse, error),
 ) IamServiceForSocial {
 	return &iamAdapter{
-		getFamilyDisplayName: getFamilyDisplayName,
-		getParentDisplayName: getParentDisplayName,
-		getFamilyInfo:        getFamilyInfo,
-		getParentInfo:        getParentInfo,
+		getFamilyDisplayName:     getFamilyDisplayName,
+		getParentDisplayName:     getParentDisplayName,
+		getFamilyInfo:            getFamilyInfo,
+		getParentInfo:            getParentInfo,
+		discoverFamiliesByRegion: discoverFamiliesByRegion,
 	}
 }

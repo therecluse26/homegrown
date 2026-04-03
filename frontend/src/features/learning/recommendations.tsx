@@ -21,10 +21,14 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
   const [lastDismissedId, setLastDismissedId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  const recType = rec.recommendation_type ?? "marketplace_content";
+  const label = rec.target_entity_label ?? "";
+  const sourceLabel = rec.source_label ?? "";
+
   async function handleDismiss() {
     setDismissed(true);
-    setLastDismissedId(rec.id);
-    await dismiss.mutateAsync(rec.id);
+    setLastDismissedId(rec.id ?? "");
+    await dismiss.mutateAsync(rec.id ?? "");
   }
 
   async function handleUndo() {
@@ -36,7 +40,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
 
   async function handleBlockCategory() {
     setMenuOpen(false);
-    await blockCategory.mutateAsync(rec.category);
+    await blockCategory.mutateAsync(recType);
   }
 
   if (dismissed) {
@@ -62,9 +66,9 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="type-label-sm text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded-radius-sm">
-            {rec.category}
+            {recType}
           </span>
-          {rec.ai_generated && (
+          {rec.is_suggestion && (
             <Badge variant="secondary">
               <Icon icon={Sparkles} size="xs" aria-hidden className="mr-0.5" />
               <FormattedMessage id="recommendations.card.aiBadge" />
@@ -99,7 +103,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
                 >
                   <FormattedMessage
                     id="recommendations.card.blockCategory"
-                    values={{ category: rec.category }}
+                    values={{ category: recType }}
                   />
                 </button>
               </div>
@@ -113,7 +117,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
             disabled={dismiss.isPending}
             aria-label={intl.formatMessage(
               { id: "recommendations.card.dismiss.label" },
-              { title: rec.title },
+              { title: label },
             )}
             className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
           >
@@ -124,22 +128,11 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
 
       {/* Title */}
       <div>
-        {rec.link ? (
-          <a
-            href={rec.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="type-title-sm text-on-surface font-semibold hover:text-primary focus:outline-none focus:underline"
-          >
-            {rec.title}
-          </a>
-        ) : (
-          <p className="type-title-sm text-on-surface font-semibold">
-            {rec.title}
-          </p>
-        )}
+        <p className="type-title-sm text-on-surface font-semibold">
+          {label}
+        </p>
         <p className="type-body-sm text-on-surface-variant mt-0.5 line-clamp-2">
-          {rec.description}
+          {sourceLabel}
         </p>
       </div>
 
@@ -160,7 +153,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
         </button>
         {reasonExpanded && (
           <p className="mt-1.5 type-body-sm text-on-surface-variant italic">
-            {rec.reason}
+            {rec.source_signal}
           </p>
         )}
       </div>

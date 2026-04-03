@@ -38,6 +38,9 @@ const (
 	TypeCoParentAdded           = "co_parent_added"
 	TypeFamilyDeletionScheduled = "family_deletion_scheduled"
 
+	// Recommendations
+	TypeRecommendationsReady = "recommendations_ready"
+
 	// Billing (Phase 2)
 	TypeSubscriptionCreated   = "subscription_created"
 	TypeSubscriptionChanged   = "subscription_changed"
@@ -103,6 +106,7 @@ var ValidNotificationTypes = map[string]bool{
 	TypeSubscriptionChanged:   true,
 	TypeSubscriptionCancelled: true,
 	TypePayoutCompleted:       true,
+	TypeRecommendationsReady: true,
 }
 
 // ValidCategories is the set of valid notification categories.
@@ -149,6 +153,7 @@ var TypeToCategory = map[string]string{
 	TypeSubscriptionChanged:     CategorySystem,
 	TypeSubscriptionCancelled:   CategorySystem,
 	TypePayoutCompleted:         CategoryMarketplace,
+	TypeRecommendationsReady:    CategoryLearning,
 }
 
 // TypeToTitleTemplate maps notification types to their title template string. [08-notify §9]
@@ -173,6 +178,7 @@ var TypeToTitleTemplate = map[string]string{
 	TypeSubscriptionChanged:     "Your subscription has been updated",
 	TypeSubscriptionCancelled:   "Your subscription has ended",
 	TypePayoutCompleted:         "Your payout of {amount} has been sent",
+	TypeRecommendationsReady:    "New recommendations are ready for you",
 }
 
 // TypeToTemplateAlias maps notification types to Postmark email template aliases. [08-notify §12]

@@ -106,6 +106,59 @@ func (m *VideoDefModel) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
+// AssessmentDefModel is the GORM model for learn_assessment_defs. [S§8.1.2]
+type AssessmentDefModel struct {
+	ID          uuid.UUID   `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	PublisherID uuid.UUID   `gorm:"type:uuid;not null"`
+	Title       string      `gorm:"not null"`
+	Description *string     `gorm:""`
+	SubjectTags StringArray `gorm:"type:text[];not null;default:'{}'"`
+	ScoringType string      `gorm:"not null;default:'percentage'"`
+	MaxScore    *float64    `gorm:"type:numeric"`
+	IsActive    bool        `gorm:"not null;default:true"`
+	CreatedAt   time.Time   `gorm:"not null;default:now()"`
+	UpdatedAt   time.Time   `gorm:"not null;default:now()"`
+}
+
+func (AssessmentDefModel) TableName() string { return "learn_assessment_defs" }
+
+func (m *AssessmentDefModel) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
+// ProjectDefModel is the GORM model for learn_project_defs. [S§8.1.5]
+type ProjectDefModel struct {
+	ID                 uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	PublisherID        uuid.UUID       `gorm:"type:uuid;not null"`
+	Title              string          `gorm:"not null"`
+	Description        *string         `gorm:""`
+	SubjectTags        StringArray     `gorm:"type:text[];not null;default:'{}'"`
+	MilestoneTemplates json.RawMessage `gorm:"type:jsonb;not null;default:'[]'"`
+	IsActive           bool            `gorm:"not null;default:true"`
+	CreatedAt          time.Time       `gorm:"not null;default:now()"`
+	UpdatedAt          time.Time       `gorm:"not null;default:now()"`
+}
+
+func (ProjectDefModel) TableName() string { return "learn_project_defs" }
+
+func (m *ProjectDefModel) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
 // QuestionModel is the GORM model for learn_questions. [S§8.1.9]
 type QuestionModel struct {
 	ID               uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
@@ -484,6 +537,88 @@ type StudentAssignmentModel struct {
 func (StudentAssignmentModel) TableName() string { return "learn_student_assignments" }
 
 func (m *StudentAssignmentModel) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
+// AssessmentResultModel is the GORM model for learn_assessment_results. [S§8.1.2]
+type AssessmentResultModel struct {
+	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	FamilyID        uuid.UUID `gorm:"type:uuid;not null"`
+	StudentID       uuid.UUID `gorm:"type:uuid;not null"`
+	AssessmentDefID uuid.UUID `gorm:"type:uuid;not null"`
+	Score           float64   `gorm:"type:numeric;not null"`
+	MaxScore        *float64  `gorm:"type:numeric"`
+	Weight          float64   `gorm:"type:numeric;not null;default:1.0"`
+	Notes           *string   `gorm:""`
+	AssessmentDate  time.Time `gorm:"type:date;not null;default:CURRENT_DATE"`
+	CreatedAt       time.Time `gorm:"not null;default:now()"`
+	UpdatedAt       time.Time `gorm:"not null;default:now()"`
+}
+
+func (AssessmentResultModel) TableName() string { return "learn_assessment_results" }
+
+func (m *AssessmentResultModel) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
+// ProjectProgressModel is the GORM model for learn_project_progress. [S§8.1.5]
+type ProjectProgressModel struct {
+	ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	FamilyID     uuid.UUID       `gorm:"type:uuid;not null"`
+	StudentID    uuid.UUID       `gorm:"type:uuid;not null"`
+	ProjectDefID uuid.UUID       `gorm:"type:uuid;not null"`
+	Status       string          `gorm:"not null;default:'planning'"`
+	Milestones   json.RawMessage `gorm:"type:jsonb;not null;default:'[]'"`
+	StartedAt    *time.Time      `gorm:""`
+	CompletedAt  *time.Time      `gorm:""`
+	Notes        *string         `gorm:""`
+	Attachments  json.RawMessage `gorm:"type:jsonb;not null;default:'[]'"`
+	CreatedAt    time.Time       `gorm:"not null;default:now()"`
+	UpdatedAt    time.Time       `gorm:"not null;default:now()"`
+}
+
+func (ProjectProgressModel) TableName() string { return "learn_project_progress" }
+
+func (m *ProjectProgressModel) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
+// GradingScaleModel is the GORM model for learn_grading_scales. [S§8.1.2]
+type GradingScaleModel struct {
+	ID        uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	FamilyID  uuid.UUID       `gorm:"type:uuid;not null"`
+	Name      string          `gorm:"not null"`
+	ScaleType string          `gorm:"not null"`
+	Grades    json.RawMessage `gorm:"type:jsonb;not null"`
+	IsDefault bool            `gorm:"not null;default:false"`
+	CreatedAt time.Time       `gorm:"not null;default:now()"`
+	UpdatedAt time.Time       `gorm:"not null;default:now()"`
+}
+
+func (GradingScaleModel) TableName() string { return "learn_grading_scales" }
+
+func (m *GradingScaleModel) BeforeCreate(_ *gorm.DB) error {
 	if m.ID == uuid.Nil {
 		id, err := uuid.NewV7()
 		if err != nil {
@@ -959,6 +1094,142 @@ type UpdateVideoProgressCommand struct {
 	Completed           *bool     `json:"completed,omitempty"`
 }
 
+// --- Assessment Def Commands (Phase 2) ----------------------------------------
+
+// CreateAssessmentDefCommand creates an assessment definition.
+type CreateAssessmentDefCommand struct {
+	PublisherID uuid.UUID `json:"publisher_id" validate:"required"`
+	Title       string    `json:"title" validate:"required,min=1,max=500"`
+	Description *string   `json:"description,omitempty"`
+	SubjectTags []string  `json:"subject_tags"`
+	ScoringType string    `json:"scoring_type" validate:"required,oneof=percentage letter points pass_fail"`
+	MaxScore    *float64  `json:"max_score,omitempty"`
+	CallerID    uuid.UUID `json:"-"`
+}
+
+// UpdateAssessmentDefCommand updates an assessment definition.
+type UpdateAssessmentDefCommand struct {
+	Title       *string  `json:"title,omitempty" validate:"omitempty,min=1,max=500"`
+	Description *string  `json:"description,omitempty"`
+	SubjectTags []string `json:"subject_tags,omitempty"`
+	ScoringType *string  `json:"scoring_type,omitempty" validate:"omitempty,oneof=percentage letter points pass_fail"`
+	MaxScore    *float64 `json:"max_score,omitempty"`
+	CallerID    uuid.UUID `json:"-"`
+}
+
+// --- Project Def Commands (Phase 2) -------------------------------------------
+
+// CreateProjectDefCommand creates a project definition.
+type CreateProjectDefCommand struct {
+	PublisherID        uuid.UUID       `json:"publisher_id" validate:"required"`
+	Title              string          `json:"title" validate:"required,min=1,max=500"`
+	Description        *string         `json:"description,omitempty"`
+	SubjectTags        []string        `json:"subject_tags"`
+	MilestoneTemplates json.RawMessage `json:"milestone_templates"`
+	CallerID           uuid.UUID       `json:"-"`
+}
+
+// UpdateProjectDefCommand updates a project definition.
+type UpdateProjectDefCommand struct {
+	Title              *string         `json:"title,omitempty" validate:"omitempty,min=1,max=500"`
+	Description        *string         `json:"description,omitempty"`
+	SubjectTags        []string        `json:"subject_tags,omitempty"`
+	MilestoneTemplates json.RawMessage `json:"milestone_templates,omitempty"`
+	CallerID           uuid.UUID       `json:"-"`
+}
+
+// --- Assessment Result Commands (Phase 2) -------------------------------------
+
+// RecordAssessmentResultCommand records an assessment result for a student.
+type RecordAssessmentResultCommand struct {
+	AssessmentDefID uuid.UUID `json:"assessment_def_id" validate:"required"`
+	Score           float64   `json:"score" validate:"required"`
+	MaxScore        *float64  `json:"max_score,omitempty"`
+	Weight          *float64  `json:"weight,omitempty"`
+	Notes           *string   `json:"notes,omitempty"`
+	AssessmentDate  *string   `json:"assessment_date,omitempty"` // YYYY-MM-DD
+}
+
+// UpdateAssessmentResultCommand updates an assessment result.
+type UpdateAssessmentResultCommand struct {
+	Score          *float64 `json:"score,omitempty"`
+	MaxScore       *float64 `json:"max_score,omitempty"`
+	Weight         *float64 `json:"weight,omitempty"`
+	Notes          *string  `json:"notes,omitempty"`
+	AssessmentDate *string  `json:"assessment_date,omitempty"` // YYYY-MM-DD
+}
+
+// --- Project Progress Commands (Phase 2) --------------------------------------
+
+// StartProjectCommand starts a project for a student.
+type StartProjectCommand struct {
+	ProjectDefID uuid.UUID `json:"project_def_id" validate:"required"`
+	Notes        *string   `json:"notes,omitempty"`
+}
+
+// UpdateProjectProgressCommand updates project progress.
+type UpdateProjectProgressCommand struct {
+	Status      *string         `json:"status,omitempty" validate:"omitempty,oneof=planning in_progress completed"`
+	Milestones  json.RawMessage `json:"milestones,omitempty"`
+	Notes       *string         `json:"notes,omitempty"`
+	Attachments json.RawMessage `json:"attachments,omitempty"`
+}
+
+// --- Grading Scale Commands (Phase 2) -----------------------------------------
+
+// CreateGradingScaleCommand creates a grading scale.
+type CreateGradingScaleCommand struct {
+	Name      string          `json:"name" validate:"required,min=1,max=200"`
+	ScaleType string          `json:"scale_type" validate:"required,oneof=letter pass_fail custom"`
+	Grades    json.RawMessage `json:"grades" validate:"required"`
+	IsDefault bool            `json:"is_default"`
+}
+
+// UpdateGradingScaleCommand updates a grading scale.
+type UpdateGradingScaleCommand struct {
+	Name      *string         `json:"name,omitempty" validate:"omitempty,min=1,max=200"`
+	Grades    json.RawMessage `json:"grades,omitempty"`
+	IsDefault *bool           `json:"is_default,omitempty"`
+}
+
+// --- Phase 2 Query Types ------------------------------------------------------
+
+// AssessmentDefQuery contains query parameters for assessment definitions.
+type AssessmentDefQuery struct {
+	Subject     *string
+	ScoringType *string
+	PublisherID *uuid.UUID
+	Search      *string
+	Cursor      *uuid.UUID
+	Limit       int64
+}
+
+// ProjectDefQuery contains query parameters for project definitions.
+type ProjectDefQuery struct {
+	Subject     *string
+	PublisherID *uuid.UUID
+	Search      *string
+	Cursor      *uuid.UUID
+	Limit       int64
+}
+
+// AssessmentResultQuery contains query parameters for assessment results.
+type AssessmentResultQuery struct {
+	AssessmentDefID *uuid.UUID
+	DateFrom        *time.Time
+	DateTo          *time.Time
+	Cursor          *uuid.UUID
+	Limit           int64
+}
+
+// ProjectProgressQuery contains query parameters for project progress.
+type ProjectProgressQuery struct {
+	Status       *string
+	ProjectDefID *uuid.UUID
+	Cursor       *uuid.UUID
+	Limit        int64
+}
+
 // --- Shared Input Types -----------------------------------------------------
 
 // AttachmentInput is a shared attachment input type.
@@ -1197,6 +1468,47 @@ type AssignmentResponse struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
+// AssessmentDefResponse is the assessment definition response. [S§8.1.2]
+type AssessmentDefResponse struct {
+	ID          uuid.UUID `json:"id"`
+	PublisherID uuid.UUID `json:"publisher_id"`
+	Title       string    `json:"title"`
+	Description *string   `json:"description,omitempty"`
+	SubjectTags []string  `json:"subject_tags"`
+	ScoringType string    `json:"scoring_type"`
+	MaxScore    *float64  `json:"max_score,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// AssessmentDefSummaryResponse is the assessment definition summary.
+type AssessmentDefSummaryResponse struct {
+	ID          uuid.UUID `json:"id"`
+	Title       string    `json:"title"`
+	SubjectTags []string  `json:"subject_tags"`
+	ScoringType string    `json:"scoring_type"`
+	MaxScore    *float64  `json:"max_score,omitempty"`
+}
+
+// ProjectDefResponse is the project definition response. [S§8.1.5]
+type ProjectDefResponse struct {
+	ID                 uuid.UUID       `json:"id"`
+	PublisherID        uuid.UUID       `json:"publisher_id"`
+	Title              string          `json:"title"`
+	Description        *string         `json:"description,omitempty"`
+	SubjectTags        []string        `json:"subject_tags"`
+	MilestoneTemplates json.RawMessage `json:"milestone_templates"`
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+}
+
+// ProjectDefSummaryResponse is the project definition summary.
+type ProjectDefSummaryResponse struct {
+	ID          uuid.UUID `json:"id"`
+	Title       string    `json:"title"`
+	SubjectTags []string  `json:"subject_tags"`
+}
+
 // --- Cross-Domain Summary Types -----------------------------------------------
 
 // PortfolioItemSummary is a minimal summary of a learn domain entity,
@@ -1328,6 +1640,43 @@ type TimelineEntryResponse struct {
 	SubjectTags []string  `json:"subject_tags"`
 	Date        time.Time `json:"date"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// AssessmentResultResponse is the assessment result response. [S§8.1.2]
+type AssessmentResultResponse struct {
+	ID              uuid.UUID `json:"id"`
+	StudentID       uuid.UUID `json:"student_id"`
+	AssessmentDefID uuid.UUID `json:"assessment_def_id"`
+	Score           float64   `json:"score"`
+	MaxScore        *float64  `json:"max_score,omitempty"`
+	Weight          float64   `json:"weight"`
+	Notes           *string   `json:"notes,omitempty"`
+	AssessmentDate  time.Time `json:"assessment_date"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// ProjectProgressResponse is the project progress response. [S§8.1.5]
+type ProjectProgressResponse struct {
+	ID           uuid.UUID       `json:"id"`
+	StudentID    uuid.UUID       `json:"student_id"`
+	ProjectDefID uuid.UUID       `json:"project_def_id"`
+	Status       string          `json:"status"`
+	Milestones   json.RawMessage `json:"milestones"`
+	StartedAt    *time.Time      `json:"started_at,omitempty"`
+	CompletedAt  *time.Time      `json:"completed_at,omitempty"`
+	Notes        *string         `json:"notes,omitempty"`
+	Attachments  json.RawMessage `json:"attachments"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
+// GradingScaleResponse is the grading scale response. [S§8.1.2]
+type GradingScaleResponse struct {
+	ID        uuid.UUID       `json:"id"`
+	Name      string          `json:"name"`
+	ScaleType string          `json:"scale_type"`
+	Grades    json.RawMessage `json:"grades"`
+	IsDefault bool            `json:"is_default"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 // SubjectTaxonomyResponse is a subject taxonomy node. [S§8.3]

@@ -78,7 +78,7 @@ function SocialResult({ result }: { result: SearchResult }) {
             <div>
               <p className="type-title-sm text-on-surface">{result.event.title}</p>
               <span className="type-label-sm text-on-surface-variant">
-                {new Date(result.event.event_date).toLocaleDateString()}
+                {new Date(result.event.event_date ?? "").toLocaleDateString()}
               </span>
             </div>
           </div>
@@ -94,10 +94,11 @@ function MarketplaceResult({ result }: { result: SearchResult }) {
   const intl = useIntl();
   if (!result.listing) return null;
   const listing = result.listing;
+  const priceCents = listing.price_cents ?? 0;
   const price =
-    listing.price_cents === 0
+    priceCents === 0
       ? intl.formatMessage({ id: "price.free" })
-      : intl.formatNumber(listing.price_cents / 100, {
+      : intl.formatNumber(priceCents / 100, {
           style: "currency",
           currency: "USD",
         });
@@ -114,7 +115,7 @@ function MarketplaceResult({ result }: { result: SearchResult }) {
             </p>
             <div className="flex items-center gap-3 mt-2">
               <span className="type-title-sm text-primary">{price}</span>
-              {listing.rating_count > 0 && (
+              {(listing.rating_count ?? 0) > 0 && (
                 <span className="type-label-sm text-on-surface-variant flex items-center gap-1">
                   <Icon icon={Star} size="xs" className="text-warning" />
                   {listing.rating_avg?.toFixed(1)}
@@ -125,8 +126,8 @@ function MarketplaceResult({ result }: { result: SearchResult }) {
               </span>
               <Badge variant="secondary">
                 {intl.formatMessage({
-                  id: `marketplace.contentType.${listing.content_type}`,
-                  defaultMessage: listing.content_type.replace("_", " "),
+                  id: `marketplace.contentType.${listing.content_type ?? "unknown"}`,
+                  defaultMessage: (listing.content_type ?? "").replace("_", " "),
                 })}
               </Badge>
             </div>
@@ -151,8 +152,8 @@ function LearningResult({ result }: { result: SearchResult }) {
           <div className="flex items-center gap-2 mt-0.5">
             <Badge variant="secondary">
               {intl.formatMessage({
-                id: `search.resultType.${result.type}`,
-                defaultMessage: result.type.replace("_", " "),
+                id: `search.resultType.${result.type ?? "unknown"}`,
+                defaultMessage: (result.type ?? "").replace("_", " "),
               })}
             </Badge>
             <span className="type-label-sm text-on-surface-variant">
@@ -274,7 +275,7 @@ export function SearchResults() {
               />
             </p>
 
-            {data.results.length === 0 && (
+            {(data.results ?? []).length === 0 && (
               <EmptyState
                 illustration={<Icon icon={Search} size="xl" />}
                 message={intl.formatMessage({
@@ -287,7 +288,7 @@ export function SearchResults() {
             )}
 
             <div className="space-y-3">
-              {data.results.map((result, i) => (
+              {(data.results ?? []).map((result, i) => (
                 <ResultItem key={i} result={result} scope={scope} />
               ))}
             </div>

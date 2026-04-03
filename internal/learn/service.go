@@ -34,6 +34,11 @@ type learningServiceImpl struct {
 	assignmentRepo      AssignmentRepository
 	videoDefRepo        VideoDefRepository
 	videoProgressRepo   VideoProgressRepository
+	assessmentDefRepo   AssessmentDefRepository
+	projectDefRepo      ProjectDefRepository
+	assessmentResultRepo AssessmentResultRepository
+	projectProgressRepo ProjectProgressRepository
+	gradingScaleRepo    GradingScaleRepository
 	iam                 IamServiceForLearn
 	method              MethodServiceForLearn
 	mkt                 MktServiceForLearn
@@ -61,6 +66,11 @@ func NewLearningService(
 	assignmentRepo AssignmentRepository,
 	videoDefRepo VideoDefRepository,
 	videoProgressRepo VideoProgressRepository,
+	assessmentDefRepo AssessmentDefRepository,
+	projectDefRepo ProjectDefRepository,
+	assessmentResultRepo AssessmentResultRepository,
+	projectProgressRepo ProjectProgressRepository,
+	gradingScaleRepo GradingScaleRepository,
 	iam IamServiceForLearn,
 	method MethodServiceForLearn,
 	mkt MktServiceForLearn,
@@ -84,9 +94,14 @@ func NewLearningService(
 		sequenceDefRepo:      sequenceDefRepo,
 		sequenceProgressRepo: sequenceProgressRepo,
 		assignmentRepo:       assignmentRepo,
-		videoDefRepo:         videoDefRepo,
-		videoProgressRepo:    videoProgressRepo,
-		iam:                  iam,
+		videoDefRepo:          videoDefRepo,
+		videoProgressRepo:     videoProgressRepo,
+		assessmentDefRepo:     assessmentDefRepo,
+		projectDefRepo:        projectDefRepo,
+		assessmentResultRepo:  assessmentResultRepo,
+		projectProgressRepo:   projectProgressRepo,
+		gradingScaleRepo:      gradingScaleRepo,
+		iam:                   iam,
 		method:               method,
 		mkt:                  mkt,
 		eventBus:             eventBus,
@@ -2647,4 +2662,649 @@ func (s *learningServiceImpl) SnapshotProgress(ctx context.Context) error {
 		}
 	}
 	return lastErr
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Assessment Definitions (Layer 1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func (s *learningServiceImpl) CreateAssessmentDef(ctx context.Context, cmd CreateAssessmentDefCommand) (AssessmentDefResponse, error) {
+	ok, err := s.mkt.IsPublisherMember(ctx, cmd.CallerID, cmd.PublisherID)
+	if err != nil {
+		return AssessmentDefResponse{}, err
+	}
+	if !ok {
+		return AssessmentDefResponse{}, &LearningError{Err: domain.ErrNotPublisherMember}
+	}
+
+	model := &AssessmentDefModel{
+		PublisherID:  cmd.PublisherID,
+		Title:        cmd.Title,
+		Description:  cmd.Description,
+		SubjectTags:  StringArray(cmd.SubjectTags),
+		ScoringType:  cmd.ScoringType,
+		MaxScore:     cmd.MaxScore,
+	}
+	if err := s.assessmentDefRepo.Create(ctx, model); err != nil {
+		return AssessmentDefResponse{}, err
+	}
+	return toAssessmentDefResponse(model), nil
+}
+
+func (s *learningServiceImpl) UpdateAssessmentDef(ctx context.Context, defID uuid.UUID, cmd UpdateAssessmentDefCommand) (AssessmentDefResponse, error) {
+	model, err := s.assessmentDefRepo.FindByID(ctx, defID)
+	if err != nil {
+		return AssessmentDefResponse{}, err
+	}
+	ok, err := s.mkt.IsPublisherMember(ctx, cmd.CallerID, model.PublisherID)
+	if err != nil {
+		return AssessmentDefResponse{}, err
+	}
+	if !ok {
+		return AssessmentDefResponse{}, &LearningError{Err: domain.ErrNotPublisherMember}
+	}
+
+	if cmd.Title != nil {
+		model.Title = *cmd.Title
+	}
+	if cmd.Description != nil {
+		model.Description = cmd.Description
+	}
+	if cmd.SubjectTags != nil {
+		model.SubjectTags = StringArray(cmd.SubjectTags)
+	}
+	if cmd.ScoringType != nil {
+		model.ScoringType = *cmd.ScoringType
+	}
+	if cmd.MaxScore != nil {
+		model.MaxScore = cmd.MaxScore
+	}
+
+	if err := s.assessmentDefRepo.Update(ctx, model); err != nil {
+		return AssessmentDefResponse{}, err
+	}
+	return toAssessmentDefResponse(model), nil
+}
+
+func (s *learningServiceImpl) DeleteAssessmentDef(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error {
+	model, err := s.assessmentDefRepo.FindByID(ctx, defID)
+	if err != nil {
+		return err
+	}
+	ok, err := s.mkt.IsPublisherMember(ctx, callerID, model.PublisherID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return &LearningError{Err: domain.ErrNotPublisherMember}
+	}
+	return s.assessmentDefRepo.SoftDelete(ctx, defID)
+}
+
+func (s *learningServiceImpl) ListAssessmentDefs(ctx context.Context, query AssessmentDefQuery) (PaginatedResponse[AssessmentDefSummaryResponse], error) {
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	query.Limit = limit + 1 // fetch one extra for hasMore
+
+	models, err := s.assessmentDefRepo.List(ctx, &query)
+	if err != nil {
+		return PaginatedResponse[AssessmentDefSummaryResponse]{}, err
+	}
+
+	hasMore := int64(len(models)) > limit
+	if hasMore {
+		models = models[:limit]
+	}
+
+	items := make([]AssessmentDefSummaryResponse, len(models))
+	for i, m := range models {
+		items[i] = AssessmentDefSummaryResponse{
+			ID:          m.ID,
+			Title:       m.Title,
+			SubjectTags: []string(m.SubjectTags),
+			ScoringType: m.ScoringType,
+			MaxScore:    m.MaxScore,
+		}
+	}
+
+	var nextCursor *uuid.UUID
+	if hasMore && len(items) > 0 {
+		nextCursor = &items[len(items)-1].ID
+	}
+
+	return PaginatedResponse[AssessmentDefSummaryResponse]{Data: items, HasMore: hasMore, NextCursor: nextCursor}, nil
+}
+
+func (s *learningServiceImpl) GetAssessmentDef(ctx context.Context, defID uuid.UUID) (AssessmentDefResponse, error) {
+	model, err := s.assessmentDefRepo.FindByID(ctx, defID)
+	if err != nil {
+		return AssessmentDefResponse{}, err
+	}
+	return toAssessmentDefResponse(model), nil
+}
+
+func toAssessmentDefResponse(m *AssessmentDefModel) AssessmentDefResponse {
+	return AssessmentDefResponse{
+		ID:          m.ID,
+		PublisherID: m.PublisherID,
+		Title:       m.Title,
+		Description: m.Description,
+		SubjectTags: []string(m.SubjectTags),
+		ScoringType: m.ScoringType,
+		MaxScore:    m.MaxScore,
+		CreatedAt:   m.CreatedAt,
+		UpdatedAt:   m.UpdatedAt,
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Project Definitions (Layer 1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func (s *learningServiceImpl) CreateProjectDef(ctx context.Context, cmd CreateProjectDefCommand) (ProjectDefResponse, error) {
+	ok, err := s.mkt.IsPublisherMember(ctx, cmd.CallerID, cmd.PublisherID)
+	if err != nil {
+		return ProjectDefResponse{}, err
+	}
+	if !ok {
+		return ProjectDefResponse{}, &LearningError{Err: domain.ErrNotPublisherMember}
+	}
+
+	milestones := cmd.MilestoneTemplates
+	if milestones == nil {
+		milestones = json.RawMessage("[]")
+	}
+
+	model := &ProjectDefModel{
+		PublisherID:        cmd.PublisherID,
+		Title:              cmd.Title,
+		Description:        cmd.Description,
+		SubjectTags:        StringArray(cmd.SubjectTags),
+		MilestoneTemplates: milestones,
+	}
+	if err := s.projectDefRepo.Create(ctx, model); err != nil {
+		return ProjectDefResponse{}, err
+	}
+	return toProjectDefResponse(model), nil
+}
+
+func (s *learningServiceImpl) UpdateProjectDef(ctx context.Context, defID uuid.UUID, cmd UpdateProjectDefCommand) (ProjectDefResponse, error) {
+	model, err := s.projectDefRepo.FindByID(ctx, defID)
+	if err != nil {
+		return ProjectDefResponse{}, err
+	}
+	ok, err := s.mkt.IsPublisherMember(ctx, cmd.CallerID, model.PublisherID)
+	if err != nil {
+		return ProjectDefResponse{}, err
+	}
+	if !ok {
+		return ProjectDefResponse{}, &LearningError{Err: domain.ErrNotPublisherMember}
+	}
+
+	if cmd.Title != nil {
+		model.Title = *cmd.Title
+	}
+	if cmd.Description != nil {
+		model.Description = cmd.Description
+	}
+	if cmd.SubjectTags != nil {
+		model.SubjectTags = StringArray(cmd.SubjectTags)
+	}
+	if cmd.MilestoneTemplates != nil {
+		model.MilestoneTemplates = cmd.MilestoneTemplates
+	}
+
+	if err := s.projectDefRepo.Update(ctx, model); err != nil {
+		return ProjectDefResponse{}, err
+	}
+	return toProjectDefResponse(model), nil
+}
+
+func (s *learningServiceImpl) DeleteProjectDef(ctx context.Context, defID uuid.UUID, callerID uuid.UUID) error {
+	model, err := s.projectDefRepo.FindByID(ctx, defID)
+	if err != nil {
+		return err
+	}
+	ok, err := s.mkt.IsPublisherMember(ctx, callerID, model.PublisherID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return &LearningError{Err: domain.ErrNotPublisherMember}
+	}
+	return s.projectDefRepo.SoftDelete(ctx, defID)
+}
+
+func (s *learningServiceImpl) ListProjectDefs(ctx context.Context, query ProjectDefQuery) (PaginatedResponse[ProjectDefSummaryResponse], error) {
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	query.Limit = limit + 1
+
+	models, err := s.projectDefRepo.List(ctx, &query)
+	if err != nil {
+		return PaginatedResponse[ProjectDefSummaryResponse]{}, err
+	}
+
+	hasMore := int64(len(models)) > limit
+	if hasMore {
+		models = models[:limit]
+	}
+
+	items := make([]ProjectDefSummaryResponse, len(models))
+	for i, m := range models {
+		items[i] = ProjectDefSummaryResponse{
+			ID:          m.ID,
+			Title:       m.Title,
+			SubjectTags: []string(m.SubjectTags),
+		}
+	}
+
+	var nextCursor *uuid.UUID
+	if hasMore && len(items) > 0 {
+		nextCursor = &items[len(items)-1].ID
+	}
+
+	return PaginatedResponse[ProjectDefSummaryResponse]{Data: items, HasMore: hasMore, NextCursor: nextCursor}, nil
+}
+
+func (s *learningServiceImpl) GetProjectDef(ctx context.Context, defID uuid.UUID) (ProjectDefResponse, error) {
+	model, err := s.projectDefRepo.FindByID(ctx, defID)
+	if err != nil {
+		return ProjectDefResponse{}, err
+	}
+	return toProjectDefResponse(model), nil
+}
+
+func toProjectDefResponse(m *ProjectDefModel) ProjectDefResponse {
+	return ProjectDefResponse{
+		ID:                 m.ID,
+		PublisherID:        m.PublisherID,
+		Title:              m.Title,
+		Description:        m.Description,
+		SubjectTags:        []string(m.SubjectTags),
+		MilestoneTemplates: m.MilestoneTemplates,
+		CreatedAt:          m.CreatedAt,
+		UpdatedAt:          m.UpdatedAt,
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Assessment Results (Layer 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func (s *learningServiceImpl) RecordAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd RecordAssessmentResultCommand) (AssessmentResultResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return AssessmentResultResponse{}, err
+	}
+
+	// Verify assessment def exists.
+	if _, err := s.assessmentDefRepo.FindByID(ctx, cmd.AssessmentDefID); err != nil {
+		return AssessmentResultResponse{}, err
+	}
+
+	assessmentDate := time.Now()
+	if cmd.AssessmentDate != nil {
+		parsed, err := time.Parse("2006-01-02", *cmd.AssessmentDate)
+		if err != nil {
+			return AssessmentResultResponse{}, &LearningError{Err: errors.New("invalid assessment_date format, expected YYYY-MM-DD")}
+		}
+		assessmentDate = parsed
+	}
+
+	weight := 1.0
+	if cmd.Weight != nil {
+		weight = *cmd.Weight
+	}
+
+	model := &AssessmentResultModel{
+		StudentID:       studentID,
+		AssessmentDefID: cmd.AssessmentDefID,
+		Score:           cmd.Score,
+		MaxScore:        cmd.MaxScore,
+		Weight:          weight,
+		Notes:           cmd.Notes,
+		AssessmentDate:  assessmentDate,
+	}
+	if err := s.assessmentResultRepo.Create(ctx, scope, model); err != nil {
+		return AssessmentResultResponse{}, err
+	}
+	return toAssessmentResultResponse(model), nil
+}
+
+func (s *learningServiceImpl) UpdateAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID, cmd UpdateAssessmentResultCommand) (AssessmentResultResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return AssessmentResultResponse{}, err
+	}
+
+	model, err := s.assessmentResultRepo.FindByID(ctx, scope, resultID)
+	if err != nil {
+		return AssessmentResultResponse{}, err
+	}
+
+	if cmd.Score != nil {
+		model.Score = *cmd.Score
+	}
+	if cmd.MaxScore != nil {
+		model.MaxScore = cmd.MaxScore
+	}
+	if cmd.Weight != nil {
+		model.Weight = *cmd.Weight
+	}
+	if cmd.Notes != nil {
+		model.Notes = cmd.Notes
+	}
+	if cmd.AssessmentDate != nil {
+		parsed, err := time.Parse("2006-01-02", *cmd.AssessmentDate)
+		if err != nil {
+			return AssessmentResultResponse{}, &LearningError{Err: errors.New("invalid assessment_date format, expected YYYY-MM-DD")}
+		}
+		model.AssessmentDate = parsed
+	}
+
+	if err := s.assessmentResultRepo.Update(ctx, scope, model); err != nil {
+		return AssessmentResultResponse{}, err
+	}
+	return toAssessmentResultResponse(model), nil
+}
+
+func (s *learningServiceImpl) DeleteAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) error {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return err
+	}
+	return s.assessmentResultRepo.Delete(ctx, scope, resultID)
+}
+
+func (s *learningServiceImpl) ListAssessmentResults(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query AssessmentResultQuery) (PaginatedResponse[AssessmentResultResponse], error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return PaginatedResponse[AssessmentResultResponse]{}, err
+	}
+
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	query.Limit = limit + 1
+
+	models, err := s.assessmentResultRepo.ListByStudent(ctx, scope, studentID, &query)
+	if err != nil {
+		return PaginatedResponse[AssessmentResultResponse]{}, err
+	}
+
+	hasMore := int64(len(models)) > limit
+	if hasMore {
+		models = models[:limit]
+	}
+
+	items := make([]AssessmentResultResponse, len(models))
+	for i, m := range models {
+		items[i] = toAssessmentResultResponse(&m)
+	}
+
+	var nextCursor *uuid.UUID
+	if hasMore && len(items) > 0 {
+		nextCursor = &items[len(items)-1].ID
+	}
+
+	return PaginatedResponse[AssessmentResultResponse]{Data: items, HasMore: hasMore, NextCursor: nextCursor}, nil
+}
+
+func (s *learningServiceImpl) GetAssessmentResult(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, resultID uuid.UUID) (AssessmentResultResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return AssessmentResultResponse{}, err
+	}
+	model, err := s.assessmentResultRepo.FindByID(ctx, scope, resultID)
+	if err != nil {
+		return AssessmentResultResponse{}, err
+	}
+	return toAssessmentResultResponse(model), nil
+}
+
+func toAssessmentResultResponse(m *AssessmentResultModel) AssessmentResultResponse {
+	return AssessmentResultResponse{
+		ID:              m.ID,
+		StudentID:       m.StudentID,
+		AssessmentDefID: m.AssessmentDefID,
+		Score:           m.Score,
+		MaxScore:        m.MaxScore,
+		Weight:          m.Weight,
+		Notes:           m.Notes,
+		AssessmentDate:  m.AssessmentDate,
+		CreatedAt:       m.CreatedAt,
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Project Progress (Layer 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func (s *learningServiceImpl) StartProject(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd StartProjectCommand) (ProjectProgressResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return ProjectProgressResponse{}, err
+	}
+
+	// Verify project def exists.
+	if _, err := s.projectDefRepo.FindByID(ctx, cmd.ProjectDefID); err != nil {
+		return ProjectProgressResponse{}, err
+	}
+
+	now := time.Now()
+	model := &ProjectProgressModel{
+		StudentID:    studentID,
+		ProjectDefID: cmd.ProjectDefID,
+		Status:       "planning",
+		Milestones:   json.RawMessage("[]"),
+		StartedAt:    &now,
+		Notes:        cmd.Notes,
+		Attachments:  json.RawMessage("[]"),
+	}
+	if err := s.projectProgressRepo.Create(ctx, scope, model); err != nil {
+		return ProjectProgressResponse{}, err
+	}
+	return toProjectProgressResponse(model), nil
+}
+
+func (s *learningServiceImpl) UpdateProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID, cmd UpdateProjectProgressCommand) (ProjectProgressResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return ProjectProgressResponse{}, err
+	}
+
+	model, err := s.projectProgressRepo.FindByID(ctx, scope, progressID)
+	if err != nil {
+		return ProjectProgressResponse{}, err
+	}
+
+	if cmd.Status != nil {
+		if !isValidProjectStatusTransition(model.Status, *cmd.Status) {
+			return ProjectProgressResponse{}, &LearningError{Err: domain.ErrInvalidProjectStatusTransition}
+		}
+		model.Status = *cmd.Status
+		if *cmd.Status == "completed" {
+			now := time.Now()
+			model.CompletedAt = &now
+		}
+	}
+	if cmd.Milestones != nil {
+		model.Milestones = cmd.Milestones
+	}
+	if cmd.Notes != nil {
+		model.Notes = cmd.Notes
+	}
+	if cmd.Attachments != nil {
+		model.Attachments = cmd.Attachments
+	}
+
+	if err := s.projectProgressRepo.Update(ctx, scope, model); err != nil {
+		return ProjectProgressResponse{}, err
+	}
+	return toProjectProgressResponse(model), nil
+}
+
+func (s *learningServiceImpl) DeleteProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) error {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return err
+	}
+	return s.projectProgressRepo.Delete(ctx, scope, progressID)
+}
+
+func (s *learningServiceImpl) ListProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, query ProjectProgressQuery) (PaginatedResponse[ProjectProgressResponse], error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return PaginatedResponse[ProjectProgressResponse]{}, err
+	}
+
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	query.Limit = limit + 1
+
+	models, err := s.projectProgressRepo.ListByStudent(ctx, scope, studentID, &query)
+	if err != nil {
+		return PaginatedResponse[ProjectProgressResponse]{}, err
+	}
+
+	hasMore := int64(len(models)) > limit
+	if hasMore {
+		models = models[:limit]
+	}
+
+	items := make([]ProjectProgressResponse, len(models))
+	for i, m := range models {
+		items[i] = toProjectProgressResponse(&m)
+	}
+
+	var nextCursor *uuid.UUID
+	if hasMore && len(items) > 0 {
+		nextCursor = &items[len(items)-1].ID
+	}
+
+	return PaginatedResponse[ProjectProgressResponse]{Data: items, HasMore: hasMore, NextCursor: nextCursor}, nil
+}
+
+func (s *learningServiceImpl) GetProjectProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID) (ProjectProgressResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, studentID, scope); err != nil {
+		return ProjectProgressResponse{}, err
+	}
+	model, err := s.projectProgressRepo.FindByID(ctx, scope, progressID)
+	if err != nil {
+		return ProjectProgressResponse{}, err
+	}
+	return toProjectProgressResponse(model), nil
+}
+
+func toProjectProgressResponse(m *ProjectProgressModel) ProjectProgressResponse {
+	return ProjectProgressResponse{
+		ID:           m.ID,
+		StudentID:    m.StudentID,
+		ProjectDefID: m.ProjectDefID,
+		Status:       m.Status,
+		Milestones:   m.Milestones,
+		StartedAt:    m.StartedAt,
+		CompletedAt:  m.CompletedAt,
+		Notes:        m.Notes,
+		Attachments:  m.Attachments,
+		CreatedAt:    m.CreatedAt,
+	}
+}
+
+func isValidProjectStatusTransition(from, to string) bool {
+	switch from {
+	case "planning":
+		return to == "in_progress" || to == "completed"
+	case "in_progress":
+		return to == "completed" || to == "planning"
+	case "completed":
+		return to == "in_progress"
+	default:
+		return false
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2: Grading Scales (Layer 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func (s *learningServiceImpl) CreateGradingScale(ctx context.Context, scope *shared.FamilyScope, cmd CreateGradingScaleCommand) (GradingScaleResponse, error) {
+	if cmd.IsDefault {
+		if err := s.gradingScaleRepo.ClearDefault(ctx, scope); err != nil {
+			return GradingScaleResponse{}, err
+		}
+	}
+
+	model := &GradingScaleModel{
+		Name:      cmd.Name,
+		ScaleType: cmd.ScaleType,
+		Grades:    cmd.Grades,
+		IsDefault: cmd.IsDefault,
+	}
+	if err := s.gradingScaleRepo.Create(ctx, scope, model); err != nil {
+		return GradingScaleResponse{}, err
+	}
+	return toGradingScaleResponse(model), nil
+}
+
+func (s *learningServiceImpl) UpdateGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID, cmd UpdateGradingScaleCommand) (GradingScaleResponse, error) {
+	model, err := s.gradingScaleRepo.FindByID(ctx, scope, scaleID)
+	if err != nil {
+		return GradingScaleResponse{}, err
+	}
+
+	if cmd.Name != nil {
+		model.Name = *cmd.Name
+	}
+	if cmd.Grades != nil {
+		model.Grades = cmd.Grades
+	}
+	if cmd.IsDefault != nil {
+		if *cmd.IsDefault {
+			if err := s.gradingScaleRepo.ClearDefault(ctx, scope); err != nil {
+				return GradingScaleResponse{}, err
+			}
+		}
+		model.IsDefault = *cmd.IsDefault
+	}
+
+	if err := s.gradingScaleRepo.Update(ctx, scope, model); err != nil {
+		return GradingScaleResponse{}, err
+	}
+	return toGradingScaleResponse(model), nil
+}
+
+func (s *learningServiceImpl) DeleteGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) error {
+	return s.gradingScaleRepo.Delete(ctx, scope, scaleID)
+}
+
+func (s *learningServiceImpl) ListGradingScales(ctx context.Context, scope *shared.FamilyScope) ([]GradingScaleResponse, error) {
+	models, err := s.gradingScaleRepo.ListByFamily(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]GradingScaleResponse, len(models))
+	for i, m := range models {
+		results[i] = toGradingScaleResponse(&m)
+	}
+	return results, nil
+}
+
+func (s *learningServiceImpl) GetGradingScale(ctx context.Context, scope *shared.FamilyScope, scaleID uuid.UUID) (GradingScaleResponse, error) {
+	model, err := s.gradingScaleRepo.FindByID(ctx, scope, scaleID)
+	if err != nil {
+		return GradingScaleResponse{}, err
+	}
+	return toGradingScaleResponse(model), nil
+}
+
+func toGradingScaleResponse(m *GradingScaleModel) GradingScaleResponse {
+	return GradingScaleResponse{
+		ID:        m.ID,
+		Name:      m.Name,
+		ScaleType: m.ScaleType,
+		Grades:    m.Grades,
+		IsDefault: m.IsDefault,
+		CreatedAt: m.CreatedAt,
+	}
 }
