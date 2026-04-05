@@ -76,6 +76,9 @@ export function useSelectMethodology() {
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(["onboarding", "progress"], data);
+      void queryClient.invalidateQueries({ queryKey: ["onboarding", "roadmap"] });
+      void queryClient.invalidateQueries({ queryKey: ["onboarding", "recommendations"] });
+      void queryClient.invalidateQueries({ queryKey: ["onboarding", "community"] });
     },
   });
 }
