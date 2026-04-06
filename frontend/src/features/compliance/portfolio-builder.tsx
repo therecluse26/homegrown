@@ -34,13 +34,14 @@ import {
 } from "@/hooks/use-compliance";
 import type {
   PortfolioItem,
+  PortfolioItemType,
   PortfolioOrganization,
   PortfolioItemCandidate,
 } from "@/hooks/use-compliance";
 
 // ─── Item type labels ──────────────────────────────────────────────────────
 
-const ITEM_TYPE_LABELS: Record<PortfolioItem["item_type"], string> = {
+const ITEM_TYPE_LABELS: Record<PortfolioItemType, string> = {
   work_sample: "compliance.portfolio.itemType.workSample",
   assessment: "compliance.portfolio.itemType.assessment",
   attendance: "compliance.portfolio.itemType.attendance",
@@ -83,14 +84,14 @@ function ItemRow({
           announce(
             intl.formatMessage(
               { id: "compliance.portfolio.item.grabbed" },
-              { title: item.title, position: index + 1, total },
+              { title: item.cached_title, position: index + 1, total },
             ),
           );
         } else {
           announce(
             intl.formatMessage(
               { id: "compliance.portfolio.item.dropped" },
-              { title: item.title, position: index + 1, total },
+              { title: item.cached_title, position: index + 1, total },
             ),
           );
         }
@@ -106,7 +107,7 @@ function ItemRow({
         announce(
           intl.formatMessage(
             { id: "compliance.portfolio.item.moved" },
-            { title: item.title, position: index, total },
+            { title: item.cached_title, position: index, total },
           ),
         );
       } else if (grabbed && e.key === "ArrowDown" && index < total - 1) {
@@ -115,12 +116,12 @@ function ItemRow({
         announce(
           intl.formatMessage(
             { id: "compliance.portfolio.item.moved" },
-            { title: item.title, position: index + 2, total },
+            { title: item.cached_title, position: index + 2, total },
           ),
         );
       }
     },
-    [grabbed, index, total, item.title, onMove, intl, announce],
+    [grabbed, index, total, item.cached_title, onMove, intl, announce],
   );
 
   return (
@@ -136,7 +137,7 @@ function ItemRow({
         onKeyDown={handleKeyDown}
         aria-label={intl.formatMessage(
           { id: "compliance.portfolio.item.reorder" },
-          { title: item.title },
+          { title: item.cached_title },
         )}
         aria-roledescription={intl.formatMessage({
           id: "compliance.portfolio.item.draggable",
@@ -147,18 +148,18 @@ function ItemRow({
       <span aria-live="assertive" className="sr-only" ref={liveRef} />
 
       <div className="flex-1 min-w-0">
-        <p className="type-body-md text-on-surface truncate">{item.title}</p>
+        <p className="type-body-md text-on-surface truncate">{item.cached_title}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <Badge variant="secondary">
-            <FormattedMessage id={ITEM_TYPE_LABELS[item.item_type]} />
+            <FormattedMessage id={ITEM_TYPE_LABELS[item.source_type]} />
           </Badge>
-          {item.subject && (
+          {item.cached_subject && (
             <span className="type-label-sm text-on-surface-variant">
-              {item.subject}
+              {item.cached_subject}
             </span>
           )}
           <span className="type-label-sm text-on-surface-variant">
-            {item.date}
+            {item.cached_date}
           </span>
         </div>
       </div>
@@ -189,7 +190,7 @@ function ItemRow({
           className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
           aria-label={intl.formatMessage(
             { id: "compliance.portfolio.item.remove" },
-            { title: item.title },
+            { title: item.cached_title },
           )}
         >
           <Icon icon={Trash2} size="xs" />
@@ -215,8 +216,8 @@ function CandidatePicker({
   onClose: () => void;
   candidates: PortfolioItemCandidate[] | undefined;
   isPending: boolean;
-  typeFilter: PortfolioItem["item_type"] | "";
-  onTypeFilter: (t: PortfolioItem["item_type"] | "") => void;
+  typeFilter: PortfolioItemType | "";
+  onTypeFilter: (t: PortfolioItemType | "") => void;
   onAdd: (candidate: PortfolioItemCandidate) => void;
   existingIds: Set<string>;
 }) {
@@ -234,7 +235,7 @@ function CandidatePicker({
         <Select
           value={typeFilter}
           onChange={(e) =>
-            onTypeFilter(e.target.value as PortfolioItem["item_type"] | "")
+            onTypeFilter(e.target.value as PortfolioItemType | "")
           }
           aria-label={intl.formatMessage({
             id: "compliance.portfolio.addItems.filterType",
@@ -246,7 +247,7 @@ function CandidatePicker({
             })}
           </option>
           {(
-            Object.keys(ITEM_TYPE_LABELS) as PortfolioItem["item_type"][]
+            Object.keys(ITEM_TYPE_LABELS) as PortfolioItemType[]
           ).map((t) => (
             <option key={t} value={t}>
               {intl.formatMessage({ id: ITEM_TYPE_LABELS[t] })}
@@ -367,18 +368,18 @@ function PreviewModal({
                   {i + 1}.
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="type-body-md text-on-surface">{item.title}</p>
+                  <p className="type-body-md text-on-surface">{item.cached_title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <Badge variant="secondary">
-                      <FormattedMessage id={ITEM_TYPE_LABELS[item.item_type]} />
+                      <FormattedMessage id={ITEM_TYPE_LABELS[item.source_type]} />
                     </Badge>
-                    {item.subject && (
+                    {item.cached_subject && (
                       <span className="type-label-sm text-on-surface-variant">
-                        {item.subject}
+                        {item.cached_subject}
                       </span>
                     )}
                     <span className="type-label-sm text-on-surface-variant">
-                      {item.date}
+                      {item.cached_date}
                     </span>
                   </div>
                 </div>
@@ -414,7 +415,7 @@ export function PortfolioBuilder() {
   // Candidate picker
   const [showPicker, setShowPicker] = useState(false);
   const [typeFilter, setTypeFilter] = useState<
-    PortfolioItem["item_type"] | ""
+    PortfolioItemType | ""
   >("");
 
   // Preview and generate
@@ -425,7 +426,7 @@ export function PortfolioBuilder() {
   const lastSyncedId = useRef<string | null>(null);
   if (portfolio && portfolio.id !== lastSyncedId.current) {
     lastSyncedId.current = portfolio.id;
-    setItems(portfolio.items);
+    setItems(portfolio.items ?? []);
     setCoverName(portfolio.cover_student_name ?? portfolio.student_name);
     setCoverDateRange(
       portfolio.cover_date_range ??
@@ -497,12 +498,12 @@ export function PortfolioBuilder() {
       ...prev,
       {
         id: crypto.randomUUID(),
-        item_type: c.item_type,
-        title: c.title,
-        subject: c.subject,
-        date: c.date,
+        source_type: c.item_type,
         source_id: c.id,
-        sort_order: prev.length,
+        display_order: prev.length,
+        cached_title: c.title,
+        cached_subject: c.subject,
+        cached_date: c.date,
       },
     ]);
     setItemsDirty(true);
@@ -513,10 +514,9 @@ export function PortfolioBuilder() {
       organization,
       cover_student_name: coverName || undefined,
       cover_date_range: coverDateRange || undefined,
-      items: items.map((item, i) => ({
+      items: items.map((item) => ({
+        source_type: item.source_type,
         source_id: item.source_id,
-        item_type: item.item_type,
-        sort_order: i,
       })),
     });
     setItemsDirty(false);

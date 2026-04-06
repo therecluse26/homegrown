@@ -3,7 +3,7 @@ import { apiClient } from "@/api/client";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type AttendanceStatus = "present" | "absent" | "partial" | "excused";
+export type AttendanceStatus = "present_full" | "present_partial" | "absent" | "not_applicable";
 
 export type PaceStatus = "ahead" | "on_track" | "behind";
 
@@ -29,10 +29,12 @@ export interface ComplianceConfig {
 export interface AttendanceEntry {
   id: string;
   student_id: string;
-  date: string;
+  attendance_date: string;
   status: AttendanceStatus;
-  auto_generated: boolean;
-  notes: string;
+  duration_minutes: number | null;
+  notes: string | null;
+  is_auto: boolean;
+  manual_override: boolean;
   created_at: string;
 }
 
@@ -133,19 +135,22 @@ export interface PortfolioDetail {
   updated_at: string;
 }
 
+export type PortfolioItemType = "work_sample" | "assessment" | "attendance" | "journal" | "activity";
+
 export interface PortfolioItem {
   id: string;
-  item_type: "work_sample" | "assessment" | "attendance" | "journal" | "activity";
-  title: string;
-  subject?: string;
-  date: string;
+  source_type: PortfolioItemType;
   source_id: string;
-  sort_order: number;
+  display_order: number;
+  cached_title: string;
+  cached_subject?: string | null;
+  cached_date: string;
+  cached_description?: string | null;
 }
 
 export interface PortfolioItemCandidate {
   id: string;
-  item_type: PortfolioItem["item_type"];
+  item_type: PortfolioItemType;
   title: string;
   subject?: string;
   date: string;
@@ -166,7 +171,7 @@ export interface UpdatePortfolioInput {
   organization?: PortfolioOrganization;
   cover_student_name?: string;
   cover_date_range?: string;
-  items?: { source_id: string; item_type: PortfolioItem["item_type"]; sort_order: number }[];
+  items?: { source_type: PortfolioItemType; source_id: string }[];
 }
 
 // ─── Transcript Types ────────────────────────────────────────────────────────
@@ -189,68 +194,62 @@ export interface TranscriptDetail {
   student_id: string;
   student_name: string;
   title: string;
-  status: TranscriptStatus;
-  gpa_display: GpaDisplay;
-  semesters: TranscriptSemester[];
-  cumulative_gpa?: number;
-  total_credits: number;
-  download_url?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TranscriptSemester {
-  id: string;
-  name: string;
-  sort_order: number;
+  grade_levels: string[];
+  status: string;
+  gpa_unweighted: number | null;
+  gpa_weighted: number | null;
   courses: TranscriptCourse[];
-  semester_gpa?: number;
-  semester_credits: number;
+  generated_at: string | null;
+  expires_at: string | null;
+  created_at: string;
 }
 
 export interface TranscriptCourse {
   id: string;
+  student_id: string;
   title: string;
-  subject?: string;
-  level: CourseLevel;
+  subject: string;
+  grade_level: number;
   credits: number;
-  grade: string;
-  grade_points?: number;
-  sort_order: number;
+  grade_letter: string | null;
+  grade_points: number | null;
+  level: string;
+  school_year: string;
+  semester: string | null;
+  created_at: string;
 }
 
 export interface CreateTranscriptInput {
   student_id: string;
   title: string;
+  grade_levels?: string[];
   gpa_display?: GpaDisplay;
 }
 
 export interface UpdateTranscriptInput {
   title?: string;
-  gpa_display?: GpaDisplay;
-}
-
-export interface AddSemesterInput {
-  name: string;
-  sort_order: number;
 }
 
 export interface AddCourseInput {
-  semester_id: string;
   title: string;
-  subject?: string;
-  level: CourseLevel;
+  subject: string;
+  grade_level: number;
   credits: number;
-  grade: string;
-  sort_order: number;
+  grade_letter?: string;
+  grade_points?: number;
+  level: string;
+  school_year: string;
+  semester?: string;
 }
 
 export interface UpdateCourseInput {
   title?: string;
   subject?: string;
-  level?: CourseLevel;
+  level?: string;
   credits?: number;
-  grade?: string;
+  grade_letter?: string;
+  grade_points?: number;
+  semester?: string;
 }
 
 // ─── Queries ────────────────────────────────────────────────────────────────
@@ -380,16 +379,19 @@ export function useSaveComplianceConfig() {
 export function useRecordAttendance() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: {
+    mutationFn: (params: {
       student_id: string;
-      date: string;
+      attendance_date: string;
       status: AttendanceStatus;
+      duration_minutes?: number;
       notes?: string;
-    }) =>
-      apiClient<AttendanceEntry>(
-        `/v1/compliance/students/${body.student_id}/attendance`,
+    }) => {
+      const { student_id, ...body } = params;
+      return apiClient<AttendanceEntry>(
+        `/v1/compliance/students/${student_id}/attendance`,
         { method: "POST", body },
-      ),
+      );
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["compliance", "attendance"],
@@ -401,11 +403,13 @@ export function useRecordAttendance() {
 export function useCreateStandardizedTest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreateTestRequest) =>
-      apiClient<StandardizedTest>(
-        `/v1/compliance/students/${body.student_id}/tests`,
+    mutationFn: (params: CreateTestRequest) => {
+      const { student_id, ...body } = params;
+      return apiClient<StandardizedTest>(
+        `/v1/compliance/students/${student_id}/tests`,
         { method: "POST", body },
-      ),
+      );
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["compliance", "tests"],
@@ -464,7 +468,7 @@ export function usePortfolioItemCandidates(params: {
   student_id: string;
   date_range_start: string;
   date_range_end: string;
-  item_type?: PortfolioItem["item_type"];
+  item_type?: PortfolioItemType;
 }) {
   return useQuery({
     queryKey: ["compliance", "portfolios", "candidates", params],
@@ -485,11 +489,20 @@ export function usePortfolioItemCandidates(params: {
 export function useCreatePortfolio() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreatePortfolioInput) =>
-      apiClient<PortfolioSummary>(
-        `/v1/compliance/students/${body.student_id}/portfolios`,
-        { method: "POST", body },
-      ),
+    mutationFn: (params: CreatePortfolioInput) => {
+      const { student_id, date_range_start, date_range_end, ...rest } = params;
+      return apiClient<PortfolioSummary>(
+        `/v1/compliance/students/${student_id}/portfolios`,
+        {
+          method: "POST",
+          body: {
+            ...rest,
+            date_range_start: `${date_range_start}T00:00:00Z`,
+            date_range_end: `${date_range_end}T23:59:59Z`,
+          },
+        },
+      );
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["compliance", "portfolios"],
@@ -575,11 +588,16 @@ export function useTranscriptDetail(studentId: string, id: string | undefined) {
 export function useCreateTranscript() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreateTranscriptInput) =>
-      apiClient<TranscriptSummary>(
-        `/v1/compliance/students/${body.student_id}/transcripts`,
-        { method: "POST", body },
-      ),
+    mutationFn: (params: CreateTranscriptInput) => {
+      const { student_id, gpa_display: _, ...rest } = params;
+      return apiClient<TranscriptSummary>(
+        `/v1/compliance/students/${student_id}/transcripts`,
+        {
+          method: "POST",
+          body: { ...rest, grade_levels: rest.grade_levels ?? [] },
+        },
+      );
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["compliance", "transcripts"],
@@ -604,22 +622,6 @@ export function useUpdateTranscript(studentId: string, id: string) {
   });
 }
 
-export function useAddSemester(studentId: string, transcriptId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (body: AddSemesterInput) =>
-      apiClient<TranscriptSemester>(
-        `/v1/compliance/students/${studentId}/transcripts/${transcriptId}/semesters`,
-        { method: "POST", body },
-      ),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["compliance", "transcripts", studentId, transcriptId],
-      });
-    },
-  });
-}
-
 export function useAddCourse(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -636,14 +638,16 @@ export function useAddCourse(studentId: string) {
   });
 }
 
-export function useUpdateCourse(studentId: string, courseId: string) {
+export function useUpdateCourse(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: UpdateCourseInput) =>
-      apiClient<TranscriptCourse>(
+    mutationFn: (params: { courseId: string } & UpdateCourseInput) => {
+      const { courseId, ...body } = params;
+      return apiClient<TranscriptCourse>(
         `/v1/compliance/students/${studentId}/courses/${courseId}`,
         { method: "PATCH", body },
-      ),
+      );
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["compliance", "transcripts"],

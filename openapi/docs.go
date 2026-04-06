@@ -19141,7 +19141,6 @@ const docTemplate = `{
         "comply.CreateTranscriptCommand": {
             "type": "object",
             "required": [
-                "grade_levels",
                 "title"
             ],
             "properties": {

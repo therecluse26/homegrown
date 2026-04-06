@@ -912,7 +912,6 @@ definitions:
       title:
         type: string
     required:
-    - grade_levels
     - title
     type: object
   comply.ExclusionPeriod:

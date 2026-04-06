@@ -62,7 +62,7 @@ function TranscriptCard({
             </RouterLink>
             <StatusBadge status={transcript.status} />
           </div>
-          {transcript.grade_levels.length > 0 && (
+          {transcript.grade_levels && transcript.grade_levels.length > 0 && (
             <p className="type-body-sm text-on-surface-variant">
               {transcript.grade_levels.join(", ")}
             </p>

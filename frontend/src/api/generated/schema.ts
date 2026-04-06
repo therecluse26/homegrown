@@ -20831,7 +20831,7 @@ export interface components {
             test_name: string;
         };
         "comply.CreateTranscriptCommand": {
-            grade_levels: string[];
+            grade_levels?: string[];
             title: string;
         };
         "comply.ExclusionPeriod": {

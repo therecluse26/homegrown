@@ -24,17 +24,17 @@ import { useState, useEffect, useRef, useMemo } from "react";
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
-  present: "bg-primary",
-  partial: "bg-secondary",
+  present_full: "bg-primary",
+  present_partial: "bg-secondary",
   absent: "bg-error",
-  excused: "bg-outline-variant",
+  not_applicable: "bg-outline-variant",
 };
 
 const STATUS_LABELS: Record<AttendanceStatus, string> = {
-  present: "compliance.attendance.present",
+  present_full: "compliance.attendance.present",
   absent: "compliance.attendance.absent",
-  partial: "compliance.attendance.partial",
-  excused: "compliance.attendance.excused",
+  present_partial: "compliance.attendance.partial",
+  not_applicable: "compliance.attendance.excused",
 };
 
 function getPaceVariant(pace: PaceStatus): "primary" | "secondary" | "error" {
@@ -75,7 +75,7 @@ function AttendanceHeatmap({
   month,
   onDayClick,
 }: {
-  entries: { date: string; status: AttendanceStatus; auto_generated: boolean }[];
+  entries: { attendance_date: string; status: AttendanceStatus; is_auto: boolean }[];
   year: number;
   month: number;
   onDayClick: (date: string) => void;
@@ -85,9 +85,11 @@ function AttendanceHeatmap({
   const firstDay = getFirstDayOfMonth(year, month);
 
   const entryMap = useMemo(() => {
-    const map = new Map<string, { status: AttendanceStatus; auto_generated: boolean }>();
+    const map = new Map<string, { status: AttendanceStatus; is_auto: boolean }>();
     for (const entry of entries) {
-      map.set(entry.date, { status: entry.status, auto_generated: entry.auto_generated });
+      // Backend returns ISO datetime; extract date portion
+      const dateKey = entry.attendance_date.slice(0, 10);
+      map.set(dateKey, { status: entry.status, is_auto: entry.is_auto });
     }
     return map;
   }, [entries]);
@@ -133,7 +135,7 @@ function AttendanceHeatmap({
               aria-label={`${intl.formatDate(dateStr, { month: "long", day: "numeric" })}${entry ? ` — ${intl.formatMessage({ id: STATUS_LABELS[entry.status] })}` : ""}`}
             >
               {day}
-              {entry?.auto_generated && (
+              {entry?.is_auto && (
                 <span className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-radius-full bg-tertiary" />
               )}
             </button>
@@ -158,7 +160,7 @@ export function AttendanceTracker() {
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<AttendanceStatus>("present");
+  const [selectedStatus, setSelectedStatus] = useState<AttendanceStatus>("present_full");
 
   const monthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
   const attendance = useAttendance(selectedStudentId, monthStr);
@@ -199,7 +201,7 @@ export function AttendanceTracker() {
     recordAttendance.mutate(
       {
         student_id: selectedStudentId,
-        date: selectedDate,
+        attendance_date: `${selectedDate}T00:00:00Z`,
         status: selectedStatus,
       },
       {
@@ -383,7 +385,7 @@ export function AttendanceTracker() {
                   setSelectedStatus(e.target.value as AttendanceStatus)
                 }
               >
-                <option value="present">
+                <option value="present_full">
                   {intl.formatMessage({
                     id: "compliance.attendance.present",
                   })}
@@ -393,12 +395,12 @@ export function AttendanceTracker() {
                     id: "compliance.attendance.absent",
                   })}
                 </option>
-                <option value="partial">
+                <option value="present_partial">
                   {intl.formatMessage({
                     id: "compliance.attendance.partial",
                   })}
                 </option>
-                <option value="excused">
+                <option value="not_applicable">
                   {intl.formatMessage({
                     id: "compliance.attendance.excused",
                   })}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -1536,14 +1537,14 @@ func (r *PgTranscriptRepository) Create(ctx context.Context, scope shared.Family
 	type idRow struct {
 		ID uuid.UUID `gorm:"column:id"`
 	}
-	levelsJSON, _ := json.Marshal(input.GradeLevels)
+	pgArray := "{" + strings.Join(input.GradeLevels, ",") + "}"
 	var r_ idRow
 	err := r.db.WithContext(ctx).Raw(`
 		INSERT INTO comply_transcripts
 			(family_id, student_id, title, student_name, grade_levels)
 		VALUES (?, ?, ?, ?, ?::text[])
 		RETURNING id`,
-		scope.FamilyID(), input.StudentID, input.Title, input.StudentName, string(levelsJSON),
+		scope.FamilyID(), input.StudentID, input.Title, input.StudentName, pgArray,
 	).First(&r_).Error
 	if err != nil {
 		return nil, fmt.Errorf("comply transcript create: %w", err)

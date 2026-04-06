@@ -88,7 +88,7 @@ export function StandardizedTests() {
       {
         student_id: studentId,
         test_name: testName.trim(),
-        test_date: testDate,
+        test_date: `${testDate}T00:00:00Z`,
         scores,
       },
       { onSuccess: resetForm },

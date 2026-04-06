@@ -67,34 +67,34 @@ SELECT
         SELECT 1 FROM soc_friendships sf
         WHERE sf.status = 'accepted'
         AND (
-            (sf.requester_family_id = $1 AND sf.accepter_family_id = f.id)
-            OR (sf.accepter_family_id = $1 AND sf.requester_family_id = f.id)
+            (sf.requester_family_id = ? AND sf.accepter_family_id = f.id)
+            OR (sf.accepter_family_id = ? AND sf.requester_family_id = f.id)
         )
     ) AS is_friend,
-    ts_rank(to_tsvector('english', f.display_name), plainto_tsquery('english', $2)) AS relevance
+    ts_rank(to_tsvector('english', f.display_name), plainto_tsquery('english', ?)) AS relevance
 FROM iam_families f
 JOIN soc_profiles sp ON sp.family_id = f.id
 LEFT JOIN method_definitions md ON md.slug = f.primary_methodology_slug
-WHERE f.id != $1
+WHERE f.id != ?
 AND (
     EXISTS (
         SELECT 1 FROM soc_friendships sf
         WHERE sf.status = 'accepted'
         AND (
-            (sf.requester_family_id = $1 AND sf.accepter_family_id = f.id)
-            OR (sf.accepter_family_id = $1 AND sf.requester_family_id = f.id)
+            (sf.requester_family_id = ? AND sf.accepter_family_id = f.id)
+            OR (sf.accepter_family_id = ? AND sf.requester_family_id = f.id)
         )
     )
     OR sp.location_visible = true
 )
 AND NOT EXISTS (
     SELECT 1 FROM soc_blocks sb
-    WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = f.id)
-       OR (sb.blocker_family_id = f.id AND sb.blocked_family_id = $1)
+    WHERE (sb.blocker_family_id = ? AND sb.blocked_family_id = f.id)
+       OR (sb.blocker_family_id = f.id AND sb.blocked_family_id = ?)
 )
-AND f.display_name ILIKE '%' || $2 || '%'
+AND f.display_name ILIKE '%' || ? || '%'
 ORDER BY relevance DESC, f.id
-LIMIT $3 OFFSET $4`
+LIMIT ? OFFSET ?`
 
 	type familyRow struct {
 		FamilyID        uuid.UUID `gorm:"column:family_id"`
@@ -106,7 +106,15 @@ LIMIT $3 OFFSET $4`
 	}
 
 	var rows []familyRow
-	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, limit, offset).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql,
+		searcherFamilyID, searcherFamilyID, // is_friend subquery
+		query,                              // ts_rank
+		searcherFamilyID,                   // WHERE f.id !=
+		searcherFamilyID, searcherFamilyID, // friends exists subquery
+		searcherFamilyID, searcherFamilyID, // blocks check
+		query,                              // ILIKE
+		limit, offset,                      // pagination
+	).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search families: %w", err)
 	}
 
@@ -150,20 +158,20 @@ SELECT
     md.display_name AS methodology_name,
     ts_rank(
         to_tsvector('english', coalesce(g.name, '') || ' ' || coalesce(g.description, '')),
-        websearch_to_tsquery('english', $2)
+        websearch_to_tsquery('english', ?)
     ) AS relevance
 FROM soc_groups g
 LEFT JOIN method_definitions md ON md.slug = g.methodology_slug
 WHERE to_tsvector('english', coalesce(g.name, '') || ' ' || coalesce(g.description, ''))
-    @@ websearch_to_tsquery('english', $2)
+    @@ websearch_to_tsquery('english', ?)
 AND NOT EXISTS (
     SELECT 1 FROM soc_blocks sb
-    WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = g.creator_family_id)
-       OR (sb.blocker_family_id = g.creator_family_id AND sb.blocked_family_id = $1)
+    WHERE (sb.blocker_family_id = ? AND sb.blocked_family_id = g.creator_family_id)
+       OR (sb.blocker_family_id = g.creator_family_id AND sb.blocked_family_id = ?)
 )
-AND ($3::text IS NULL OR g.methodology_slug = $3)
+AND (? = '' OR g.methodology_slug = ?)
 ORDER BY relevance DESC, g.id
-LIMIT $4 OFFSET $5`
+LIMIT ? OFFSET ?`
 
 	type groupRow struct {
 		GroupID         uuid.UUID `gorm:"column:group_id"`
@@ -174,8 +182,22 @@ LIMIT $4 OFFSET $5`
 		Relevance       float32   `gorm:"column:relevance"`
 	}
 
+	// Use empty string as "no filter" sentinel — GORM Raw() drops all args
+	// when any variadic param is a nil interface{}.
+	methSlug := ""
+	if methodologySlug != nil {
+		methSlug = *methodologySlug
+	}
+
 	var rows []groupRow
-	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, methodologySlug, limit, offset).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql,
+		query,                // websearch_to_tsquery in SELECT
+		query,                // websearch_to_tsquery in WHERE
+		searcherFamilyID,     // blocker check #1
+		searcherFamilyID,     // blocker check #2
+		methSlug, methSlug,   // methodology filter (= '' OR = ?)
+		limit, offset,        // pagination
+	).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search groups: %w", err)
 	}
 
@@ -222,12 +244,12 @@ SELECT
     e.attendee_count,
     ts_rank(
         to_tsvector('english', coalesce(e.title, '') || ' ' || coalesce(e.description, '')),
-        websearch_to_tsquery('english', $2)
+        websearch_to_tsquery('english', ?)
     ) AS relevance
 FROM soc_events e
 WHERE e.status = 'active'
 AND to_tsvector('english', coalesce(e.title, '') || ' ' || coalesce(e.description, ''))
-    @@ websearch_to_tsquery('english', $2)
+    @@ websearch_to_tsquery('english', ?)
 AND (
     e.visibility = 'discoverable'
     OR (
@@ -236,8 +258,8 @@ AND (
             SELECT 1 FROM soc_friendships sf
             WHERE sf.status = 'accepted'
             AND (
-                (sf.requester_family_id = $1 AND sf.accepter_family_id = e.creator_family_id)
-                OR (sf.accepter_family_id = $1 AND sf.requester_family_id = e.creator_family_id)
+                (sf.requester_family_id = ? AND sf.accepter_family_id = e.creator_family_id)
+                OR (sf.accepter_family_id = ? AND sf.requester_family_id = e.creator_family_id)
             )
         )
     )
@@ -247,20 +269,20 @@ AND (
         AND EXISTS (
             SELECT 1 FROM soc_group_members gm
             WHERE gm.group_id = e.group_id
-            AND gm.family_id = $1
+            AND gm.family_id = ?
             AND gm.status = 'active'
         )
     )
-    OR e.creator_family_id = $1
+    OR e.creator_family_id = ?
 )
 AND NOT EXISTS (
     SELECT 1 FROM soc_blocks sb
-    WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = e.creator_family_id)
-       OR (sb.blocker_family_id = e.creator_family_id AND sb.blocked_family_id = $1)
+    WHERE (sb.blocker_family_id = ? AND sb.blocked_family_id = e.creator_family_id)
+       OR (sb.blocker_family_id = e.creator_family_id AND sb.blocked_family_id = ?)
 )
-AND ($3::text IS NULL OR e.methodology_slug = $3)
+AND (? = '' OR e.methodology_slug = ?)
 ORDER BY relevance DESC, e.id
-LIMIT $4 OFFSET $5`
+LIMIT ? OFFSET ?`
 
 	type eventRow struct {
 		EventID       uuid.UUID `gorm:"column:event_id"`
@@ -274,8 +296,24 @@ LIMIT $4 OFFSET $5`
 		Relevance     float32   `gorm:"column:relevance"`
 	}
 
+	// Use empty string as "no filter" sentinel — GORM Raw() drops all args
+	// when any variadic param is a nil interface{}.
+	methSlug := ""
+	if methodologySlug != nil {
+		methSlug = *methodologySlug
+	}
+
 	var rows []eventRow
-	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, methodologySlug, limit, offset).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql,
+		query,                                              // websearch_to_tsquery in SELECT
+		query,                                              // websearch_to_tsquery in WHERE
+		searcherFamilyID, searcherFamilyID,                 // friends check
+		searcherFamilyID,                                   // group member check
+		searcherFamilyID,                                   // creator check
+		searcherFamilyID, searcherFamilyID,                 // blocks check
+		methSlug, methSlug,                                 // methodology filter
+		limit, offset,                                      // pagination
+	).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search events: %w", err)
 	}
 
@@ -321,21 +359,21 @@ SELECT
     f.display_name AS author_display_name,
     g.name AS group_name,
     p.created_at,
-    ts_rank(p.search_vector, websearch_to_tsquery('english', $2)) AS relevance
+    ts_rank(p.search_vector, websearch_to_tsquery('english', ?)) AS relevance
 FROM soc_posts p
 JOIN iam_families f ON f.id = p.family_id
 LEFT JOIN soc_groups g ON g.id = p.group_id
-WHERE p.search_vector @@ websearch_to_tsquery('english', $2)
+WHERE p.search_vector @@ websearch_to_tsquery('english', ?)
 AND (
-    p.family_id = $1
+    p.family_id = ?
     OR (
         p.visibility = 'friends'
         AND EXISTS (
             SELECT 1 FROM soc_friendships sf
             WHERE sf.status = 'accepted'
             AND (
-                (sf.requester_family_id = $1 AND sf.accepter_family_id = p.family_id)
-                OR (sf.accepter_family_id = $1 AND sf.requester_family_id = p.family_id)
+                (sf.requester_family_id = ? AND sf.accepter_family_id = p.family_id)
+                OR (sf.accepter_family_id = ? AND sf.requester_family_id = p.family_id)
             )
         )
     )
@@ -345,18 +383,18 @@ AND (
         AND EXISTS (
             SELECT 1 FROM soc_group_members gm
             WHERE gm.group_id = p.group_id
-            AND gm.family_id = $1
+            AND gm.family_id = ?
             AND gm.status = 'active'
         )
     )
 )
 AND NOT EXISTS (
     SELECT 1 FROM soc_blocks sb
-    WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = p.family_id)
-       OR (sb.blocker_family_id = p.family_id AND sb.blocked_family_id = $1)
+    WHERE (sb.blocker_family_id = ? AND sb.blocked_family_id = p.family_id)
+       OR (sb.blocker_family_id = p.family_id AND sb.blocked_family_id = ?)
 )
 ORDER BY relevance DESC, p.id
-LIMIT $3 OFFSET $4`
+LIMIT ? OFFSET ?`
 
 	type postRow struct {
 		PostID            uuid.UUID `gorm:"column:post_id"`
@@ -369,7 +407,15 @@ LIMIT $3 OFFSET $4`
 	}
 
 	var rows []postRow
-	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, limit, offset).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql,
+		query,                              // ts_rank
+		query,                              // search_vector match
+		searcherFamilyID,                   // own posts
+		searcherFamilyID, searcherFamilyID, // friends check
+		searcherFamilyID,                   // group member check
+		searcherFamilyID, searcherFamilyID, // blocks check
+		limit, offset,                      // pagination
+	).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search posts: %w", err)
 	}
 
@@ -417,6 +463,55 @@ func (r *PgMarketplaceSearchRepository) SearchListings(ctx context.Context, quer
 		}
 	}
 
+	// Build WHERE clause dynamically to avoid untyped NULL issues with GORM.
+	// PostgreSQL cannot infer the type of NULL when used with array operators (&&).
+	var whereClauses []string
+	var whereArgs []any
+
+	whereClauses = append(whereClauses, "l.status = 'published'")
+	whereClauses = append(whereClauses, "l.search_vector @@ websearch_to_tsquery('english', ?)")
+	whereArgs = append(whereArgs, query)
+
+	if len(filters.MethodologyTags) > 0 {
+		whereClauses = append(whereClauses, "l.methodology_tags && ?")
+		whereArgs = append(whereArgs, uuidSliceToStringSlice(filters.MethodologyTags))
+	}
+	if len(filters.SubjectTags) > 0 {
+		whereClauses = append(whereClauses, "l.subject_tags && ?")
+		whereArgs = append(whereArgs, filters.SubjectTags)
+	}
+	if filters.GradeMax != nil {
+		whereClauses = append(whereClauses, "l.grade_min <= ?")
+		whereArgs = append(whereArgs, *filters.GradeMax)
+	}
+	if filters.GradeMin != nil {
+		whereClauses = append(whereClauses, "l.grade_max >= ?")
+		whereArgs = append(whereArgs, *filters.GradeMin)
+	}
+	if filters.PriceMax != nil {
+		whereClauses = append(whereClauses, "l.price_cents <= ?")
+		whereArgs = append(whereArgs, *filters.PriceMax)
+	}
+	if filters.PriceMin != nil {
+		whereClauses = append(whereClauses, "l.price_cents >= ?")
+		whereArgs = append(whereArgs, *filters.PriceMin)
+	}
+	if filters.ContentType != nil {
+		whereClauses = append(whereClauses, "l.content_type = ?")
+		whereArgs = append(whereArgs, *filters.ContentType)
+	}
+	if len(filters.WorldviewTags) > 0 {
+		whereClauses = append(whereClauses, "l.worldview_tags && ?")
+		whereArgs = append(whereArgs, filters.WorldviewTags)
+	}
+	if filters.FreeOnly != nil && *filters.FreeOnly {
+		whereClauses = append(whereClauses, "l.price_cents = 0")
+	}
+
+	whereSQL := strings.Join(whereClauses, "\n  AND ")
+
+	sortStr := string(sortOrder)
+
 	sql := `
 SELECT
     l.id AS listing_id,
@@ -430,43 +525,29 @@ SELECT
     array_to_string(l.methodology_tags, ',') AS methodology_tags_csv,
     array_to_string(l.subject_tags, ',') AS subject_tags_csv,
     l.published_at,
-    ts_rank(l.search_vector, websearch_to_tsquery('english', $1)) AS relevance
+    ts_rank(l.search_vector, websearch_to_tsquery('english', ?)) AS relevance
 FROM mkt_listings l
 JOIN mkt_publishers p ON p.id = l.publisher_id
-WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
-  AND ($2::uuid[] IS NULL OR l.methodology_tags && $2)
-  AND ($3::text[] IS NULL OR l.subject_tags && $3)
-  AND ($4::smallint IS NULL OR l.grade_min <= $4)
-  AND ($5::smallint IS NULL OR l.grade_max >= $5)
-  AND ($6::int IS NULL OR l.price_cents <= $6)
-  AND ($7::int IS NULL OR l.price_cents >= $7)
-  AND ($8::text IS NULL OR l.content_type = $8)
-  AND ($9::text[] IS NULL OR l.worldview_tags && $9)
-  AND ($10::bool IS NULL OR NOT $10 OR l.price_cents = 0)
+WHERE ` + whereSQL + `
 ORDER BY
-    CASE WHEN $11 = 'relevance' THEN ts_rank(l.search_vector, websearch_to_tsquery('english', $1)) END DESC,
-    CASE WHEN $11 = 'price_asc' THEN l.price_cents END ASC,
-    CASE WHEN $11 = 'price_desc' THEN l.price_cents END DESC,
-    CASE WHEN $11 = 'rating' THEN l.rating_avg END DESC,
-    CASE WHEN $11 = 'recency' THEN l.published_at END DESC,
+    CASE WHEN ? = 'relevance' THEN ts_rank(l.search_vector, websearch_to_tsquery('english', ?)) END DESC,
+    CASE WHEN ? = 'price_asc' THEN l.price_cents END ASC,
+    CASE WHEN ? = 'price_desc' THEN l.price_cents END DESC,
+    CASE WHEN ? = 'rating' THEN l.rating_avg END DESC,
+    CASE WHEN ? = 'recency' THEN l.published_at END DESC,
     l.id
-LIMIT $12 OFFSET $13`
+LIMIT ? OFFSET ?`
 
-	var methodologyTags any
-	if len(filters.MethodologyTags) > 0 {
-		methodologyTags = uuidSliceToStringSlice(filters.MethodologyTags)
-	}
-
-	var subjectTags any
-	if len(filters.SubjectTags) > 0 {
-		subjectTags = filters.SubjectTags
-	}
-
-	var worldviewTags any
-	if len(filters.WorldviewTags) > 0 {
-		worldviewTags = filters.WorldviewTags
-	}
+	// Build args: ts_rank in SELECT, then WHERE args, then ORDER BY + pagination
+	var args []any
+	args = append(args, query) // ts_rank in SELECT
+	args = append(args, whereArgs...)
+	args = append(args, sortStr, query) // ORDER BY relevance
+	args = append(args, sortStr)        // ORDER BY price_asc
+	args = append(args, sortStr)        // ORDER BY price_desc
+	args = append(args, sortStr)        // ORDER BY rating
+	args = append(args, sortStr)        // ORDER BY recency
+	args = append(args, limit, offset)  // pagination
 
 	type listingRow struct {
 		ListingID          uuid.UUID `gorm:"column:listing_id"`
@@ -484,13 +565,7 @@ LIMIT $12 OFFSET $13`
 	}
 
 	var rows []listingRow
-	if err := r.db.WithContext(ctx).Raw(sql,
-		query, methodologyTags, subjectTags,
-		filters.GradeMax, filters.GradeMin,
-		filters.PriceMax, filters.PriceMin,
-		filters.ContentType, worldviewTags, filters.FreeOnly,
-		string(sortOrder), limit, offset,
-	).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("search listings: %w", err)
 	}
 
@@ -516,25 +591,10 @@ LIMIT $12 OFFSET $13`
 	countSQL := `
 SELECT COUNT(*)
 FROM mkt_listings l
-WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
-  AND ($2::uuid[] IS NULL OR l.methodology_tags && $2)
-  AND ($3::text[] IS NULL OR l.subject_tags && $3)
-  AND ($4::smallint IS NULL OR l.grade_min <= $4)
-  AND ($5::smallint IS NULL OR l.grade_max >= $5)
-  AND ($6::int IS NULL OR l.price_cents <= $6)
-  AND ($7::int IS NULL OR l.price_cents >= $7)
-  AND ($8::text IS NULL OR l.content_type = $8)
-  AND ($9::text[] IS NULL OR l.worldview_tags && $9)
-  AND ($10::bool IS NULL OR NOT $10 OR l.price_cents = 0)`
+WHERE ` + whereSQL
 
 	var totalCount int64
-	if err := r.db.WithContext(ctx).Raw(countSQL,
-		query, methodologyTags, subjectTags,
-		filters.GradeMax, filters.GradeMin,
-		filters.PriceMax, filters.PriceMin,
-		filters.ContentType, worldviewTags, filters.FreeOnly,
-	).Scan(&totalCount).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(countSQL, whereArgs...).Scan(&totalCount).Error; err != nil {
 		return nil, fmt.Errorf("count listings: %w", err)
 	}
 
@@ -562,9 +622,9 @@ SELECT mt.tag_value::text AS value,
        COALESCE(md.display_name, mt.tag_value::text) AS display_name,
        COUNT(*) AS count
 FROM mkt_listings l, unnest(l.methodology_tags) AS mt(tag_value)
-LEFT JOIN method_definitions md ON md.id = mt.tag_value
+LEFT JOIN method_definitions md ON md.slug = mt.tag_value::text
 WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
+  AND l.search_vector @@ websearch_to_tsquery('english', ?)
 GROUP BY mt.tag_value, md.display_name
 ORDER BY count DESC`
 
@@ -579,7 +639,7 @@ SELECT st.tag_value AS value,
        COUNT(*) AS count
 FROM mkt_listings l, unnest(l.subject_tags) AS st(tag_value)
 WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
+  AND l.search_vector @@ websearch_to_tsquery('english', ?)
 GROUP BY st.tag_value
 ORDER BY count DESC`
 
@@ -594,7 +654,7 @@ SELECT l.content_type AS value,
        COUNT(*) AS count
 FROM mkt_listings l
 WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
+  AND l.search_vector @@ websearch_to_tsquery('english', ?)
 GROUP BY l.content_type
 ORDER BY count DESC`
 
@@ -609,7 +669,7 @@ SELECT wt.tag_value AS value,
        COUNT(*) AS count
 FROM mkt_listings l, unnest(l.worldview_tags) AS wt(tag_value)
 WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
+  AND l.search_vector @@ websearch_to_tsquery('english', ?)
 GROUP BY wt.tag_value
 ORDER BY count DESC`
 
@@ -637,7 +697,7 @@ SELECT
     COUNT(*) AS count
 FROM mkt_listings l
 WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
+  AND l.search_vector @@ websearch_to_tsquery('english', ?)
 GROUP BY value, display_name
 ORDER BY count DESC`
 
@@ -663,7 +723,7 @@ SELECT
     COUNT(*) AS count
 FROM mkt_listings l
 WHERE l.status = 'published'
-  AND l.search_vector @@ websearch_to_tsquery('english', $1)
+  AND l.search_vector @@ websearch_to_tsquery('english', ?)
   AND l.rating_avg IS NOT NULL
 GROUP BY value, display_name
 ORDER BY count DESC`
@@ -715,9 +775,40 @@ func (r *PgLearningSearchRepository) SearchLearning(ctx context.Context, familyS
 		Relevance   float32   `gorm:"column:relevance"`
 	}
 
+	// Build dynamic filter clauses shared across all learning sub-queries.
+	// We avoid "? IS NULL OR col op ?" patterns because GORM + pgx can't
+	// infer the type of an untyped NULL for array operators (&&).
+	buildLearningFilters := func(studentCol, dateCol, tagsCol string) (string, []any) {
+		var clauses []string
+		var args []any
+		if filters.StudentID != nil {
+			clauses = append(clauses, studentCol+" = ?")
+			args = append(args, *filters.StudentID)
+		}
+		if filters.DateFrom != nil {
+			clauses = append(clauses, dateCol+" >= ?")
+			args = append(args, *filters.DateFrom)
+		}
+		if filters.DateTo != nil {
+			clauses = append(clauses, dateCol+" <= ?")
+			args = append(args, *filters.DateTo)
+		}
+		if len(filters.SubjectTags) > 0 {
+			clauses = append(clauses, tagsCol+" && ?")
+			args = append(args, filters.SubjectTags)
+		}
+		extra := ""
+		if len(clauses) > 0 {
+			extra = "\n  AND " + strings.Join(clauses, "\n  AND ")
+		}
+		return extra, args
+	}
+
 	var allRows []learningRow
 
 	if includeActivity {
+		filterSQL, filterArgs := buildLearningFilters("al.student_id", "al.activity_date", "al.subject_tags")
+
 		actSQL := `
 SELECT
     al.id,
@@ -731,31 +822,29 @@ SELECT
     '' AS entry_type,
     NULL AS author,
     '' AS status,
-    ts_rank(al.search_vector, websearch_to_tsquery('english', $2)) AS relevance
+    ts_rank(al.search_vector, websearch_to_tsquery('english', ?)) AS relevance
 FROM learn_activity_logs al
 JOIN iam_students s ON s.id = al.student_id
-WHERE al.family_id = $1
-  AND al.search_vector @@ websearch_to_tsquery('english', $2)
-  AND ($3::uuid IS NULL OR al.student_id = $3)
-  AND ($4::date IS NULL OR al.activity_date >= $4)
-  AND ($5::date IS NULL OR al.activity_date <= $5)
-  AND ($6::text[] IS NULL OR al.subject_tags && $6)
+WHERE al.family_id = ?
+  AND al.search_vector @@ websearch_to_tsquery('english', ?)` + filterSQL + `
 ORDER BY relevance DESC, al.id
-LIMIT $7`
+LIMIT ?`
 
-		var subjectTags any
-		if len(filters.SubjectTags) > 0 {
-			subjectTags = filters.SubjectTags
-		}
+		var args []any
+		args = append(args, query, familyID, query)
+		args = append(args, filterArgs...)
+		args = append(args, limit)
 
 		var rows []learningRow
-		if err := r.db.WithContext(ctx).Raw(actSQL, familyID, query, filters.StudentID, filters.DateFrom, filters.DateTo, subjectTags, limit).Scan(&rows).Error; err != nil {
+		if err := r.db.WithContext(ctx).Raw(actSQL, args...).Scan(&rows).Error; err != nil {
 			return nil, fmt.Errorf("search activities: %w", err)
 		}
 		allRows = append(allRows, rows...)
 	}
 
 	if includeJournal {
+		filterSQL, filterArgs := buildLearningFilters("je.student_id", "je.entry_date", "je.subject_tags")
+
 		jrnlSQL := `
 SELECT
     je.id,
@@ -769,31 +858,29 @@ SELECT
     je.entry_type,
     NULL AS author,
     '' AS status,
-    ts_rank(je.search_vector, websearch_to_tsquery('english', $2)) AS relevance
+    ts_rank(je.search_vector, websearch_to_tsquery('english', ?)) AS relevance
 FROM learn_journal_entries je
 JOIN iam_students s ON s.id = je.student_id
-WHERE je.family_id = $1
-  AND je.search_vector @@ websearch_to_tsquery('english', $2)
-  AND ($3::uuid IS NULL OR je.student_id = $3)
-  AND ($4::date IS NULL OR je.entry_date >= $4)
-  AND ($5::date IS NULL OR je.entry_date <= $5)
-  AND ($6::text[] IS NULL OR je.subject_tags && $6)
+WHERE je.family_id = ?
+  AND je.search_vector @@ websearch_to_tsquery('english', ?)` + filterSQL + `
 ORDER BY relevance DESC, je.id
-LIMIT $7`
+LIMIT ?`
 
-		var subjectTags any
-		if len(filters.SubjectTags) > 0 {
-			subjectTags = filters.SubjectTags
-		}
+		var args []any
+		args = append(args, query, familyID, query)
+		args = append(args, filterArgs...)
+		args = append(args, limit)
 
 		var rows []learningRow
-		if err := r.db.WithContext(ctx).Raw(jrnlSQL, familyID, query, filters.StudentID, filters.DateFrom, filters.DateTo, subjectTags, limit).Scan(&rows).Error; err != nil {
+		if err := r.db.WithContext(ctx).Raw(jrnlSQL, args...).Scan(&rows).Error; err != nil {
 			return nil, fmt.Errorf("search journals: %w", err)
 		}
 		allRows = append(allRows, rows...)
 	}
 
 	if includeReading {
+		filterSQL, filterArgs := buildLearningFilters("rp.student_id", "rp.created_at::date", "ri.subject_tags")
+
 		readSQL := `
 SELECT
     ri.id,
@@ -807,25 +894,21 @@ SELECT
     '' AS entry_type,
     ri.author,
     rp.status,
-    ts_rank(ri.search_vector, websearch_to_tsquery('english', $2)) AS relevance
+    ts_rank(ri.search_vector, websearch_to_tsquery('english', ?)) AS relevance
 FROM learn_reading_items ri
-JOIN learn_reading_progress rp ON rp.reading_item_id = ri.id AND rp.family_id = $1
+JOIN learn_reading_progress rp ON rp.reading_item_id = ri.id AND rp.family_id = ?
 JOIN iam_students s ON s.id = rp.student_id
-WHERE ri.search_vector @@ websearch_to_tsquery('english', $2)
-  AND ($3::uuid IS NULL OR rp.student_id = $3)
-  AND ($4::date IS NULL OR rp.created_at::date >= $4)
-  AND ($5::date IS NULL OR rp.created_at::date <= $5)
-  AND ($6::text[] IS NULL OR ri.subject_tags && $6)
+WHERE ri.search_vector @@ websearch_to_tsquery('english', ?)` + filterSQL + `
 ORDER BY relevance DESC, ri.id
-LIMIT $7`
+LIMIT ?`
 
-		var subjectTags any
-		if len(filters.SubjectTags) > 0 {
-			subjectTags = filters.SubjectTags
-		}
+		var args []any
+		args = append(args, query, familyID, query)
+		args = append(args, filterArgs...)
+		args = append(args, limit)
 
 		var rows []learningRow
-		if err := r.db.WithContext(ctx).Raw(readSQL, familyID, query, filters.StudentID, filters.DateFrom, filters.DateTo, subjectTags, limit).Scan(&rows).Error; err != nil {
+		if err := r.db.WithContext(ctx).Raw(readSQL, args...).Scan(&rows).Error; err != nil {
 			return nil, fmt.Errorf("search reading items: %w", err)
 		}
 		allRows = append(allRows, rows...)
@@ -902,15 +985,19 @@ SELECT DISTINCT
     l.title AS text,
     'listing' AS entity_type,
     l.id AS entity_id,
-    similarity(l.title, $1) AS score
+    similarity(l.title, ?) AS score
 FROM mkt_listings l
 WHERE l.status = 'published'
-  AND l.title % $1
+  AND l.title % ?
 ORDER BY score DESC
-LIMIT $2`
+LIMIT ?`
 
 	var suggestions []AutocompleteSuggestion
-	if err := r.db.WithContext(ctx).Raw(sql, query, limit).Scan(&suggestions).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql,
+		query,  // similarity
+		query,  // trigram match
+		limit,  // pagination
+	).Scan(&suggestions).Error; err != nil {
 		return nil, fmt.Errorf("autocomplete marketplace: %w", err)
 	}
 	return suggestions, nil
@@ -927,25 +1014,25 @@ SELECT
     1.0::real AS score
 FROM iam_families f
 JOIN soc_profiles sp ON sp.family_id = f.id
-WHERE f.id != $1
-AND f.display_name ILIKE $2 || '%'
+WHERE f.id != ?
+AND f.display_name ILIKE ? || '%'
 AND (
     EXISTS (
         SELECT 1 FROM soc_friendships sf
         WHERE sf.status = 'accepted'
         AND (
-            (sf.requester_family_id = $1 AND sf.accepter_family_id = f.id)
-            OR (sf.accepter_family_id = $1 AND sf.requester_family_id = f.id)
+            (sf.requester_family_id = ? AND sf.accepter_family_id = f.id)
+            OR (sf.accepter_family_id = ? AND sf.requester_family_id = f.id)
         )
     )
     OR sp.location_visible = true
 )
 AND NOT EXISTS (
     SELECT 1 FROM soc_blocks sb
-    WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = f.id)
-       OR (sb.blocker_family_id = f.id AND sb.blocked_family_id = $1)
+    WHERE (sb.blocker_family_id = ? AND sb.blocked_family_id = f.id)
+       OR (sb.blocker_family_id = f.id AND sb.blocked_family_id = ?)
 )
-LIMIT $3
+LIMIT ?
 )
 UNION ALL
 (
@@ -955,19 +1042,29 @@ SELECT
     g.id AS entity_id,
     1.0::real AS score
 FROM soc_groups g
-WHERE g.name ILIKE $2 || '%'
+WHERE g.name ILIKE ? || '%'
 AND NOT EXISTS (
     SELECT 1 FROM soc_blocks sb
-    WHERE (sb.blocker_family_id = $1 AND sb.blocked_family_id = g.creator_family_id)
-       OR (sb.blocker_family_id = g.creator_family_id AND sb.blocked_family_id = $1)
+    WHERE (sb.blocker_family_id = ? AND sb.blocked_family_id = g.creator_family_id)
+       OR (sb.blocker_family_id = g.creator_family_id AND sb.blocked_family_id = ?)
 )
-LIMIT $3
+LIMIT ?
 )
 ORDER BY text
-LIMIT $3`
+LIMIT ?`
 
 	var suggestions []AutocompleteSuggestion
-	if err := r.db.WithContext(ctx).Raw(sql, searcherFamilyID, query, limit).Scan(&suggestions).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql,
+		searcherFamilyID,                           // f.id !=
+		query,                                      // ILIKE family
+		searcherFamilyID, searcherFamilyID,         // friends check
+		searcherFamilyID, searcherFamilyID,         // blocks check (family)
+		limit,                                      // LIMIT (family subquery)
+		query,                                      // ILIKE group
+		searcherFamilyID, searcherFamilyID,         // blocks check (group)
+		limit,                                      // LIMIT (group subquery)
+		limit,                                      // LIMIT (outer)
+	).Scan(&suggestions).Error; err != nil {
 		return nil, fmt.Errorf("autocomplete social: %w", err)
 	}
 	return suggestions, nil
@@ -984,9 +1081,9 @@ SELECT title AS text,
        id AS entity_id,
        1.0::real AS score
 FROM learn_activity_logs
-WHERE family_id = $1
-AND title ILIKE $2 || '%'
-LIMIT $3
+WHERE family_id = ?
+AND title ILIKE ? || '%'
+LIMIT ?
 )
 UNION ALL
 (
@@ -995,15 +1092,19 @@ SELECT title AS text,
        id AS entity_id,
        1.0::real AS score
 FROM learn_journal_entries
-WHERE family_id = $1
-AND title ILIKE $2 || '%'
-LIMIT $3
+WHERE family_id = ?
+AND title ILIKE ? || '%'
+LIMIT ?
 )
 ORDER BY text
-LIMIT $3`
+LIMIT ?`
 
 	var suggestions []AutocompleteSuggestion
-	if err := r.db.WithContext(ctx).Raw(sql, familyID, query, limit).Scan(&suggestions).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sql,
+		familyID, query, limit,   // activity subquery
+		familyID, query, limit,   // journal subquery
+		limit,                    // outer LIMIT
+	).Scan(&suggestions).Error; err != nil {
 		return nil, fmt.Errorf("autocomplete learning: %w", err)
 	}
 	return suggestions, nil

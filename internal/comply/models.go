@@ -204,7 +204,7 @@ type PortfolioItemInput struct {
 // CreateTranscriptCommand is the body for POST /v1/compliance/students/:id/transcripts (Phase 3).
 type CreateTranscriptCommand struct {
 	Title       string   `json:"title" validate:"required"`
-	GradeLevels []string `json:"grade_levels" validate:"required"`
+	GradeLevels []string `json:"grade_levels"`
 }
 
 // CreateCourseCommand is the body for POST /v1/compliance/students/:id/courses (Phase 3).

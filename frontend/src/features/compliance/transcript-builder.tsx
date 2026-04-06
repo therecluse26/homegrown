@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  Download,
   FileText,
   GraduationCap,
 } from "lucide-react";
@@ -18,74 +17,25 @@ import {
   Badge,
   Input,
   ConfirmationDialog,
-  Tabs,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
 import { TierGate } from "@/components/common/tier-gate";
 import { useAuth } from "@/hooks/use-auth";
 import {
   useTranscriptDetail,
-  useUpdateTranscript,
-  useAddSemester,
   useAddCourse,
   useUpdateCourse,
   useDeleteCourse,
   useGenerateTranscript,
 } from "@/hooks/use-compliance";
-import type {
-  TranscriptSemester,
-  TranscriptCourse,
-  CourseLevel,
-  GpaDisplay,
-} from "@/hooks/use-compliance";
-
-// ─── GPA calculation utilities ─────────────────────────────────────────────
-
-const LETTER_TO_POINTS: Record<string, number> = {
-  "A+": 4.0, A: 4.0, "A-": 3.7,
-  "B+": 3.3, B: 3.0, "B-": 2.7,
-  "C+": 2.3, C: 2.0, "C-": 1.7,
-  "D+": 1.3, D: 1.0, "D-": 0.7,
-  F: 0.0,
-};
-
-const LEVEL_WEIGHT: Record<CourseLevel, number> = {
-  regular: 0,
-  honors: 0.5,
-  ap: 1.0,
-  dual_enrollment: 1.0,
-};
-
-function calculateWeightedGPA(courses: TranscriptCourse[]): number | undefined {
-  if (courses.length === 0) return undefined;
-  let totalQualityPoints = 0;
-  let totalCredits = 0;
-
-  for (const course of courses) {
-    const basePoints = LETTER_TO_POINTS[course.grade.toUpperCase()];
-    if (basePoints === undefined) continue;
-    const weightedPoints = basePoints + LEVEL_WEIGHT[course.level];
-    totalQualityPoints += weightedPoints * course.credits;
-    totalCredits += course.credits;
-  }
-
-  if (totalCredits === 0) return undefined;
-  return totalQualityPoints / totalCredits;
-}
-
-function calculateSemesterGPA(
-  courses: TranscriptCourse[],
-): number | undefined {
-  return calculateWeightedGPA(courses);
-}
+import type { TranscriptCourse } from "@/hooks/use-compliance";
 
 // ─── Level labels ──────────────────────────────────────────────────────────
 
-const LEVEL_LABELS: Record<CourseLevel, string> = {
+const LEVEL_LABELS: Record<string, string> = {
   regular: "compliance.transcript.level.regular",
   honors: "compliance.transcript.level.honors",
   ap: "compliance.transcript.level.ap",
-  dual_enrollment: "compliance.transcript.level.dualEnrollment",
 };
 
 // ─── Course row ────────────────────────────────────────────────────────────
@@ -122,7 +72,7 @@ function CourseRow({
             id: "compliance.transcript.course.level",
           })}
         >
-          {(Object.keys(LEVEL_LABELS) as CourseLevel[]).map((l) => (
+          {Object.keys(LEVEL_LABELS).map((l) => (
             <option key={l} value={l}>
               {intl.formatMessage({ id: LEVEL_LABELS[l] })}
             </option>
@@ -146,8 +96,8 @@ function CourseRow({
       </td>
       <td className="py-2 pr-2">
         <Input
-          value={course.grade}
-          onChange={(e) => onUpdate(course.id, "grade", e.target.value)}
+          value={course.grade_letter ?? ""}
+          onChange={(e) => onUpdate(course.id, "grade_letter", e.target.value)}
           className="w-16 type-body-sm text-center"
           aria-label={intl.formatMessage({
             id: "compliance.transcript.course.grade",
@@ -155,7 +105,7 @@ function CourseRow({
         />
       </td>
       <td className="py-2 pr-2 type-label-sm text-on-surface-variant text-center whitespace-nowrap">
-        {course.grade_points !== undefined
+        {course.grade_points != null
           ? course.grade_points.toFixed(2)
           : "—"}
       </td>
@@ -175,164 +125,6 @@ function CourseRow({
   );
 }
 
-// ─── Semester tab content ──────────────────────────────────────────────────
-
-function SemesterPanel({
-  semester,
-  studentId,
-}: {
-  semester: TranscriptSemester;
-  studentId: string;
-}) {
-  const intl = useIntl();
-  const addCourse = useAddCourse(studentId);
-  const updateCourse = useUpdateCourse(studentId, "");
-  const deleteCourse = useDeleteCourse(studentId);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const gpaLiveRef = useRef<HTMLSpanElement>(null);
-
-  const semesterGPA = useMemo(
-    () => calculateSemesterGPA(semester.courses),
-    [semester.courses],
-  );
-
-  const handleAddCourse = useCallback(() => {
-    addCourse.mutate({
-      semester_id: semester.id,
-      title: "",
-      level: "regular",
-      credits: 1,
-      grade: "",
-      sort_order: semester.courses.length,
-    });
-  }, [addCourse, semester.id, semester.courses.length]);
-
-  const handleUpdateCourse = useCallback(
-    (courseId: string, field: string, value: string | number) => {
-      // Use the course-specific mutation
-      const body: Record<string, string | number> = {};
-      body[field] = value;
-      updateCourse.mutate(body as never);
-      // Announce GPA change
-      if (gpaLiveRef.current && (field === "grade" || field === "credits" || field === "level")) {
-        const newGPA = calculateWeightedGPA(
-          semester.courses.map((c) =>
-            c.id === courseId ? { ...c, [field]: value } : c,
-          ),
-        );
-        if (newGPA !== undefined) {
-          gpaLiveRef.current.textContent = intl.formatMessage(
-            { id: "compliance.transcript.gpaUpdated" },
-            { gpa: newGPA.toFixed(2) },
-          );
-        }
-      }
-    },
-    [updateCourse, semester.courses, intl],
-  );
-
-  const handleDeleteCourse = useCallback(() => {
-    if (deleteTarget) {
-      deleteCourse.mutate(deleteTarget, {
-        onSuccess: () => setDeleteTarget(null),
-      });
-    }
-  }, [deleteTarget, deleteCourse]);
-
-  return (
-    <div>
-      <span aria-live="polite" className="sr-only" ref={gpaLiveRef} />
-
-      {/* Semester summary */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <span className="type-label-md text-on-surface-variant">
-            <FormattedMessage
-              id="compliance.transcript.semesterCredits"
-              values={{ count: semester.semester_credits }}
-            />
-          </span>
-          {semesterGPA !== undefined && (
-            <Badge variant="primary">
-              <FormattedMessage
-                id="compliance.transcript.semesterGpa"
-                values={{ gpa: semesterGPA.toFixed(2) }}
-              />
-            </Badge>
-          )}
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleAddCourse}
-          disabled={addCourse.isPending}
-        >
-          <Icon icon={Plus} size="sm" className="mr-1" />
-          <FormattedMessage id="compliance.transcript.addCourse" />
-        </Button>
-      </div>
-
-      {/* Course table */}
-      {semester.courses.length === 0 ? (
-        <p className="type-body-md text-on-surface-variant text-center py-6">
-          <FormattedMessage id="compliance.transcript.noCourses" />
-        </p>
-      ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="type-label-sm text-on-surface-variant uppercase tracking-wide">
-              <th className="text-left pb-2 pr-2 font-medium">
-                <FormattedMessage id="compliance.transcript.course.title" />
-              </th>
-              <th className="text-left pb-2 pr-2 font-medium">
-                <FormattedMessage id="compliance.transcript.course.level" />
-              </th>
-              <th className="text-center pb-2 pr-2 font-medium">
-                <FormattedMessage id="compliance.transcript.course.credits" />
-              </th>
-              <th className="text-center pb-2 pr-2 font-medium">
-                <FormattedMessage id="compliance.transcript.course.grade" />
-              </th>
-              <th className="text-center pb-2 pr-2 font-medium">
-                <FormattedMessage id="compliance.transcript.course.points" />
-              </th>
-              <th className="text-center pb-2 font-medium w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {semester.courses.map((course) => (
-              <CourseRow
-                key={course.id}
-                course={course}
-                onUpdate={handleUpdateCourse}
-                onDelete={setDeleteTarget}
-              />
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {/* Delete course confirmation */}
-      <ConfirmationDialog
-        open={!!deleteTarget}
-        onConfirm={handleDeleteCourse}
-        onClose={() => setDeleteTarget(null)}
-        title={intl.formatMessage({
-          id: "compliance.transcript.course.deleteTitle",
-        })}
-        confirmLabel={intl.formatMessage({
-          id: "compliance.transcript.course.deleteConfirm",
-        })}
-        destructive
-      >
-        {intl.formatMessage({
-          id: "compliance.transcript.course.deleteDescription",
-        })}
-      </ConfirmationDialog>
-    </div>
-  );
-}
-
 // ─── Main component ────────────────────────────────────────────────────────
 
 export function TranscriptBuilder() {
@@ -342,57 +134,49 @@ export function TranscriptBuilder() {
   const studentId = routeStudentId ?? "";
 
   const { data: transcript, isPending } = useTranscriptDetail(studentId, id);
-  const updateTranscript = useUpdateTranscript(studentId, id ?? "");
-  const addSemester = useAddSemester(studentId, id ?? "");
+  const addCourse = useAddCourse(studentId);
+  const updateCourse = useUpdateCourse(studentId);
+  const deleteCourse = useDeleteCourse(studentId);
   const generateTranscript = useGenerateTranscript(studentId, id ?? "");
 
-
-  const [gpaDisplay, setGpaDisplay] = useState<GpaDisplay>("four_point");
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
-  const [newSemesterName, setNewSemesterName] = useState("");
-  const [showAddSemester, setShowAddSemester] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const gpaLiveRef = useRef<HTMLSpanElement>(null);
 
-  // Sync GPA display from server
-  const lastSyncedId = useRef<string | null>(null);
-  if (transcript && transcript.id !== lastSyncedId.current) {
-    lastSyncedId.current = transcript.id;
-    setGpaDisplay(transcript.gpa_display);
-  }
+  const courses = useMemo(() => transcript?.courses ?? [], [transcript]);
 
-  // Calculate cumulative GPA across all semesters
-  const allCourses = useMemo(() => {
-    if (!transcript) return [];
-    return transcript.semesters.flatMap((s) => s.courses);
-  }, [transcript]);
-
-  const cumulativeGPA = useMemo(
-    () => calculateWeightedGPA(allCourses),
-    [allCourses],
+  const totalCredits = useMemo(
+    () => courses.reduce((sum, c) => sum + c.credits, 0),
+    [courses],
   );
 
-  const handleAddSemester = useCallback(() => {
-    if (!newSemesterName.trim()) return;
-    addSemester.mutate(
-      {
-        name: newSemesterName.trim(),
-        sort_order: transcript?.semesters.length ?? 0,
-      },
-      {
-        onSuccess: () => {
-          setNewSemesterName("");
-          setShowAddSemester(false);
-        },
-      },
-    );
-  }, [newSemesterName, addSemester, transcript]);
+  const handleAddCourse = useCallback(() => {
+    addCourse.mutate({
+      title: "New Course",
+      subject: "General",
+      grade_level: 9,
+      level: "regular",
+      credits: 1,
+      school_year: new Date().getFullYear().toString(),
+    });
+  }, [addCourse]);
 
-  const handleGpaDisplayChange = useCallback(
-    (display: GpaDisplay) => {
-      setGpaDisplay(display);
-      updateTranscript.mutate({ gpa_display: display });
+  const handleUpdateCourse = useCallback(
+    (courseId: string, field: string, value: string | number) => {
+      const body: Record<string, string | number> = { courseId: courseId };
+      body[field] = value;
+      updateCourse.mutate(body as never);
     },
-    [updateTranscript],
+    [updateCourse],
   );
+
+  const handleDeleteCourse = useCallback(() => {
+    if (deleteTarget) {
+      deleteCourse.mutate(deleteTarget, {
+        onSuccess: () => setDeleteTarget(null),
+      });
+    }
+  }, [deleteTarget, deleteCourse]);
 
   const handleGenerate = useCallback(() => {
     generateTranscript.mutate(undefined, {
@@ -434,17 +218,6 @@ export function TranscriptBuilder() {
     );
   }
 
-  const semesterTabs = transcript.semesters.map((s) => ({
-    id: s.id,
-    label: s.name,
-    content: (
-      <SemesterPanel
-        semester={s}
-        studentId={studentId}
-      />
-    ),
-  }));
-
   return (
     <div className="max-w-content mx-auto">
       <PageTitle
@@ -470,35 +243,11 @@ export function TranscriptBuilder() {
             {transcript.student_name}
           </span>
         </div>
-
-        {/* GPA display toggle */}
-        <div className="flex items-center gap-2">
-          <span className="type-label-md text-on-surface-variant">
-            <FormattedMessage id="compliance.transcript.form.gpaDisplay" />:
-          </span>
-          <div className="flex bg-surface-container-low rounded-radius-sm">
-            {(["four_point", "percentage", "pass_fail"] as GpaDisplay[]).map(
-              (d) => (
-                <button
-                  key={d}
-                  onClick={() => handleGpaDisplayChange(d)}
-                  className={`px-2 py-1 type-label-sm rounded-radius-sm transition-colors ${
-                    gpaDisplay === d
-                      ? "bg-primary text-on-primary"
-                      : "text-on-surface-variant hover:bg-surface-container-high"
-                  }`}
-                >
-                  <FormattedMessage
-                    id={`compliance.transcript.gpa.${d === "four_point" ? "fourPoint" : d === "percentage" ? "percentage" : "passFail"}`}
-                  />
-                </button>
-              ),
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* Cumulative GPA */}
+      <span aria-live="polite" className="sr-only" ref={gpaLiveRef} />
+
+      {/* GPA summary */}
       <Card className="p-card-padding mb-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -515,8 +264,8 @@ export function TranscriptBuilder() {
                 className="type-headline-md text-on-surface font-bold"
                 aria-live="polite"
               >
-                {cumulativeGPA !== undefined
-                  ? cumulativeGPA.toFixed(2)
+                {transcript.gpa_weighted != null
+                  ? transcript.gpa_weighted.toFixed(2)
                   : "—"}
               </p>
             </div>
@@ -525,106 +274,87 @@ export function TranscriptBuilder() {
             <span>
               <FormattedMessage
                 id="compliance.transcript.totalCredits"
-                values={{ count: transcript.total_credits }}
+                values={{ count: totalCredits }}
               />
             </span>
             <span>
               <FormattedMessage
-                id="compliance.transcript.totalSemesters"
-                values={{ count: transcript.semesters.length }}
+                id="compliance.transcript.totalCourses"
+                values={{ count: courses.length }}
               />
             </span>
+            <Badge>
+              {transcript.status}
+            </Badge>
           </div>
         </div>
       </Card>
 
-      {/* Semester tabs */}
+      {/* Course table */}
       <Card className="p-card-padding mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="type-title-sm text-on-surface">
-            <FormattedMessage id="compliance.transcript.semesters.title" />
+            <FormattedMessage id="compliance.transcript.courses" />
           </h3>
           <Button
-            variant="tertiary"
+            variant="secondary"
             size="sm"
-            onClick={() => setShowAddSemester(true)}
+            onClick={handleAddCourse}
+            disabled={addCourse.isPending}
           >
             <Icon icon={Plus} size="sm" className="mr-1" />
-            <FormattedMessage id="compliance.transcript.addSemester" />
+            <FormattedMessage id="compliance.transcript.addCourse" />
           </Button>
         </div>
 
-        {/* Add semester inline form */}
-        {showAddSemester && (
-          <div className="flex items-end gap-2 mb-4 p-3 bg-surface-container-low rounded-radius-sm">
-            <div className="flex-1">
-              <label
-                htmlFor="new-semester"
-                className="type-label-md text-on-surface block mb-1"
-              >
-                <FormattedMessage id="compliance.transcript.semesterName" />
-              </label>
-              <Input
-                id="new-semester"
-                value={newSemesterName}
-                onChange={(e) => setNewSemesterName(e.target.value)}
-                placeholder={intl.formatMessage({
-                  id: "compliance.transcript.semesterName.placeholder",
-                })}
-              />
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleAddSemester}
-              disabled={!newSemesterName.trim() || addSemester.isPending}
-            >
-              <FormattedMessage id="common.add" />
-            </Button>
-            <Button
-              variant="tertiary"
-              size="sm"
-              onClick={() => {
-                setShowAddSemester(false);
-                setNewSemesterName("");
-              }}
-            >
-              <FormattedMessage id="common.cancel" />
-            </Button>
-          </div>
-        )}
-
-        {transcript.semesters.length === 0 ? (
+        {courses.length === 0 ? (
           <p className="type-body-md text-on-surface-variant text-center py-8">
-            <FormattedMessage id="compliance.transcript.noSemesters" />
+            <FormattedMessage id="compliance.transcript.noCourses" />
           </p>
         ) : (
-          <Tabs tabs={semesterTabs} />
+          <table className="w-full">
+            <thead>
+              <tr className="type-label-sm text-on-surface-variant uppercase tracking-wide">
+                <th className="text-left pb-2 pr-2 font-medium">
+                  <FormattedMessage id="compliance.transcript.course.title" />
+                </th>
+                <th className="text-left pb-2 pr-2 font-medium">
+                  <FormattedMessage id="compliance.transcript.course.level" />
+                </th>
+                <th className="text-center pb-2 pr-2 font-medium">
+                  <FormattedMessage id="compliance.transcript.course.credits" />
+                </th>
+                <th className="text-center pb-2 pr-2 font-medium">
+                  <FormattedMessage id="compliance.transcript.course.grade" />
+                </th>
+                <th className="text-center pb-2 pr-2 font-medium">
+                  <FormattedMessage id="compliance.transcript.course.points" />
+                </th>
+                <th className="text-center pb-2 font-medium w-10" />
+              </tr>
+            </thead>
+            <tbody>
+              {courses.map((course) => (
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  onUpdate={handleUpdateCourse}
+                  onDelete={setDeleteTarget}
+                />
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
 
       {/* Action bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {transcript.download_url && (
-            <a
-              href={transcript.download_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="tertiary" size="sm">
-                <Icon icon={Download} size="sm" className="mr-1" />
-                <FormattedMessage id="compliance.transcript.download" />
-              </Button>
-            </a>
-          )}
-        </div>
+      <div className="flex items-center justify-end">
         <Button
           variant="primary"
           size="sm"
           onClick={() => setShowGenerateConfirm(true)}
           disabled={
-            transcript.semesters.length === 0 ||
+            courses.length === 0 ||
             generateTranscript.isPending
           }
         >
@@ -632,6 +362,24 @@ export function TranscriptBuilder() {
           <FormattedMessage id="compliance.transcript.generate" />
         </Button>
       </div>
+
+      {/* Delete course confirmation */}
+      <ConfirmationDialog
+        open={!!deleteTarget}
+        onConfirm={handleDeleteCourse}
+        onClose={() => setDeleteTarget(null)}
+        title={intl.formatMessage({
+          id: "compliance.transcript.course.deleteTitle",
+        })}
+        confirmLabel={intl.formatMessage({
+          id: "compliance.transcript.course.deleteConfirm",
+        })}
+        destructive
+      >
+        {intl.formatMessage({
+          id: "compliance.transcript.course.deleteDescription",
+        })}
+      </ConfirmationDialog>
 
       {/* Generate confirmation */}
       <ConfirmationDialog
