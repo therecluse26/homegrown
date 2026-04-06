@@ -762,7 +762,7 @@ Produce a structured gap report as a markdown file. Follow this template:
 
 ## 6  Screenshots
 
-All screenshots saved to `specs/screenshots/e2e/` with naming convention:
+All screenshots saved to `research/screenshots/e2e/` with naming convention:
 `{route-group}-{route-number}-{status}.png`
 
 Example: `social-S1-PASS.png`, `learning-LR9-FAIL.png`
@@ -803,10 +803,10 @@ If authentication is lost (session expired):
 
 ### 7.4  Screenshot Storage
 
-Save all screenshots to `specs/screenshots/e2e/`. Create the directory if it doesn't exist:
+Save all screenshots to `research/screenshots/e2e/`. Create the directory if it doesn't exist:
 
 ```bash
-mkdir -p specs/screenshots/e2e
+mkdir -p research/screenshots/e2e
 ```
 
 Use descriptive filenames: `{group}-{number}-{status}.png`
