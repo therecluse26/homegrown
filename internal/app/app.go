@@ -272,7 +272,7 @@ func corsConfig(cfg *config.AppConfig) echomw.CORSConfig {
 			http.MethodPatch,
 			http.MethodDelete,
 		},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"},
 		AllowCredentials: true, // Required for auth provider session cookies
 	}
 }
