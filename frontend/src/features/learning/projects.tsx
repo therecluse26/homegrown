@@ -35,13 +35,20 @@ import { useState, useEffect, useRef, useCallback } from "react";
 export function Projects() {
   const intl = useIntl();
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const projects = useProjects();
   const students = useStudents();
+  const [studentFilter, setStudentFilter] = useState("");
+  const projects = useProjects(studentFilter);
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
-  const deleteProject = useDeleteProject();
-  const addMilestone = useAddMilestone();
-  const toggleMilestone = useToggleMilestone();
+  const deleteProject = useDeleteProject(studentFilter);
+  const addMilestone = useAddMilestone(studentFilter);
+  const toggleMilestone = useToggleMilestone(studentFilter);
+
+  // Auto-select first student
+  useEffect(() => {
+    const first = students.data?.[0];
+    if (first?.id && !studentFilter) setStudentFilter(first.id);
+  }, [students.data, studentFilter]);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -100,9 +107,9 @@ export function Projects() {
 
   const handleStatusChange = useCallback(
     (id: string, status: ProjectStatus) => {
-      updateProject.mutate({ id, status });
+      updateProject.mutate({ id, studentId: studentFilter, status });
     },
-    [updateProject],
+    [updateProject, studentFilter],
   );
 
   // ─── Loading ──────────────────────────────────────────────────────────

@@ -243,7 +243,7 @@ export function PostDetail() {
   const intl = useIntl();
   const navigate = useNavigate();
   const { postId } = useParams<{ postId: string }>();
-  const { data, isPending } = usePostDetail(postId);
+  const { data, isPending, error } = usePostDetail(postId);
   const likePost = useLikePost();
   const unlikePost = useUnlikePost();
   const deletePost = useDeletePost();
@@ -272,7 +272,25 @@ export function PostDetail() {
     );
   }
 
-  if (!data) return null;
+  if (error || !data) {
+    return (
+      <div className="max-w-content-narrow mx-auto">
+        <PageTitle title={intl.formatMessage({ id: "social.post.notFound.title" })} />
+        <RouterLink
+          to="/"
+          className="inline-flex items-center gap-1 mb-4 type-label-md text-on-surface-variant hover:text-primary transition-colors"
+        >
+          <Icon icon={ArrowLeft} size="sm" />
+          <FormattedMessage id="social.post.backToFeed" />
+        </RouterLink>
+        <Card className="p-card-padding text-center">
+          <p className="type-body-md text-on-surface-variant">
+            <FormattedMessage id="social.post.notFound" />
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   const { post, comments } = data;
 

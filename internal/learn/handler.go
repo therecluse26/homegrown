@@ -154,6 +154,9 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	learn.PATCH("/students/:studentId/projects/:id", h.updateProjectProgress)
 	learn.DELETE("/students/:studentId/projects/:id", h.deleteProjectProgress)
 
+	// Streak (stub — Phase 3)
+	learn.GET("/students/:studentId/streak", h.getStudentStreak)
+
 	// Grading Scales (Layer 3 — family-scoped, Phase 2)
 	learn.POST("/grading-scales", h.createGradingScale)
 	learn.GET("/grading-scales", h.listGradingScales)
@@ -3325,4 +3328,15 @@ func (h *Handler) deleteGradingScale(c echo.Context) error {
 		return mapLearningError(err)
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ─── Stub Handlers (Phase 3) ────────────────────────────────────────────────
+
+// getStudentStreak returns streak data for a student (stub — always zero).
+func (h *Handler) getStudentStreak(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"current_streak":     0,
+		"longest_streak":     0,
+		"last_activity_date": nil,
+	})
 }

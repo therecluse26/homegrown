@@ -45,28 +45,35 @@ export interface CreateMilestoneRequest {
   due_date?: string;
 }
 
+interface PaginatedResponse<T> {
+  data: T[];
+  has_more: boolean;
+}
+
 // ─── Queries ────────────────────────────────────────────────────────────────
 
-export function useProjects(studentId?: string) {
+export function useProjects(studentId: string) {
   return useQuery({
     queryKey: ["learning", "projects", studentId],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (studentId) params.set("student_id", studentId);
-      const qs = params.toString();
-      return apiClient<Project[]>(
-        `/v1/learning/projects${qs ? `?${qs}` : ""}`,
+    queryFn: async () => {
+      const resp = await apiClient<PaginatedResponse<Project>>(
+        `/v1/learning/students/${studentId}/projects`,
       );
+      return resp.data;
     },
+    enabled: !!studentId,
     staleTime: 1000 * 60, // 1 min
   });
 }
 
-export function useProject(id: string) {
+export function useProject(studentId: string, id: string) {
   return useQuery({
-    queryKey: ["learning", "projects", "detail", id],
-    queryFn: () => apiClient<Project>(`/v1/learning/projects/${id}`),
-    enabled: !!id,
+    queryKey: ["learning", "projects", "detail", studentId, id],
+    queryFn: () =>
+      apiClient<Project>(
+        `/v1/learning/students/${studentId}/projects/${id}`,
+      ),
+    enabled: !!studentId && !!id,
   });
 }
 
@@ -76,10 +83,10 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateProjectRequest) =>
-      apiClient<Project>("/v1/learning/projects", {
-        method: "POST",
-        body,
-      }),
+      apiClient<Project>(
+        `/v1/learning/students/${body.student_id}/projects`,
+        { method: "POST", body },
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["learning", "projects"],
@@ -93,12 +100,13 @@ export function useUpdateProject() {
   return useMutation({
     mutationFn: ({
       id,
+      studentId,
       ...body
-    }: UpdateProjectRequest & { id: string }) =>
-      apiClient<Project>(`/v1/learning/projects/${id}`, {
-        method: "PATCH",
-        body,
-      }),
+    }: UpdateProjectRequest & { id: string; studentId: string }) =>
+      apiClient<Project>(
+        `/v1/learning/students/${studentId}/projects/${id}`,
+        { method: "PATCH", body },
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["learning", "projects"],
@@ -107,13 +115,14 @@ export function useUpdateProject() {
   });
 }
 
-export function useDeleteProject() {
+export function useDeleteProject(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiClient<void>(`/v1/learning/projects/${id}`, {
-        method: "DELETE",
-      }),
+      apiClient<void>(
+        `/v1/learning/students/${studentId}/projects/${id}`,
+        { method: "DELETE" },
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["learning", "projects"],
@@ -122,7 +131,7 @@ export function useDeleteProject() {
   });
 }
 
-export function useAddMilestone() {
+export function useAddMilestone(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -130,7 +139,7 @@ export function useAddMilestone() {
       ...body
     }: CreateMilestoneRequest & { projectId: string }) =>
       apiClient<Milestone>(
-        `/v1/learning/projects/${projectId}/milestones`,
+        `/v1/learning/students/${studentId}/projects/${projectId}/milestones`,
         { method: "POST", body },
       ),
     onSuccess: () => {
@@ -141,7 +150,7 @@ export function useAddMilestone() {
   });
 }
 
-export function useToggleMilestone() {
+export function useToggleMilestone(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -154,7 +163,7 @@ export function useToggleMilestone() {
       completed: boolean;
     }) =>
       apiClient<void>(
-        `/v1/learning/projects/${projectId}/milestones/${milestoneId}`,
+        `/v1/learning/students/${studentId}/projects/${projectId}/milestones/${milestoneId}`,
         { method: "PATCH", body: { completed } },
       ),
     onSuccess: () => {

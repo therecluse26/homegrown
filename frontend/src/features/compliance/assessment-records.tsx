@@ -9,13 +9,22 @@ import {
 import { TierGate } from "@/components/common/tier-gate";
 import { useComplianceAssessments } from "@/hooks/use-compliance";
 import { useAuth } from "@/hooks/use-auth";
-import { useEffect, useRef } from "react";
+import { useStudents } from "@/hooks/use-family";
+import { useState, useEffect, useRef } from "react";
 
 export function AssessmentRecords() {
   const intl = useIntl();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { tier } = useAuth();
-  const assessments = useComplianceAssessments();
+  const students = useStudents();
+  const [studentId, setStudentId] = useState("");
+  const assessments = useComplianceAssessments(studentId);
+
+  // Auto-select first student
+  useEffect(() => {
+    const first = students.data?.[0];
+    if (first?.id && !studentId) setStudentId(first.id);
+  }, [students.data, studentId]);
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "compliance.assessments.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
@@ -103,19 +112,23 @@ export function AssessmentRecords() {
                   />
                   <div>
                     <p className="type-title-sm text-on-surface font-medium">
-                      {record.assessment_title}
+                      {record.title}
                     </p>
                     <p className="type-body-sm text-on-surface-variant">
-                      {record.student_name} · {record.requirement_name}
+                      {record.subject} · {record.assessment_type}
                     </p>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="type-title-sm text-on-surface font-medium">
-                    {record.score}
+                    {record.score != null
+                      ? record.max_score != null
+                        ? `${record.score}/${record.max_score}`
+                        : String(record.score)
+                      : record.grade_letter ?? "—"}
                   </p>
                   <p className="type-label-sm text-on-surface-variant">
-                    {intl.formatDate(record.date, {
+                    {intl.formatDate(record.assessment_date, {
                       month: "short",
                       day: "numeric",
                       year: "numeric",

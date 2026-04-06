@@ -91,7 +91,7 @@ export function useSearch(params: SearchParams | null) {
     queryKey: ["search", params],
     queryFn: () =>
       apiClient<SearchResponse>(
-        `/v1/search/search?${buildSearchQuery(params!)}`,
+        `/v1/search?${buildSearchQuery(params!)}`,
       ),
     enabled: !!params && params.q.length >= 2,
   });

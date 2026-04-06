@@ -179,15 +179,15 @@ function CourseRow({
 
 function SemesterPanel({
   semester,
-  transcriptId,
+  studentId,
 }: {
   semester: TranscriptSemester;
-  transcriptId: string;
+  studentId: string;
 }) {
   const intl = useIntl();
-  const addCourse = useAddCourse(transcriptId);
-  const updateCourse = useUpdateCourse(transcriptId, "");
-  const deleteCourse = useDeleteCourse(transcriptId);
+  const addCourse = useAddCourse(studentId);
+  const updateCourse = useUpdateCourse(studentId, "");
+  const deleteCourse = useDeleteCourse(studentId);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const gpaLiveRef = useRef<HTMLSpanElement>(null);
 
@@ -337,13 +337,14 @@ function SemesterPanel({
 
 export function TranscriptBuilder() {
   const intl = useIntl();
-  const { id } = useParams<{ id: string }>();
+  const { id, studentId: routeStudentId } = useParams<{ id: string; studentId: string }>();
   const { tier } = useAuth();
+  const studentId = routeStudentId ?? "";
 
-  const { data: transcript, isPending } = useTranscriptDetail(id);
-  const updateTranscript = useUpdateTranscript(id ?? "");
-  const addSemester = useAddSemester(id ?? "");
-  const generateTranscript = useGenerateTranscript(id ?? "");
+  const { data: transcript, isPending } = useTranscriptDetail(studentId, id);
+  const updateTranscript = useUpdateTranscript(studentId, id ?? "");
+  const addSemester = useAddSemester(studentId, id ?? "");
+  const generateTranscript = useGenerateTranscript(studentId, id ?? "");
 
 
   const [gpaDisplay, setGpaDisplay] = useState<GpaDisplay>("four_point");
@@ -439,7 +440,7 @@ export function TranscriptBuilder() {
     content: (
       <SemesterPanel
         semester={s}
-        transcriptId={transcript.id}
+        studentId={studentId}
       />
     ),
   }));

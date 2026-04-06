@@ -38,6 +38,7 @@ func (h *Handler) RegisterWithStudentSession(authGroup, hooksGroup, rootGroup *e
 
 	// Authenticated routes under /v1 — all require session cookie via Auth middleware.
 	authGroup.GET("/auth/me", h.getMe)
+	authGroup.GET("/auth/mfa/status", h.getMfaStatus)
 
 	families := authGroup.Group("/families")
 	families.GET("/profile", h.getFamilyProfile)
@@ -833,4 +834,14 @@ func mapIamError(err error) error {
 
 	// Default: internal error — log internally, never expose details. [CODING §2.2]
 	return shared.ErrInternal(err)
+}
+
+// ─── Stub Handlers (Phase 3) ────────────────────────────────────────────────
+
+// getMfaStatus returns MFA status (stub — always disabled).
+func (h *Handler) getMfaStatus(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"enabled": false,
+		"methods": []any{},
+	})
 }

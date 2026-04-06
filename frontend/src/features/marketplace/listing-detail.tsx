@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useParams, Link as RouterLink } from "react-router";
 import { ArrowLeft, ShoppingCart, Star, Download, FileText, Package } from "lucide-react";
@@ -9,6 +9,7 @@ import {
   Skeleton,
   Badge,
 } from "@/components/ui";
+import { useToast } from "@/components/ui/toast";
 import { PageTitle } from "@/components/common/page-title";
 import {
   useListingDetail,
@@ -64,11 +65,18 @@ function ReviewCard({ review }: { review: ReviewResponse }) {
 export function ListingDetail() {
   const intl = useIntl();
   const { id } = useParams<{ id: string }>();
-  const { data: listing, isPending } = useListingDetail(id);
+  const { data: listing, isPending, error } = useListingDetail(id);
   const { data: reviewsResp } = useListingReviews(id);
   const reviews = reviewsResp?.data;
   const addToCart = useAddToCart();
   const purchaseBundle = usePurchaseBundle();
+  const { toast } = useToast();
+
+  const handleAddToCart = useCallback(() => {
+    addToCart.mutate(listing?.id ?? "", {
+      onSuccess: () => toast(intl.formatMessage({ id: "marketplace.addedToCart" }), "success"),
+    });
+  }, [addToCart, listing?.id, toast, intl]);
   const createReview = useCreateReview(id ?? "");
 
   const [reviewRating, setReviewRating] = useState(5);
@@ -85,7 +93,25 @@ export function ListingDetail() {
     );
   }
 
-  if (!listing) return null;
+  if (error || !listing) {
+    return (
+      <div className="max-w-content-narrow mx-auto">
+        <PageTitle title={intl.formatMessage({ id: "marketplace.listing.notFound.title" })} />
+        <RouterLink
+          to="/marketplace"
+          className="inline-flex items-center gap-1 mb-4 type-label-md text-on-surface-variant hover:text-primary transition-colors"
+        >
+          <Icon icon={ArrowLeft} size="sm" />
+          <FormattedMessage id="marketplace.backToListings" />
+        </RouterLink>
+        <Card className="p-card-padding text-center">
+          <p className="type-body-md text-on-surface-variant">
+            <FormattedMessage id="marketplace.listing.notFound" />
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   const price =
     listing.price_cents === 0
@@ -200,7 +226,7 @@ export function ListingDetail() {
               ) : listing.price_cents > 0 ? (
                 <Button
                   variant="primary"
-                  onClick={() => addToCart.mutate(listing.id)}
+                  onClick={handleAddToCart}
                   disabled={addToCart.isPending}
                 >
                   <Icon icon={ShoppingCart} size="sm" className="mr-1" />

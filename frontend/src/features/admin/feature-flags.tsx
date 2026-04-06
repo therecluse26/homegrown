@@ -42,7 +42,7 @@ function FlagRow({ flag }: { flag: FeatureFlag }) {
       .map((s) => s.trim())
       .filter(Boolean);
     await updateFlag.mutateAsync({
-      id: flag.id,
+      key: flag.key,
       rollout_percentage: rollout,
       whitelisted_families: families,
     });
@@ -50,7 +50,7 @@ function FlagRow({ flag }: { flag: FeatureFlag }) {
   }
 
   async function handleToggle() {
-    await updateFlag.mutateAsync({ id: flag.id, enabled: !flag.enabled });
+    await updateFlag.mutateAsync({ key: flag.key, enabled: !flag.enabled });
   }
 
   return (

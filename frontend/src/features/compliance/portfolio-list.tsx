@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink, useNavigate } from "react-router";
-import { Plus, FolderOpen, Download, Trash2 } from "lucide-react";
+import { Plus, FolderOpen, Trash2 } from "lucide-react";
 import {
   Button,
   Card,
@@ -31,7 +31,13 @@ import type {
 
 function StatusBadge({ status }: { status: PortfolioSummary["status"] }) {
   const variant =
-    status === "ready" ? "primary" : status === "generating" ? "secondary" : undefined;
+    status === "ready"
+      ? "primary"
+      : status === "generating"
+        ? "secondary"
+        : status === "failed"
+          ? "error"
+          : undefined;
   return (
     <Badge variant={variant}>
       <FormattedMessage id={`compliance.portfolio.status.${status}`} />
@@ -43,14 +49,16 @@ function StatusBadge({ status }: { status: PortfolioSummary["status"] }) {
 
 function PortfolioCard({
   portfolio,
+  studentId,
   onDelete,
 }: {
   portfolio: PortfolioSummary;
+  studentId: string;
   onDelete: (id: string) => void;
 }) {
   const intl = useIntl();
-  const startDate = new Date(portfolio.date_range_start + "T12:00:00");
-  const endDate = new Date(portfolio.date_range_end + "T12:00:00");
+  const startDate = new Date(portfolio.date_range_start);
+  const endDate = new Date(portfolio.date_range_end);
   const dateRange = `${startDate.toLocaleDateString(intl.locale, {
     month: "short",
     day: "numeric",
@@ -66,7 +74,7 @@ function PortfolioCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <RouterLink
-              to={`/compliance/portfolios/${portfolio.id}`}
+              to={`/compliance/portfolios/${studentId}/${portfolio.id}`}
               className="type-title-sm text-on-surface font-semibold hover:text-primary transition-colors"
             >
               {portfolio.title}
@@ -74,7 +82,7 @@ function PortfolioCard({
             <StatusBadge status={portfolio.status} />
           </div>
           <p className="type-body-sm text-on-surface-variant">
-            {portfolio.student_name} — {dateRange}
+            {dateRange}
           </p>
           <p className="type-label-sm text-on-surface-variant mt-1">
             <FormattedMessage
@@ -84,19 +92,6 @@ function PortfolioCard({
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {portfolio.download_url && (
-            <a
-              href={portfolio.download_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
-              aria-label={intl.formatMessage({
-                id: "compliance.portfolio.download",
-              })}
-            >
-              <Icon icon={Download} size="sm" />
-            </a>
-          )}
           <button
             onClick={() => onDelete(portfolio.id)}
             className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
@@ -149,7 +144,7 @@ function CreatePortfolioForm({
         },
         {
           onSuccess: (data) => {
-            navigate(`/compliance/portfolios/${data.id}`);
+            navigate(`/compliance/portfolios/${studentId}/${data.id}`);
           },
         },
       );
@@ -283,12 +278,18 @@ export function PortfolioList() {
   const intl = useIntl();
   const { tier } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
-  const [studentFilter, setStudentFilter] = useState<string | undefined>();
+  const [studentFilter, setStudentFilter] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const { data: students } = useStudents();
   const { data: portfolios, isPending } = usePortfolios(studentFilter);
-  const deletePortfolio = useDeletePortfolio();
+  const deletePortfolio = useDeletePortfolio(studentFilter);
+
+  // Auto-select first student
+  useEffect(() => {
+    const first = students?.[0];
+    if (first?.id && !studentFilter) setStudentFilter(first.id);
+  }, [students, studentFilter]);
 
   const handleDelete = useCallback(() => {
     if (!deleteTarget) return;
@@ -312,9 +313,9 @@ export function PortfolioList() {
         <div className="flex items-center gap-3">
           {students && students.length > 1 && (
             <Select
-              value={studentFilter ?? ""}
+              value={studentFilter}
               onChange={(e) =>
-                setStudentFilter(e.target.value || undefined)
+                setStudentFilter(e.target.value)
               }
               className="w-40"
               aria-label={intl.formatMessage({
@@ -386,6 +387,7 @@ export function PortfolioList() {
             <PortfolioCard
               key={p.id}
               portfolio={p}
+              studentId={studentFilter}
               onDelete={setDeleteTarget}
             />
           ))}

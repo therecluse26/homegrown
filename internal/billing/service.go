@@ -145,6 +145,9 @@ func (s *BillingServiceImpl) ListPaymentMethods(ctx context.Context, scope share
 
 	methods, err := s.adapter.ListPaymentMethods(ctx, customer.HyperswitchCustomerID)
 	if err != nil {
+		if errors.Is(err, ErrPaymentAdapterUnavailable) {
+			return []PaymentMethodResponse{}, nil
+		}
 		return nil, &BillingError{Err: fmt.Errorf("list payment methods from adapter: %w", err)}
 	}
 

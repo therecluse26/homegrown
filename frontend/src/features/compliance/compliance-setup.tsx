@@ -98,16 +98,16 @@ export function ComplianceSetup() {
   useEffect(() => {
     if (config.data) {
       setStateCode(config.data.state_code || "");
-      setDaysRequired(String(config.data.days_required || ""));
-      setHoursRequired(String(config.data.hours_required || ""));
+      setDaysRequired(String(config.data.days_required ?? 0));
+      setHoursRequired(String(config.data.hours_required ?? 0));
     }
   }, [config.data]);
 
   // Auto-fill thresholds from state requirements
   useEffect(() => {
     if (stateReqs.data) {
-      setDaysRequired(String(stateReqs.data.days_required));
-      setHoursRequired(String(stateReqs.data.hours_required));
+      setDaysRequired(String(stateReqs.data.days_required ?? 0));
+      setHoursRequired(String(stateReqs.data.hours_required ?? 0));
     }
   }, [stateReqs.data]);
 

@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink, useNavigate } from "react-router";
-import { Plus, GraduationCap, Download, Trash2 } from "lucide-react";
+import { Plus, GraduationCap, Trash2 } from "lucide-react";
 import {
   Button,
   Card,
@@ -40,9 +40,11 @@ function StatusBadge({ status }: { status: TranscriptSummary["status"] }) {
 
 function TranscriptCard({
   transcript,
+  studentId,
   onDelete,
 }: {
   transcript: TranscriptSummary;
+  studentId: string;
   onDelete: (id: string) => void;
 }) {
   const intl = useIntl();
@@ -53,53 +55,20 @@ function TranscriptCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <RouterLink
-              to={`/compliance/transcripts/${transcript.id}`}
+              to={`/compliance/transcripts/${studentId}/${transcript.id}`}
               className="type-title-sm text-on-surface font-semibold hover:text-primary transition-colors"
             >
               {transcript.title}
             </RouterLink>
             <StatusBadge status={transcript.status} />
           </div>
-          <p className="type-body-sm text-on-surface-variant">
-            {transcript.student_name}
-          </p>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="type-label-sm text-on-surface-variant">
-              <FormattedMessage
-                id="compliance.transcript.semesters"
-                values={{ count: transcript.semester_count }}
-              />
-            </span>
-            <span className="type-label-sm text-on-surface-variant">
-              <FormattedMessage
-                id="compliance.transcript.credits"
-                values={{ count: transcript.total_credits }}
-              />
-            </span>
-            {transcript.cumulative_gpa !== undefined && (
-              <Badge variant="primary">
-                <FormattedMessage
-                  id="compliance.transcript.gpa"
-                  values={{ gpa: transcript.cumulative_gpa.toFixed(2) }}
-                />
-              </Badge>
-            )}
-          </div>
+          {transcript.grade_levels.length > 0 && (
+            <p className="type-body-sm text-on-surface-variant">
+              {transcript.grade_levels.join(", ")}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {transcript.download_url && (
-            <a
-              href={transcript.download_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
-              aria-label={intl.formatMessage({
-                id: "compliance.transcript.download",
-              })}
-            >
-              <Icon icon={Download} size="sm" />
-            </a>
-          )}
           <button
             onClick={() => onDelete(transcript.id)}
             className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
@@ -147,7 +116,7 @@ function CreateTranscriptForm({
         },
         {
           onSuccess: (data) => {
-            navigate(`/compliance/transcripts/${data.id}`);
+            navigate(`/compliance/transcripts/${studentId}/${data.id}`);
           },
         },
       );
@@ -246,12 +215,18 @@ export function TranscriptList() {
   const intl = useIntl();
   const { tier } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
-  const [studentFilter, setStudentFilter] = useState<string | undefined>();
+  const [studentFilter, setStudentFilter] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const { data: students } = useStudents();
   const { data: transcripts, isPending } = useTranscripts(studentFilter);
-  const deleteTranscript = useDeleteTranscript();
+  const deleteTranscript = useDeleteTranscript(studentFilter);
+
+  // Auto-select first student
+  useEffect(() => {
+    const first = students?.[0];
+    if (first?.id && !studentFilter) setStudentFilter(first.id);
+  }, [students, studentFilter]);
 
   const handleDelete = useCallback(() => {
     if (!deleteTarget) return;
@@ -275,9 +250,9 @@ export function TranscriptList() {
         <div className="flex items-center gap-3">
           {students && students.length > 1 && (
             <Select
-              value={studentFilter ?? ""}
+              value={studentFilter}
               onChange={(e) =>
-                setStudentFilter(e.target.value || undefined)
+                setStudentFilter(e.target.value)
               }
               className="w-40"
               aria-label={intl.formatMessage({
@@ -349,6 +324,7 @@ export function TranscriptList() {
             <TranscriptCard
               key={t.id}
               transcript={t}
+              studentId={studentFilter}
               onDelete={setDeleteTarget}
             />
           ))}

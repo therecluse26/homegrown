@@ -55,12 +55,19 @@ func (h *Handler) Register(authGroup, hooksGroup, pubGroup *echo.Group) {
 	creator.POST("/creators/onboarding-link", h.createOnboardingLink)
 	creator.GET("/creators/dashboard", h.getCreatorDashboard)
 	creator.GET("/creators/listings", h.getCreatorListings)
+	creator.GET("/creators/verification", h.getCreatorVerification)
+	creator.GET("/creators/reviews", h.getCreatorReviews)
+	creator.GET("/creators/payouts/config", h.getPayoutConfig)
+	creator.GET("/creators/payouts/methods", h.getPayoutMethods)
+	creator.GET("/creators/payouts/history", h.getPayoutHistory)
 
 	creator.POST("/publishers", h.createPublisher)
 	creator.PUT("/publishers/:publisher_id", h.updatePublisher)
 	creator.GET("/publishers/:publisher_id/members", h.getPublisherMembers)
 	creator.POST("/publishers/:publisher_id/members", h.addPublisherMember)
 	creator.DELETE("/publishers/:publisher_id/members/:creator_id", h.removePublisherMember)
+
+	creator.GET("/listings/:listing_id/versions", h.getListingVersions)
 
 	creator.POST("/listings", h.createListing)
 	creator.PUT("/listings/:listing_id", h.updateListing)
@@ -1239,6 +1246,55 @@ func (h *Handler) getListingReviews(c echo.Context) error {
 		return mapMktError(err)
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Stub Handlers (Phase 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// getCreatorVerification returns creator verification status (stub — always unverified).
+func (h *Handler) getCreatorVerification(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":       "unverified",
+		"submitted_at": nil,
+	})
+}
+
+// getCreatorReviews returns reviews for a creator (stub — always empty).
+func (h *Handler) getCreatorReviews(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"reviews":        []any{},
+		"average_rating": 0,
+		"total_reviews":  0,
+	})
+}
+
+// getListingVersions returns version history for a listing (stub — always empty).
+func (h *Handler) getListingVersions(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"versions": []any{},
+	})
+}
+
+// getPayoutConfig returns payout configuration (stub — not configured).
+func (h *Handler) getPayoutConfig(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"configured": false,
+	})
+}
+
+// getPayoutMethods returns payout methods (stub — always empty).
+func (h *Handler) getPayoutMethods(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"methods": []any{},
+	})
+}
+
+// getPayoutHistory returns payout history (stub — always empty).
+func (h *Handler) getPayoutHistory(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"payouts": []any{},
+	})
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

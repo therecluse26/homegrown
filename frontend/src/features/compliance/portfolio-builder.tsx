@@ -395,12 +395,13 @@ function PreviewModal({
 
 export function PortfolioBuilder() {
   const intl = useIntl();
-  const { id } = useParams<{ id: string }>();
+  const { id, studentId: routeStudentId } = useParams<{ id: string; studentId: string }>();
   const { tier } = useAuth();
+  const studentId = routeStudentId ?? "";
 
-  const { data: portfolio, isPending } = usePortfolioDetail(id);
-  const updatePortfolio = useUpdatePortfolio(id ?? "");
-  const generatePortfolio = useGeneratePortfolio(id ?? "");
+  const { data: portfolio, isPending } = usePortfolioDetail(studentId, id);
+  const updatePortfolio = useUpdatePortfolio(studentId, id ?? "");
+  const generatePortfolio = useGeneratePortfolio(studentId, id ?? "");
 
   // Local state for item management
   const [items, setItems] = useState<PortfolioItem[]>([]);

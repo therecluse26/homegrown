@@ -116,7 +116,7 @@ export function NotificationHistory() {
   const markAllRead = useMarkAllRead();
 
   const notifications = data?.notifications ?? [];
-  const total = data?.total ?? 0;
+  const total = data?.total || notifications.length;
   const unreadCount = data?.unread_count ?? 0;
 
   useEffect(() => {

@@ -27,7 +27,8 @@ export function StandardizedTests() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { tier } = useAuth();
   const students = useStudents();
-  const tests = useStandardizedTests();
+  const [studentFilter, setStudentFilter] = useState("");
+  const tests = useStandardizedTests(studentFilter);
   const createTest = useCreateStandardizedTest();
 
   const [showForm, setShowForm] = useState(false);
@@ -42,6 +43,12 @@ export function StandardizedTests() {
     document.title = `${intl.formatMessage({ id: "compliance.tests.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
     headingRef.current?.focus();
   }, [intl]);
+
+  // Auto-select first student for list filtering
+  useEffect(() => {
+    const first = students.data?.[0];
+    if (first?.id && !studentFilter) setStudentFilter(first.id);
+  }, [students.data, studentFilter]);
 
   const addSection = useCallback(() => {
     setSections((prev) => [...prev, { name: "", score: "" }]);
@@ -70,15 +77,19 @@ export function StandardizedTests() {
 
   const handleSubmit = useCallback(() => {
     if (!testName.trim() || !testDate || !studentId) return;
-    const validSections = sections.filter(
-      (s) => s.name.trim() && s.score.trim(),
-    );
+    const scores: Record<string, number> = {};
+    for (const s of sections) {
+      if (s.name.trim() && s.score.trim()) {
+        const num = Number(s.score);
+        if (!Number.isNaN(num)) scores[s.name.trim()] = num;
+      }
+    }
     createTest.mutate(
       {
         student_id: studentId,
         test_name: testName.trim(),
         test_date: testDate,
-        sections: validSections,
+        scores,
       },
       { onSuccess: resetForm },
     );
@@ -315,7 +326,6 @@ export function StandardizedTests() {
                         {test.test_name}
                       </p>
                       <p className="type-body-sm text-on-surface-variant">
-                        {test.student_name} ·{" "}
                         {intl.formatDate(test.test_date, {
                           month: "short",
                           day: "numeric",
@@ -325,18 +335,18 @@ export function StandardizedTests() {
                     </div>
                   </div>
                 </div>
-                {test.sections.length > 0 && (
+                {test.scores && Object.keys(test.scores).length > 0 && (
                   <div className="ml-8 grid grid-cols-2 gap-1">
-                    {test.sections.map((section, i) => (
+                    {Object.entries(test.scores).map(([name, score]) => (
                       <div
-                        key={i}
+                        key={name}
                         className="flex items-center justify-between bg-surface-container-low rounded-radius-sm px-3 py-1.5"
                       >
                         <span className="type-body-sm text-on-surface-variant">
-                          {section.name}
+                          {name}
                         </span>
                         <span className="type-title-sm text-on-surface font-medium">
-                          {section.score}
+                          {score}
                         </span>
                       </div>
                     ))}

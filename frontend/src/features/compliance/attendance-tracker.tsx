@@ -151,11 +151,10 @@ export function AttendanceTracker() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { tier } = useAuth();
   const students = useStudents();
-  const summaries = useAttendanceSummary();
-  const recordAttendance = useRecordAttendance();
-
   const now = new Date();
   const [selectedStudentId, setSelectedStudentId] = useState("");
+  const summaries = useAttendanceSummary(selectedStudentId);
+  const recordAttendance = useRecordAttendance();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -235,10 +234,7 @@ export function AttendanceTracker() {
   }
 
   const studentList = students.data ?? [];
-  const summaryList = summaries.data ?? [];
-  const studentSummary = summaryList.find(
-    (s) => s.student_id === selectedStudentId,
-  );
+  const studentSummary = summaries.data ?? null;
   const attendanceEntries = attendance.data ?? [];
 
   return (

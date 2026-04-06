@@ -398,7 +398,7 @@ export function useAdminAuditLog(params: {
 export function useFeatureFlags() {
   return useQuery({
     queryKey: ["admin", "flags"],
-    queryFn: () => apiClient<FeatureFlag[]>("/v1/admin/feature-flags"),
+    queryFn: () => apiClient<FeatureFlag[]>("/v1/admin/flags"),
   });
 }
 
@@ -406,16 +406,16 @@ export function useUpdateFeatureFlag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
-      id,
+      key,
       ...body
     }: {
-      id: string;
+      key: string;
       enabled?: boolean;
       rollout_percentage?: number;
       whitelisted_families?: string[];
     }) =>
-      apiClient<FeatureFlag>(`/v1/admin/feature-flags/${id}`, {
-        method: "PUT",
+      apiClient<FeatureFlag>(`/v1/admin/flags/${key}`, {
+        method: "PATCH",
         body: body,
       }),
     onSuccess: () => {
@@ -433,7 +433,7 @@ export function useCreateFeatureFlag() {
       enabled: boolean;
       rollout_percentage?: number;
     }) =>
-      apiClient<FeatureFlag>("/v1/admin/feature-flags", {
+      apiClient<FeatureFlag>("/v1/admin/flags", {
         method: "POST",
         body: cmd,
       }),
@@ -461,9 +461,9 @@ export interface MethodologyConfigFull {
 
 export function useMethodologyConfigs() {
   return useQuery({
-    queryKey: ["admin", "methodology-configs"],
+    queryKey: ["admin", "methodologies"],
     queryFn: () =>
-      apiClient<MethodologyConfigFull[]>("/v1/admin/methodology-configs"),
+      apiClient<MethodologyConfigFull[]>("/v1/admin/methodologies"),
   });
 }
 
@@ -480,14 +480,14 @@ export function useUpdateMethodologyConfig() {
       tools?: MethodologyTool[];
     }) =>
       apiClient<MethodologyConfigFull>(
-        `/v1/admin/methodology-configs/${slug}`,
+        `/v1/admin/methodologies/${slug}`,
         {
-          method: "PUT",
+          method: "PATCH",
           body: body,
         },
       ),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "methodology-configs"] });
+      qc.invalidateQueries({ queryKey: ["admin", "methodologies"] });
     },
   });
 }

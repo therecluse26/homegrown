@@ -1577,6 +1577,28 @@ func (a *adminIamAdapter) SearchUsers(ctx context.Context, query *admin.UserSear
 	var rows []row
 	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
 		// Admin cross-family query — RLS bypass required.
+		// Build WHERE dynamically to avoid NULL-cast issues with positional params.
+		where := "TRUE"
+		args := make([]interface{}, 0, 5)
+
+		if query.Q != nil {
+			where += " AND (pp.email ILIKE '%' || ? || '%' OR f.display_name ILIKE '%' || ? || '%')"
+			args = append(args, *query.Q, *query.Q)
+		}
+		if query.FamilyID != nil {
+			where += " AND f.id = ?"
+			args = append(args, *query.FamilyID)
+		}
+		if query.Status != nil {
+			where += " AND COALESCE(sas.status, 'active') = ?"
+			args = append(args, *query.Status)
+		}
+		if query.Subscription != nil {
+			where += " AND f.subscription_tier = ?"
+			args = append(args, *query.Subscription)
+		}
+		args = append(args, limit)
+
 		q := tx.Raw(`
 			SELECT
 				f.id AS family_id,
@@ -1590,19 +1612,9 @@ func (a *adminIamAdapter) SearchUsers(ctx context.Context, query *admin.UserSear
 			FROM iam_families f
 			JOIN iam_parents pp ON pp.family_id = f.id AND pp.is_primary = true
 			LEFT JOIN safety_account_status sas ON sas.family_id = f.id
-			WHERE
-				(? IS NULL OR pp.email ILIKE '%' || ? || '%' OR f.display_name ILIKE '%' || ? || '%')
-				AND (? IS NULL OR f.id = ?::uuid)
-				AND (? IS NULL OR COALESCE(sas.status, 'active') = ?)
-				AND (? IS NULL OR f.subscription_tier = ?)
+			WHERE `+where+`
 			ORDER BY f.created_at DESC
-			LIMIT ?`,
-			query.Q, query.Q, query.Q,
-			query.FamilyID, query.FamilyID,
-			query.Status, query.Status,
-			query.Subscription, query.Subscription,
-			limit,
-		)
+			LIMIT ?`, args...)
 		return q.Scan(&rows).Error
 	})
 	if err != nil {

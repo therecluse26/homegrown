@@ -371,9 +371,9 @@ export function useLogAsActivity(itemId: string) {
 
 export function useScheduleTemplates() {
   return useQuery({
-    queryKey: ["planning", "schedule-templates"],
+    queryKey: ["planning", "templates"],
     queryFn: () =>
-      apiClient<ScheduleTemplate[]>("/v1/planning/schedule-templates"),
+      apiClient<ScheduleTemplate[]>("/v1/planning/templates"),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -382,13 +382,13 @@ export function useCreateScheduleTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateScheduleTemplateInput) =>
-      apiClient<ScheduleTemplate>("/v1/planning/schedule-templates", {
+      apiClient<ScheduleTemplate>("/v1/planning/templates", {
         method: "POST",
         body,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ["planning", "schedule-templates"],
+        queryKey: ["planning", "templates"],
       });
     },
   });
@@ -402,7 +402,7 @@ export function useApplyScheduleTemplate() {
       ...body
     }: ApplyScheduleTemplateInput & { templateId: string }) =>
       apiClient<{ items_created: number }>(
-        `/v1/planning/schedule-templates/${templateId}/apply`,
+        `/v1/planning/templates/${templateId}/apply`,
         { method: "POST", body },
       ),
     onSuccess: () => {
@@ -415,12 +415,12 @@ export function useDeleteScheduleTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (templateId: string) =>
-      apiClient<void>(`/v1/planning/schedule-templates/${templateId}`, {
+      apiClient<void>(`/v1/planning/templates/${templateId}`, {
         method: "DELETE",
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ["planning", "schedule-templates"],
+        queryKey: ["planning", "templates"],
       });
     },
   });
