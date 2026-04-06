@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { useParams, Link as RouterLink } from "react-router";
+import { useParams, useNavigate, Link as RouterLink } from "react-router";
 import {
   ArrowLeft,
   Download,
@@ -29,6 +29,7 @@ import {
 } from "@/hooks/use-progress";
 import { useStudents } from "@/hooks/use-family";
 import { useRequestExport } from "@/hooks/use-data-lifecycle";
+import { parseLocalDate } from "@/lib/date-utils";
 
 // ─── Timeline entry icon mapping ────────────────────────────────────────────
 
@@ -42,9 +43,20 @@ const TIMELINE_ICONS: Record<TimelineEntryType, typeof ClipboardList> = {
 
 export function ProgressView() {
   const intl = useIntl();
+  const navigate = useNavigate();
   const { studentId } = useParams<{ studentId: string }>();
   const { data: students } = useStudents();
   const { toolLabel } = useMethodologyContext();
+
+  // Handle non-UUID studentId (e.g. "select") — redirect to first student
+  const isValidId = studentId && /^[0-9a-f-]{36}$/i.test(studentId);
+  if (!isValidId && students && students.length > 0) {
+    const firstId = students[0]?.id;
+    if (firstId) {
+      void navigate(`/learning/progress/${firstId}`, { replace: true });
+    }
+  }
+
   const student = students?.find((s) => s.id === studentId);
 
   const [dateFrom, setDateFrom] = useState("");
@@ -308,7 +320,7 @@ export function ProgressView() {
                           </p>
                         )}
                         <p className="type-label-sm text-on-surface-variant mt-1">
-                          {new Date(entry.date).toLocaleDateString()}
+                          {parseLocalDate(entry.date).toLocaleDateString()}
                         </p>
                       </div>
                     </Card>

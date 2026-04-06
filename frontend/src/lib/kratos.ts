@@ -93,16 +93,45 @@ export type FlowResult =
 
 // ─── Field error extraction ───────────────────────────────────────────────────
 
+/** Map raw Kratos field names to user-friendly display names. */
+const FRIENDLY_FIELD_NAMES: Record<string, string> = {
+  identifier: "Email",
+  password: "Password",
+  "traits.name": "Name",
+  "traits.email": "Email",
+  "traits.name.first": "First name",
+  "traits.name.last": "Last name",
+  code: "Verification code",
+};
+
+/** Humanize a Kratos validation message by replacing raw field references. */
+function humanizeMessage(text: string): string {
+  return text
+    .replace(/Property (\S+) is missing/i, (_m, field: string) => {
+      const friendly = FRIENDLY_FIELD_NAMES[field] ?? field;
+      return `${friendly} is required`;
+    })
+    .replace(
+      /length must be >= (\d+)/i,
+      (_m, len: string) => `Must be at least ${len} characters`,
+    );
+}
+
 /**
  * Extract field-level validation errors from a Kratos flow's UI nodes.
- * Returns a map of field name → first error message text.
+ * Returns a map of friendly field name → humanized error message text.
  */
 export function extractFieldErrors(flow: KratosFlow): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const node of flow.ui.nodes) {
     const first = node.messages.find((m) => m.type === "error");
     if (first) {
-      errors[node.attributes.name] = first.text;
+      const fieldName = FRIENDLY_FIELD_NAMES[node.attributes.name] ?? node.attributes.name;
+      errors[node.attributes.name] = humanizeMessage(first.text);
+      // Also store under friendly name for components that look up by label
+      if (fieldName !== node.attributes.name) {
+        errors[fieldName] = humanizeMessage(first.text);
+      }
     }
   }
   return errors;

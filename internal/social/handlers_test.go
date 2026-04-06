@@ -293,6 +293,10 @@ func (m *mockSocialService) CreateComment(ctx context.Context, auth *shared.Auth
 	panic("unexpected call to CreateComment")
 }
 
+func (m *mockSocialService) UpdateComment(_ context.Context, _ *shared.AuthContext, _ uuid.UUID, _ UpdateCommentCommand) (*CommentResponse, error) {
+	return &CommentResponse{}, nil
+}
+
 func (m *mockSocialService) DeleteComment(ctx context.Context, auth *shared.AuthContext, commentID uuid.UUID) error {
 	if m.deleteCommentFn != nil {
 		return m.deleteCommentFn(ctx, auth, commentID)

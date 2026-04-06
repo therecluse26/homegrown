@@ -16,6 +16,7 @@ import { SubjectPicker } from "@/components/common/subject-picker";
 import { useStudents } from "@/hooks/use-family";
 import { useActivityLog, useLogActivity } from "@/hooks/use-activities";
 import { useMethodologyContext } from "@/features/auth/methodology-provider";
+import { parseLocalDate } from "@/lib/date-utils";
 
 // ─── Add activity form ──────────────────────────────────────────────────────
 
@@ -371,7 +372,7 @@ export function ActivityLog() {
                       )}
                       <span className="inline-flex items-center gap-1 type-label-sm text-on-surface-variant">
                         <Icon icon={Calendar} size="xs" aria-hidden />
-                        {new Date(
+                        {parseLocalDate(
                           activity.activity_date,
                         ).toLocaleDateString()}
                       </span>

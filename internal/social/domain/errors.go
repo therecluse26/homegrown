@@ -60,6 +60,7 @@ var (
 var (
 	ErrCommentNotFound       = errors.New("comment not found")
 	ErrNestedReplyNotAllowed = errors.New("only one level of reply threading is allowed")
+	ErrCannotEditComment     = errors.New("can only edit your own comments")
 	ErrCannotDeleteComment   = errors.New("can only delete your own comments or comments on your posts")
 	ErrCommentCrossPost      = errors.New("parent comment must belong to the same post")
 )

@@ -124,7 +124,10 @@ export function AcceptInvitation() {
             values={{
               inviterName: (
                 <strong className="text-on-surface">
-                  <FormattedMessage id="app.name" />
+                  <FormattedMessage
+                    id="auth.acceptInvitation.aFamilyMember"
+                    defaultMessage="a family member"
+                  />
                 </strong>
               ),
             }}

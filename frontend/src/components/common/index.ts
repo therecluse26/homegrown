@@ -1,4 +1,5 @@
 // Common components — barrel export
+export { ComingSoonStub } from "./coming-soon-stub";
 export { ErrorBoundary } from "./error-boundary";
 export { MethodologyBadge } from "./methodology-badge";
 export { MethodologyCard } from "./methodology-card";

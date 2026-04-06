@@ -101,11 +101,12 @@ export function ScheduleEditor() {
       e.preventDefault();
       if (!form.title || !form.start_date) return;
 
+      // Convert HTML date input ("YYYY-MM-DD") → RFC3339 ISO string for Go time.Time [H8]
       const data: CreateScheduleItemInput = {
         title: form.title,
         description: form.description,
         student_id: form.student_id,
-        start_date: form.start_date,
+        start_date: new Date(form.start_date + "T00:00:00").toISOString(),
         start_time: form.start_time,
         end_time: form.end_time,
         duration_minutes: form.duration_minutes,

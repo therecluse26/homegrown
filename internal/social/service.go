@@ -867,6 +867,41 @@ func (s *socialServiceImpl) CreateComment(ctx context.Context, auth *shared.Auth
 	}, nil
 }
 
+func (s *socialServiceImpl) UpdateComment(ctx context.Context, auth *shared.AuthContext, commentID uuid.UUID, cmd UpdateCommentCommand) (*CommentResponse, error) {
+	comment, err := s.commentRepo.FindByID(ctx, commentID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only the comment author can edit. [05-social §7.3]
+	if comment.FamilyID != auth.FamilyID {
+		return nil, &SocialError{Err: domain.ErrCannotEditComment}
+	}
+
+	comment.Content = cmd.Content
+	comment.UpdatedAt = time.Now()
+
+	scope := shared.NewFamilyScopeFromAuth(auth)
+	err = shared.ScopedTransaction(ctx, s.db, scope, func(tx *gorm.DB) error {
+		commentRepo := &PgCommentRepository{db: tx}
+		return commentRepo.Update(ctx, comment)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	authorName, _ := s.iam.GetParentDisplayName(ctx, auth.ParentID)
+	return &CommentResponse{
+		ID:              comment.ID,
+		PostID:          comment.PostID,
+		FamilyID:        comment.FamilyID,
+		AuthorName:      authorName,
+		ParentCommentID: comment.ParentCommentID,
+		Content:         comment.Content,
+		CreatedAt:       comment.CreatedAt,
+	}, nil
+}
+
 func (s *socialServiceImpl) DeleteComment(ctx context.Context, auth *shared.AuthContext, commentID uuid.UUID) error {
 	comment, err := s.commentRepo.FindByID(ctx, commentID)
 	if err != nil {

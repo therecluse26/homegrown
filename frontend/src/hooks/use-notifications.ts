@@ -81,7 +81,7 @@ export function useMarkRead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiClient<void>(`/v1/notifications/${id}/read`, { method: "POST" }),
+      apiClient<void>(`/v1/notifications/${id}/read`, { method: "PATCH" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
@@ -92,7 +92,7 @@ export function useMarkAllRead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiClient<void>("/v1/notifications/read-all", { method: "POST" }),
+      apiClient<void>("/v1/notifications/read-all", { method: "PATCH" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },

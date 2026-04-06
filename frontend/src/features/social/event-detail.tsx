@@ -27,10 +27,12 @@ import { ReportButton } from "@/components/common/report-button";
 import {
   useEventDetail,
   useRSVP,
+  useRemoveRSVP,
   useCancelEvent,
 } from "@/hooks/use-social";
 import type { EventRsvpResponse, RSVPCommand } from "@/hooks/use-social";
 import { useAuth } from "@/hooks/use-auth";
+import { ResourceNotFound } from "@/components/common/resource-not-found";
 
 // ─── RSVP button ────────────────────────────────────────────────────────────
 
@@ -44,12 +46,18 @@ function RSVPButton({
   isFull: boolean;
 }) {
   const rsvp = useRSVP(eventId);
+  const removeRsvp = useRemoveRSVP(eventId);
 
   const handleRSVP = useCallback(
     (status: RSVPCommand["status"]) => {
-      rsvp.mutate({ status });
+      // If clicking the already-selected status, un-toggle (remove RSVP)
+      if (myRsvp === status) {
+        removeRsvp.mutate();
+      } else {
+        rsvp.mutate({ status });
+      }
     },
-    [rsvp],
+    [rsvp, removeRsvp, myRsvp],
   );
 
   if (isFull && myRsvp !== "going") {
@@ -76,7 +84,7 @@ function RSVPButton({
               : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
           }`}
           aria-pressed={myRsvp === status}
-          disabled={rsvp.isPending}
+          disabled={rsvp.isPending || removeRsvp.isPending}
         >
           <Icon
             icon={status === "going" ? Check : status === "interested" ? Star : XCircle}
@@ -198,7 +206,7 @@ export function EventDetail() {
     );
   }
 
-  if (!event) return null;
+  if (!event) return <ResourceNotFound backTo="/events" />;
 
   const isCreator = event.creator_family_id === user?.family_id;
   const isFull =

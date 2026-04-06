@@ -862,13 +862,14 @@ type CreateArtifactLinkCommand struct {
 // --- Layer 3: Instance Commands ---------------------------------------------
 
 // LogActivityCommand logs an activity. [S§8.1.1]
+// ToolSlug accepts UUID strings or methodology tool slugs (e.g. "nature-journal"). [H9]
 type LogActivityCommand struct {
 	Title           string            `json:"title" validate:"required,min=1,max=500"`
 	Description     *string           `json:"description,omitempty" validate:"omitempty,max=5000"`
 	SubjectTags     []string          `json:"subject_tags"`
 	ContentID       *uuid.UUID        `json:"content_id,omitempty"`
 	MethodologyID   *uuid.UUID        `json:"methodology_id,omitempty"`
-	ToolID          *uuid.UUID        `json:"tool_id,omitempty"`
+	ToolSlug        *string           `json:"tool_id,omitempty"`
 	DurationMinutes *int16            `json:"duration_minutes,omitempty"`
 	Attachments     []AttachmentInput `json:"attachments"`
 	ActivityDate    *time.Time        `json:"activity_date,omitempty"`

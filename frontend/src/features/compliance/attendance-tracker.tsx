@@ -280,30 +280,44 @@ export function AttendanceTracker() {
               <FormattedMessage id={getPaceLabelId(studentSummary.pace)} />
             </Badge>
           </div>
-          <ProgressBar
-            value={
-              studentSummary.days_required > 0
-                ? (studentSummary.days_present / studentSummary.days_required) * 100
-                : 0
-            }
-          />
-          <p className="type-body-sm text-on-surface-variant mt-1" aria-live="polite">
-            <FormattedMessage
-              id="compliance.attendance.summary"
-              values={{
-                count: studentSummary.days_present,
-                required: studentSummary.days_required,
-                percentage:
-                  studentSummary.days_required > 0
-                    ? Math.round(
-                        (studentSummary.days_present /
-                          studentSummary.days_required) *
-                          100,
-                      )
-                    : 0,
-              }}
-            />
-          </p>
+          {studentSummary.days_required > 0 ? (
+            <>
+              <ProgressBar
+                value={
+                  (studentSummary.days_present / studentSummary.days_required) * 100
+                }
+              />
+              <p className="type-body-sm text-on-surface-variant mt-1" aria-live="polite">
+                <FormattedMessage
+                  id="compliance.attendance.summary"
+                  values={{
+                    count: studentSummary.days_present,
+                    required: studentSummary.days_required,
+                    percentage: Math.round(
+                      (studentSummary.days_present /
+                        studentSummary.days_required) *
+                        100,
+                    ),
+                  }}
+                />
+              </p>
+            </>
+          ) : (
+            <p className="type-body-sm text-on-surface-variant mt-1">
+              <FormattedMessage
+                id="compliance.attendance.noRequirement"
+                defaultMessage="No attendance requirement configured. Set one in Compliance Setup."
+              />
+              {" "}
+              <span className="type-label-sm">
+                ({studentSummary.days_present}{" "}
+                <FormattedMessage
+                  id="compliance.attendance.daysRecorded"
+                  defaultMessage="days recorded"
+                />)
+              </span>
+            </p>
+          )}
         </Card>
       )}
 

@@ -91,15 +91,19 @@ export function useRequestExport() {
 export function useDeletionStatus() {
   return useQuery({
     queryKey: ["data", "deletion"],
-    queryFn: () =>
-      apiClient<DeletionRequest>("/v1/account/deletion"),
-    staleTime: 1000 * 60,
-    // Return a default "none" state if the endpoint 404s (no pending request)
-    retry: (failureCount, error) => {
-      if (error instanceof Error && error.message.includes("404"))
-        return false;
-      return failureCount < 3;
+    queryFn: async (): Promise<DeletionRequest> => {
+      try {
+        return await apiClient<DeletionRequest>("/v1/account/deletion");
+      } catch (err: unknown) {
+        // 404 = no active deletion request — return default "none" state
+        const status = (err as { error?: { code?: number } })?.error?.code;
+        if (status === 404) {
+          return { status: "none" };
+        }
+        throw err;
+      }
     },
+    staleTime: 1000 * 60,
   });
 }
 

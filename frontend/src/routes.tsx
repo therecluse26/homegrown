@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { createBrowserRouter, type RouteObject } from "react-router";
+import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthLayout } from "@/components/layout/auth-layout";
 import { OnboardingLayout } from "@/components/layout/onboarding-layout";
@@ -110,6 +110,11 @@ const PayoutSetup = lazy(() => import("@/features/marketplace/payout-setup").the
 const CreatorVerification = lazy(() => import("@/features/marketplace/creator-verification").then(m => ({ default: m.CreatorVerification })));
 const CreatorReviews = lazy(() => import("@/features/marketplace/creator-reviews").then(m => ({ default: m.CreatorReviews })));
 const ListingVersionHistory = lazy(() => import("@/features/marketplace/listing-version-history").then(m => ({ default: m.ListingVersionHistory })));
+
+// Stub / redirect pages
+const ComingSoonStub = lazy(() => import("@/components/common/coming-soon-stub").then(m => ({ default: m.ComingSoonStub })));
+const ProfileRedirect = lazy(() => import("@/features/social/profile-redirect").then(m => ({ default: m.ProfileRedirect })));
+const LogoutRoute = lazy(() => import("@/features/auth/logout-route").then(m => ({ default: m.LogoutRoute })));
 
 // Billing
 const PricingPage = lazy(() => import("@/features/billing/pricing-page").then(m => ({ default: m.PricingPage })));
@@ -280,6 +285,17 @@ const routes: RouteObject[] = [
               // Notifications
               { path: "notifications", element: <NotificationCenter /> },
 
+              // ─── Stub pages (coming soon) ───────────────────────────────────
+              { path: "creator/earnings", element: <ComingSoonStub title="Creator Earnings" description="Track your marketplace earnings and payout history." backTo="/creator" backLabel="Back to Creator Dashboard" /> },
+              { path: "creator/analytics", element: <ComingSoonStub title="Creator Analytics" description="View performance metrics for your marketplace listings." backTo="/creator" backLabel="Back to Creator Dashboard" /> },
+              { path: "marketplace/library", element: <ComingSoonStub title="My Library" description="Access your purchased resources and downloads." backTo="/marketplace" backLabel="Back to Marketplace" /> },
+
+              // ─── Redirects ──────────────────────────────────────────────────
+              { path: "settings/billing", element: <Navigate to="/billing" replace /> },
+              { path: "notifications/history", element: <Navigate to="/settings/notifications/history" replace /> },
+              { path: "settings/moderation", element: <Navigate to="/settings/account/appeals" replace /> },
+              { path: "profile", element: <ProfileRedirect /> },
+
               // 404
               { path: "*", element: <NotFoundPage /> },
             ],
@@ -321,6 +337,8 @@ const routes: RouteObject[] = [
         element: <AcceptInvitation />,
         errorElement: <RouteErrorBoundary />,
       },
+      // Logout route — not wrapped in GuestRoute since authenticated users hit it
+      { path: "logout", element: <LogoutRoute /> },
     ],
   },
 

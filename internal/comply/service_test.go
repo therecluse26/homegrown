@@ -12,6 +12,11 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
+// helpers for pointer fields in tests
+func ptrTime(t time.Time) *time.Time { return &t }
+func ptrInt16(v int16) *int16        { return &v }
+func ptrStr(s string) *string        { return &s }
+
 // TestNewComplianceService_Scaffolding verifies the package compiles
 // and the constructor wires all dependencies correctly.
 func TestNewComplianceService_Scaffolding(t *testing.T) {
@@ -69,10 +74,10 @@ func TestUpsertFamilyConfig_CreatesNewConfig(t *testing.T) {
 
 	resp, err := svc.UpsertFamilyConfig(context.Background(), UpsertFamilyConfigCommand{
 		StateCode:       "TX",
-		SchoolYearStart: time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC),
-		SchoolYearEnd:   time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
-		TotalSchoolDays: 180,
-		GpaScale:        "standard_4",
+		SchoolYearStart: ptrTime(time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)),
+		SchoolYearEnd:   ptrTime(time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)),
+		TotalSchoolDays: ptrInt16(180),
+		GpaScale:        ptrStr("standard_4"),
 	}, *scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -93,10 +98,10 @@ func TestUpsertFamilyConfig_RejectsInvalidStateCode(t *testing.T) {
 
 	_, err := svc.UpsertFamilyConfig(context.Background(), UpsertFamilyConfigCommand{
 		StateCode:       "ZZ",
-		SchoolYearStart: time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC),
-		SchoolYearEnd:   time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
-		TotalSchoolDays: 180,
-		GpaScale:        "standard_4",
+		SchoolYearStart: ptrTime(time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)),
+		SchoolYearEnd:   ptrTime(time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)),
+		TotalSchoolDays: ptrInt16(180),
+		GpaScale:        ptrStr("standard_4"),
 	}, *scope)
 	if !errors.Is(err, ErrInvalidStateCode) {
 		t.Fatalf("got %v, want ErrInvalidStateCode", err)
@@ -114,10 +119,10 @@ func TestUpsertFamilyConfig_RejectsInvalidSchoolYearRange(t *testing.T) {
 
 	_, err := svc.UpsertFamilyConfig(context.Background(), UpsertFamilyConfigCommand{
 		StateCode:       "TX",
-		SchoolYearStart: time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
-		SchoolYearEnd:   time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC), // end before start
-		TotalSchoolDays: 180,
-		GpaScale:        "standard_4",
+		SchoolYearStart: ptrTime(time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)),
+		SchoolYearEnd:   ptrTime(time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)), // end before start
+		TotalSchoolDays: ptrInt16(180),
+		GpaScale:        ptrStr("standard_4"),
 	}, *scope)
 	if !errors.Is(err, ErrInvalidSchoolYearRange) {
 		t.Fatalf("got %v, want ErrInvalidSchoolYearRange", err)
@@ -150,10 +155,10 @@ func TestUpsertFamilyConfig_UpdatesExistingConfig(t *testing.T) {
 
 	resp, err := svc.UpsertFamilyConfig(context.Background(), UpsertFamilyConfigCommand{
 		StateCode:       "CA",
-		SchoolYearStart: time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC),
-		SchoolYearEnd:   time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
-		TotalSchoolDays: 175,
-		GpaScale:        "standard_4",
+		SchoolYearStart: ptrTime(time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)),
+		SchoolYearEnd:   ptrTime(time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)),
+		TotalSchoolDays: ptrInt16(175),
+		GpaScale:        ptrStr("standard_4"),
 	}, *scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -180,11 +185,11 @@ func TestUpsertFamilyConfig_ValidatesCustomScheduleID(t *testing.T) {
 
 	_, err := svc.UpsertFamilyConfig(context.Background(), UpsertFamilyConfigCommand{
 		StateCode:        "TX",
-		SchoolYearStart:  time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC),
-		SchoolYearEnd:    time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
-		TotalSchoolDays:  180,
+		SchoolYearStart:  ptrTime(time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)),
+		SchoolYearEnd:    ptrTime(time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)),
+		TotalSchoolDays:  ptrInt16(180),
 		CustomScheduleID: &schedID,
-		GpaScale:         "standard_4",
+		GpaScale:         ptrStr("standard_4"),
 	}, *scope)
 	if !errors.Is(err, ErrScheduleNotFound) {
 		t.Fatalf("got %v, want ErrScheduleNotFound", err)

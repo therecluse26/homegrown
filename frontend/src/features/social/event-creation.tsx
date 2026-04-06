@@ -87,8 +87,10 @@ export function EventCreation() {
       const data: CreateEventCommand = {
         title: form.title,
         description: form.description,
-        event_date: form.event_date,
-        end_date: form.end_date,
+        event_date: new Date(form.event_date).toISOString(),
+        end_date: form.end_date
+          ? new Date(form.end_date).toISOString()
+          : undefined,
         is_virtual: locationType === "virtual" || locationType === "hybrid",
         visibility: form.visibility ?? "friends",
         location_name:

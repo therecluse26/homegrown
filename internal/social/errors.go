@@ -86,6 +86,8 @@ func (e *SocialError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "comment_not_found", Message: "Comment not found", StatusCode: http.StatusNotFound}
 	case errors.Is(e.Err, domain.ErrNestedReplyNotAllowed):
 		return &shared.AppError{Code: "nested_reply", Message: "Only one level of reply threading is allowed", StatusCode: http.StatusUnprocessableEntity}
+	case errors.Is(e.Err, domain.ErrCannotEditComment):
+		return &shared.AppError{Code: "cannot_edit_comment", Message: "Can only edit your own comments", StatusCode: http.StatusForbidden}
 	case errors.Is(e.Err, domain.ErrCannotDeleteComment):
 		return &shared.AppError{Code: "cannot_delete_comment", Message: "Cannot delete this comment", StatusCode: http.StatusForbidden}
 	case errors.Is(e.Err, domain.ErrCommentCrossPost):

@@ -15,6 +15,7 @@ import {
   useStateRequirements,
   useSaveComplianceConfig,
 } from "@/hooks/use-compliance";
+import { useFamilyProfile } from "@/hooks/use-family";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router";
@@ -82,6 +83,7 @@ export function ComplianceSetup() {
   const { tier } = useAuth();
   const config = useComplianceConfig();
   const saveConfig = useSaveComplianceConfig();
+  const { data: familyProfile } = useFamilyProfile();
 
   const [stateCode, setStateCode] = useState("");
   const [daysRequired, setDaysRequired] = useState("");
@@ -102,6 +104,13 @@ export function ComplianceSetup() {
       setHoursRequired(String(config.data.hours_required ?? 0));
     }
   }, [config.data]);
+
+  // Fall back to family profile state_code if compliance config has no state set
+  useEffect(() => {
+    if (!stateCode && familyProfile?.state_code) {
+      setStateCode(familyProfile.state_code);
+    }
+  }, [familyProfile, stateCode]);
 
   // Auto-fill thresholds from state requirements
   useEffect(() => {

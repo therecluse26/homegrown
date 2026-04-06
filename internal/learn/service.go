@@ -356,6 +356,16 @@ func (s *learningServiceImpl) LogActivity(ctx context.Context, scope *shared.Fam
 		attachments = json.RawMessage("[]")
 	}
 
+	// Resolve tool_id: accept UUID strings or ignore non-UUID slugs gracefully. [H9]
+	var toolID *uuid.UUID
+	if cmd.ToolSlug != nil {
+		if parsed, parseErr := uuid.Parse(*cmd.ToolSlug); parseErr == nil {
+			toolID = &parsed
+		}
+		// Non-UUID slugs (e.g. "nature-journal") are silently ignored — the tool
+		// reference is informational and the activity is still logged correctly.
+	}
+
 	log := &ActivityLogModel{
 		StudentID:       studentID,
 		Title:           cmd.Title,
@@ -363,7 +373,7 @@ func (s *learningServiceImpl) LogActivity(ctx context.Context, scope *shared.Fam
 		SubjectTags:     StringArray(cmd.SubjectTags),
 		ContentID:       cmd.ContentID,
 		MethodologyID:   cmd.MethodologyID,
-		ToolID:          cmd.ToolID,
+		ToolID:          toolID,
 		DurationMinutes: cmd.DurationMinutes,
 		Attachments:     attachments,
 		ActivityDate:    actDate,

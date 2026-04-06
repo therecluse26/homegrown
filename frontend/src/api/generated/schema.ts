@@ -20842,8 +20842,10 @@ export interface components {
         "comply.FamilyConfigResponse": {
             created_at?: string;
             custom_schedule_id?: string;
+            days_required?: number;
             family_id?: string;
             gpa_scale?: string;
+            hours_required?: number;
             school_year_end?: string;
             school_year_start?: string;
             state_code?: string;
@@ -21042,13 +21044,15 @@ export interface components {
         };
         "comply.UpsertFamilyConfigCommand": {
             custom_schedule_id?: string;
+            days_required?: number;
             gpa_custom_config?: Record<string, never>;
             /** @enum {string} */
-            gpa_scale: "standard_4" | "weighted" | "custom";
-            school_year_end: string;
-            school_year_start: string;
+            gpa_scale?: "standard_4" | "weighted" | "custom";
+            hours_required?: number;
+            school_year_end?: string;
+            school_year_start?: string;
             state_code: string;
-            total_school_days: number;
+            total_school_days?: number;
         };
         "comply.WhatIfCourse": {
             credits: number;

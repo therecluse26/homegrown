@@ -582,7 +582,7 @@ func (r *PgCartRepository) AddItem(ctx context.Context, listingID, parentID uuid
 		AddedByParentID: parentID,
 	}
 	if err := r.db.WithContext(ctx).Create(&item).Error; err != nil {
-		if strings.Contains(err.Error(), "duplicate key") {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505") {
 			return ErrAlreadyInCart
 		}
 		return shared.ErrDatabase(err)
@@ -781,12 +781,22 @@ func (r *PgReviewRepository) Create(ctx context.Context, cmd CreateReview) (*Mkt
 		ModerationStatus: "pending",
 	}
 	if err := r.db.WithContext(ctx).Create(&review).Error; err != nil {
-		if strings.Contains(err.Error(), "duplicate key") {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505") {
 			return nil, ErrAlreadyReviewed
 		}
 		return nil, shared.ErrDatabase(err)
 	}
 	return &review, nil
+}
+
+func (r *PgReviewRepository) ExistsByFamilyAndListing(ctx context.Context, familyID, listingID uuid.UUID) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&MktReview{}).
+		Where("family_id = ? AND listing_id = ?", familyID, listingID).
+		Count(&count).Error; err != nil {
+		return false, shared.ErrDatabase(err)
+	}
+	return count > 0, nil
 }
 
 func (r *PgReviewRepository) GetByID(ctx context.Context, reviewID uuid.UUID) (*MktReview, error) {

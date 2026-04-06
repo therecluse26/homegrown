@@ -48,6 +48,7 @@ type SocialService interface {
 
 	// ─── Comment Commands ───────────────────────────────────────────────
 	CreateComment(ctx context.Context, auth *shared.AuthContext, postID uuid.UUID, cmd CreateCommentCommand) (*CommentResponse, error)
+	UpdateComment(ctx context.Context, auth *shared.AuthContext, commentID uuid.UUID, cmd UpdateCommentCommand) (*CommentResponse, error)
 	DeleteComment(ctx context.Context, auth *shared.AuthContext, commentID uuid.UUID) error
 
 	// ─── Comment Queries ────────────────────────────────────────────────
@@ -209,6 +210,7 @@ type PostRepository interface {
 type CommentRepository interface {
 	Create(ctx context.Context, comment *Comment) error
 	FindByID(ctx context.Context, id uuid.UUID) (*Comment, error)
+	Update(ctx context.Context, comment *Comment) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListByPost(ctx context.Context, postID uuid.UUID) ([]Comment, error)
 }

@@ -365,6 +365,11 @@ type CreateCommentCommand struct {
 	ParentCommentID *uuid.UUID `json:"parent_comment_id"`
 }
 
+// UpdateCommentCommand is the request body for PATCH /v1/social/comments/:id. [05-social §8.1]
+type UpdateCommentCommand struct {
+	Content string `json:"content" validate:"required,min=1,max=2000"`
+}
+
 // CreateConversationCommand is the request body for POST /v1/social/conversations. [05-social §8.1]
 // Phase 1: single recipient (1:1 DMs). Multi-participant is Phase 3+.
 type CreateConversationCommand struct {

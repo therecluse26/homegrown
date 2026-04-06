@@ -85,6 +85,11 @@ const (
 	review1ID       = "01900000-0000-7000-8000-000000000231"
 	cartItem1ID     = "01900000-0000-7000-8000-000000000241"
 
+	friendCreatorID  = "01900000-0000-7000-8000-000000000203"
+	friendPublisherID = "01900000-0000-7000-8000-000000000204"
+	friendListingID  = "01900000-0000-7000-8000-000000000216"
+	seedPurchaseID   = "01900000-0000-7000-8000-000000000223"
+
 	// Marketplace Extended
 	mktCuratedItem1ID = "01900000-0000-7000-8000-000000000242"
 	mktCuratedItem2ID = "01900000-0000-7000-8000-000000000243"
@@ -1024,6 +1029,68 @@ func seedMarketplace(db *gorm.DB) error {
 			cartItem1ID, seedFamilyID, listing3ID, seedParentID,
 		).Error; err != nil {
 			return fmt.Errorf("insert cart item: %w", err)
+		}
+
+		// ─── Friend creator + listing so seed family can purchase & review ────
+		// Friend publisher (creator-owned)
+		if err := tx.Exec(`
+			INSERT INTO mkt_publishers
+				(id, name, slug, description, is_platform, is_verified)
+			VALUES (?, 'Friend Family Press', 'friend-family-press',
+				'Resources from the Friend homeschooling family.',
+				false, true)
+			ON CONFLICT (id) DO NOTHING`,
+			friendPublisherID,
+		).Error; err != nil {
+			return fmt.Errorf("insert friend publisher: %w", err)
+		}
+
+		// Friend creator
+		if err := tx.Exec(`
+			INSERT INTO mkt_creators
+				(id, parent_id, onboarding_status, store_name, store_bio, tos_accepted_at)
+			VALUES (?, ?, 'active', 'Friend Family Press',
+				'Classical education resources from our family to yours.',
+				NOW() - INTERVAL '45 days')
+			ON CONFLICT (id) DO NOTHING`,
+			friendCreatorID, friendParentID,
+		).Error; err != nil {
+			return fmt.Errorf("insert friend creator: %w", err)
+		}
+
+		// Publisher member: friend creator owns friend publisher
+		if err := tx.Exec(`
+			INSERT INTO mkt_publisher_members (publisher_id, creator_id, role)
+			VALUES (?, ?, 'owner')
+			ON CONFLICT (publisher_id, creator_id) DO NOTHING`,
+			friendPublisherID, friendCreatorID,
+		).Error; err != nil {
+			return fmt.Errorf("insert friend publisher member: %w", err)
+		}
+
+		// Friend listing (something seed family can buy)
+		if err := tx.Exec(`
+			INSERT INTO mkt_listings
+				(id, creator_id, publisher_id, title, description, price_cents,
+				 methodology_tags, subject_tags, content_type, status, published_at)
+			VALUES (?, ?, ?, 'Classical Trivium Workbook', 'A comprehensive grammar-stage workbook.', 1999,
+				'{}', ARRAY['language_arts','latin'], 'worksheet', 'published', NOW() - INTERVAL '20 days')
+			ON CONFLICT (id) DO NOTHING`,
+			friendListingID, friendCreatorID, friendPublisherID,
+		).Error; err != nil {
+			return fmt.Errorf("insert friend listing: %w", err)
+		}
+
+		// Seed family purchase of friend listing (enables review creation in E2E)
+		if err := tx.Exec(`
+			INSERT INTO mkt_purchases
+				(id, family_id, listing_id, creator_id,
+				 amount_cents, platform_fee_cents, creator_payout_cents)
+			VALUES (?, ?, ?, ?, 1999, 200, 1799)
+			ON CONFLICT (id) DO NOTHING`,
+			seedPurchaseID, seedFamilyID, friendListingID, friendCreatorID,
+		).Error; err != nil {
+			return fmt.Errorf("insert seed purchase: %w", err)
 		}
 
 		return nil

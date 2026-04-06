@@ -17,6 +17,7 @@ import {
   type JournalEntryType,
 } from "@/hooks/use-journals";
 import { useMethodologyContext } from "@/features/auth/methodology-provider";
+import { parseLocalDate } from "@/lib/date-utils";
 
 const ENTRY_TYPE_COLORS: Record<JournalEntryType, string> = {
   freeform: "bg-tertiary-fixed text-on-tertiary-fixed",
@@ -189,7 +190,7 @@ export function JournalList() {
                       <div className="flex items-center gap-2 mt-2">
                         <span className="inline-flex items-center gap-1 type-label-sm text-on-surface-variant">
                           <Icon icon={Calendar} size="xs" aria-hidden />
-                          {new Date(entry.entry_date).toLocaleDateString()}
+                          {parseLocalDate(entry.entry_date).toLocaleDateString()}
                         </span>
                         {entry.subject_tags?.map((tag) => (
                           <span

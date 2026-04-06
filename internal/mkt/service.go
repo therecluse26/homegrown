@@ -803,6 +803,15 @@ func (s *marketplaceServiceImpl) CreateReview(ctx context.Context, cmd CreateRev
 		return uuid.Nil, err
 	}
 
+	// Pre-check for existing review to return 409 instead of relying on DB constraint. [H5]
+	exists, err := s.reviews.ExistsByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if exists {
+		return uuid.Nil, ErrAlreadyReviewed
+	}
+
 	isAnonymous := true
 	if cmd.IsAnonymous != nil {
 		isAnonymous = *cmd.IsAnonymous

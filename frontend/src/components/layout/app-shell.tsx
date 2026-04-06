@@ -1,4 +1,4 @@
-import { type ReactNode, Suspense } from "react";
+import { type ReactNode, Suspense, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import {
   Home,
@@ -8,6 +8,7 @@ import {
   Calendar,
   Settings,
   Search,
+  LogOut,
 } from "lucide-react";
 import { useIntl } from "react-intl";
 import { Icon, Spinner } from "@/components/ui";
@@ -17,6 +18,7 @@ import { NotificationBell } from "@/components/layout/notification-bell";
 import { SearchBar } from "@/components/layout/search-bar";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { CoppaReverificationBanner } from "@/features/auth/coppa-reverification-banner";
+import { initLogout, performLogout } from "@/lib/kratos";
 
 type NavItem = {
   to: string;
@@ -34,8 +36,26 @@ const navItems: NavItem[] = [
   { to: "/settings", icon: Settings, labelId: "nav.settings" },
 ];
 
+function useLogout() {
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      const { logout_token } = await initLogout();
+      await performLogout(logout_token);
+      window.location.href = "/auth/login";
+    } catch {
+      // If logout init fails (e.g. no session), redirect to login anyway
+      window.location.href = "/auth/login";
+    }
+  };
+  return { handleLogout, isLoggingOut };
+}
+
 function SidebarNav() {
   const intl = useIntl();
+  const { handleLogout, isLoggingOut } = useLogout();
 
   return (
     <nav
@@ -68,6 +88,16 @@ function SidebarNav() {
           </li>
         ))}
       </ul>
+      <div className="px-3 pb-4">
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-radius-button type-label-lg text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)] disabled:opacity-disabled"
+        >
+          <Icon icon={LogOut} size="md" />
+          <span>{intl.formatMessage({ id: "nav.logout", defaultMessage: "Log out" })}</span>
+        </button>
+      </div>
     </nav>
   );
 }
@@ -107,6 +137,7 @@ function BottomNav() {
 function Header() {
   const intl = useIntl();
   const { user } = useAuthContext();
+  const { handleLogout, isLoggingOut } = useLogout();
 
   return (
     <header className="flex items-center justify-between py-4 lg:py-6">
@@ -129,6 +160,14 @@ function Header() {
         <div className="type-label-md text-on-surface-variant">
           {user?.display_name ?? ""}
         </div>
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="p-2 min-w-11 min-h-11 flex items-center justify-center rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)] disabled:opacity-disabled"
+          aria-label={intl.formatMessage({ id: "nav.logout", defaultMessage: "Log out" })}
+        >
+          <Icon icon={LogOut} size="md" />
+        </button>
       </div>
     </header>
   );

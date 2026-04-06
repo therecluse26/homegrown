@@ -347,8 +347,11 @@ export function useCreatePost() {
         method: "POST",
         body: data,
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["social", "feed"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({
+        queryKey: ["social", "feed"],
+        refetchType: "active",
+      });
     },
   });
 }
@@ -379,12 +382,60 @@ export function useDeletePost() {
   });
 }
 
+/** Optimistically toggle like state on feed/post-detail caches. */
+function optimisticLikeToggle(
+  qc: ReturnType<typeof useQueryClient>,
+  postId: string,
+  liked: boolean,
+) {
+  // Update feed caches
+  qc.setQueriesData<FeedResponse>(
+    { queryKey: ["social", "feed"] },
+    (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        posts: old.posts.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                is_liked_by_me: liked,
+                likes_count: p.likes_count + (liked ? 1 : -1),
+              }
+            : p,
+        ),
+      };
+    },
+  );
+  // Update post detail cache
+  qc.setQueriesData<PostDetailResponse>(
+    { queryKey: ["social", "posts", postId] },
+    (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        post: {
+          ...old.post,
+          is_liked_by_me: liked,
+          likes_count: old.post.likes_count + (liked ? 1 : -1),
+        },
+      };
+    },
+  );
+}
+
 export function useLikePost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (postId: string) =>
       apiClient<void>(`/v1/social/posts/${postId}/like`, { method: "POST" }),
-    onSuccess: (_data, postId) => {
+    onMutate: (postId) => {
+      optimisticLikeToggle(qc, postId, true);
+    },
+    onError: (_err, postId) => {
+      optimisticLikeToggle(qc, postId, false);
+    },
+    onSettled: (_data, _err, postId) => {
       void qc.invalidateQueries({ queryKey: ["social", "posts", postId] });
       void qc.invalidateQueries({ queryKey: ["social", "feed"] });
     },
@@ -396,7 +447,13 @@ export function useUnlikePost() {
   return useMutation({
     mutationFn: (postId: string) =>
       apiClient<void>(`/v1/social/posts/${postId}/like`, { method: "DELETE" }),
-    onSuccess: (_data, postId) => {
+    onMutate: (postId) => {
+      optimisticLikeToggle(qc, postId, false);
+    },
+    onError: (_err, postId) => {
+      optimisticLikeToggle(qc, postId, true);
+    },
+    onSettled: (_data, _err, postId) => {
       void qc.invalidateQueries({ queryKey: ["social", "posts", postId] });
       void qc.invalidateQueries({ queryKey: ["social", "feed"] });
     },

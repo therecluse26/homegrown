@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useParams, Link as RouterLink } from "react-router";
 import { Users, ArrowLeft, LogOut } from "lucide-react";
+import { ResourceNotFound } from "@/components/common/resource-not-found";
 import {
   Button,
   Card,
@@ -73,7 +74,7 @@ export function GroupDetail() {
     );
   }
 
-  if (!group) return null;
+  if (!group) return <ResourceNotFound backTo="/groups" />;
 
   const summary = group.summary;
 

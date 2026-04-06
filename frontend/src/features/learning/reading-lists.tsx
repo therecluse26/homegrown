@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
+import { useNavigate } from "react-router";
 import { BookMarked, Plus, Check, BookOpen } from "lucide-react";
 import {
   Button,
@@ -67,6 +68,8 @@ export function ReadingLists() {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState("");
+
+  const navigate = useNavigate();
 
   const effectiveStudent =
     selectedStudent || (students?.length === 1 ? (students[0]?.id ?? "") : "");
@@ -214,7 +217,12 @@ export function ReadingLists() {
                     )
                   : 0;
               return (
-                <Card key={list.id} interactive>
+                <Card
+                  key={list.id}
+                  interactive
+                  onClick={() => navigate(`/reading-lists/${list.id}`)}
+                  className="cursor-pointer"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="type-title-sm text-on-surface font-medium">
                       {list.name}

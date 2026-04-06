@@ -174,6 +174,7 @@ type PurchaseRepository interface {
 type ReviewRepository interface {
 	Create(ctx context.Context, cmd CreateReview) (*MktReview, error)
 	GetByID(ctx context.Context, reviewID uuid.UUID) (*MktReview, error)
+	ExistsByFamilyAndListing(ctx context.Context, familyID, listingID uuid.UUID) (bool, error)
 	Update(ctx context.Context, reviewID uuid.UUID, cmd UpdateReview) (*MktReview, error)
 	Delete(ctx context.Context, reviewID uuid.UUID) error
 	SetCreatorResponse(ctx context.Context, reviewID uuid.UUID, responseText string) error

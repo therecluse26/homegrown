@@ -87,9 +87,32 @@ func (s *ComplianceServiceImpl) UpsertFamilyConfig(ctx context.Context, cmd Upse
 		return nil, err
 	}
 
+	// Apply defaults for simplified setup flow (state + days/hours only). [M16]
+	now := time.Now().UTC()
+	schoolYearStart := time.Date(now.Year(), time.September, 1, 0, 0, 0, 0, time.UTC)
+	if cmd.SchoolYearStart != nil {
+		schoolYearStart = *cmd.SchoolYearStart
+	}
+	schoolYearEnd := time.Date(now.Year()+1, time.June, 30, 0, 0, 0, 0, time.UTC)
+	if cmd.SchoolYearEnd != nil {
+		schoolYearEnd = *cmd.SchoolYearEnd
+	}
+
 	// Validate school year range
-	if !cmd.SchoolYearEnd.After(cmd.SchoolYearStart) {
+	if !schoolYearEnd.After(schoolYearStart) {
 		return nil, ErrInvalidSchoolYearRange
+	}
+
+	totalSchoolDays := int16(180) // default
+	if cmd.TotalSchoolDays != nil {
+		totalSchoolDays = *cmd.TotalSchoolDays
+	} else if cmd.DaysRequired != nil {
+		totalSchoolDays = *cmd.DaysRequired
+	}
+
+	gpaScale := "standard_4"
+	if cmd.GpaScale != nil {
+		gpaScale = *cmd.GpaScale
 	}
 
 	// Validate custom schedule belongs to family if provided
@@ -99,7 +122,17 @@ func (s *ComplianceServiceImpl) UpsertFamilyConfig(ctx context.Context, cmd Upse
 		}
 	}
 
-	config, err := s.familyConfigRepo.Upsert(ctx, scope, UpsertFamilyConfigRow(cmd))
+	row := UpsertFamilyConfigRow{
+		StateCode:        cmd.StateCode,
+		SchoolYearStart:  schoolYearStart,
+		SchoolYearEnd:    schoolYearEnd,
+		TotalSchoolDays:  totalSchoolDays,
+		CustomScheduleID: cmd.CustomScheduleID,
+		GpaScale:         gpaScale,
+		GpaCustomConfig:  cmd.GpaCustomConfig,
+	}
+
+	config, err := s.familyConfigRepo.Upsert(ctx, scope, row)
 	if err != nil {
 		return nil, err
 	}
@@ -1187,6 +1220,8 @@ func mapFamilyConfigToResponse(c *ComplyFamilyConfig, stateName string) *FamilyC
 		SchoolYearStart:  c.SchoolYearStart,
 		SchoolYearEnd:    c.SchoolYearEnd,
 		TotalSchoolDays:  c.TotalSchoolDays,
+		DaysRequired:     c.TotalSchoolDays, // alias for simplified frontend flow [M16]
+		HoursRequired:    0,                 // not stored in DB; frontend derives from state requirements
 		CustomScheduleID: c.CustomScheduleID,
 		GpaScale:         c.GpaScale,
 		CreatedAt:        c.CreatedAt,

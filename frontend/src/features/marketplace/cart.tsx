@@ -8,6 +8,7 @@ import {
   Icon,
   Skeleton,
 } from "@/components/ui";
+import { useToast } from "@/components/ui/toast";
 import { PageTitle } from "@/components/common/page-title";
 import {
   useCart,
@@ -20,6 +21,7 @@ export function Cart() {
   const { data: cart, isPending } = useCart();
   const removeFromCart = useRemoveFromCart();
   const checkout = useCheckout();
+  const { toast } = useToast();
 
   if (isPending) {
     return (
@@ -37,6 +39,12 @@ export function Cart() {
         if (data.checkout_url) {
           window.location.href = data.checkout_url;
         }
+      },
+      onError: () => {
+        toast(
+          intl.formatMessage({ id: "marketplace.cart.checkout.error" }),
+          "error",
+        );
       },
     });
   };

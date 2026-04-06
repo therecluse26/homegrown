@@ -402,15 +402,17 @@ export function PostDetail() {
         </Button>
       </form>
 
-      {/* Comments */}
+      {/* Comments — only render top-level; replies are nested via Comment component */}
       <div className="mt-4 space-y-1">
-        {comments.map((comment) => (
-          <Comment
-            key={comment.id}
-            comment={comment}
-            postId={post.id}
-          />
-        ))}
+        {comments
+          .filter((c) => !c.parent_comment_id)
+          .map((comment) => (
+            <Comment
+              key={comment.id}
+              comment={comment}
+              postId={post.id}
+            />
+          ))}
       </div>
 
       <ConfirmationDialog

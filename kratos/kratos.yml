@@ -80,6 +80,12 @@ selfservice:
       config:
         min_password_length: 10
         identifier_similarity_check_enabled: true
+    link:
+      enabled: true
+      config:
+        lifespan: 1h
+    code:
+      enabled: true
 
 identity:
   default_schema_id: user

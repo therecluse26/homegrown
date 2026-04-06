@@ -933,10 +933,14 @@ definitions:
         type: string
       custom_schedule_id:
         type: string
+      days_required:
+        type: integer
       family_id:
         type: string
       gpa_scale:
         type: string
+      hours_required:
+        type: integer
       school_year_end:
         type: string
       school_year_start:
@@ -1351,6 +1355,8 @@ definitions:
     properties:
       custom_schedule_id:
         type: string
+      days_required:
+        type: integer
       gpa_custom_config:
         type: object
       gpa_scale:
@@ -1359,6 +1365,8 @@ definitions:
         - weighted
         - custom
         type: string
+      hours_required:
+        type: integer
       school_year_end:
         type: string
       school_year_start:
@@ -1368,11 +1376,7 @@ definitions:
       total_school_days:
         type: integer
     required:
-    - gpa_scale
-    - school_year_end
-    - school_year_start
     - state_code
-    - total_school_days
     type: object
   comply.WhatIfCourse:
     properties:

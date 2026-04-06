@@ -511,6 +511,13 @@ func (r *PgCommentRepository) FindByID(ctx context.Context, id uuid.UUID) (*Comm
 	return &comment, nil
 }
 
+func (r *PgCommentRepository) Update(ctx context.Context, comment *Comment) error {
+	if err := r.db.WithContext(ctx).Save(comment).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
 func (r *PgCommentRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if err := r.db.WithContext(ctx).Delete(&Comment{}, "id = ?", id).Error; err != nil {
 		return shared.ErrDatabase(err)

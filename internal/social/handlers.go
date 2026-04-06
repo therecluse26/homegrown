@@ -60,6 +60,7 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	// Comments
 	soc.POST("/posts/:id/comments", h.createComment)
 	soc.GET("/posts/:id/comments", h.listComments)
+	soc.PATCH("/comments/:id", h.updateComment)
 	soc.DELETE("/comments/:id", h.deleteComment)
 
 	// Messaging
@@ -473,6 +474,29 @@ func (h *Handler) listComments(c echo.Context) error {
 		return shared.ErrBadRequest("invalid post ID")
 	}
 	resp, err := h.svc.ListComments(c.Request().Context(), auth, postID)
+	if err != nil {
+		return mapSocialError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) updateComment(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	commentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid comment ID")
+	}
+	var cmd UpdateCommentCommand
+	if err := c.Bind(&cmd); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	resp, err := h.svc.UpdateComment(c.Request().Context(), auth, commentID, cmd)
 	if err != nil {
 		return mapSocialError(err)
 	}

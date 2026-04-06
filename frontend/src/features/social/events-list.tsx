@@ -190,7 +190,16 @@ function CreateEventModal({
       e.preventDefault();
       if (!form.title || !form.event_date) return;
 
-      createEvent.mutate(form as CreateEventCommand, {
+      // Ensure datetime-local values are sent as RFC3339 (Go expects trailing :00Z)
+      const payload: CreateEventCommand = {
+        ...(form as CreateEventCommand),
+        event_date: new Date(form.event_date).toISOString(),
+        end_date: form.end_date
+          ? new Date(form.end_date).toISOString()
+          : undefined,
+      };
+
+      createEvent.mutate(payload, {
         onSuccess: () => {
           onClose();
           setForm({ visibility: "friends", is_virtual: false });

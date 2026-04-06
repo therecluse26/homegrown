@@ -79,14 +79,18 @@ const (
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // UpsertFamilyConfigCommand is the body for PUT /v1/compliance/config.
+// Fields marked omitempty are optional for the simplified setup flow (state + days/hours).
+// The service layer sets defaults for missing fields. [M16]
 type UpsertFamilyConfigCommand struct {
 	StateCode        string          `json:"state_code" validate:"required,len=2"`
-	SchoolYearStart  time.Time       `json:"school_year_start" validate:"required"`
-	SchoolYearEnd    time.Time       `json:"school_year_end" validate:"required"`
-	TotalSchoolDays  int16           `json:"total_school_days" validate:"required,gt=0"`
+	SchoolYearStart  *time.Time      `json:"school_year_start,omitempty"`
+	SchoolYearEnd    *time.Time      `json:"school_year_end,omitempty"`
+	TotalSchoolDays  *int16          `json:"total_school_days,omitempty"`
+	DaysRequired     *int16          `json:"days_required,omitempty"`
+	HoursRequired    *int16          `json:"hours_required,omitempty"`
 	CustomScheduleID *uuid.UUID      `json:"custom_schedule_id"`
-	GpaScale         string          `json:"gpa_scale" validate:"required,oneof=standard_4 weighted custom"`
-	GpaCustomConfig  json.RawMessage `json:"gpa_custom_config" swaggertype:"object"`
+	GpaScale         *string         `json:"gpa_scale,omitempty" validate:"omitempty,oneof=standard_4 weighted custom"`
+	GpaCustomConfig  json.RawMessage `json:"gpa_custom_config,omitempty" swaggertype:"object"`
 }
 
 // CreateScheduleCommand is the body for POST /v1/compliance/schedules.
@@ -294,6 +298,7 @@ type WhatIfCourse struct {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // FamilyConfigResponse represents family compliance configuration.
+// DaysRequired and HoursRequired mirror TotalSchoolDays for the simplified frontend flow.
 type FamilyConfigResponse struct {
 	FamilyID         uuid.UUID  `json:"family_id"`
 	StateCode        string     `json:"state_code"`
@@ -301,6 +306,8 @@ type FamilyConfigResponse struct {
 	SchoolYearStart  time.Time  `json:"school_year_start"`
 	SchoolYearEnd    time.Time  `json:"school_year_end"`
 	TotalSchoolDays  int16      `json:"total_school_days"`
+	DaysRequired     int16      `json:"days_required"`
+	HoursRequired    int16      `json:"hours_required"`
 	CustomScheduleID *uuid.UUID `json:"custom_schedule_id"`
 	GpaScale         string     `json:"gpa_scale"`
 	CreatedAt        time.Time  `json:"created_at"`

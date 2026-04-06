@@ -141,6 +141,7 @@ export function TranscriptBuilder() {
 
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const gpaLiveRef = useRef<HTMLSpanElement>(null);
 
   const courses = useMemo(() => transcript?.courses ?? [], [transcript]);
@@ -179,10 +180,36 @@ export function TranscriptBuilder() {
   }, [deleteTarget, deleteCourse]);
 
   const handleGenerate = useCallback(() => {
+    setGenerateError(null);
+    const timeout = setTimeout(() => {
+      setGenerateError(
+        intl.formatMessage({
+          id: "compliance.transcript.generate.timeout",
+          defaultMessage:
+            "PDF generation is taking longer than expected. Please try again.",
+        }),
+      );
+    }, 30_000);
+
     generateTranscript.mutate(undefined, {
-      onSuccess: () => setShowGenerateConfirm(false),
+      onSuccess: () => {
+        clearTimeout(timeout);
+        setShowGenerateConfirm(false);
+        setGenerateError(null);
+      },
+      onError: () => {
+        clearTimeout(timeout);
+        setShowGenerateConfirm(false);
+        setGenerateError(
+          intl.formatMessage({
+            id: "compliance.transcript.generate.error",
+            defaultMessage:
+              "Failed to generate transcript PDF. Please try again later.",
+          }),
+        );
+      },
     });
-  }, [generateTranscript]);
+  }, [generateTranscript, intl]);
 
   if (tier === "free") {
     return <TierGate featureName="Transcript Builder" />;
@@ -347,6 +374,16 @@ export function TranscriptBuilder() {
         )}
       </Card>
 
+      {/* Generate error */}
+      {generateError && (
+        <div
+          role="alert"
+          className="rounded-radius-md bg-error-container px-4 py-3 type-body-sm text-on-error-container mb-4"
+        >
+          {generateError}
+        </div>
+      )}
+
       {/* Action bar */}
       <div className="flex items-center justify-end">
         <Button
@@ -359,7 +396,14 @@ export function TranscriptBuilder() {
           }
         >
           <Icon icon={FileText} size="sm" className="mr-1" />
-          <FormattedMessage id="compliance.transcript.generate" />
+          {generateTranscript.isPending ? (
+            <FormattedMessage
+              id="compliance.transcript.generating"
+              defaultMessage="Generating..."
+            />
+          ) : (
+            <FormattedMessage id="compliance.transcript.generate" />
+          )}
         </Button>
       </div>
 

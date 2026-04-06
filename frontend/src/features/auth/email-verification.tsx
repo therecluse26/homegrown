@@ -157,8 +157,11 @@ export function EmailVerification() {
 
       if (result.kind === "flow") setFlow(result.flow);
       startResendCooldown();
-    } catch {
-      setGlobalError(intl.formatMessage({ id: "error.generic" }));
+    } catch (err: unknown) {
+      const kratosErr = err as KratosError;
+      setGlobalError(
+        kratosErr.error?.message ?? intl.formatMessage({ id: "error.generic" }),
+      );
     }
   }
 

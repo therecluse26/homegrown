@@ -19183,11 +19183,17 @@ const docTemplate = `{
                 "custom_schedule_id": {
                     "type": "string"
                 },
+                "days_required": {
+                    "type": "integer"
+                },
                 "family_id": {
                     "type": "string"
                 },
                 "gpa_scale": {
                     "type": "string"
+                },
+                "hours_required": {
+                    "type": "integer"
                 },
                 "school_year_end": {
                     "type": "string"
@@ -19814,15 +19820,14 @@ const docTemplate = `{
         "comply.UpsertFamilyConfigCommand": {
             "type": "object",
             "required": [
-                "gpa_scale",
-                "school_year_end",
-                "school_year_start",
-                "state_code",
-                "total_school_days"
+                "state_code"
             ],
             "properties": {
                 "custom_schedule_id": {
                     "type": "string"
+                },
+                "days_required": {
+                    "type": "integer"
                 },
                 "gpa_custom_config": {
                     "type": "object"
@@ -19834,6 +19839,9 @@ const docTemplate = `{
                         "weighted",
                         "custom"
                     ]
+                },
+                "hours_required": {
+                    "type": "integer"
                 },
                 "school_year_end": {
                     "type": "string"

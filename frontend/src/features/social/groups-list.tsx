@@ -178,6 +178,24 @@ export function GroupsList() {
                     ))}
                   </div>
                 )}
+
+                {/* Empty state when no groups to discover */}
+                {!platformPending &&
+                  (!platformGroups || platformGroups.length === 0) &&
+                  (!discoverGroups || discoverGroups.length === 0) && (
+                    <EmptyState
+                      illustration={<Icon icon={Globe} size="xl" />}
+                      message={intl.formatMessage({
+                        id: "social.groups.discover.empty.title",
+                        defaultMessage: "No groups to discover yet",
+                      })}
+                      description={intl.formatMessage({
+                        id: "social.groups.discover.empty.description",
+                        defaultMessage:
+                          "Check back later as more groups are created by the community.",
+                      })}
+                    />
+                  )}
               </div>
             ),
           },

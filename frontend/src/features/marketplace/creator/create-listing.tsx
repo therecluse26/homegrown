@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useNavigate, Link as RouterLink } from "react-router";
 import { ArrowLeft } from "lucide-react";
@@ -10,7 +10,7 @@ import {
   FormField,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
-import { useCreateListing } from "@/hooks/use-marketplace";
+import { useCreateListing, useCreatorProfile } from "@/hooks/use-marketplace";
 import type { CreateListingCommand } from "@/hooks/use-marketplace";
 
 const CONTENT_TYPES = [
@@ -33,6 +33,7 @@ export function CreateListing() {
   const intl = useIntl();
   const navigate = useNavigate();
   const createListing = useCreateListing();
+  const { data: creatorProfile } = useCreatorProfile();
 
   const [form, setForm] = useState<Partial<CreateListingCommand>>({
     price_cents: 0,
@@ -40,6 +41,13 @@ export function CreateListing() {
     methodology_tags: [],
     subject_tags: [],
   });
+
+  // Auto-fill publisher_id from creator profile
+  useEffect(() => {
+    if (creatorProfile?.id && !form.publisher_id) {
+      setForm((prev) => ({ ...prev, publisher_id: creatorProfile.id }));
+    }
+  }, [creatorProfile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [subjectInput, setSubjectInput] = useState("");
 
@@ -185,13 +193,20 @@ export function CreateListing() {
             required
           >
             {({ id }) => (
-              <Input
-                id={id}
-                value={form.publisher_id ?? ""}
-                onChange={(e) => updateField("publisher_id", e.target.value)}
-                placeholder="Publisher ID"
-                required
-              />
+              <div>
+                <Input
+                  id={id}
+                  value={form.publisher_id ?? ""}
+                  onChange={(e) => updateField("publisher_id", e.target.value)}
+                  placeholder={creatorProfile?.store_name ?? "Publisher ID"}
+                  required
+                />
+                {creatorProfile?.store_name && form.publisher_id === creatorProfile.id && (
+                  <p className="type-label-sm text-on-surface-variant mt-1">
+                    {creatorProfile.store_name}
+                  </p>
+                )}
+              </div>
             )}
           </FormField>
 

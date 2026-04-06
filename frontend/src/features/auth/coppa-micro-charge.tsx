@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { ShieldCheck, CreditCard, CheckCircle } from "lucide-react";
 import {
   Button,
@@ -10,6 +10,7 @@ import {
   Skeleton,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useMicroChargeStatus,
   useInitMicroCharge,
@@ -19,12 +20,21 @@ import {
 export function CoppaMicroCharge() {
   const intl = useIntl();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const statusQuery = useMicroChargeStatus();
   const initMutation = useInitMicroCharge();
   const verifyMutation = useVerifyMicroCharge();
 
   const [dollarInput, setDollarInput] = useState("");
   const [verifyError, setVerifyError] = useState(false);
+
+  // Redirect unauthenticated users to login with return URL
+  if (!authLoading && !isAuthenticated) {
+    const returnUrl = encodeURIComponent(location.pathname);
+    navigate(`/auth/login?return_to=${returnUrl}`, { replace: true });
+    return null;
+  }
 
   const status = statusQuery.data;
 

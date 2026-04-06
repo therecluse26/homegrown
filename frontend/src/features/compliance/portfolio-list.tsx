@@ -26,6 +26,7 @@ import type {
   PortfolioSummary,
   PortfolioOrganization,
 } from "@/hooks/use-compliance";
+import { parseLocalDate } from "@/lib/date-utils";
 
 // ─── Status badge ──────────────────────────────────────────────────────────
 
@@ -57,8 +58,8 @@ function PortfolioCard({
   onDelete: (id: string) => void;
 }) {
   const intl = useIntl();
-  const startDate = new Date(portfolio.date_range_start);
-  const endDate = new Date(portfolio.date_range_end);
+  const startDate = parseLocalDate(portfolio.date_range_start);
+  const endDate = parseLocalDate(portfolio.date_range_end);
   const dateRange = `${startDate.toLocaleDateString(intl.locale, {
     month: "short",
     day: "numeric",
