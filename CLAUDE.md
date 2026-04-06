@@ -308,6 +308,7 @@ The project generates TypeScript API types from Go source via a three-stage pipe
 | **Coding Rules** | **`specs/CODING_STANDARDS.md`** | **How to write the code** |
 | Design Vision | `specs/DESIGN.md` | Creative direction ("Curated Hearth" aesthetic) |
 | **Design Tokens** | **`specs/DESIGN_TOKENS.md`** | **Implementable token values for all frontend styling** |
+| E2E Testing | `specs/procedures/E2E_EXPLORATORY_TESTING.md` | Agent prompt for exhaustive Playwright-based exploratory testing |
 
 ---
 
