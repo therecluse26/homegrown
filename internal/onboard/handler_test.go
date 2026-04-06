@@ -101,6 +101,9 @@ func (m *mockOnboardingService) InitializeWizard(_ context.Context, _ uuid.UUID)
 func (m *mockOnboardingService) HandleMethodologyChanged(_ context.Context, _ uuid.UUID, _ string, _ []string) error {
 	return nil
 }
+func (m *mockOnboardingService) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
 
 // ─── GET /v1/onboarding/progress ─────────────────────────────────────────────
 

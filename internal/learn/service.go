@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -2567,9 +2568,33 @@ func (s *learningServiceImpl) GetPortfolioItemSummary(ctx context.Context, famil
 	return &summary, nil
 }
 
-func (s *learningServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
-	// No-op for learn:: — data exports are handled by lifecycle:: domain.
-	return nil
+func (s *learningServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		// Delete all family-scoped learning data. Order: dependent tables first.
+		tables := []string{
+			"learn_reading_list_items", // FK → learn_reading_lists
+			"learn_reading_lists",
+			"learn_activity_logs",
+			"learn_reading_progress",
+			"learn_journal_entries",
+			"learn_quiz_sessions",
+			"learn_sequence_progress",
+			"learn_student_assignments",
+			"learn_video_progress",
+			"learn_assessment_results",
+			"learn_project_progress",
+			"learn_grading_scales",
+			"learn_custom_subjects",
+			"learn_progress_snapshots",
+			"learn_export_requests",
+		}
+		for _, table := range tables {
+			if err := tx.Exec("DELETE FROM "+table+" WHERE family_id = ?", familyID).Error; err != nil {
+				return fmt.Errorf("learn: delete %s: %w", table, err)
+			}
+		}
+		return nil
+	})
 }
 
 func (s *learningServiceImpl) HandlePurchaseCompleted(_ context.Context, _ uuid.UUID, _ PurchaseMetadata) error {

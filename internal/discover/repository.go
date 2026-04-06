@@ -115,6 +115,16 @@ func (r *PgQuizResultRepository) ClaimForFamily(ctx context.Context, shareID str
 	return nil
 }
 
+func (r *PgQuizResultRepository) UnclaimByFamilyID(ctx context.Context, familyID any) error {
+	if err := r.db.WithContext(ctx).
+		Model(&QuizResult{}).
+		Where("family_id = ?", familyID).
+		Update("family_id", nil).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
 // ─── Content Page Repository ──────────────────────────────────────────────────
 
 // PgContentPageRepository implements ContentPageRepository using PostgreSQL via GORM.

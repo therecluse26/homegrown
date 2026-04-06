@@ -116,7 +116,7 @@ func TestFamilyCreatedEvent(t *testing.T) {
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
-	bus.Subscribe(reflect.TypeOf(FamilyCreated{}), &captureHandler{capture: &got})
+	bus.Subscribe(reflect.TypeFor[FamilyCreated](), &captureHandler{capture: &got})
 
 	if err := bus.Publish(ctx, FamilyCreated{FamilyID: familyID, ParentID: parentID}); err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestStudentCreatedEvent(t *testing.T) {
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
-	bus.Subscribe(reflect.TypeOf(StudentCreated{}), &captureHandler{capture: &got})
+	bus.Subscribe(reflect.TypeFor[StudentCreated](), &captureHandler{capture: &got})
 
 	if err := bus.Publish(ctx, StudentCreated{FamilyID: familyID, StudentID: studentID}); err != nil {
 		t.Fatal(err)
@@ -163,7 +163,7 @@ func TestStudentDeletedEvent(t *testing.T) {
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
-	bus.Subscribe(reflect.TypeOf(StudentDeleted{}), &captureHandler{capture: &got})
+	bus.Subscribe(reflect.TypeFor[StudentDeleted](), &captureHandler{capture: &got})
 
 	if err := bus.Publish(ctx, StudentDeleted{FamilyID: familyID, StudentID: studentID}); err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestCoppaConsentGrantedEvent(t *testing.T) {
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
-	bus.Subscribe(reflect.TypeOf(CoppaConsentGranted{}), &captureHandler{capture: &got})
+	bus.Subscribe(reflect.TypeFor[CoppaConsentGranted](), &captureHandler{capture: &got})
 
 	if err := bus.Publish(ctx, CoppaConsentGranted{FamilyID: familyID}); err != nil {
 		t.Fatal(err)
@@ -362,7 +362,7 @@ func TestCoParentAddedEvent(t *testing.T) {
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
-	bus.Subscribe(reflect.TypeOf(CoParentAdded{}), &captureHandler{capture: &got})
+	bus.Subscribe(reflect.TypeFor[CoParentAdded](), &captureHandler{capture: &got})
 
 	if err := bus.Publish(ctx, CoParentAdded{
 		FamilyID:      familyID,
@@ -391,7 +391,7 @@ func TestFamilyDeletionScheduledEvent(t *testing.T) {
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
-	bus.Subscribe(reflect.TypeOf(FamilyDeletionScheduled{}), &captureHandler{capture: &got})
+	bus.Subscribe(reflect.TypeFor[FamilyDeletionScheduled](), &captureHandler{capture: &got})
 
 	if err := bus.Publish(ctx, FamilyDeletionScheduled{FamilyID: familyID}); err != nil {
 		t.Fatal(err)
@@ -414,7 +414,7 @@ func TestPrimaryParentTransferredEvent(t *testing.T) {
 
 	bus := shared.NewEventBus()
 	var got shared.DomainEvent
-	bus.Subscribe(reflect.TypeOf(PrimaryParentTransferred{}), &captureHandler{capture: &got})
+	bus.Subscribe(reflect.TypeFor[PrimaryParentTransferred](), &captureHandler{capture: &got})
 
 	if err := bus.Publish(ctx, PrimaryParentTransferred{
 		FamilyID:      familyID,
@@ -450,5 +450,181 @@ func TestCoppaConsentStatus_CanCreateStudents(t *testing.T) {
 		if got := tc.status.CanCreateStudents(); got != tc.can {
 			t.Errorf("status %q: CanCreateStudents() = %v, want %v", tc.status, got, tc.can)
 		}
+	}
+}
+
+// ─── TransferPrimaryParent Guard Tests ───────────────────────────────────────
+
+func TestTransferPrimaryParent_RequiresPrimary(t *testing.T) {
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: false}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	err := svc.TransferPrimaryParent(context.Background(), &scope, auth, TransferPrimaryCommand{
+		NewPrimaryParentID: uuid.Must(uuid.NewV7()),
+	})
+	if !errors.Is(err, ErrNotPrimaryParent) {
+		t.Errorf("want ErrNotPrimaryParent, got %v", err)
+	}
+}
+
+// ─── WithdrawCoppaConsent Guard Tests ────────────────────────────────────────
+
+func TestWithdrawCoppaConsent_RequiresPrimary(t *testing.T) {
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: false, CoppaConsentStatus: string(CoppaConsentConsented)}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	err := svc.WithdrawCoppaConsent(context.Background(), &scope, auth)
+	if !errors.Is(err, ErrNotPrimaryParent) {
+		t.Errorf("want ErrNotPrimaryParent, got %v", err)
+	}
+}
+
+func TestWithdrawCoppaConsent_RegisteredState_InvalidTransition(t *testing.T) {
+	svc := &IamServiceImpl{eventBus: shared.NewEventBus()}
+	auth := &shared.AuthContext{IsPrimaryParent: true, CoppaConsentStatus: string(CoppaConsentRegistered)}
+	scope := shared.NewFamilyScopeFromID(uuid.Must(uuid.NewV7()))
+	err := svc.WithdrawCoppaConsent(context.Background(), &scope, auth)
+	var consentErr *InvalidConsentTransitionError
+	if !errors.As(err, &consentErr) {
+		t.Fatalf("want InvalidConsentTransitionError, got %T: %v", err, err)
+	}
+	if consentErr.From != string(CoppaConsentRegistered) {
+		t.Errorf("From = %q, want %q", consentErr.From, CoppaConsentRegistered)
+	}
+	if consentErr.To != string(CoppaConsentWithdrawn) {
+		t.Errorf("To = %q, want %q", consentErr.To, CoppaConsentWithdrawn)
+	}
+}
+
+// ─── InvalidConsentTransitionError Tests ─────────────────────────────────────
+
+func TestInvalidConsentTransitionError_Message(t *testing.T) {
+	err := &InvalidConsentTransitionError{From: "registered", To: "consented"}
+	want := "invalid COPPA consent transition from registered to consented"
+	if got := err.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+// ─── SlugArray Edge Cases ────────────────────────────────────────────────────
+
+func TestSlugArray_ScanBytes(t *testing.T) {
+	var arr SlugArray
+	if err := arr.Scan([]byte("{unschooling,montessori}")); err != nil {
+		t.Fatal(err)
+	}
+	if len(arr) != 2 {
+		t.Fatalf("want 2 elements, got %d", len(arr))
+	}
+	if arr[0] != "unschooling" || arr[1] != "montessori" {
+		t.Errorf("unexpected values: %v", arr)
+	}
+}
+
+func TestSlugArray_ScanUnsupportedType(t *testing.T) {
+	var arr SlugArray
+	err := arr.Scan(42)
+	if err == nil {
+		t.Fatal("expected error for unsupported type, got nil")
+	}
+}
+
+func TestSlugArray_SingleElement(t *testing.T) {
+	var arr SlugArray
+	if err := arr.Scan("{charlotte-mason}"); err != nil {
+		t.Fatal(err)
+	}
+	if len(arr) != 1 || arr[0] != "charlotte-mason" {
+		t.Errorf("unexpected: %v", arr)
+	}
+	val, err := arr.Value()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val != "{charlotte-mason}" {
+		t.Errorf("got %v, want {charlotte-mason}", val)
+	}
+}
+
+// ─── Event EventName Tests ───────────────────────────────────────────────────
+
+func TestEventNames(t *testing.T) {
+	tests := []struct {
+		event shared.DomainEvent
+		name  string
+	}{
+		{FamilyCreated{}, "iam.FamilyCreated"},
+		{StudentCreated{}, "iam.StudentCreated"},
+		{StudentDeleted{}, "iam.StudentDeleted"},
+		{CoppaConsentGranted{}, "iam.CoppaConsentGranted"},
+		{FamilyDeletionScheduled{}, "iam.FamilyDeletionScheduled"},
+		{InviteCreated{}, "iam.InviteCreated"},
+		{CoParentAdded{}, "iam.CoParentAdded"},
+		{CoParentRemoved{}, "iam.CoParentRemoved"},
+		{PrimaryParentTransferred{}, "iam.PrimaryParentTransferred"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.event.EventName(); got != tc.name {
+				t.Errorf("EventName() = %q, want %q", got, tc.name)
+			}
+		})
+	}
+}
+
+// ─── Phase 2 Event Publishing Tests (additional events) ──────────────────────
+
+func TestInviteCreatedEvent(t *testing.T) {
+	ctx := context.Background()
+	familyID := uuid.Must(uuid.NewV7())
+	inviteID := uuid.Must(uuid.NewV7())
+
+	bus := shared.NewEventBus()
+	var got shared.DomainEvent
+	bus.Subscribe(reflect.TypeFor[InviteCreated](), &captureHandler{capture: &got})
+
+	if err := bus.Publish(ctx, InviteCreated{
+		FamilyID: familyID,
+		InviteID: inviteID,
+		Email:    "invited@example.com",
+		Token:    "tok123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	evt, ok := got.(InviteCreated)
+	if !ok {
+		t.Fatalf("got %T, want InviteCreated", got)
+	}
+	if evt.FamilyID != familyID || evt.InviteID != inviteID {
+		t.Errorf("unexpected event fields: %+v", evt)
+	}
+	if evt.Email != "invited@example.com" {
+		t.Errorf("Email = %q, want %q", evt.Email, "invited@example.com")
+	}
+}
+
+func TestCoParentRemovedEvent(t *testing.T) {
+	ctx := context.Background()
+	familyID := uuid.Must(uuid.NewV7())
+	coParentID := uuid.Must(uuid.NewV7())
+
+	bus := shared.NewEventBus()
+	var got shared.DomainEvent
+	bus.Subscribe(reflect.TypeFor[CoParentRemoved](), &captureHandler{capture: &got})
+
+	if err := bus.Publish(ctx, CoParentRemoved{
+		FamilyID:   familyID,
+		CoParentID: coParentID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	evt, ok := got.(CoParentRemoved)
+	if !ok {
+		t.Fatalf("got %T, want CoParentRemoved", got)
+	}
+	if evt.FamilyID != familyID || evt.CoParentID != coParentID {
+		t.Errorf("unexpected event fields: %+v", evt)
 	}
 }

@@ -759,6 +759,30 @@ func matchesAgeGroup(itemAgeGroup string, familyAgeGroups map[AgeGroup]bool) boo
 	return familyAgeGroups[AgeGroup(itemAgeGroup)]
 }
 
+// ─── HandleFamilyDeletionScheduled ────────────────────────────────────────────
+
+// HandleFamilyDeletionScheduled deletes all onboarding data for a family.
+// Called by lifecycle:: deletion sweep via DeletionHandler adapter. [15-data-lifecycle §7]
+func (s *onboardingServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		wizardRepo := &PgWizardProgressRepository{db: tx}
+		roadmapRepo := &PgRoadmapItemRepository{db: tx}
+		recRepo := &PgStarterRecommendationRepository{db: tx}
+		commRepo := &PgCommunitySuggestionRepository{db: tx}
+
+		if err := roadmapRepo.DeleteByFamilyID(ctx, familyID); err != nil {
+			return err
+		}
+		if err := recRepo.DeleteByFamilyID(ctx, familyID); err != nil {
+			return err
+		}
+		if err := commRepo.DeleteByFamilyID(ctx, familyID); err != nil {
+			return err
+		}
+		return wizardRepo.DeleteByFamilyID(ctx, familyID)
+	})
+}
+
 // ─── Wizard State Machine ────────────────────────────────────────────────────
 
 // advanceStep adds a step to completed_steps (idempotent) and advances current_step

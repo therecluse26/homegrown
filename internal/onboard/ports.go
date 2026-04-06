@@ -67,6 +67,10 @@ type OnboardingService interface {
 	// HandleMethodologyChanged re-materializes guidance when methodology changes.
 	// Called from FamilyMethodologyChangedHandler — no auth context available. [04-onboard §11.2]
 	HandleMethodologyChanged(ctx context.Context, familyID uuid.UUID, primarySlug string, secondarySlugs []string) error
+
+	// HandleFamilyDeletionScheduled deletes all onboarding data for a family.
+	// Called by lifecycle:: deletion sweep via DeletionHandler adapter. [15-data-lifecycle §7]
+	HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── Repository Interfaces ───────────────────────────────────────────────────
@@ -77,6 +81,7 @@ type WizardProgressRepository interface {
 	Create(ctx context.Context, progress *WizardProgress) error
 	FindByFamilyID(ctx context.Context, familyID uuid.UUID) (*WizardProgress, error)
 	Update(ctx context.Context, progress *WizardProgress) error
+	DeleteByFamilyID(ctx context.Context, familyID uuid.UUID) error
 }
 
 // RoadmapItemRepository provides persistence for materialized roadmap items.

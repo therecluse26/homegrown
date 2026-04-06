@@ -39,4 +39,15 @@ func RegisterTaskHandlers(worker shared.JobWorker, svc LifecycleService) {
 		slog.Info("lifecycle: process_deletion completed", "deletion_id", job.DeletionID)
 		return nil
 	})
+
+	// Nightly sweep: find all deletion requests past grace period and process them.
+	// Registered as a cron schedule in main.go. [15-data-lifecycle §10.1]
+	worker.Handle("lifecycle:sweep_deletions", func(ctx context.Context, _ []byte) error {
+		if err := svc.ProcessDeletion(ctx); err != nil {
+			slog.Error("lifecycle: sweep_deletions job failed", "error", err)
+			return err
+		}
+		slog.Info("lifecycle: sweep_deletions completed")
+		return nil
+	})
 }

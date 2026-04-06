@@ -618,6 +618,10 @@ func (r *stubQuizResRepo) ClaimForFamily(_ context.Context, _ string, _ any) err
 	return r.err
 }
 
+func (r *stubQuizResRepo) UnclaimByFamilyID(_ context.Context, _ any) error {
+	return r.err
+}
+
 type stubStateRepo struct {
 	summaries []StateGuideSummary
 	guide     *StateGuide

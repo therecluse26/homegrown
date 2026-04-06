@@ -126,6 +126,12 @@ type IamService interface {
 	// GetStudentSessionMe validates a student bearer token and returns the session identity. [§5]
 	// Used by the student-session middleware — no family scope available.
 	GetStudentSessionMe(ctx context.Context, token string) (*StudentSessionIdentityResponse, error)
+
+	// ─── Lifecycle (Deletion) ──────────────────────────────────────────────
+	// HandleFamilyDeletionScheduled deletes all IAM data for a family.
+	// Called by lifecycle:: as the LAST deletion handler (other domains reference IAM records via FK).
+	// RETAINS: iam_coppa_audit_log (legal compliance). [15-data-lifecycle §7]
+	HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────

@@ -92,6 +92,9 @@ func (m *mockDiscoveryService) ClaimQuizResult(ctx context.Context, shareID stri
 func (m *mockDiscoveryService) GetContentBySlug(_ context.Context, _ string) (*ContentPage, error) {
 	return &ContentPage{}, nil
 }
+func (m *mockDiscoveryService) HandleFamilyDeletionScheduled(_ context.Context, _ any) error {
+	return nil
+}
 
 // ─── GET /v1/discovery/quiz ───────────────────────────────────────────────────
 

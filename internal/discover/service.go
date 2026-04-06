@@ -409,3 +409,12 @@ func (s *discoveryServiceImpl) GetStateRequirements(ctx context.Context, stateCo
 
 	return &reqs, nil
 }
+
+// ─── HandleFamilyDeletionScheduled ────────────────────────────────────────────
+
+// HandleFamilyDeletionScheduled clears family association from quiz results.
+// Quiz results are made anonymous again (family_id = NULL) rather than deleted,
+// since they may be referenced by share_id from external sources. [15-data-lifecycle §7]
+func (s *discoveryServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID any) error {
+	return s.quizResRepo.UnclaimByFamilyID(ctx, familyID)
+}

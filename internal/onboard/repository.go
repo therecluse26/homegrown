@@ -46,6 +46,13 @@ func (r *PgWizardProgressRepository) Update(ctx context.Context, progress *Wizar
 	return nil
 }
 
+func (r *PgWizardProgressRepository) DeleteByFamilyID(ctx context.Context, familyID uuid.UUID) error {
+	if err := r.db.WithContext(ctx).Where("family_id = ?", familyID).Delete(&WizardProgress{}).Error; err != nil {
+		return shared.ErrDatabase(err)
+	}
+	return nil
+}
+
 // ─── Roadmap Item Repository ─────────────────────────────────────────────────
 
 // PgRoadmapItemRepository implements RoadmapItemRepository using PostgreSQL via GORM.

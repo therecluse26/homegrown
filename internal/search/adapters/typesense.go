@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/search"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // HttpTypesenseAdapter implements search.TypesenseAdapter using the Typesense REST API.
@@ -51,7 +52,7 @@ func (a *HttpTypesenseAdapter) IndexDocument(ctx context.Context, collection str
 	}
 	a.setHeaders(req)
 
-	resp, err := a.client.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.client, req, nil)
 	if err != nil {
 		return fmt.Errorf("typesense: index document: %w", err)
 	}
@@ -72,7 +73,7 @@ func (a *HttpTypesenseAdapter) RemoveDocument(ctx context.Context, collection st
 	}
 	a.setHeaders(req)
 
-	resp, err := a.client.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.client, req, nil)
 	if err != nil {
 		return fmt.Errorf("typesense: remove document: %w", err)
 	}
@@ -104,13 +105,13 @@ func (a *HttpTypesenseAdapter) BulkIndex(ctx context.Context, collection string,
 	}
 
 	endpoint := fmt.Sprintf("%s/collections/%s/documents/import?action=upsert", a.baseURL, url.PathEscape(collection))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &buf)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(buf.Bytes()))
 	if err != nil {
 		return nil, fmt.Errorf("typesense: create request: %w", err)
 	}
 	a.setHeaders(req)
 
-	resp, err := a.client.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.client, req, nil)
 	if err != nil {
 		return nil, fmt.Errorf("typesense: bulk index: %w", err)
 	}
@@ -184,7 +185,7 @@ func (a *HttpTypesenseAdapter) Search(ctx context.Context, collection string, qu
 	}
 	a.setHeaders(req)
 
-	resp, err := a.client.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.client, req, nil)
 	if err != nil {
 		return nil, fmt.Errorf("typesense: search: %w", err)
 	}
@@ -227,7 +228,7 @@ func (a *HttpTypesenseAdapter) CollectionStats(ctx context.Context, collection s
 	}
 	a.setHeaders(req)
 
-	resp, err := a.client.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.client, req, nil)
 	if err != nil {
 		return nil, fmt.Errorf("typesense: collection stats: %w", err)
 	}

@@ -92,7 +92,7 @@ func newTestHarness() *testHarness {
 		h.iamService, h.cache, h.events, h.jobs, scanner, cfg,
 		newMockParentalControlRepo(), newMockAdminRoleRepo(),
 		newMockAdminRoleAssignRepo(), newMockGroomingScoreRepo(),
-		newMockGroomingDetector(),
+		newMockGroomingDetector(), nil,
 	)
 
 	return h

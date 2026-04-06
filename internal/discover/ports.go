@@ -42,6 +42,10 @@ type DiscoveryService interface {
 	// GetContentBySlug returns a published content page by its slug. [03-discover §8.4]
 	// Returns ErrContentPageNotFound (→ 404) if not found or not published.
 	GetContentBySlug(ctx context.Context, slug string) (*ContentPage, error)
+
+	// HandleFamilyDeletionScheduled clears family association from quiz results.
+	// Called by lifecycle:: deletion sweep via DeletionHandler adapter. [15-data-lifecycle §7]
+	HandleFamilyDeletionScheduled(ctx context.Context, familyID any) error
 }
 
 // ─── Repository Interfaces ────────────────────────────────────────────────────
@@ -71,6 +75,10 @@ type QuizResultRepository interface {
 	// Returns ErrQuizResultAlreadyClaimed if already owned by a different family.
 	// Defined here for Phase 2 but implemented now. [03-discover §3.1]
 	ClaimForFamily(ctx context.Context, shareID string, familyID any) error
+
+	// UnclaimByFamilyID sets family_id to NULL on all quiz results owned by the given family.
+	// Used during family deletion to disassociate results without deleting them. [15-data-lifecycle §7]
+	UnclaimByFamilyID(ctx context.Context, familyID any) error
 }
 
 // StateGuideRepository provides read-only access to state legal guides.

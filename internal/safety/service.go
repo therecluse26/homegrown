@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/safety/domain"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
+	"gorm.io/gorm"
 )
 
 // safetyServiceImpl implements SafetyService. [11-safety §5.1]
@@ -34,6 +35,7 @@ type safetyServiceImpl struct {
 	adminRoleAssignRepo AdminRoleAssignmentRepository
 	groomingScoreRepo   GroomingScoreRepository
 	groomingDetector    GroomingDetector
+	db                  *gorm.DB // for BypassRLSTransaction in deletion handler
 }
 
 // NewSafetyService creates a new SafetyService.
@@ -56,6 +58,7 @@ func NewSafetyService(
 	adminRoleAssignRepo AdminRoleAssignmentRepository,
 	groomingScoreRepo GroomingScoreRepository,
 	groomingDetector GroomingDetector,
+	db *gorm.DB,
 ) SafetyService {
 	return &safetyServiceImpl{
 		reportRepo:          reportRepo,
@@ -76,6 +79,7 @@ func NewSafetyService(
 		adminRoleAssignRepo: adminRoleAssignRepo,
 		groomingScoreRepo:   groomingScoreRepo,
 		groomingDetector:    groomingDetector,
+		db:                  db,
 	}
 }
 
@@ -1360,6 +1364,39 @@ func groomingScoreToResponse(gs *GroomingScore) GroomingScoreResponse {
 		ReviewedBy:     gs.ReviewedBy,
 		CreatedAt:      gs.CreatedAt,
 	}
+}
+
+// ─── HandleFamilyDeletionScheduled ────────────────────────────────────────────
+
+// HandleFamilyDeletionScheduled deletes family-scoped safety data for a deleted family.
+// RETAINS: ncmec_reports and ncmec_pending_reports per 18 U.S.C. §2258A (legal obligation).
+// Anonymizes: reports filed BY this family (sets reporter fields to NULL). [15-data-lifecycle §7]
+func (s *safetyServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		// Delete family-owned records (order: children before parents to respect FKs).
+		if err := tx.Where("family_id = ?", familyID).Delete(&ParentalControl{}).Error; err != nil {
+			return fmt.Errorf("safety: delete parental_controls: %w", err)
+		}
+		if err := tx.Where("family_id = ?", familyID).Delete(&Appeal{}).Error; err != nil {
+			return fmt.Errorf("safety: delete appeals: %w", err)
+		}
+		if err := tx.Where("family_id = ?", familyID).Delete(&AccountStatusRow{}).Error; err != nil {
+			return fmt.Errorf("safety: delete account_status: %w", err)
+		}
+		if err := tx.Where("author_family_id = ?", familyID).Delete(&GroomingScore{}).Error; err != nil {
+			return fmt.Errorf("safety: delete grooming_scores: %w", err)
+		}
+
+		// Delete reports filed BY this family (reporter_family_id is NOT NULL).
+		if err := tx.Where("reporter_family_id = ?", familyID).Delete(&Report{}).Error; err != nil {
+			return fmt.Errorf("safety: delete reporter reports: %w", err)
+		}
+
+		// NOTE: ncmec_reports, ncmec_pending_reports RETAINED per 18 U.S.C. §2258A.
+		// NOTE: content_flags, mod_actions, bot_signals, manual_review_queue are platform
+		//       safety records retained for audit trail integrity.
+		return nil
+	})
 }
 
 // ExpireSuspensionsPayload is the job payload for the expire suspensions job.

@@ -14,6 +14,8 @@
     "convert-spec": "swagger2openapi ../openapi/swagger.json -o ../openapi/openapi3.json",
     "generate-types": "npm run convert-spec && openapi-typescript ../openapi/openapi3.json -o src/api/generated/schema.ts",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:a11y": "playwright test e2e/a11y.spec.ts"
   },
@@ -31,17 +33,22 @@
     "@axe-core/playwright": "^4.11.1",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.58.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.4",
     "eslint-plugin-jsx-a11y": "^6.10.2",
+    "happy-dom": "^20.8.9",
     "openapi-typescript": "^7",
     "swagger2openapi": "^7",
     "tailwindcss": "^4",
     "typescript": "^5",
     "typescript-eslint": "^8.57.2",
-    "vite": "^6"
+    "vite": "^6",
+    "vitest": "^4.1.2"
   }
 }

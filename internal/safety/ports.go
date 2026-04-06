@@ -67,6 +67,11 @@ type SafetyService interface {
 	AnalyzeTextForGrooming(ctx context.Context, contentType string, contentID uuid.UUID, authorFamilyID uuid.UUID, text string) (*GroomingAnalysisResult, error)
 	AdminListGroomingScores(ctx context.Context, auth *shared.AuthContext, pagination shared.PaginationParams) (*shared.PaginatedResponse[GroomingScoreResponse], error)
 	AdminReviewGroomingScore(ctx context.Context, auth *shared.AuthContext, scoreID uuid.UUID, cmd ReviewGroomingScoreCommand) (*GroomingScoreResponse, error)
+
+	// ─── Lifecycle (Deletion) ──────────────────────────────────────
+	// HandleFamilyDeletionScheduled deletes family-scoped safety data.
+	// RETAINS ncmec_reports and ncmec_pending_reports per 18 U.S.C. §2258A. [15-data-lifecycle §7]
+	HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error
 }
 
 // ─── Repository Interfaces ──────────────────────────────────────────────────────

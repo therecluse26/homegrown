@@ -674,6 +674,9 @@ func (m *mockSafetyService) AdminReviewGroomingScore(ctx context.Context, auth *
 	}
 	panic("AdminReviewGroomingScore not mocked")
 }
+func (m *mockSafetyService) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
 
 // ─── Phase 2 Mock Repositories ──────────────────────────────────────────────────
 

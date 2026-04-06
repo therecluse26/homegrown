@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/billing"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // HyperswitchSubscriptionAdapter wraps the Hyperswitch REST API for subscription + billing flows.
@@ -46,14 +47,14 @@ func NewHyperswitchSubscriptionAdapter(baseURL, apiKey, profileID, webhookKey st
 
 // ─── Customer Management ────────────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) CreateCustomer(_ context.Context, email string, name string, metadata map[string]string) (string, error) {
+func (a *HyperswitchSubscriptionAdapter) CreateCustomer(ctx context.Context,email string, name string, metadata map[string]string) (string, error) {
 	body := map[string]any{
 		"email":    email,
 		"name":     name,
 		"metadata": metadata,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/customers", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/customers", body)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -72,13 +73,13 @@ func (a *HyperswitchSubscriptionAdapter) CreateCustomer(_ context.Context, email
 	return result.CustomerID, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) UpdateCustomer(_ context.Context, customerID string, email string, name string) error {
+func (a *HyperswitchSubscriptionAdapter) UpdateCustomer(ctx context.Context,customerID string, email string, name string) error {
 	body := map[string]any{
 		"email": email,
 		"name":  name,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/customers/"+customerID, body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/customers/"+customerID, body)
 	if err != nil {
 		return fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -92,7 +93,7 @@ func (a *HyperswitchSubscriptionAdapter) UpdateCustomer(_ context.Context, custo
 
 // ─── Subscriptions ──────────────────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) CreateSubscription(_ context.Context, customerID string, priceID string, paymentMethodID string, metadata map[string]string) (*billing.HyperswitchSubscription, error) {
+func (a *HyperswitchSubscriptionAdapter) CreateSubscription(ctx context.Context,customerID string, priceID string, paymentMethodID string, metadata map[string]string) (*billing.HyperswitchSubscription, error) {
 	body := map[string]any{
 		"customer_id":       customerID,
 		"price_id":          priceID,
@@ -101,7 +102,7 @@ func (a *HyperswitchSubscriptionAdapter) CreateSubscription(_ context.Context, c
 		"metadata":          metadata,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/subscriptions", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/subscriptions", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -123,12 +124,12 @@ func (a *HyperswitchSubscriptionAdapter) CreateSubscription(_ context.Context, c
 	return &sub, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) UpdateSubscription(_ context.Context, subscriptionID string, newPriceID string) (*billing.HyperswitchSubscription, error) {
+func (a *HyperswitchSubscriptionAdapter) UpdateSubscription(ctx context.Context,subscriptionID string, newPriceID string) (*billing.HyperswitchSubscription, error) {
 	body := map[string]any{
 		"price_id": newPriceID,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/subscriptions/"+subscriptionID, body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/subscriptions/"+subscriptionID, body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -145,12 +146,12 @@ func (a *HyperswitchSubscriptionAdapter) UpdateSubscription(_ context.Context, s
 	return &sub, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) CancelSubscription(_ context.Context, subscriptionID string) (*billing.HyperswitchSubscription, error) {
+func (a *HyperswitchSubscriptionAdapter) CancelSubscription(ctx context.Context,subscriptionID string) (*billing.HyperswitchSubscription, error) {
 	body := map[string]any{
 		"cancel_option": "end_of_term",
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/subscriptions/"+subscriptionID+"/cancel", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/subscriptions/"+subscriptionID+"/cancel", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -167,8 +168,8 @@ func (a *HyperswitchSubscriptionAdapter) CancelSubscription(_ context.Context, s
 	return &sub, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) PauseSubscription(_ context.Context, subscriptionID string) (*billing.HyperswitchSubscription, error) {
-	resp, err := a.doRequest(http.MethodPost, "/subscriptions/"+subscriptionID+"/pause", nil)
+func (a *HyperswitchSubscriptionAdapter) PauseSubscription(ctx context.Context,subscriptionID string) (*billing.HyperswitchSubscription, error) {
+	resp, err := a.doRequest(ctx, http.MethodPost, "/subscriptions/"+subscriptionID+"/pause", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -185,8 +186,8 @@ func (a *HyperswitchSubscriptionAdapter) PauseSubscription(_ context.Context, su
 	return &sub, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) ResumeSubscription(_ context.Context, subscriptionID string) (*billing.HyperswitchSubscription, error) {
-	resp, err := a.doRequest(http.MethodPost, "/subscriptions/"+subscriptionID+"/resume", nil)
+func (a *HyperswitchSubscriptionAdapter) ResumeSubscription(ctx context.Context,subscriptionID string) (*billing.HyperswitchSubscription, error) {
+	resp, err := a.doRequest(ctx, http.MethodPost, "/subscriptions/"+subscriptionID+"/resume", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -203,8 +204,8 @@ func (a *HyperswitchSubscriptionAdapter) ResumeSubscription(_ context.Context, s
 	return &sub, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) ReactivateSubscription(_ context.Context, subscriptionID string) (*billing.HyperswitchSubscription, error) {
-	resp, err := a.doRequest(http.MethodPost, "/subscriptions/"+subscriptionID+"/reactivate", nil)
+func (a *HyperswitchSubscriptionAdapter) ReactivateSubscription(ctx context.Context,subscriptionID string) (*billing.HyperswitchSubscription, error) {
+	resp, err := a.doRequest(ctx, http.MethodPost, "/subscriptions/"+subscriptionID+"/reactivate", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -221,7 +222,7 @@ func (a *HyperswitchSubscriptionAdapter) ReactivateSubscription(_ context.Contex
 	return &sub, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) EstimateSubscription(_ context.Context, customerID string, priceID string, currentSubscriptionID *string) (*billing.HyperswitchEstimate, error) {
+func (a *HyperswitchSubscriptionAdapter) EstimateSubscription(ctx context.Context,customerID string, priceID string, currentSubscriptionID *string) (*billing.HyperswitchEstimate, error) {
 	body := map[string]any{
 		"customer_id": customerID,
 		"price_id":    priceID,
@@ -230,7 +231,7 @@ func (a *HyperswitchSubscriptionAdapter) EstimateSubscription(_ context.Context,
 		body["subscription_id"] = *currentSubscriptionID
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/subscriptions/estimate", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/subscriptions/estimate", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -249,13 +250,13 @@ func (a *HyperswitchSubscriptionAdapter) EstimateSubscription(_ context.Context,
 
 // ─── Payment Methods ────────────────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) CreateSetupIntent(_ context.Context, customerID string) (*billing.SetupIntentResponse, error) {
+func (a *HyperswitchSubscriptionAdapter) CreateSetupIntent(ctx context.Context,customerID string) (*billing.SetupIntentResponse, error) {
 	body := map[string]any{
 		"customer_id": customerID,
 		"profile_id":  a.profileID,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/setup_intents", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/setup_intents", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -272,8 +273,8 @@ func (a *HyperswitchSubscriptionAdapter) CreateSetupIntent(_ context.Context, cu
 	return &result, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) ListPaymentMethods(_ context.Context, customerID string) ([]billing.HyperswitchPaymentMethod, error) {
-	resp, err := a.doRequest(http.MethodGet, "/customers/"+customerID+"/payment_methods", nil)
+func (a *HyperswitchSubscriptionAdapter) ListPaymentMethods(ctx context.Context,customerID string) ([]billing.HyperswitchPaymentMethod, error) {
+	resp, err := a.doRequest(ctx, http.MethodGet, "/customers/"+customerID+"/payment_methods", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -290,8 +291,8 @@ func (a *HyperswitchSubscriptionAdapter) ListPaymentMethods(_ context.Context, c
 	return methods, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) DetachPaymentMethod(_ context.Context, paymentMethodID string) error {
-	resp, err := a.doRequest(http.MethodDelete, "/payment_methods/"+paymentMethodID, nil)
+func (a *HyperswitchSubscriptionAdapter) DetachPaymentMethod(ctx context.Context,paymentMethodID string) error {
+	resp, err := a.doRequest(ctx, http.MethodDelete, "/payment_methods/"+paymentMethodID, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -308,7 +309,7 @@ func (a *HyperswitchSubscriptionAdapter) DetachPaymentMethod(_ context.Context, 
 
 // ─── One-Time Payments (COPPA) ──────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) ProcessMicroCharge(_ context.Context, customerID string, paymentMethodID string, amountCents int64, description string, metadata map[string]string) (string, string, error) {
+func (a *HyperswitchSubscriptionAdapter) ProcessMicroCharge(ctx context.Context,customerID string, paymentMethodID string, amountCents int64, description string, metadata map[string]string) (string, string, error) {
 	// Step 1: Create one-time payment
 	payBody := map[string]any{
 		"customer_id":       customerID,
@@ -321,7 +322,7 @@ func (a *HyperswitchSubscriptionAdapter) ProcessMicroCharge(_ context.Context, c
 		"confirm":           true,
 	}
 
-	payResp, err := a.doRequest(http.MethodPost, "/payments", payBody)
+	payResp, err := a.doRequest(ctx, http.MethodPost, "/payments", payBody)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -348,7 +349,7 @@ func (a *HyperswitchSubscriptionAdapter) ProcessMicroCharge(_ context.Context, c
 		"reason":     "COPPA micro-charge verification refund",
 	}
 
-	refundResp, err := a.doRequest(http.MethodPost, "/refunds", refundBody)
+	refundResp, err := a.doRequest(ctx, http.MethodPost, "/refunds", refundBody)
 	if err != nil {
 		// Charge succeeded but refund failed — return charge ID and empty refund.
 		// Service layer logs this and still returns success. [10-billing §13]
@@ -375,9 +376,9 @@ func (a *HyperswitchSubscriptionAdapter) ProcessMicroCharge(_ context.Context, c
 
 // ─── Invoices ───────────────────────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) ListInvoices(_ context.Context, customerID string, limit uint32) ([]billing.HyperswitchInvoice, error) {
+func (a *HyperswitchSubscriptionAdapter) ListInvoices(ctx context.Context,customerID string, limit uint32) ([]billing.HyperswitchInvoice, error) {
 	url := fmt.Sprintf("/customers/%s/invoices?limit=%d", customerID, limit)
-	resp, err := a.doRequest(http.MethodGet, url, nil)
+	resp, err := a.doRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -396,7 +397,7 @@ func (a *HyperswitchSubscriptionAdapter) ListInvoices(_ context.Context, custome
 
 // ─── Payouts ────────────────────────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) CreatePayout(_ context.Context, paymentAccountID string, amountCents int64, currency string, metadata map[string]string) (*billing.HyperswitchPayout, error) {
+func (a *HyperswitchSubscriptionAdapter) CreatePayout(ctx context.Context,paymentAccountID string, amountCents int64, currency string, metadata map[string]string) (*billing.HyperswitchPayout, error) {
 	body := map[string]any{
 		"merchant_id": paymentAccountID,
 		"amount":      amountCents,
@@ -404,7 +405,7 @@ func (a *HyperswitchSubscriptionAdapter) CreatePayout(_ context.Context, payment
 		"metadata":    metadata,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/payouts/create", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/payouts/create", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", billing.ErrPaymentAdapterUnavailable, err)
 	}
@@ -423,7 +424,7 @@ func (a *HyperswitchSubscriptionAdapter) CreatePayout(_ context.Context, payment
 
 // ─── Webhooks ───────────────────────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) VerifyWebhook(_ context.Context, payload []byte, signature string) (bool, error) {
+func (a *HyperswitchSubscriptionAdapter) VerifyWebhook(ctx context.Context,payload []byte, signature string) (bool, error) {
 	if a.webhookKey == "" {
 		return false, billing.ErrInvalidWebhookSignature
 	}
@@ -438,7 +439,7 @@ func (a *HyperswitchSubscriptionAdapter) VerifyWebhook(_ context.Context, payloa
 	return true, nil
 }
 
-func (a *HyperswitchSubscriptionAdapter) ParseWebhookEvent(_ context.Context, payload []byte) (*billing.BillingWebhookEvent, error) {
+func (a *HyperswitchSubscriptionAdapter) ParseWebhookEvent(ctx context.Context,payload []byte) (*billing.BillingWebhookEvent, error) {
 	var raw struct {
 		Type    string `json:"type"`
 		Content json.RawMessage `json:"content"`
@@ -494,7 +495,7 @@ func (a *HyperswitchSubscriptionAdapter) ParseWebhookEvent(_ context.Context, pa
 
 // ─── HTTP Helpers ────────────────────────────────────────────────────────────
 
-func (a *HyperswitchSubscriptionAdapter) doRequest(method, path string, body any) (*http.Response, error) {
+func (a *HyperswitchSubscriptionAdapter) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBytes, err := json.Marshal(body)
@@ -504,7 +505,7 @@ func (a *HyperswitchSubscriptionAdapter) doRequest(method, path string, body any
 		bodyReader = bytes.NewReader(jsonBytes)
 	}
 
-	req, err := http.NewRequest(method, a.baseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, a.baseURL+path, bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +513,7 @@ func (a *HyperswitchSubscriptionAdapter) doRequest(method, path string, body any
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("api-key", a.apiKey)
 
-	return a.client.Do(req)
+	return shared.RetryableHTTPDo(ctx, a.client, req, nil)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -521,71 +522,71 @@ func (a *HyperswitchSubscriptionAdapter) doRequest(method, path string, body any
 
 type noopSubscriptionAdapter struct{}
 
-func (n *noopSubscriptionAdapter) CreateCustomer(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+func (n *noopSubscriptionAdapter) CreateCustomer(ctx context.Context,_ string, _ string, _ map[string]string) (string, error) {
 	slog.Warn("billing adapter not configured — CreateCustomer is a no-op")
 	return "", billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) UpdateCustomer(_ context.Context, _ string, _ string, _ string) error {
+func (n *noopSubscriptionAdapter) UpdateCustomer(ctx context.Context,_ string, _ string, _ string) error {
 	return billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) CreateSubscription(_ context.Context, _ string, _ string, _ string, _ map[string]string) (*billing.HyperswitchSubscription, error) {
+func (n *noopSubscriptionAdapter) CreateSubscription(ctx context.Context,_ string, _ string, _ string, _ map[string]string) (*billing.HyperswitchSubscription, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) UpdateSubscription(_ context.Context, _ string, _ string) (*billing.HyperswitchSubscription, error) {
+func (n *noopSubscriptionAdapter) UpdateSubscription(ctx context.Context,_ string, _ string) (*billing.HyperswitchSubscription, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) CancelSubscription(_ context.Context, _ string) (*billing.HyperswitchSubscription, error) {
+func (n *noopSubscriptionAdapter) CancelSubscription(ctx context.Context,_ string) (*billing.HyperswitchSubscription, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) PauseSubscription(_ context.Context, _ string) (*billing.HyperswitchSubscription, error) {
+func (n *noopSubscriptionAdapter) PauseSubscription(ctx context.Context,_ string) (*billing.HyperswitchSubscription, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) ResumeSubscription(_ context.Context, _ string) (*billing.HyperswitchSubscription, error) {
+func (n *noopSubscriptionAdapter) ResumeSubscription(ctx context.Context,_ string) (*billing.HyperswitchSubscription, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) ReactivateSubscription(_ context.Context, _ string) (*billing.HyperswitchSubscription, error) {
+func (n *noopSubscriptionAdapter) ReactivateSubscription(ctx context.Context,_ string) (*billing.HyperswitchSubscription, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) EstimateSubscription(_ context.Context, _ string, _ string, _ *string) (*billing.HyperswitchEstimate, error) {
+func (n *noopSubscriptionAdapter) EstimateSubscription(ctx context.Context,_ string, _ string, _ *string) (*billing.HyperswitchEstimate, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) CreateSetupIntent(_ context.Context, _ string) (*billing.SetupIntentResponse, error) {
+func (n *noopSubscriptionAdapter) CreateSetupIntent(ctx context.Context,_ string) (*billing.SetupIntentResponse, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) ListPaymentMethods(_ context.Context, _ string) ([]billing.HyperswitchPaymentMethod, error) {
+func (n *noopSubscriptionAdapter) ListPaymentMethods(ctx context.Context,_ string) ([]billing.HyperswitchPaymentMethod, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) DetachPaymentMethod(_ context.Context, _ string) error {
+func (n *noopSubscriptionAdapter) DetachPaymentMethod(ctx context.Context,_ string) error {
 	return billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) ProcessMicroCharge(_ context.Context, _ string, _ string, _ int64, _ string, _ map[string]string) (string, string, error) {
+func (n *noopSubscriptionAdapter) ProcessMicroCharge(ctx context.Context,_ string, _ string, _ int64, _ string, _ map[string]string) (string, string, error) {
 	return "", "", billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) ListInvoices(_ context.Context, _ string, _ uint32) ([]billing.HyperswitchInvoice, error) {
+func (n *noopSubscriptionAdapter) ListInvoices(ctx context.Context,_ string, _ uint32) ([]billing.HyperswitchInvoice, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) CreatePayout(_ context.Context, _ string, _ int64, _ string, _ map[string]string) (*billing.HyperswitchPayout, error) {
+func (n *noopSubscriptionAdapter) CreatePayout(ctx context.Context,_ string, _ int64, _ string, _ map[string]string) (*billing.HyperswitchPayout, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) VerifyWebhook(_ context.Context, _ []byte, _ string) (bool, error) {
+func (n *noopSubscriptionAdapter) VerifyWebhook(ctx context.Context,_ []byte, _ string) (bool, error) {
 	return false, billing.ErrPaymentAdapterUnavailable
 }
 
-func (n *noopSubscriptionAdapter) ParseWebhookEvent(_ context.Context, _ []byte) (*billing.BillingWebhookEvent, error) {
+func (n *noopSubscriptionAdapter) ParseWebhookEvent(ctx context.Context,_ []byte) (*billing.BillingWebhookEvent, error) {
 	return nil, billing.ErrPaymentAdapterUnavailable
 }

@@ -943,3 +943,43 @@ func (s *IamServiceImpl) GetStudentSessionMe(ctx context.Context, token string) 
 	}
 	return result, nil
 }
+
+// ─── HandleFamilyDeletionScheduled ────────────────────────────────────────────
+
+// HandleFamilyDeletionScheduled deletes all IAM data for a family.
+// Must run LAST among deletion handlers because other domains' tables reference IAM records.
+// RETAINS: iam_coppa_audit_log (legal compliance requirement). [15-data-lifecycle §7]
+func (s *IamServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		// Delete children-first to respect FK ordering.
+
+		// 1. Student sessions (references iam_students).
+		studentIDSubquery := tx.Model(&StudentModel{}).Select("id").Where("family_id = ?", familyID)
+		if err := tx.Where("student_id IN (?)", studentIDSubquery).Delete(&StudentSessionModel{}).Error; err != nil {
+			return fmt.Errorf("iam: delete student_sessions: %w", err)
+		}
+
+		// 2. Co-parent invites.
+		if err := tx.Where("family_id = ?", familyID).Delete(&CoParentInviteModel{}).Error; err != nil {
+			return fmt.Errorf("iam: delete co_parent_invites: %w", err)
+		}
+
+		// 3. Students (referenced by many domains — must be deleted after domain handlers).
+		if err := tx.Where("family_id = ?", familyID).Delete(&StudentModel{}).Error; err != nil {
+			return fmt.Errorf("iam: delete students: %w", err)
+		}
+
+		// 4. Parents (referenced by many domains — must be deleted after domain handlers).
+		if err := tx.Where("family_id = ?", familyID).Delete(&ParentModel{}).Error; err != nil {
+			return fmt.Errorf("iam: delete parents: %w", err)
+		}
+
+		// 5. Family record itself.
+		if err := tx.Where("id = ?", familyID).Delete(&FamilyModel{}).Error; err != nil {
+			return fmt.Errorf("iam: delete family: %w", err)
+		}
+
+		// NOTE: iam_coppa_audit_log RETAINED per legal compliance requirement.
+		return nil
+	})
+}

@@ -313,6 +313,440 @@ func TestService_GetListing_RepositoryError_Propagates(t *testing.T) {
 	listingRepo.AssertExpectations(t)
 }
 
+// ─── RegisterCreator Success ──────────────────────────────────────────────────
+
+func TestService_RegisterCreator_Success(t *testing.T) {
+	parentID := uuid.New()
+	creatorID := uuid.New()
+	creatorRepo := &mockCreatorRepo{}
+	creatorRepo.On("GetByParentID", mock.Anything, parentID).Return(nil, nil)
+	creatorRepo.On("Create", mock.Anything, mock.AnythingOfType("mkt.CreateCreator")).
+		Return(&MktCreator{ID: creatorID, StoreName: "My Store"}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     creatorRepo,
+		publishers:   &mockPublisherRepo{},
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	auth := &shared.AuthContext{ParentID: parentID, FamilyID: uuid.New()}
+	id, err := svc.RegisterCreator(context.Background(), RegisterCreatorCommand{
+		StoreName:   "My Store",
+		TOSAccepted: true,
+	}, auth)
+
+	require.NoError(t, err)
+	assert.Equal(t, creatorID, id)
+	creatorRepo.AssertExpectations(t)
+}
+
+func TestService_RegisterCreator_RepoError_Propagates(t *testing.T) {
+	parentID := uuid.New()
+	creatorRepo := &mockCreatorRepo{}
+	repoErr := errors.New("db error")
+	creatorRepo.On("GetByParentID", mock.Anything, parentID).Return(nil, repoErr)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     creatorRepo,
+		publishers:   &mockPublisherRepo{},
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	auth := &shared.AuthContext{ParentID: parentID, FamilyID: uuid.New()}
+	_, err := svc.RegisterCreator(context.Background(), RegisterCreatorCommand{
+		StoreName:   "My Store",
+		TOSAccepted: true,
+	}, auth)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, repoErr)
+}
+
+// ─── UpdateCreatorProfile Tests ───────────────────────────────────────────────
+
+func TestService_UpdateCreatorProfile_Success(t *testing.T) {
+	creatorID := uuid.New()
+	creatorRepo := &mockCreatorRepo{}
+	creatorRepo.On("Update", mock.Anything, creatorID, mock.AnythingOfType("mkt.UpdateCreator")).
+		Return(&MktCreator{ID: creatorID}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     creatorRepo,
+		publishers:   &mockPublisherRepo{},
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.UpdateCreatorProfile(context.Background(), UpdateCreatorProfileCommand{}, creatorID)
+	require.NoError(t, err)
+	creatorRepo.AssertExpectations(t)
+}
+
+// ─── CreatePublisher Tests ────────────────────────────────────────────────────
+
+func TestService_CreatePublisher_Success(t *testing.T) {
+	creatorID := uuid.New()
+	publisherID := uuid.New()
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetBySlug", mock.Anything, mock.AnythingOfType("string")).Return(nil, nil)
+	pubRepo.On("Create", mock.Anything, mock.AnythingOfType("mkt.CreatePublisher")).
+		Return(&MktPublisher{ID: publisherID, Name: "My Publisher"}, nil)
+	pubRepo.On("AddMember", mock.Anything, publisherID, creatorID, "owner").Return(nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	id, err := svc.CreatePublisher(context.Background(), CreatePublisherCommand{
+		Name: "My Publisher",
+	}, creatorID)
+
+	require.NoError(t, err)
+	assert.Equal(t, publisherID, id)
+	pubRepo.AssertExpectations(t)
+}
+
+func TestService_CreatePublisher_SlugConflict(t *testing.T) {
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetBySlug", mock.Anything, mock.AnythingOfType("string")).
+		Return(&MktPublisher{ID: uuid.New()}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	_, err := svc.CreatePublisher(context.Background(), CreatePublisherCommand{
+		Name: "My Publisher",
+	}, uuid.New())
+
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 409, appErr.StatusCode)
+}
+
+// ─── UpdatePublisher Tests ────────────────────────────────────────────────────
+
+func TestService_UpdatePublisher_PlatformPublisher_Forbidden(t *testing.T) {
+	publisherID := uuid.New()
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, IsPlatform: true}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.UpdatePublisher(context.Background(), UpdatePublisherCommand{}, publisherID, uuid.New())
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 403, appErr.StatusCode)
+}
+
+func TestService_UpdatePublisher_NonOwner_Forbidden(t *testing.T) {
+	publisherID := uuid.New()
+	creatorID := uuid.New()
+	memberRole := "member"
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, IsPlatform: false}, nil)
+	pubRepo.On("GetMemberRole", mock.Anything, publisherID, creatorID).
+		Return(&memberRole, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.UpdatePublisher(context.Background(), UpdatePublisherCommand{}, publisherID, creatorID)
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 403, appErr.StatusCode)
+}
+
+func TestService_UpdatePublisher_Owner_Success(t *testing.T) {
+	publisherID := uuid.New()
+	creatorID := uuid.New()
+	ownerRole := "owner"
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, IsPlatform: false}, nil)
+	pubRepo.On("GetMemberRole", mock.Anything, publisherID, creatorID).
+		Return(&ownerRole, nil)
+	pubRepo.On("Update", mock.Anything, publisherID, mock.AnythingOfType("mkt.UpdatePublisher")).
+		Return(&MktPublisher{ID: publisherID}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.UpdatePublisher(context.Background(), UpdatePublisherCommand{}, publisherID, creatorID)
+	require.NoError(t, err)
+	pubRepo.AssertExpectations(t)
+}
+
+// ─── AddPublisherMember Tests ─────────────────────────────────────────────────
+
+func TestService_AddPublisherMember_PlatformPublisher_Forbidden(t *testing.T) {
+	publisherID := uuid.New()
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, IsPlatform: true}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.AddPublisherMember(context.Background(), publisherID, AddPublisherMemberCommand{
+		CreatorID: uuid.New(),
+		Role:      "member",
+	}, uuid.New())
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 403, appErr.StatusCode)
+}
+
+func TestService_AddPublisherMember_NonOwner_Forbidden(t *testing.T) {
+	publisherID := uuid.New()
+	actingCreatorID := uuid.New()
+	memberRole := "member"
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, IsPlatform: false}, nil)
+	pubRepo.On("GetMemberRole", mock.Anything, publisherID, actingCreatorID).
+		Return(&memberRole, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.AddPublisherMember(context.Background(), publisherID, AddPublisherMemberCommand{
+		CreatorID: uuid.New(),
+		Role:      "member",
+	}, actingCreatorID)
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 403, appErr.StatusCode)
+}
+
+// ─── RemovePublisherMember Tests ──────────────────────────────────────────────
+
+func TestService_RemovePublisherMember_PlatformPublisher_Forbidden(t *testing.T) {
+	publisherID := uuid.New()
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, IsPlatform: true}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.RemovePublisherMember(context.Background(), publisherID, uuid.New(), uuid.New())
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 403, appErr.StatusCode)
+}
+
+func TestService_RemovePublisherMember_LastOwner_Rejected(t *testing.T) {
+	publisherID := uuid.New()
+	actingCreatorID := uuid.New()
+	memberCreatorID := uuid.New()
+	ownerRole := "owner"
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, IsPlatform: false}, nil)
+	pubRepo.On("GetMemberRole", mock.Anything, publisherID, actingCreatorID).
+		Return(&ownerRole, nil)
+	pubRepo.On("GetMemberRole", mock.Anything, publisherID, memberCreatorID).
+		Return(&ownerRole, nil)
+	pubRepo.On("CountOwners", mock.Anything, publisherID).
+		Return(int32(1), nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.RemovePublisherMember(context.Background(), publisherID, memberCreatorID, actingCreatorID)
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 400, appErr.StatusCode)
+}
+
+// ─── CreateListing Tests ──────────────────────────────────────────────────────
+
+func TestService_CreateListing_InvalidContentType(t *testing.T) {
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   &mockPublisherRepo{},
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	_, err := svc.CreateListing(context.Background(), CreateListingCommand{
+		ContentType: "invalid_type",
+		PublisherID: uuid.New(),
+		Title:       "Test",
+	}, uuid.New())
+
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 422, appErr.StatusCode)
+}
+
+func TestService_CreateListing_NonMember_Forbidden(t *testing.T) {
+	publisherID := uuid.New()
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetMemberRole", mock.Anything, publisherID, mock.AnythingOfType("uuid.UUID")).
+		Return(nil, ErrNotPublisherMember)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	_, err := svc.CreateListing(context.Background(), CreateListingCommand{
+		ContentType: "curriculum",
+		PublisherID: publisherID,
+		Title:       "Test",
+	}, uuid.New())
+
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 403, appErr.StatusCode)
+}
+
+func TestService_CreateListing_Success(t *testing.T) {
+	publisherID := uuid.New()
+	creatorID := uuid.New()
+	listingID := uuid.New()
+	ownerRole := "owner"
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetMemberRole", mock.Anything, publisherID, creatorID).
+		Return(&ownerRole, nil)
+
+	listingRepo := &mockListingRepo{}
+	listingRepo.On("Create", mock.Anything, mock.AnythingOfType("mkt.CreateListing")).
+		Return(&MktListing{ID: listingID}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     listingRepo,
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	id, err := svc.CreateListing(context.Background(), CreateListingCommand{
+		ContentType: "curriculum",
+		PublisherID: publisherID,
+		Title:       "Test Listing",
+		Description: "A test listing",
+		PriceCents:  999,
+	}, creatorID)
+
+	require.NoError(t, err)
+	assert.Equal(t, listingID, id)
+	pubRepo.AssertExpectations(t)
+	listingRepo.AssertExpectations(t)
+}
+
+// ─── UpdateListing Tests ──────────────────────────────────────────────────────
+
+func TestService_UpdateListing_NotOwner_Forbidden(t *testing.T) {
+	listingID := uuid.New()
+	listingRepo := &mockListingRepo{}
+	listingRepo.On("GetByID", mock.Anything, listingID).
+		Return(&MktListing{ID: listingID, CreatorID: uuid.New()}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   &mockPublisherRepo{},
+		listings:     listingRepo,
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	err := svc.UpdateListing(context.Background(), UpdateListingCommand{}, listingID, uuid.New())
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 403, appErr.StatusCode)
+}
+
+// ─── GetCreatorByParentID Tests ───────────────────────────────────────────────
+
+func TestService_GetCreatorByParentID_NotFound(t *testing.T) {
+	parentID := uuid.New()
+	creatorRepo := &mockCreatorRepo{}
+	creatorRepo.On("GetByParentID", mock.Anything, parentID).Return(nil, ErrCreatorNotFound)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     creatorRepo,
+		publishers:   &mockPublisherRepo{},
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	result, err := svc.GetCreatorByParentID(context.Background(), parentID)
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestService_GetCreatorByParentID_Success(t *testing.T) {
+	parentID := uuid.New()
+	creatorID := uuid.New()
+	creatorRepo := &mockCreatorRepo{}
+	creatorRepo.On("GetByParentID", mock.Anything, parentID).
+		Return(&MktCreator{ID: creatorID, StoreName: "My Store"}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     creatorRepo,
+		publishers:   &mockPublisherRepo{},
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	result, err := svc.GetCreatorByParentID(context.Background(), parentID)
+	require.NoError(t, err)
+	assert.Equal(t, creatorID, result.ID)
+}
+
 // ─── BrowseListings Tests ─────────────────────────────────────────────────────
 
 func TestService_BrowseListings_MapsResults(t *testing.T) {
@@ -345,4 +779,177 @@ func TestService_BrowseListings_MapsResults(t *testing.T) {
 	assert.Equal(t, "Test Listing", result.Data[0].Title)
 	assert.Equal(t, int32(999), result.Data[0].PriceCents)
 	listingRepo.AssertExpectations(t)
+}
+
+func TestService_BrowseListings_EmptyResults(t *testing.T) {
+	listingRepo := &mockListingRepo{}
+	listingRepo.On("Browse", mock.Anything, mock.AnythingOfType("*mkt.BrowseListingsParams")).
+		Return([]ListingBrowseRow{}, int64(0), nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   &mockPublisherRepo{},
+		listings:     listingRepo,
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	result, err := svc.BrowseListings(context.Background(), BrowseListingsParams{})
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Data)
+}
+
+func TestService_BrowseListings_RepoError(t *testing.T) {
+	listingRepo := &mockListingRepo{}
+	repoErr := errors.New("db error")
+	listingRepo.On("Browse", mock.Anything, mock.AnythingOfType("*mkt.BrowseListingsParams")).
+		Return([]ListingBrowseRow{}, int64(0), repoErr)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   &mockPublisherRepo{},
+		listings:     listingRepo,
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	_, err := svc.BrowseListings(context.Background(), BrowseListingsParams{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, repoErr)
+}
+
+// ─── GetCreatorListings Tests ─────────────────────────────────────────────────
+
+func TestService_GetCreatorListings_Success(t *testing.T) {
+	creatorID := uuid.New()
+	listingID := uuid.New()
+	listingRepo := &mockListingRepo{}
+	listingRepo.On("GetByCreator", mock.Anything, creatorID, mock.AnythingOfType("*mkt.CreatorListingQueryParams")).
+		Return([]MktListing{{ID: listingID, Title: "Listing 1"}}, int64(1), nil)
+
+	listingFileRepo := &mockListingFileRepo{}
+	listingFileRepo.On("ListByListing", mock.Anything, listingID).
+		Return([]MktListingFile{}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   &mockPublisherRepo{},
+		listings:     listingRepo,
+		listingFiles: listingFileRepo,
+	})
+
+	result, err := svc.GetCreatorListings(context.Background(), creatorID, CreatorListingQueryParams{})
+	require.NoError(t, err)
+	require.Len(t, result.Data, 1)
+}
+
+// ─── Autocomplete Tests ────────────────────────────────────────────────────────
+
+func TestService_AutocompleteListings_Success(t *testing.T) {
+	listingRepo := &mockListingRepo{}
+	listingRepo.On("Autocomplete", mock.Anything, "test", uint8(10)).
+		Return([]AutocompleteRow{{ListingID: uuid.New(), Title: "Test Listing"}}, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   &mockPublisherRepo{},
+		listings:     listingRepo,
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	results, err := svc.AutocompleteListings(context.Background(), "test", 10)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "Test Listing", results[0].Title)
+}
+
+func TestService_AutocompleteListings_QueryTooShort(t *testing.T) {
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   &mockPublisherRepo{},
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	_, err := svc.AutocompleteListings(context.Background(), "a", 10)
+	require.Error(t, err)
+	var appErr *shared.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, 422, appErr.StatusCode)
+}
+
+// ─── GetPublisher Tests ────────────────────────────────────────────────────────
+
+func TestService_GetPublisher_NotFound(t *testing.T) {
+	publisherID := uuid.New()
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).Return(nil, ErrPublisherNotFound)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	_, err := svc.GetPublisher(context.Background(), publisherID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrPublisherNotFound))
+}
+
+func TestService_GetPublisher_Success(t *testing.T) {
+	publisherID := uuid.New()
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetByID", mock.Anything, publisherID).
+		Return(&MktPublisher{ID: publisherID, Name: "My Pub"}, nil)
+	pubRepo.On("CountMembers", mock.Anything, publisherID).
+		Return(int32(3), nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	result, err := svc.GetPublisher(context.Background(), publisherID)
+	require.NoError(t, err)
+	assert.Equal(t, "My Pub", result.Name)
+	pubRepo.AssertExpectations(t)
+}
+
+// ─── VerifyPublisherMembership Tests ──────────────────────────────────────────
+
+func TestService_VerifyPublisherMembership_NotMember(t *testing.T) {
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetMemberRole", mock.Anything, mock.AnythingOfType("uuid.UUID"), mock.AnythingOfType("uuid.UUID")).
+		Return(nil, ErrNotPublisherMember)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	isMember, err := svc.VerifyPublisherMembership(context.Background(), uuid.New(), uuid.New())
+	require.Error(t, err)
+	assert.False(t, isMember)
+}
+
+func TestService_VerifyPublisherMembership_IsMember(t *testing.T) {
+	ownerRole := "owner"
+	pubRepo := &mockPublisherRepo{}
+	pubRepo.On("GetMemberRole", mock.Anything, mock.AnythingOfType("uuid.UUID"), mock.AnythingOfType("uuid.UUID")).
+		Return(&ownerRole, nil)
+
+	svc := newMktService(mktServiceDeps{
+		creators:     &mockCreatorRepo{},
+		publishers:   pubRepo,
+		listings:     &mockListingRepo{},
+		listingFiles: &mockListingFileRepo{},
+	})
+
+	isMember, err := svc.VerifyPublisherMembership(context.Background(), uuid.New(), uuid.New())
+	require.NoError(t, err)
+	assert.True(t, isMember)
 }

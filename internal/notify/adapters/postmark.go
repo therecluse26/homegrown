@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/notify"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // NoopEmailAdapter satisfies notify.EmailAdapter for tests and environments without Postmark.
@@ -82,7 +83,7 @@ func (a *PostmarkEmailAdapter) do(ctx context.Context, url string, body any) err
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Postmark-Server-Token", a.serverToken)
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {
 		return fmt.Errorf("postmark: send request: %w", err)
 	}

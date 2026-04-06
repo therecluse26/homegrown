@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // HyperswitchPaymentAdapter wraps the Hyperswitch REST API for marketplace payments.
@@ -44,7 +45,7 @@ func NewHyperswitchPaymentAdapter(baseURL, apiKey, webhookKey string) mkt.Paymen
 
 // ─── Account Management ─────────────────────────────────────────────────────
 
-func (a *HyperswitchPaymentAdapter) CreateSubMerchant(_ context.Context, config mkt.SubMerchantConfig) (string, error) {
+func (a *HyperswitchPaymentAdapter) CreateSubMerchant(ctx context.Context,config mkt.SubMerchantConfig) (string, error) {
 	body := map[string]any{
 		"merchant_name": config.StoreName,
 		"metadata": map[string]string{
@@ -54,7 +55,7 @@ func (a *HyperswitchPaymentAdapter) CreateSubMerchant(_ context.Context, config 
 		},
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/accounts", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/accounts", body)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", mkt.ErrPaymentProviderUnavailable, err)
 	}
@@ -73,13 +74,13 @@ func (a *HyperswitchPaymentAdapter) CreateSubMerchant(_ context.Context, config 
 	return result.MerchantID, nil
 }
 
-func (a *HyperswitchPaymentAdapter) CreateOnboardingLink(_ context.Context, paymentAccountID, returnURL string) (string, error) {
+func (a *HyperswitchPaymentAdapter) CreateOnboardingLink(ctx context.Context,paymentAccountID, returnURL string) (string, error) {
 	body := map[string]any{
 		"merchant_id": paymentAccountID,
 		"return_url":  returnURL,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/account_link", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/account_link", body)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", mkt.ErrPaymentProviderUnavailable, err)
 	}
@@ -98,8 +99,8 @@ func (a *HyperswitchPaymentAdapter) CreateOnboardingLink(_ context.Context, paym
 	return result.URL, nil
 }
 
-func (a *HyperswitchPaymentAdapter) GetAccountStatus(_ context.Context, paymentAccountID string) (mkt.PaymentAccountStatus, error) {
-	resp, err := a.doRequest(http.MethodGet, fmt.Sprintf("/accounts/%s", paymentAccountID), nil)
+func (a *HyperswitchPaymentAdapter) GetAccountStatus(ctx context.Context,paymentAccountID string) (mkt.PaymentAccountStatus, error) {
+	resp, err := a.doRequest(ctx, http.MethodGet, fmt.Sprintf("/accounts/%s", paymentAccountID), nil)
 	if err != nil {
 		return mkt.PaymentAccountStatusPending, fmt.Errorf("%w: %v", mkt.ErrPaymentProviderUnavailable, err)
 	}
@@ -132,7 +133,7 @@ func (a *HyperswitchPaymentAdapter) GetAccountStatus(_ context.Context, paymentA
 
 // ─── Payments ────────────────────────────────────────────────────────────────
 
-func (a *HyperswitchPaymentAdapter) CreatePayment(_ context.Context, lineItems []mkt.PaymentLineItem, splitRules []mkt.SplitRule, returnURL string, metadata map[string]string) (*mkt.PaymentSession, error) {
+func (a *HyperswitchPaymentAdapter) CreatePayment(ctx context.Context,lineItems []mkt.PaymentLineItem, splitRules []mkt.SplitRule, returnURL string, metadata map[string]string) (*mkt.PaymentSession, error) {
 	var totalCents int64
 	for _, item := range lineItems {
 		totalCents += item.AmountCents
@@ -157,7 +158,7 @@ func (a *HyperswitchPaymentAdapter) CreatePayment(_ context.Context, lineItems [
 		}(),
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/payments", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/payments", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", mkt.ErrPaymentProviderUnavailable, err)
 	}
@@ -189,8 +190,8 @@ func (a *HyperswitchPaymentAdapter) CreatePayment(_ context.Context, lineItems [
 	}, nil
 }
 
-func (a *HyperswitchPaymentAdapter) GetPaymentStatus(_ context.Context, paymentID string) (mkt.PaymentStatus, error) {
-	resp, err := a.doRequest(http.MethodGet, fmt.Sprintf("/payments/%s", paymentID), nil)
+func (a *HyperswitchPaymentAdapter) GetPaymentStatus(ctx context.Context,paymentID string) (mkt.PaymentStatus, error) {
+	resp, err := a.doRequest(ctx, http.MethodGet, fmt.Sprintf("/payments/%s", paymentID), nil)
 	if err != nil {
 		return mkt.PaymentStatusProcessing, fmt.Errorf("%w: %v", mkt.ErrPaymentProviderUnavailable, err)
 	}
@@ -221,7 +222,7 @@ func (a *HyperswitchPaymentAdapter) GetPaymentStatus(_ context.Context, paymentI
 
 // ─── Payouts ─────────────────────────────────────────────────────────────────
 
-func (a *HyperswitchPaymentAdapter) CreatePayout(_ context.Context, paymentAccountID string, amountCents int64, currency string) (*mkt.PayoutResult, error) {
+func (a *HyperswitchPaymentAdapter) CreatePayout(ctx context.Context,paymentAccountID string, amountCents int64, currency string) (*mkt.PayoutResult, error) {
 	body := map[string]any{
 		"merchant_id": paymentAccountID,
 		"amount":      amountCents,
@@ -229,7 +230,7 @@ func (a *HyperswitchPaymentAdapter) CreatePayout(_ context.Context, paymentAccou
 		"payout_type": "bank",
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/payouts/create", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/payouts/create", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", mkt.ErrPaymentProviderUnavailable, err)
 	}
@@ -257,14 +258,14 @@ func (a *HyperswitchPaymentAdapter) CreatePayout(_ context.Context, paymentAccou
 
 // ─── Refunds ─────────────────────────────────────────────────────────────────
 
-func (a *HyperswitchPaymentAdapter) CreateRefund(_ context.Context, paymentID string, amountCents int64, reason string) (*mkt.RefundResult, error) {
+func (a *HyperswitchPaymentAdapter) CreateRefund(ctx context.Context,paymentID string, amountCents int64, reason string) (*mkt.RefundResult, error) {
 	body := map[string]any{
 		"payment_id": paymentID,
 		"amount":     amountCents,
 		"reason":     reason,
 	}
 
-	resp, err := a.doRequest(http.MethodPost, "/refunds", body)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/refunds", body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", mkt.ErrPaymentProviderUnavailable, err)
 	}
@@ -292,7 +293,7 @@ func (a *HyperswitchPaymentAdapter) CreateRefund(_ context.Context, paymentID st
 
 // ─── Webhooks ────────────────────────────────────────────────────────────────
 
-func (a *HyperswitchPaymentAdapter) VerifyWebhook(_ context.Context, payload []byte, signature string) (bool, error) {
+func (a *HyperswitchPaymentAdapter) VerifyWebhook(ctx context.Context,payload []byte, signature string) (bool, error) {
 	if a.webhookKey == "" {
 		return false, mkt.ErrInvalidWebhookSignature
 	}
@@ -307,7 +308,7 @@ func (a *HyperswitchPaymentAdapter) VerifyWebhook(_ context.Context, payload []b
 	return true, nil
 }
 
-func (a *HyperswitchPaymentAdapter) ParseEvent(_ context.Context, payload []byte) (*mkt.PaymentEvent, error) {
+func (a *HyperswitchPaymentAdapter) ParseEvent(ctx context.Context,payload []byte) (*mkt.PaymentEvent, error) {
 	var raw struct {
 		Type    string `json:"type"`
 		Content struct {
@@ -339,7 +340,7 @@ func (a *HyperswitchPaymentAdapter) ParseEvent(_ context.Context, payload []byte
 
 // ─── HTTP Helpers ────────────────────────────────────────────────────────────
 
-func (a *HyperswitchPaymentAdapter) doRequest(method, path string, body any) (*http.Response, error) {
+func (a *HyperswitchPaymentAdapter) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBytes, err := json.Marshal(body)
@@ -349,7 +350,7 @@ func (a *HyperswitchPaymentAdapter) doRequest(method, path string, body any) (*h
 		bodyReader = bytes.NewReader(jsonBytes)
 	}
 
-	req, err := http.NewRequest(method, a.baseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, a.baseURL+path, bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +358,7 @@ func (a *HyperswitchPaymentAdapter) doRequest(method, path string, body any) (*h
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("api-key", a.apiKey)
 
-	return a.client.Do(req)
+	return shared.RetryableHTTPDo(ctx, a.client, req, nil)
 }
 
 // ─── Noop Adapter (Hyperswitch not configured) ──────────────────────────────
@@ -366,40 +367,40 @@ func (a *HyperswitchPaymentAdapter) doRequest(method, path string, body any) (*h
 // Used when Hyperswitch is not configured (development, testing). [07-mkt §7]
 type noopPaymentAdapter struct{}
 
-func (n *noopPaymentAdapter) CreateSubMerchant(_ context.Context, _ mkt.SubMerchantConfig) (string, error) {
+func (n *noopPaymentAdapter) CreateSubMerchant(ctx context.Context,_ mkt.SubMerchantConfig) (string, error) {
 	slog.Warn("payment adapter not configured — CreateSubMerchant is a no-op")
 	return "", mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) CreateOnboardingLink(_ context.Context, _, _ string) (string, error) {
+func (n *noopPaymentAdapter) CreateOnboardingLink(ctx context.Context,_, _ string) (string, error) {
 	slog.Warn("payment adapter not configured — CreateOnboardingLink is a no-op")
 	return "", mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) GetAccountStatus(_ context.Context, _ string) (mkt.PaymentAccountStatus, error) {
+func (n *noopPaymentAdapter) GetAccountStatus(ctx context.Context,_ string) (mkt.PaymentAccountStatus, error) {
 	return mkt.PaymentAccountStatusPending, mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) CreatePayment(_ context.Context, _ []mkt.PaymentLineItem, _ []mkt.SplitRule, _ string, _ map[string]string) (*mkt.PaymentSession, error) {
+func (n *noopPaymentAdapter) CreatePayment(ctx context.Context,_ []mkt.PaymentLineItem, _ []mkt.SplitRule, _ string, _ map[string]string) (*mkt.PaymentSession, error) {
 	return nil, mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) GetPaymentStatus(_ context.Context, _ string) (mkt.PaymentStatus, error) {
+func (n *noopPaymentAdapter) GetPaymentStatus(ctx context.Context,_ string) (mkt.PaymentStatus, error) {
 	return mkt.PaymentStatusProcessing, mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) CreatePayout(_ context.Context, _ string, _ int64, _ string) (*mkt.PayoutResult, error) {
+func (n *noopPaymentAdapter) CreatePayout(ctx context.Context,_ string, _ int64, _ string) (*mkt.PayoutResult, error) {
 	return nil, mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) CreateRefund(_ context.Context, _ string, _ int64, _ string) (*mkt.RefundResult, error) {
+func (n *noopPaymentAdapter) CreateRefund(ctx context.Context,_ string, _ int64, _ string) (*mkt.RefundResult, error) {
 	return nil, mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) VerifyWebhook(_ context.Context, _ []byte, _ string) (bool, error) {
+func (n *noopPaymentAdapter) VerifyWebhook(ctx context.Context,_ []byte, _ string) (bool, error) {
 	return false, mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) ParseEvent(_ context.Context, _ []byte) (*mkt.PaymentEvent, error) {
+func (n *noopPaymentAdapter) ParseEvent(ctx context.Context,_ []byte) (*mkt.PaymentEvent, error) {
 	return nil, mkt.ErrPaymentProviderUnavailable
 }

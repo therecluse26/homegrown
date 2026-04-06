@@ -460,6 +460,13 @@ type ProcessDeletionJob struct {
 
 func (ProcessDeletionJob) TaskType() string { return "lifecycle:process_deletion" }
 
+// DeletionSweepPayload is the cron job payload for the nightly deletion sweep.
+// The payload is empty — the handler calls ProcessDeletion which iterates all
+// expired grace-period requests itself. [15-data-lifecycle §10.1]
+type DeletionSweepPayload struct{}
+
+func (DeletionSweepPayload) TaskType() string { return "lifecycle:sweep_deletions" }
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Grace Period Computation [15-data-lifecycle §10]
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -2230,8 +2230,76 @@ func (s *socialServiceImpl) HandleMilestoneAchieved(ctx context.Context, familyI
 	return nil
 }
 
-func (s *socialServiceImpl) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
-	return nil
+func (s *socialServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, familyID uuid.UUID) error {
+	return shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		// Delete in FK-safe order: children before parents.
+
+		// 1. Post children: likes, comments, pinned posts for family's posts.
+		if err := tx.Exec(`DELETE FROM soc_post_likes WHERE post_id IN (SELECT id FROM soc_posts WHERE family_id = ?)`, familyID).Error; err != nil {
+			return fmt.Errorf("social: delete post_likes: %w", err)
+		}
+		if err := tx.Exec(`DELETE FROM soc_comments WHERE post_id IN (SELECT id FROM soc_posts WHERE family_id = ?)`, familyID).Error; err != nil {
+			return fmt.Errorf("social: delete comments on owned posts: %w", err)
+		}
+		if err := tx.Exec(`DELETE FROM soc_pinned_posts WHERE post_id IN (SELECT id FROM soc_posts WHERE family_id = ?)`, familyID).Error; err != nil {
+			return fmt.Errorf("social: delete pinned_posts: %w", err)
+		}
+
+		// 2. Also delete this family's comments/likes on OTHER families' posts.
+		if err := tx.Where("family_id = ?", familyID).Delete(&Comment{}).Error; err != nil {
+			return fmt.Errorf("social: delete authored comments: %w", err)
+		}
+		if err := tx.Where("family_id = ?", familyID).Delete(&PostLike{}).Error; err != nil {
+			return fmt.Errorf("social: delete authored likes: %w", err)
+		}
+
+		// 3. Posts.
+		if err := tx.Where("family_id = ?", familyID).Delete(&Post{}).Error; err != nil {
+			return fmt.Errorf("social: delete posts: %w", err)
+		}
+
+		// 4. Messaging: messages, participants, then orphaned conversations.
+		if err := tx.Where("sender_family_id = ?", familyID).Delete(&Message{}).Error; err != nil {
+			return fmt.Errorf("social: delete messages: %w", err)
+		}
+		if err := tx.Where("family_id = ?", familyID).Delete(&ConversationParticipant{}).Error; err != nil {
+			return fmt.Errorf("social: delete conversation_participants: %w", err)
+		}
+
+		// 5. Events: RSVPs (both owned and attended), then events.
+		if err := tx.Exec(`DELETE FROM soc_event_rsvps WHERE event_id IN (SELECT id FROM soc_events WHERE creator_family_id = ?)`, familyID).Error; err != nil {
+			return fmt.Errorf("social: delete rsvps on owned events: %w", err)
+		}
+		if err := tx.Where("family_id = ?", familyID).Delete(&EventRSVP{}).Error; err != nil {
+			return fmt.Errorf("social: delete authored rsvps: %w", err)
+		}
+		if err := tx.Where("creator_family_id = ?", familyID).Delete(&Event{}).Error; err != nil {
+			return fmt.Errorf("social: delete events: %w", err)
+		}
+
+		// 6. Groups: memberships (family was member of), then owned groups.
+		if err := tx.Where("family_id = ?", familyID).Delete(&GroupMember{}).Error; err != nil {
+			return fmt.Errorf("social: delete group_members: %w", err)
+		}
+		if err := tx.Where("creator_family_id = ?", familyID).Delete(&Group{}).Error; err != nil {
+			return fmt.Errorf("social: delete groups: %w", err)
+		}
+
+		// 7. Friendships (either side) and blocks (either side).
+		if err := tx.Where("requester_family_id = ? OR accepter_family_id = ?", familyID, familyID).Delete(&Friendship{}).Error; err != nil {
+			return fmt.Errorf("social: delete friendships: %w", err)
+		}
+		if err := tx.Where("blocker_family_id = ? OR blocked_family_id = ?", familyID, familyID).Delete(&Block{}).Error; err != nil {
+			return fmt.Errorf("social: delete blocks: %w", err)
+		}
+
+		// 8. Profile (last — no FKs reference it).
+		if err := tx.Where("family_id = ?", familyID).Delete(&Profile{}).Error; err != nil {
+			return fmt.Errorf("social: delete profile: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

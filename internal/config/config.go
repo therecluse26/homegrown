@@ -122,6 +122,14 @@ type AppConfig struct {
 	// Public base URL for CDN-served media (e.g., "https://media.homegrown.academy").
 	ObjectStoragePublicURL string
 
+	// ─���─ Safety Scanning (Thorn Safer) ───────────────────────────────
+	// Thorn Safer API key. Optional — omit to use NoopSafetyScanAdapter.
+	// When set, CSAM scanning uses Thorn Safer PhotoDNA hash matching. [09-media §7.2]
+	ThornAPIKey string
+
+	// Thorn Safer API base URL. Default: "https://safer.thorn.org".
+	ThornBaseURL string
+
 	// ─── Recommendations ─────────────────────────────────────────────
 	// HMAC secret for anonymizing family IDs in recs_anonymized_interactions.
 	// Optional — empty value disables the anonymization task (dev mode). [13-recs §14.3]
@@ -257,6 +265,10 @@ func LoadConfig() (*AppConfig, error) {
 		slog.Warn("UNSUBSCRIBE_SECRET not set; email unsubscribe tokens will fail — set this env var in production")
 	}
 
+	// Optional Thorn Safer config (omit to use noop safety scanner)
+	thornAPIKey := envOrDefault("THORN_API_KEY", "")
+	thornBaseURL := envOrDefault("THORN_BASE_URL", "https://safer.thorn.org")
+
 	// Optional recs anonymization secret (omit to disable anonymization task)
 	recsAnonymizationSecret := envOrDefault("RECS_ANONYMIZATION_SECRET", "")
 
@@ -293,6 +305,8 @@ func LoadConfig() (*AppConfig, error) {
 		ObjectStoragePublicURL:      objectStoragePublicURL,
 		PostmarkServerToken:     postmarkServerToken,
 		UnsubscribeSecret:       unsubscribeSecret,
+		ThornAPIKey:             thornAPIKey,
+		ThornBaseURL:            thornBaseURL,
 		RecsAnonymizationSecret: recsAnonymizationSecret,
 		Environment:              env,
 	}, nil

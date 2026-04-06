@@ -192,3 +192,6 @@ func (m *mockIamService) RevokeStudentSession(_ context.Context, _ *shared.Famil
 func (m *mockIamService) GetStudentSessionMe(_ context.Context, _ string) (*StudentSessionIdentityResponse, error) {
 	panic("not implemented")
 }
+func (m *mockIamService) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
+	return nil
+}

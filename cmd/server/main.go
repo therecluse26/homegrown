@@ -563,8 +563,15 @@ func main() {
 		mediaStorage = s3Adapter
 	}
 
-	// Safety scan adapter: noop until safety:: domain is implemented.
+	// Safety scan adapter: Thorn Safer when configured, otherwise noop.
 	var mediaSafety media.SafetyScanAdapter = media.NoopSafetyScanAdapter{}
+	if cfg.ThornAPIKey != "" {
+		mediaSafety = mediaadapters.NewThornSaferAdapter(mediaadapters.ThornConfig{
+			BaseURL: cfg.ThornBaseURL,
+			APIKey:  cfg.ThornAPIKey,
+		})
+		slog.Info("media: Thorn Safer CSAM scanning enabled")
+	}
 
 	mediaCfg := &media.MediaConfig{
 		PublicURLBase:           cfg.ObjectStoragePublicURL,
@@ -919,7 +926,7 @@ func main() {
 		iamForSafety, cache, eventBus, jobs, textScanner, safetyCfg,
 		safetyParentalControlRepo, safetyAdminRoleRepo,
 		safetyAdminRoleAssignRepo, safetyGroomingScoreRepo,
-		groomingDetector,
+		groomingDetector, db,
 	)
 
 	// Register safety:: event subscriptions
@@ -1281,7 +1288,12 @@ func main() {
 			&lifecycleComplyDeletion{svc: complySvc},
 			&lifecycleRecsDeletion{svc: recsSvc},
 			&lifecycleMediaDeletion{svc: mediaSvc},
+			&lifecycleSearchDeletion{svc: searchSvc},
+			&lifecycleOnboardDeletion{svc: onboardSvc},
+			&lifecycleSafetyDeletion{svc: safetySvc},
+			&lifecycleDiscoverDeletion{svc: discoverSvc},
 			planDeletion, // svc set after plan:: is wired (below)
+			&lifecycleIamDeletion{svc: iamSvc}, // MUST be last — other domains reference IAM records
 		},
 	)
 
@@ -1495,6 +1507,10 @@ func main() {
 	// Weekly progress snapshots for all students — Sunday midnight UTC. [06-learn §12.3]
 	if schedErr := scheduler.Register("0 0 * * 0", learn.SnapshotProgressPayload{}); schedErr != nil {
 		slog.Error("failed to register learn:snapshot_progress schedule", "error", schedErr)
+	}
+	// Nightly deletion sweep — process requests past grace period. Daily 2 AM UTC. [15-data-lifecycle §10.1]
+	if schedErr := scheduler.Register("0 2 * * *", lifecycle.DeletionSweepPayload{}); schedErr != nil {
+		slog.Error("failed to register lifecycle:sweep_deletions schedule", "error", schedErr)
 	}
 	if schedErr := scheduler.Start(); schedErr != nil {
 		slog.Error("job scheduler failed to start", "error", schedErr)
@@ -2384,6 +2400,56 @@ func (a *lifecycleMediaDeletion) DeleteStudentData(_ context.Context, _ uuid.UUI
 // The svc field is set after plan:: is wired (plan:: depends on comply:: and social::,
 // which are wired after lifecycle::). The adapter is only called at deletion time,
 // well after all services are fully wired.
+type lifecycleSearchDeletion struct{ svc search.SearchService }
+
+func (a *lifecycleSearchDeletion) DomainName() string { return "search" }
+func (a *lifecycleSearchDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleSearchDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // search indexes are family-scoped, not student-specific
+}
+
+type lifecycleOnboardDeletion struct{ svc onboard.OnboardingService }
+
+func (a *lifecycleOnboardDeletion) DomainName() string { return "onboarding" }
+func (a *lifecycleOnboardDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleOnboardDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // onboarding data is family-scoped, not student-specific
+}
+
+type lifecycleSafetyDeletion struct{ svc safety.SafetyService }
+
+func (a *lifecycleSafetyDeletion) DomainName() string { return "safety" }
+func (a *lifecycleSafetyDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleSafetyDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // safety data is family-scoped, not student-specific
+}
+
+type lifecycleDiscoverDeletion struct{ svc discover.DiscoveryService }
+
+func (a *lifecycleDiscoverDeletion) DomainName() string { return "discovery" }
+func (a *lifecycleDiscoverDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleDiscoverDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // quiz results are family-scoped, not student-specific
+}
+
+type lifecycleIamDeletion struct{ svc iam.IamService }
+
+func (a *lifecycleIamDeletion) DomainName() string { return "iam" }
+func (a *lifecycleIamDeletion) DeleteFamilyData(ctx context.Context, familyID uuid.UUID) error {
+	return a.svc.HandleFamilyDeletionScheduled(ctx, familyID)
+}
+func (a *lifecycleIamDeletion) DeleteStudentData(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil // IAM student deletion handled as part of family deletion
+}
+
 type lifecyclePlanDeletion struct{ svc plan.PlanningService }
 
 func (a *lifecyclePlanDeletion) DomainName() string { return "planning" }
