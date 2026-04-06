@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	wsPingInterval = 30 * time.Second
-	wsPongTimeout  = 10 * time.Second
+	wsPingInterval      = 30 * time.Second
+	wsPongTimeout       = 10 * time.Second
+	wsSessionRevalidate = 60 * time.Second // Re-validate Kratos session every 60s [CRIT-3]
 )
 
 // newUpgrader builds a gorilla/websocket Upgrader that validates the Origin
@@ -42,17 +43,24 @@ func newUpgrader(allowedOrigins []string) websocket.Upgrader {
 // WebSocketMessage is the JSON envelope for WebSocket messages. [05-social §12]
 type WebSocketMessage struct {
 	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
+	Payload json.RawMessage `json:"payload" swaggertype:"object"`
 }
 
 // handleWebSocket upgrades an HTTP connection to WebSocket and subscribes to
 // Redis pub/sub for real-time delivery. [05-social §12]
-func handleWebSocket(pubsub shared.PubSub, allowedOrigins []string) echo.HandlerFunc {
+// Periodically re-validates the Kratos session to disconnect revoked users. [CRIT-3]
+func handleWebSocket(pubsub shared.PubSub, allowedOrigins []string, sessionValidator shared.SessionValidator) echo.HandlerFunc {
 	upgrader := newUpgrader(allowedOrigins)
 	return func(c echo.Context) error {
 		auth, err := shared.GetAuthContext(c)
 		if err != nil {
 			return err
+		}
+
+		// Capture the session cookie for periodic re-validation. [CRIT-3]
+		sessionCookie := ""
+		if cookie, cookieErr := c.Request().Cookie("ory_kratos_session"); cookieErr == nil {
+			sessionCookie = cookie.Name + "=" + cookie.Value
 		}
 
 		conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
@@ -103,6 +111,34 @@ func handleWebSocket(pubsub shared.PubSub, allowedOrigins []string) echo.Handler
 			}
 		}()
 
+		// Session re-validation goroutine: checks session validity every 60s. [CRIT-3]
+		// Closes the connection if the session has been revoked or expired.
+		sessionDone := make(chan struct{})
+		go func() {
+			defer close(sessionDone)
+			if sessionCookie == "" || sessionValidator == nil {
+				return // No cookie or no validator — skip re-validation
+			}
+			ticker := time.NewTicker(wsSessionRevalidate)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if _, validateErr := sessionValidator.ValidateSession(context.Background(), sessionCookie); validateErr != nil {
+						slog.Info("websocket session revoked — disconnecting", "parent_id", parentID)
+						writeMu.Lock()
+						_ = conn.WriteMessage(websocket.CloseMessage,
+							websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "session expired"))
+						writeMu.Unlock()
+						_ = conn.Close()
+						return
+					}
+				case <-done:
+					return
+				}
+			}
+		}()
+
 		// Ping goroutine: sends periodic pings to the client.
 		pingDone := make(chan struct{})
 		go func() {
@@ -141,6 +177,7 @@ func handleWebSocket(pubsub shared.PubSub, allowedOrigins []string) echo.Handler
 		}
 		<-done
 		<-pingDone
+		<-sessionDone
 		return nil
 	}
 }

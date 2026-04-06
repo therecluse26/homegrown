@@ -49,6 +49,8 @@ func (e *LearningError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "invalid_status_transition", Message: "Invalid reading status transition", StatusCode: http.StatusUnprocessableEntity}
 
 	// ─── Subject Taxonomy ────────────────────────────────────────
+	case errors.Is(e.Err, domain.ErrTaxonomyNotFound):
+		return &shared.AppError{Code: "taxonomy_not_found", Message: "Taxonomy node not found", StatusCode: http.StatusNotFound}
 	case errors.Is(e.Err, domain.ErrDuplicateCustomSubject):
 		return &shared.AppError{Code: "duplicate_custom_subject", Message: "Custom subject already exists", StatusCode: http.StatusConflict}
 
@@ -73,6 +75,10 @@ func (e *LearningError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "tool_not_active", Message: "Tool is not active for this student", StatusCode: http.StatusForbidden}
 	case errors.Is(e.Err, domain.ErrPremiumRequired):
 		return &shared.AppError{Code: "premium_required", Message: "Premium subscription required", StatusCode: http.StatusForbidden}
+
+	// ─── Progress ───────────────────────────────────────────────
+	case errors.Is(e.Err, domain.ErrSnapshotNotFound):
+		return &shared.AppError{Code: "snapshot_not_found", Message: "Progress snapshot not found", StatusCode: http.StatusNotFound}
 
 	// ─── Export ──────────────────────────────────────────────────
 	case errors.Is(e.Err, domain.ErrExportAlreadyInProgress):

@@ -45,7 +45,7 @@ func (r *PgCreatorRepository) GetByID(ctx context.Context, creatorID uuid.UUID) 
 	var creator MktCreator
 	if err := r.db.WithContext(ctx).Where("id = ?", creatorID).First(&creator).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrCreatorNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -56,7 +56,7 @@ func (r *PgCreatorRepository) GetByParentID(ctx context.Context, parentID uuid.U
 	var creator MktCreator
 	if err := r.db.WithContext(ctx).Where("parent_id = ?", parentID).First(&creator).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrCreatorNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -134,7 +134,7 @@ func (r *PgPublisherRepository) GetByID(ctx context.Context, publisherID uuid.UU
 	var pub MktPublisher
 	if err := r.db.WithContext(ctx).Where("id = ?", publisherID).First(&pub).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrPublisherNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -145,7 +145,7 @@ func (r *PgPublisherRepository) GetBySlug(ctx context.Context, slug string) (*Mk
 	var pub MktPublisher
 	if err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&pub).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrPublisherNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -178,7 +178,7 @@ func (r *PgPublisherRepository) GetPlatformPublisher(ctx context.Context) (*MktP
 	var pub MktPublisher
 	if err := r.db.WithContext(ctx).Where("is_platform = true").First(&pub).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrPublisherNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -239,7 +239,7 @@ func (r *PgPublisherRepository) GetMemberRole(ctx context.Context, publisherID, 
 	err := r.db.WithContext(ctx).Where("publisher_id = ? AND creator_id = ?", publisherID, creatorID).First(&member).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrNotPublisherMember
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -350,7 +350,7 @@ func (r *PgListingRepository) GetByID(ctx context.Context, listingID uuid.UUID) 
 	var listing MktListing
 	if err := r.db.WithContext(ctx).Where("id = ?", listingID).First(&listing).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrListingNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -532,7 +532,7 @@ func (r *PgListingFileRepository) GetByID(ctx context.Context, listingID, fileID
 	var file MktListingFile
 	if err := r.db.WithContext(ctx).Where("id = ? AND listing_id = ?", fileID, listingID).First(&file).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrFileNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -543,7 +543,7 @@ func (r *PgListingFileRepository) FindByStorageKey(ctx context.Context, storageK
 	var file MktListingFile
 	if err := r.db.WithContext(ctx).Where("storage_key = ?", storageKey).First(&file).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrFileNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -658,7 +658,7 @@ func (r *PgPurchaseRepository) GetByFamilyAndListing(ctx context.Context, family
 	err := r.db.WithContext(ctx).Where("family_id = ? AND listing_id = ?", familyID, listingID).First(&purchase).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrPurchaseNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -696,7 +696,7 @@ func (r *PgPurchaseRepository) GetByPaymentSessionID(ctx context.Context, sessio
 	err := r.db.WithContext(ctx).Where("payment_session_id = ?", sessionID).First(&purchase).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrPurchaseNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -793,7 +793,7 @@ func (r *PgReviewRepository) GetByID(ctx context.Context, reviewID uuid.UUID) (*
 	var review MktReview
 	if err := r.db.WithContext(ctx).Where("id = ?", reviewID).First(&review).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrReviewNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}

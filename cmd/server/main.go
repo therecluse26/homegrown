@@ -190,6 +190,22 @@ func main() {
 			}
 			return iamSvc.SetFamilyMethodology(ctx, scope, string(primarySlug), secondary)
 		},
+		func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, override *method.MethodologyID) error {
+			// UpdateStudentCommand.MethodologyOverrideSlug is **string:
+			// - nil outer pointer = don't change
+			// - non-nil outer pointing to nil inner = clear the override
+			// - non-nil outer pointing to non-nil inner = set override to that value
+			var slugPtr *string
+			if override != nil {
+				s := string(*override)
+				slugPtr = &s
+			}
+			// Always pass a non-nil outer pointer so the repository applies the change.
+			_, err := iamSvc.UpdateStudent(ctx, scope, studentID, iam.UpdateStudentCommand{
+				MethodologyOverrideSlug: &slugPtr,
+			})
+			return err
+		},
 	)
 	methodSvc := method.NewMethodologyService(defRepo, toolRepo, activationRepo, iamForMethod, eventBus)
 

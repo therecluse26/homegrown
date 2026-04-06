@@ -161,9 +161,25 @@ func (m *mockCache) IncrementWithExpiry(ctx context.Context, key string, window 
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *mockCache) Ping(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 func (m *mockCache) Close() error { return nil }
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
+
+// countMockCalls counts how many times a specific method was called on a mock.
+func countMockCalls(calls []mock.Call, method string) int {
+	count := 0
+	for _, c := range calls {
+		if c.Method == method {
+			count++
+		}
+	}
+	return count
+}
 
 func testFamilyScope() *shared.FamilyScope {
 	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.New()})
@@ -990,6 +1006,86 @@ func TestSocialEventHandlers(t *testing.T) {
 		})
 		require.NoError(t, err)
 		notifRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+	})
+
+	// F6. EventCancelled with email enabled → enqueues a single SendBatchEmailTaskPayload.
+	t.Run("F6_event_cancelled_batch_email", func(t *testing.T) {
+		family1 := uuid.New()
+		family2 := uuid.New()
+
+		notifRepo := new(mockNotificationRepo)
+		prefRepo := new(mockPreferenceRepo)
+		iamSvc := new(mockIamService)
+		jobsMock := new(mockJobEnqueuer)
+
+		notifRepo.On("ExistsBySourceEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
+		prefRepo.On("IsEnabled", mock.Anything, mock.Anything, mock.Anything, ChannelInApp).Return(true, nil)
+		prefRepo.On("IsEnabled", mock.Anything, mock.Anything, mock.Anything, ChannelEmail).Return(true, nil)
+		notifRepo.On("Create", mock.Anything, mock.Anything).Return(&NotifyNotification{
+			ID: uuid.New(), Category: CategorySocial,
+			Metadata: json.RawMessage(`{}`), CreatedAt: time.Now(),
+		}, nil)
+		iamSvc.On("GetFamilyPrimaryEmail", mock.Anything, family1).Return("family1@example.com", "Family1", nil)
+		iamSvc.On("GetFamilyPrimaryEmail", mock.Anything, family2).Return("family2@example.com", "Family2", nil)
+		jobsMock.On("Enqueue", mock.Anything, mock.AnythingOfType("SendBatchEmailTaskPayload")).Return(nil)
+
+		svc := NewNotificationService(
+			notifRepo, prefRepo, &mockDigestRepo{}, &mockEmailAdapter{},
+			iamSvc, new(mockCache), shared.NoopPubSub{}, jobsMock, "test-secret",
+		)
+
+		err := svc.HandleEventCancelled(ctx, EventCancelledEvent{
+			EventID:         uuid.New(),
+			CreatorFamilyID: uuid.New(),
+			Title:           "Study Group",
+			GoingFamilyIDs:  []uuid.UUID{family1, family2},
+		})
+		require.NoError(t, err)
+
+		// Both in-app notifications created.
+		assert.Equal(t, 2, countMockCalls(notifRepo.Calls, "Create"))
+
+		// One batch email task enqueued with 2 messages.
+		jobsMock.AssertCalled(t, "Enqueue", mock.Anything, mock.MatchedBy(func(p SendBatchEmailTaskPayload) bool {
+			return len(p.Messages) == 2
+		}))
+	})
+
+	// F7. EventCancelled with email disabled → no batch email task enqueued.
+	t.Run("F7_event_cancelled_email_disabled_no_batch", func(t *testing.T) {
+		family1 := uuid.New()
+		family2 := uuid.New()
+
+		notifRepo := new(mockNotificationRepo)
+		prefRepo := new(mockPreferenceRepo)
+		jobsMock := new(mockJobEnqueuer)
+
+		notifRepo.On("ExistsBySourceEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
+		prefRepo.On("IsEnabled", mock.Anything, mock.Anything, mock.Anything, ChannelInApp).Return(true, nil)
+		prefRepo.On("IsEnabled", mock.Anything, mock.Anything, mock.Anything, ChannelEmail).Return(false, nil)
+		notifRepo.On("Create", mock.Anything, mock.Anything).Return(&NotifyNotification{
+			ID: uuid.New(), Category: CategorySocial,
+			Metadata: json.RawMessage(`{}`), CreatedAt: time.Now(),
+		}, nil)
+
+		svc := NewNotificationService(
+			notifRepo, prefRepo, &mockDigestRepo{}, &mockEmailAdapter{},
+			new(mockIamService), new(mockCache), shared.NoopPubSub{}, jobsMock, "test-secret",
+		)
+
+		err := svc.HandleEventCancelled(ctx, EventCancelledEvent{
+			EventID:         uuid.New(),
+			CreatorFamilyID: uuid.New(),
+			Title:           "Study Group",
+			GoingFamilyIDs:  []uuid.UUID{family1, family2},
+		})
+		require.NoError(t, err)
+
+		// In-app notifications still created.
+		assert.Equal(t, 2, countMockCalls(notifRepo.Calls, "Create"))
+
+		// No batch email task enqueued (email disabled).
+		jobsMock.AssertNotCalled(t, "Enqueue", mock.Anything, mock.Anything)
 	})
 }
 

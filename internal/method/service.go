@@ -244,13 +244,89 @@ func (s *methodologyServiceImpl) UpdateFamilyMethodology(ctx context.Context, sc
 	}, nil
 }
 
-func (s *methodologyServiceImpl) UpdateStudentMethodology(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID, _ UpdateStudentMethodologyCommand) (*MethodologySelectionResponse, error) {
-	// Phase 2 — not implemented yet
-	return nil, &shared.AppError{
-		Code:       "not_implemented",
-		Message:    "Student methodology override is not yet available",
-		StatusCode: 501,
+func (s *methodologyServiceImpl) UpdateStudentMethodology(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, cmd UpdateStudentMethodologyCommand) (*MethodologySelectionResponse, error) {
+	// Validate override slug if provided — must reference an active methodology.
+	if cmd.MethodologyOverrideSlug != nil {
+		active, err := s.defRepo.AllActive(ctx, []MethodologyID{*cmd.MethodologyOverrideSlug})
+		if err != nil {
+			return nil, err
+		}
+		if !active {
+			return nil, &domain.MethodError{
+				Err:  domain.ErrInvalidMethodologyIDs,
+				Slug: string(*cmd.MethodologyOverrideSlug),
+			}
+		}
 	}
+
+	// Persist via IAM service (bounded context boundary — iam:: owns the columns). [S§4.6, 02-method §11.2]
+	if err := s.iamService.SetStudentMethodologyOverride(ctx, scope, studentID, cmd.MethodologyOverrideSlug); err != nil {
+		return nil, err
+	}
+
+	// Publish event after persistence succeeds.
+	if pubErr := s.eventBus.Publish(ctx, StudentMethodologyChanged{
+		FamilyID:                scope.FamilyID(),
+		StudentID:               studentID,
+		MethodologyOverrideSlug: cmd.MethodologyOverrideSlug,
+	}); pubErr != nil {
+		slog.Error("failed to publish StudentMethodologyChanged",
+			"family_id", scope.FamilyID(), "student_id", studentID, "error", pubErr)
+	}
+
+	// Build response: if override is set, return that methodology as primary with no secondary.
+	// If override is cleared, return the family's current methodology selection.
+	if cmd.MethodologyOverrideSlug != nil {
+		slug := *cmd.MethodologyOverrideSlug
+		def, err := s.defRepo.FindBySlug(ctx, string(slug))
+		if err != nil {
+			return nil, err
+		}
+		activations, err := s.activationRepo.ListByMethodology(ctx, slug)
+		if err != nil {
+			return nil, err
+		}
+		tools := activationsToToolResponses(activations)
+		return &MethodologySelectionResponse{
+			Primary:         toSummaryResponse(def),
+			Secondary:       []MethodologySummaryResponse{},
+			ActiveToolCount: len(tools),
+		}, nil
+	}
+
+	// Override cleared — reflect the family's active methodology.
+	primarySlug, secondarySlugs, err := s.iamService.GetFamilyMethodologyIDs(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	allSlugs := append([]MethodologyID{primarySlug}, secondarySlugs...)
+	defs, err := s.defRepo.FindBySlugs(ctx, allSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defMap := make(map[MethodologyID]*MethodologyDefinition, len(defs))
+	for i := range defs {
+		defMap[defs[i].Slug] = &defs[i]
+	}
+	primary, ok := defMap[primarySlug]
+	if !ok {
+		return nil, &domain.MethodError{Err: domain.ErrMethodologyNotFound, Slug: string(primarySlug)}
+	}
+	secondary := make([]MethodologySummaryResponse, 0, len(secondarySlugs))
+	for _, slug := range secondarySlugs {
+		if def, ok := defMap[slug]; ok {
+			secondary = append(secondary, toSummaryResponse(def))
+		}
+	}
+	tools, err := s.resolveTools(ctx, primarySlug, secondarySlugs)
+	if err != nil {
+		return nil, err
+	}
+	return &MethodologySelectionResponse{
+		Primary:         toSummaryResponse(primary),
+		Secondary:       secondary,
+		ActiveToolCount: len(tools),
+	}, nil
 }
 
 // ─── Internal Helpers ────────────────────────────────────────────────────────

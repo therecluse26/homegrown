@@ -292,6 +292,8 @@ func (s *stubCache) IncrementWithExpiry(ctx context.Context, key string, window 
 	return 0, nil
 }
 
+func (s *stubCache) Ping(_ context.Context) error { return nil }
+
 func (s *stubCache) Close() error { return nil }
 
 // ─── stubHealthChecker ──────────────────────────────────────────────────────

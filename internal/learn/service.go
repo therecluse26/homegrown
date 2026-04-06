@@ -152,12 +152,14 @@ func (s *learningServiceImpl) validateSubjectTags(ctx context.Context, tags []st
 
 	// Re-validate: check each tag against both platform + custom.
 	for _, tag := range tags {
-		node, nodeErr := s.taxonomyRepo.FindBySlug(ctx, tag)
+		_, nodeErr := s.taxonomyRepo.FindBySlug(ctx, tag)
 		if nodeErr != nil {
-			return nodeErr
-		}
-		if node == nil && !customSlugs[tag] {
-			return &LearningError{Err: &domain.ErrInvalidSubjectTag{Tag: tag}}
+			if errors.Is(nodeErr, domain.ErrTaxonomyNotFound) && !customSlugs[tag] {
+				return &LearningError{Err: &domain.ErrInvalidSubjectTag{Tag: tag}}
+			} else if !errors.Is(nodeErr, domain.ErrTaxonomyNotFound) {
+				return nodeErr
+			}
+			// taxonomy not found but it's a valid custom slug — continue
 		}
 	}
 	return nil
@@ -1101,11 +1103,11 @@ func (s *learningServiceImpl) GetSubjectTaxonomy(ctx context.Context, scope *sha
 func (s *learningServiceImpl) CreateCustomSubject(ctx context.Context, scope *shared.FamilyScope, cmd CreateCustomSubjectCommand) (CustomSubjectResponse, error) {
 	slug := domain.Slugify(cmd.Name)
 	// Check for duplicates: both platform taxonomy and family custom subjects.
-	existing, err := s.taxonomyRepo.FindBySlug(ctx, slug)
-	if err != nil {
+	_, err := s.taxonomyRepo.FindBySlug(ctx, slug)
+	if err != nil && !errors.Is(err, domain.ErrTaxonomyNotFound) {
 		return CustomSubjectResponse{}, err
 	}
-	if existing != nil {
+	if err == nil {
 		return CustomSubjectResponse{}, &LearningError{Err: domain.ErrDuplicateCustomSubject}
 	}
 	customs, err := s.taxonomyRepo.ListCustomSubjects(ctx, scope)
@@ -2576,7 +2578,9 @@ func (s *learningServiceImpl) HandlePurchaseCompleted(_ context.Context, _ uuid.
 }
 
 func (s *learningServiceImpl) HandleMethodologyConfigUpdated(_ context.Context) error {
-	// TODO: invalidate tool resolution cache (Phase 2)
+	// P1-5: Tool resolution is computed fresh on each request (no in-memory or Redis cache),
+	// so there is no stale-cache risk. If caching is added in the future, invalidation
+	// must be triggered here by clearing the relevant cache key prefix.
 	return nil
 }
 

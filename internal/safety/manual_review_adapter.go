@@ -35,25 +35,26 @@ func NewManualReviewThornAdapter(
 	}
 }
 
-// ScanCsam queues the content for manual CSAM review and returns RequiresManualReview=true.
+// ScanCsam queues ALL uploaded content for manual safety review and returns RequiresManualReview=true.
+// Queues both potential CSAM and general safety concerns (age-inappropriate, violence, etc.). [P1-6]
 // The safety service will create a moderation task based on this flag. [11-safety §7.1]
 func (a *ManualReviewThornAdapter) ScanCsam(ctx context.Context, key string) (*CsamScanResult, error) {
 	if err := a.reviewRepo.Create(ctx, &ManualReviewItem{
 		StorageKey: key,
-		ReviewType: "csam_scan",
+		ReviewType: "content_safety", // Covers CSAM + general safety concerns [P1-6]
 		Status:     "pending",
 	}); err != nil {
-		slog.Error("manual review adapter: failed to queue CSAM scan for review",
+		slog.Error("manual review adapter: failed to queue content for safety review",
 			"content_key", key, "error", err)
 		// Return the result even if persistence fails — don't block the upload pipeline.
 	}
 
-	slog.Warn("thorn not integrated — CSAM scan queued for manual review",
+	slog.Warn("thorn not integrated — content queued for manual safety review",
 		"content_key", key,
 		"action", "manual_review_queued",
 	)
 	return &CsamScanResult{
-		IsCSAM:              false,
+		IsCSAM:               false,
 		RequiresManualReview: true,
 	}, nil
 }

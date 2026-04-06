@@ -93,6 +93,15 @@ func (h *Handler) Register(authGroup, hooksGroup, pubGroup *echo.Group) {
 // Webhook Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// handlePaymentWebhook godoc
+//
+// @Summary     Handle payment webhook
+// @Tags        marketplace-hooks
+// @Accept      json
+// @Success     200
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Router      /hooks/payments [post]
 func (h *Handler) handlePaymentWebhook(c echo.Context) error {
 	payload, err := io.ReadAll(c.Request().Body)
 	if err != nil {
@@ -110,6 +119,19 @@ func (h *Handler) handlePaymentWebhook(c echo.Context) error {
 // Creator Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// registerCreator godoc
+//
+// @Summary     Register as a creator
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body RegisterCreatorCommand true "Creator registration"
+// @Success     201 {object} CreatorResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Failure     422 {object} shared.AppError
+// @Router      /marketplace/creators/register [post]
 func (h *Handler) registerCreator(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -134,6 +156,16 @@ func (h *Handler) registerCreator(c echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
+// getCreatorProfile godoc
+//
+// @Summary     Get my creator profile
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} CreatorResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Router      /marketplace/creators/me [get]
 func (h *Handler) getCreatorProfile(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -146,6 +178,19 @@ func (h *Handler) getCreatorProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// updateCreatorProfile godoc
+//
+// @Summary     Update my creator profile
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body UpdateCreatorProfileCommand true "Profile fields"
+// @Success     200 {object} CreatorResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     422 {object} shared.AppError
+// @Router      /marketplace/creators/me [put]
 func (h *Handler) updateCreatorProfile(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -169,6 +214,16 @@ func (h *Handler) updateCreatorProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// createOnboardingLink godoc
+//
+// @Summary     Create creator onboarding link
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} map[string]string
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Router      /marketplace/creators/onboarding-link [post]
 func (h *Handler) createOnboardingLink(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -181,6 +236,17 @@ func (h *Handler) createOnboardingLink(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"url": url})
 }
 
+// getCreatorDashboard godoc
+//
+// @Summary     Get creator dashboard
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       period query string false "Dashboard period" Enums(last_7_days,last_30_days,last_90_days,all_time)
+// @Success     200 {object} CreatorDashboardResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Router      /marketplace/creators/dashboard [get]
 func (h *Handler) getCreatorDashboard(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -198,6 +264,19 @@ func (h *Handler) getCreatorDashboard(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// getCreatorListings godoc
+//
+// @Summary     Get my creator listings
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       status query string false "Filter by status"
+// @Param       limit  query int    false "Results per page"
+// @Param       cursor query string false "Pagination cursor"
+// @Success     200 {object} CreatorListingsResult
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Router      /marketplace/creators/listings [get]
 func (h *Handler) getCreatorListings(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -222,6 +301,19 @@ func (h *Handler) getCreatorListings(c echo.Context) error {
 // Publisher Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// createPublisher godoc
+//
+// @Summary     Create a publisher
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body CreatePublisherCommand true "Publisher details"
+// @Success     201 {object} PublisherResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /marketplace/publishers [post]
 func (h *Handler) createPublisher(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -246,6 +338,16 @@ func (h *Handler) createPublisher(c echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
+// getPublisher godoc
+//
+// @Summary     Get a publisher
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       publisher_id path string true "Publisher ID"
+// @Success     200 {object} PublisherResponse
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/publishers/{publisher_id} [get]
 func (h *Handler) getPublisher(c echo.Context) error {
 	publisherID, err := uuid.Parse(c.Param("publisher_id"))
 	if err != nil {
@@ -259,6 +361,20 @@ func (h *Handler) getPublisher(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// updatePublisher godoc
+//
+// @Summary     Update a publisher
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       publisher_id path string                 true "Publisher ID"
+// @Param       body         body UpdatePublisherCommand  true "Fields to update"
+// @Success     200 {object} PublisherResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/publishers/{publisher_id} [put]
 func (h *Handler) updatePublisher(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -286,6 +402,18 @@ func (h *Handler) updatePublisher(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// getPublisherMembers godoc
+//
+// @Summary     Get publisher members
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       publisher_id path string true "Publisher ID"
+// @Success     200 {array}  PublisherMemberResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/publishers/{publisher_id}/members [get]
 func (h *Handler) getPublisherMembers(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -303,6 +431,20 @@ func (h *Handler) getPublisherMembers(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// addPublisherMember godoc
+//
+// @Summary     Add a publisher member
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       publisher_id path string                    true "Publisher ID"
+// @Param       body         body AddPublisherMemberCommand  true "Member details"
+// @Success     201 {object} PublisherMemberResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/publishers/{publisher_id}/members [post]
 func (h *Handler) addPublisherMember(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -337,6 +479,18 @@ func (h *Handler) addPublisherMember(c echo.Context) error {
 	return c.NoContent(http.StatusCreated)
 }
 
+// removePublisherMember godoc
+//
+// @Summary     Remove a publisher member
+// @Tags        marketplace
+// @Security    BearerAuth
+// @Param       publisher_id path string true "Publisher ID"
+// @Param       creator_id   path string true "Creator ID"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/publishers/{publisher_id}/members/{creator_id} [delete]
 func (h *Handler) removePublisherMember(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -361,6 +515,19 @@ func (h *Handler) removePublisherMember(c echo.Context) error {
 // Listing Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// createListing godoc
+//
+// @Summary     Create a listing
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body CreateListingCommand true "Listing details"
+// @Success     201 {object} ListingDetailResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     422 {object} shared.AppError
+// @Router      /marketplace/listings [post]
 func (h *Handler) createListing(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -385,6 +552,20 @@ func (h *Handler) createListing(c echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
+// updateListing godoc
+//
+// @Summary     Update a listing
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string               true "Listing ID"
+// @Param       body       body UpdateListingCommand  true "Fields to update"
+// @Success     200 {object} ListingDetailResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id} [put]
 func (h *Handler) updateListing(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -412,6 +593,18 @@ func (h *Handler) updateListing(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// submitListing godoc
+//
+// @Summary     Submit listing for review
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string true "Listing ID"
+// @Success     200 {object} ListingDetailResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id}/submit [post]
 func (h *Handler) submitListing(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -432,6 +625,18 @@ func (h *Handler) submitListing(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// publishListing godoc
+//
+// @Summary     Publish a listing
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string true "Listing ID"
+// @Success     200 {object} ListingDetailResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id}/publish [post]
 func (h *Handler) publishListing(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -452,6 +657,18 @@ func (h *Handler) publishListing(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// archiveListing godoc
+//
+// @Summary     Archive a listing
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string true "Listing ID"
+// @Success     200 {object} ListingDetailResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id}/archive [post]
 func (h *Handler) archiveListing(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -472,6 +689,21 @@ func (h *Handler) archiveListing(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// uploadListingFile godoc
+//
+// @Summary     Upload a listing file
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string                    true "Listing ID"
+// @Param       body       body UploadListingFileCommand   true "File details"
+// @Success     201 {object} ListingFileResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     413 {object} shared.AppError
+// @Failure     422 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id}/files [post]
 func (h *Handler) uploadListingFile(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -504,6 +736,19 @@ func (h *Handler) uploadListingFile(c echo.Context) error {
 // Browse Handlers (public)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// browseListings godoc
+//
+// @Summary     Browse marketplace listings
+// @Tags        marketplace
+// @Produce     json
+// @Param       q          query string false "Search query"
+// @Param       category   query string false "Filter by category"
+// @Param       sort       query string false "Sort order"
+// @Param       limit      query int    false "Results per page"
+// @Param       cursor     query string false "Pagination cursor"
+// @Success     200 {object} BrowseListingsResult
+// @Failure     400 {object} shared.AppError
+// @Router      /marketplace/listings [get]
 func (h *Handler) browseListings(c echo.Context) error {
 	var params BrowseListingsParams
 	if err := c.Bind(&params); err != nil {
@@ -520,6 +765,15 @@ func (h *Handler) browseListings(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// autocompleteListings godoc
+//
+// @Summary     Autocomplete listing search
+// @Tags        marketplace
+// @Produce     json
+// @Param       q query string true "Search query"
+// @Success     200 {array}  AutocompleteResult
+// @Failure     400 {object} shared.AppError
+// @Router      /marketplace/listings/autocomplete [get]
 func (h *Handler) autocompleteListings(c echo.Context) error {
 	query := c.QueryParam("q")
 	if query == "" {
@@ -533,6 +787,15 @@ func (h *Handler) autocompleteListings(c echo.Context) error {
 	return c.JSON(http.StatusOK, results)
 }
 
+// getListing godoc
+//
+// @Summary     Get a listing
+// @Tags        marketplace
+// @Produce     json
+// @Param       listing_id path string true "Listing ID"
+// @Success     200 {object} ListingDetailResponse
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id} [get]
 func (h *Handler) getListing(c echo.Context) error {
 	listingID, err := uuid.Parse(c.Param("listing_id"))
 	if err != nil {
@@ -546,6 +809,13 @@ func (h *Handler) getListing(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// getCuratedSections godoc
+//
+// @Summary     Get curated marketplace sections
+// @Tags        marketplace
+// @Produce     json
+// @Success     200 {array}  CuratedSectionResponse
+// @Router      /marketplace/curated-sections [get]
 func (h *Handler) getCuratedSections(c echo.Context) error {
 	resp, err := h.svc.GetCuratedSections(c.Request().Context(), 8)
 	if err != nil {
@@ -558,6 +828,17 @@ func (h *Handler) getCuratedSections(c echo.Context) error {
 // Cart & Checkout Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// addToCart godoc
+//
+// @Summary     Add listing to cart
+// @Tags        marketplace
+// @Accept      json
+// @Security    BearerAuth
+// @Param       body body AddToCartCommand true "Cart item"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /marketplace/cart/items [post]
 func (h *Handler) addToCart(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -581,6 +862,16 @@ func (h *Handler) addToCart(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// removeFromCart godoc
+//
+// @Summary     Remove listing from cart
+// @Tags        marketplace
+// @Security    BearerAuth
+// @Param       listing_id path string true "Listing ID"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/cart/items/{listing_id} [delete]
 func (h *Handler) removeFromCart(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -597,6 +888,15 @@ func (h *Handler) removeFromCart(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// getCart godoc
+//
+// @Summary     Get shopping cart
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} CartResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /marketplace/cart [get]
 func (h *Handler) getCart(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -610,6 +910,17 @@ func (h *Handler) getCart(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// createCheckout godoc
+//
+// @Summary     Create a checkout session
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Success     201 {object} CheckoutSessionResponse
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /marketplace/cart/checkout [post]
 func (h *Handler) createCheckout(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -627,6 +938,17 @@ func (h *Handler) createCheckout(c echo.Context) error {
 // Purchase Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// getPurchases godoc
+//
+// @Summary     List purchases
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       limit  query int    false "Results per page"
+// @Param       cursor query string false "Pagination cursor"
+// @Success     200 {object} PurchaseListResult
+// @Failure     401 {object} shared.AppError
+// @Router      /marketplace/purchases [get]
 func (h *Handler) getPurchases(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -647,6 +969,19 @@ func (h *Handler) getPurchases(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// getDownloadURL godoc
+//
+// @Summary     Get download URL for purchased file
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string true "Listing ID"
+// @Param       file_id    path string true "File ID"
+// @Success     200 {object} DownloadResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/purchases/{listing_id}/download/{file_id} [get]
 func (h *Handler) getDownloadURL(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -668,6 +1003,18 @@ func (h *Handler) getDownloadURL(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// getFreeListing godoc
+//
+// @Summary     Get a free listing
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string true "Listing ID"
+// @Success     201 {object} map[string]string
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id}/get [post]
 func (h *Handler) getFreeListing(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -689,6 +1036,20 @@ func (h *Handler) getFreeListing(c echo.Context) error {
 // Review Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// createReview godoc
+//
+// @Summary     Create a listing review
+// @Tags        marketplace
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       listing_id path string              true "Listing ID"
+// @Param       body       body CreateReviewCommand  true "Review details"
+// @Success     201 {object} ReviewResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id}/reviews [post]
 func (h *Handler) createReview(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -717,6 +1078,19 @@ func (h *Handler) createReview(c echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
+// updateReview godoc
+//
+// @Summary     Update a review
+// @Tags        marketplace
+// @Accept      json
+// @Security    BearerAuth
+// @Param       review_id path string              true "Review ID"
+// @Param       body      body UpdateReviewCommand  true "Fields to update"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/reviews/{review_id} [put]
 func (h *Handler) updateReview(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -740,6 +1114,17 @@ func (h *Handler) updateReview(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// deleteReview godoc
+//
+// @Summary     Delete a review
+// @Tags        marketplace
+// @Security    BearerAuth
+// @Param       review_id path string true "Review ID"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/reviews/{review_id} [delete]
 func (h *Handler) deleteReview(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -756,6 +1141,19 @@ func (h *Handler) deleteReview(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// respondToReview godoc
+//
+// @Summary     Respond to a review (creator)
+// @Tags        marketplace
+// @Accept      json
+// @Security    BearerAuth
+// @Param       review_id path string                  true "Review ID"
+// @Param       body      body RespondToReviewCommand   true "Response details"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/reviews/{review_id}/response [post]
 func (h *Handler) respondToReview(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -783,6 +1181,17 @@ func (h *Handler) respondToReview(c echo.Context) error {
 // Payout Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// requestPayout godoc
+//
+// @Summary     Request a creator payout
+// @Tags        marketplace
+// @Produce     json
+// @Security    BearerAuth
+// @Success     201 {object} PayoutResult
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Router      /marketplace/payouts/request [post]
 func (h *Handler) requestPayout(c echo.Context) error {
 	cc, err := GetCreatorContext(c)
 	if err != nil {
@@ -800,6 +1209,18 @@ func (h *Handler) requestPayout(c echo.Context) error {
 // Review listing route (public)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// getListingReviews godoc
+//
+// @Summary     Get reviews for a listing
+// @Tags        marketplace
+// @Produce     json
+// @Param       listing_id path string true "Listing ID"
+// @Param       limit      query int   false "Results per page"
+// @Param       cursor     query string false "Pagination cursor"
+// @Success     200 {object} ReviewListResult
+// @Failure     400 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /marketplace/listings/{listing_id}/reviews [get]
 func (h *Handler) getListingReviews(c echo.Context) error {
 	listingID, err := uuid.Parse(c.Param("listing_id"))
 	if err != nil {

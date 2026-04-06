@@ -50,7 +50,7 @@ func (a *KratosAdapterImpl) ValidateSession(ctx context.Context, sessionCookie s
 	}
 	req.Header.Set("Cookie", sessionCookie)
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
@@ -101,7 +101,7 @@ func (a *KratosAdapterImpl) GetIdentity(ctx context.Context, identityID uuid.UUI
 		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
@@ -144,7 +144,7 @@ func (a *KratosAdapterImpl) DeleteIdentity(ctx context.Context, identityID uuid.
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
@@ -165,7 +165,7 @@ func (a *KratosAdapterImpl) RevokeSessions(ctx context.Context, identityID uuid.
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
@@ -186,7 +186,7 @@ func (a *KratosAdapterImpl) ListSessionsForIdentity(ctx context.Context, identit
 		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
@@ -233,7 +233,7 @@ func (a *KratosAdapterImpl) RevokeSpecificSession(ctx context.Context, sessionID
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
@@ -258,7 +258,7 @@ func (a *KratosAdapterImpl) InitiateAccountRecovery(ctx context.Context, email s
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
 
-	flowResp, err := a.httpClient.Do(flowReq)
+	flowResp, err := shared.RetryableHTTPDo(ctx, a.httpClient, flowReq, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
@@ -292,7 +292,7 @@ func (a *KratosAdapterImpl) InitiateAccountRecovery(ctx context.Context, email s
 	submitReq.Header.Set("Content-Type", "application/json")
 	submitReq.Header.Set("Accept", "application/json")
 
-	submitResp, err := a.httpClient.Do(submitReq)
+	submitResp, err := shared.RetryableHTTPDo(ctx, a.httpClient, submitReq, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}

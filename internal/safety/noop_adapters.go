@@ -18,7 +18,7 @@ var _ ThornAdapter = NoopThornAdapter{}
 
 func (NoopThornAdapter) ScanCsam(_ context.Context, key string) (*CsamScanResult, error) {
 	slog.Warn("thorn not configured — ScanCsam is a no-op", "key", key)
-	return &CsamScanResult{IsCSAM: false}, nil
+	return &CsamScanResult{IsCSAM: false, RequiresManualReview: true}, nil
 }
 
 func (NoopThornAdapter) SubmitNcmecReport(_ context.Context, report NcmecReportPayload) (*NcmecSubmissionResult, error) {

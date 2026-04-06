@@ -15,7 +15,7 @@ type ToolActivationWithTool struct {
 	ToolDescription *string         `json:"tool_description,omitempty"`
 	ToolTier        string          `json:"tool_tier"`
 	ToolIsActive    bool            `json:"tool_is_active"`
-	ConfigOverrides json.RawMessage `json:"config_overrides"`
+	ConfigOverrides json.RawMessage `json:"config_overrides" swaggertype:"object"`
 	SortOrder       int16           `json:"sort_order"`
 }
 
@@ -26,7 +26,7 @@ type ResolvedTool struct {
 	DisplayName           string          `json:"display_name"`
 	Description           *string         `json:"description,omitempty"`
 	Tier                  string          `json:"tier"`
-	ConfigOverrides       json.RawMessage `json:"config_overrides"`
+	ConfigOverrides       json.RawMessage `json:"config_overrides" swaggertype:"object"`
 	SortOrder             int16           `json:"sort_order"`
 	SourceMethodologySlug string          `json:"source_methodology_slug"`
 }

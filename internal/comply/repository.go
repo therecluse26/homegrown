@@ -14,6 +14,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// ValidComplyColumns is the exhaustive allowlist of column names that may appear in
+// dynamically-built SET clauses. All comply Update methods use hardcoded column names
+// from this set — never user input. This allowlist exists as defense-in-depth so that
+// future developers cannot accidentally introduce SQL injection via dynamic columns. [P2-7]
+var ValidComplyColumns = map[string]bool{
+	"name": true, "school_days": true, "exclusion_periods": true,
+	"date": true, "status": true, "notes": true, "hours": true,
+	"subject": true, "assessment_type": true, "score": true, "max_score": true,
+	"percentile": true, "grade_level": true, "description": true,
+	"test_name": true, "test_date": true, "total_score": true,
+	"subject_scores": true, "title": true, "entries": true,
+	"student_name": true, "school_name": true, "graduation_date": true,
+	"gpa": true, "credits_earned": true, "credits_required": true,
+	"course_name": true, "course_code": true, "credits": true,
+	"semester": true, "grade": true, "teacher": true, "updated_at": true,
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // State Config Repository [14-comply §6]
 // NOT family-scoped — platform-authored reference data.
@@ -128,7 +145,7 @@ func (r *PgStateConfigRepository) FindByStateCode(ctx context.Context, stateCode
 		WHERE state_code = ?`, stateCode).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrStateConfigNotFound
 		}
 		return nil, fmt.Errorf("comply state config find: %w", err)
 	}
@@ -263,7 +280,7 @@ func (r *PgFamilyConfigRepository) FindByFamily(ctx context.Context, scope share
 		WHERE family_id = ?`, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrFamilyConfigNotFound
 		}
 		return nil, fmt.Errorf("comply family config find: %w", err)
 	}
@@ -335,7 +352,7 @@ func (r *PgScheduleRepository) FindByID(ctx context.Context, scheduleID uuid.UUI
 		WHERE id = ? AND family_id = ?`, scheduleID, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrScheduleNotFound
 		}
 		return nil, fmt.Errorf("comply schedule find: %w", err)
 	}
@@ -507,7 +524,7 @@ func (r *PgAttendanceRepository) FindByID(ctx context.Context, attendanceID uuid
 		WHERE id = ? AND family_id = ?`, attendanceID, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrAttendanceNotFound
 		}
 		return nil, fmt.Errorf("comply attendance find: %w", err)
 	}
@@ -545,7 +562,7 @@ func (r *PgAttendanceRepository) FindByStudentAndDate(ctx context.Context, stude
 		scope.FamilyID(), studentID, date.Format("2006-01-02")).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrAttendanceNotFound
 		}
 		return nil, fmt.Errorf("comply attendance find by student and date: %w", err)
 	}
@@ -785,7 +802,7 @@ func (r *PgAssessmentRepository) FindByID(ctx context.Context, assessmentID uuid
 		WHERE id = ? AND family_id = ?`, assessmentID, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrAssessmentNotFound
 		}
 		return nil, fmt.Errorf("comply assessment find: %w", err)
 	}
@@ -1012,7 +1029,7 @@ func (r *PgTestScoreRepository) findByID(ctx context.Context, testID uuid.UUID, 
 		WHERE id = ? AND family_id = ?`, testID, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrTestScoreNotFound
 		}
 		return nil, fmt.Errorf("comply test score find: %w", err)
 	}
@@ -1215,7 +1232,7 @@ func (r *PgPortfolioRepository) FindByID(ctx context.Context, portfolioID uuid.U
 		WHERE id = ? AND family_id = ?`, portfolioID, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrPortfolioNotFound
 		}
 		return nil, fmt.Errorf("comply portfolio find: %w", err)
 	}
@@ -1565,7 +1582,7 @@ func (r *PgTranscriptRepository) FindByID(ctx context.Context, transcriptID uuid
 		WHERE id = ? AND family_id = ?`, transcriptID, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrTranscriptNotFound
 		}
 		return nil, fmt.Errorf("comply transcript find: %w", err)
 	}
@@ -1805,7 +1822,7 @@ func (r *PgCourseRepository) findByID(ctx context.Context, courseID uuid.UUID, s
 		WHERE id = ? AND family_id = ?`, courseID, scope.FamilyID()).First(&r_).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrCourseNotFound
 		}
 		return nil, fmt.Errorf("comply course find: %w", err)
 	}

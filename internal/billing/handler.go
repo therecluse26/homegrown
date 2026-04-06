@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
@@ -146,18 +147,23 @@ func (h *Handler) coppaVerify(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// hyperswitchWebhook handles POST /hooks/hyperswitch/billing. [10-billing §4.1]
+// hyperswitchWebhook handles POST /hooks/hyperswitch/billing. [10-billing §4.1, P1-1]
 func (h *Handler) hyperswitchWebhook(c echo.Context) error {
 	payload, err := io.ReadAll(c.Request().Body)
 	if err != nil {
-		// Always return 200 to Hyperswitch to prevent retries. [10-billing §14]
-		return c.NoContent(http.StatusOK)
+		return c.NoContent(http.StatusBadRequest)
 	}
 
 	signature := c.Request().Header.Get("X-Webhook-Signature")
 
-	// Errors are logged internally; always return 200 to Hyperswitch.
-	_ = h.svc.ProcessHyperswitchWebhook(c.Request().Context(), payload, signature)
+	// Return appropriate status codes so the payment provider retries on transient failure. [P1-1]
+	// Signature failures → 400 (permanent, don't retry). Processing errors → 500 (transient, retry).
+	if err := h.svc.ProcessHyperswitchWebhook(c.Request().Context(), payload, signature); err != nil {
+		if errors.Is(err, ErrInvalidWebhookSignature) {
+			return c.NoContent(http.StatusBadRequest)
+		}
+		return c.NoContent(http.StatusInternalServerError)
+	}
 
 	return c.NoContent(http.StatusOK)
 }

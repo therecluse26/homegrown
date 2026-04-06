@@ -425,7 +425,7 @@ type ContentFlagResponse struct {
 	TargetID    uuid.UUID        `json:"target_id"`
 	FlagType    string           `json:"flag_type"`
 	Confidence  *float64         `json:"confidence,omitempty"`
-	Labels      *json.RawMessage `json:"labels,omitempty"`
+	Labels      *json.RawMessage `json:"labels,omitempty" swaggertype:"object"`
 	Reviewed    bool             `json:"reviewed"`
 	ReviewedBy  *uuid.UUID       `json:"reviewed_by,omitempty"`
 	ActionTaken *bool            `json:"action_taken,omitempty"`
@@ -545,7 +545,7 @@ type AppealFilter struct {
 type UpsertParentalControlCommand struct {
 	ControlType string          `json:"control_type" validate:"required"`
 	Enabled     bool            `json:"enabled"`
-	Settings    json.RawMessage `json:"settings" validate:"required"`
+	Settings    json.RawMessage `json:"settings" validate:"required" swaggertype:"object"`
 }
 
 // CreateAdminRoleCommand is the request body for POST /v1/admin/safety/roles. [11-safety §9.3]
@@ -572,7 +572,7 @@ type ParentalControlResponse struct {
 	ID          uuid.UUID       `json:"id"`
 	ControlType string          `json:"control_type"`
 	Enabled     bool            `json:"enabled"`
-	Settings    json.RawMessage `json:"settings"`
+	Settings    json.RawMessage `json:"settings" swaggertype:"object"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
@@ -614,6 +614,51 @@ type GroomingAnalysisResult struct {
 	Score        float64 `json:"score"`
 	ModelVersion string  `json:"model_version"`
 	Flagged      bool    `json:"flagged"`
+}
+
+// ─── Swagger-friendly paginated response aliases ────────────────────────────────
+// (Go generics like PaginatedResponse[T] are not supported by swag.)
+
+// ReportListResult is a swagger-friendly type for PaginatedResponse[ReportResponse].
+type ReportListResult struct {
+	Data       []ReportResponse `json:"data"`
+	NextCursor *string          `json:"next_cursor"`
+	HasMore    bool             `json:"has_more"`
+}
+
+// AdminReportListResult is a swagger-friendly type for PaginatedResponse[AdminReportResponse].
+type AdminReportListResult struct {
+	Data       []AdminReportResponse `json:"data"`
+	NextCursor *string               `json:"next_cursor"`
+	HasMore    bool                  `json:"has_more"`
+}
+
+// ContentFlagListResult is a swagger-friendly type for PaginatedResponse[ContentFlagResponse].
+type ContentFlagListResult struct {
+	Data       []ContentFlagResponse `json:"data"`
+	NextCursor *string               `json:"next_cursor"`
+	HasMore    bool                  `json:"has_more"`
+}
+
+// ModActionListResult is a swagger-friendly type for PaginatedResponse[ModActionResponse].
+type ModActionListResult struct {
+	Data       []ModActionResponse `json:"data"`
+	NextCursor *string             `json:"next_cursor"`
+	HasMore    bool                `json:"has_more"`
+}
+
+// AdminAppealListResult is a swagger-friendly type for PaginatedResponse[AdminAppealResponse].
+type AdminAppealListResult struct {
+	Data       []AdminAppealResponse `json:"data"`
+	NextCursor *string               `json:"next_cursor"`
+	HasMore    bool                  `json:"has_more"`
+}
+
+// GroomingScoreListResult is a swagger-friendly type for PaginatedResponse[GroomingScoreResponse].
+type GroomingScoreListResult struct {
+	Data       []GroomingScoreResponse `json:"data"`
+	NextCursor *string                 `json:"next_cursor"`
+	HasMore    bool                    `json:"has_more"`
 }
 
 // ─── Internal / Adapter Types ───────────────────────────────────────────────────

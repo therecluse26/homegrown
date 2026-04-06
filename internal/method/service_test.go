@@ -409,3 +409,6 @@ func (s *stubIamSvc) GetStudent(_ context.Context, _ *shared.FamilyScope, _ uuid
 func (s *stubIamSvc) SetFamilyMethodology(_ context.Context, _ *shared.FamilyScope, _ MethodologyID, _ []MethodologyID) error {
 	return nil
 }
+func (s *stubIamSvc) SetStudentMethodologyOverride(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID, _ *MethodologyID) error {
+	return nil
+}

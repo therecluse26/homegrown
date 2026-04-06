@@ -339,7 +339,7 @@ func TestGetSubscription_ReturnsFreeDefault_WhenNoSubscription(t *testing.T) {
 	subRepo := new(mockSubscriptionRepo)
 	svc := newTestService(subRepo, new(mockTransactionRepo), new(mockCustomerRepo), new(mockPayoutRepo), new(mockAdapter), new(mockIamService))
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 
 	resp, err := svc.GetSubscription(context.Background(), testScope())
 	require.NoError(t, err)
@@ -463,7 +463,7 @@ func TestListPaymentMethods_ReturnsEmptyList_WhenNoCustomer(t *testing.T) {
 	custRepo := new(mockCustomerRepo)
 	svc := newTestService(new(mockSubscriptionRepo), new(mockTransactionRepo), custRepo, new(mockPayoutRepo), new(mockAdapter), new(mockIamService))
 
-	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(nil, nil)
+	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(nil, ErrCustomerNotFound)
 
 	methods, err := svc.ListPaymentMethods(context.Background(), testScope())
 	require.NoError(t, err)
@@ -481,7 +481,7 @@ func TestEstimateSubscription_ReturnsPricingFromAdapter(t *testing.T) {
 	svc := newTestService(subRepo, new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, new(mockIamService))
 
 	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(testCustomer(), nil)
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 	adapter.On("EstimateSubscription", mock.Anything, "cus_test_123", "price_annual_v1", (*string)(nil)).Return(&HyperswitchEstimate{
 		AmountCents:           11999,
 		Currency:              "usd",
@@ -503,7 +503,7 @@ func TestEstimateSubscription_ResolvesCorrectPriceID(t *testing.T) {
 	svc := newTestService(subRepo, new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, new(mockIamService))
 
 	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(testCustomer(), nil)
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 	adapter.On("EstimateSubscription", mock.Anything, "cus_test_123", "price_monthly_v1", (*string)(nil)).Return(&HyperswitchEstimate{
 		AmountCents: 1499, Currency: "usd",
 	}, nil)
@@ -545,8 +545,8 @@ func TestCreateSubscription_CreatesCustomerIfNotExists(t *testing.T) {
 	iamSvc := new(mockIamService)
 	svc := newTestService(subRepo, new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, iamSvc)
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
-	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
+	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(nil, ErrCustomerNotFound)
 	iamSvc.On("GetFamilyPrimaryEmail", mock.Anything, testFamilyID()).Return("test@example.com", "Test Family", nil)
 	adapter.On("CreateCustomer", mock.Anything, "test@example.com", "Test Family", mock.Anything).Return("cus_new_123", nil)
 	custRepo.On("Upsert", mock.Anything, testFamilyID(), mock.Anything).Return(testCustomer(), nil)
@@ -585,7 +585,7 @@ func TestCreateSubscription_CreatesLocalRow_WithIncompleteStatus(t *testing.T) {
 	iamSvc := new(mockIamService)
 	svc := newTestService(subRepo, new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, iamSvc)
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(testCustomer(), nil)
 	adapter.On("CreateSubscription", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&HyperswitchSubscription{
 		ID: "sub_123", CustomerID: "cus_test_123", Status: SubscriptionStatusIncomplete,
@@ -632,7 +632,7 @@ func TestCreateSubscription_ReturnsPaymentDeclined_WhenPaymentFails(t *testing.T
 	adapter := new(mockAdapter)
 	svc := newTestService(subRepo, new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, new(mockIamService))
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(testCustomer(), nil)
 	adapter.On("CreateSubscription", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, ErrPaymentDeclined)
 
@@ -651,7 +651,7 @@ func TestCreateSubscription_ReturnsAdapterUnavailable_WhenAdapterDown(t *testing
 	adapter := new(mockAdapter)
 	svc := newTestService(subRepo, new(mockTransactionRepo), custRepo, new(mockPayoutRepo), adapter, new(mockIamService))
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(testCustomer(), nil)
 	adapter.On("CreateSubscription", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, ErrPaymentAdapterUnavailable)
 
@@ -687,7 +687,7 @@ func TestUpdateSubscription_ReturnsNotFound_WhenNoSubscription(t *testing.T) {
 	subRepo := new(mockSubscriptionRepo)
 	svc := newTestService(subRepo, new(mockTransactionRepo), new(mockCustomerRepo), new(mockPayoutRepo), new(mockAdapter), new(mockIamService))
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 
 	_, err := svc.UpdateSubscription(context.Background(), UpdateSubscriptionCommand{BillingInterval: IntervalAnnual}, testScope())
 	require.Error(t, err)
@@ -758,7 +758,7 @@ func TestCancelSubscription_ReturnsNotFound(t *testing.T) {
 	subRepo := new(mockSubscriptionRepo)
 	svc := newTestService(subRepo, new(mockTransactionRepo), new(mockCustomerRepo), new(mockPayoutRepo), new(mockAdapter), new(mockIamService))
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil)
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound)
 
 	_, err := svc.CancelSubscription(context.Background(), testScope())
 	require.Error(t, err)
@@ -844,7 +844,7 @@ func TestDetachPaymentMethod_CallsAdapterToDetach(t *testing.T) {
 	adapter := new(mockAdapter)
 	svc := newTestService(subRepo, new(mockTransactionRepo), new(mockCustomerRepo), new(mockPayoutRepo), adapter, new(mockIamService))
 
-	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, nil) // no active sub
+	subRepo.On("FindByFamily", mock.Anything, testScope()).Return(nil, ErrSubscriptionNotFound) // no active sub
 
 	adapter.On("DetachPaymentMethod", mock.Anything, "pm_123").Return(nil)
 
@@ -883,7 +883,7 @@ func TestProcessCoppaVerification_CreatesCustomerIfNotExists(t *testing.T) {
 	iamSvc := new(mockIamService)
 	svc := newTestService(new(mockSubscriptionRepo), txnRepo, custRepo, new(mockPayoutRepo), adapter, iamSvc)
 
-	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(nil, nil)
+	custRepo.On("FindByFamily", mock.Anything, testFamilyID()).Return(nil, ErrCustomerNotFound)
 	iamSvc.On("GetFamilyPrimaryEmail", mock.Anything, testFamilyID()).Return("parent@example.com", "Family", nil)
 	adapter.On("CreateCustomer", mock.Anything, "parent@example.com", "Family", mock.Anything).Return("cus_new", nil)
 	custRepo.On("Upsert", mock.Anything, testFamilyID(), mock.Anything).Return(testCustomer(), nil)
@@ -1011,7 +1011,8 @@ func TestProcessWebhook_RejectsInvalidSignature(t *testing.T) {
 	adapter.On("VerifyWebhook", mock.Anything, mock.Anything, mock.Anything).Return(false, ErrInvalidWebhookSignature)
 
 	err := svc.ProcessHyperswitchWebhook(context.Background(), []byte("{}"), "bad-sig")
-	assert.NoError(t, err) // Returns nil — webhook always 200
+	assert.Error(t, err)                              // Signature failure propagated [P1-1]
+	assert.ErrorIs(t, err, ErrInvalidWebhookSignature) // Wraps sentinel for handler to distinguish
 }
 
 func TestProcessWebhook_HandlesSubscriptionCreated(t *testing.T) {
@@ -1033,7 +1034,7 @@ func TestProcessWebhook_HandlesSubscriptionCreated(t *testing.T) {
 		},
 	}, nil)
 
-	subRepo.On("FindByHyperswitchID", mock.Anything, "sub_new").Return(nil, nil)
+	subRepo.On("FindByHyperswitchID", mock.Anything, "sub_new").Return(nil, ErrSubscriptionNotFound)
 	custRepo.On("FindByHyperswitchID", mock.Anything, "cus_123").Return(&BillHyperswitchCustomer{
 		FamilyID: testFamilyID(), HyperswitchCustomerID: "cus_123",
 	}, nil)

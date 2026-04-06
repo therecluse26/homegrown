@@ -355,6 +355,8 @@ func (m *mockCache) IncrementWithExpiry(_ context.Context, _ string, _ time.Dura
 	return 0, nil
 }
 
+func (m *mockCache) Ping(_ context.Context) error { return nil }
+
 func (m *mockCache) Close() error { return nil }
 
 // ─── Mock EventBus ──────────────────────────────────────────────────────────────

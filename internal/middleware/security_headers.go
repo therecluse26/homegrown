@@ -25,6 +25,12 @@ func SecurityHeaders() echo.MiddlewareFunc {
 					"connect-src 'self' wss:; frame-ancestors 'none'")
 			// Prevent cross-domain Flash/PDF data loading
 			h.Set("X-Permitted-Cross-Domain-Policies", "none")
+			// Restrict browser feature access (camera, microphone, geolocation, etc.) [P2-10]
+			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)")
+			// Prevent cross-origin window references (Spectre mitigation) [P2-10]
+			h.Set("Cross-Origin-Opener-Policy", "same-origin")
+			// Control cross-origin resource loading [P2-10]
+			h.Set("Cross-Origin-Resource-Policy", "same-origin")
 			return next(c)
 		}
 	}

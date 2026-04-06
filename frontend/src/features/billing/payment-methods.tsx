@@ -13,6 +13,7 @@ import {
   usePaymentMethods,
   useSetDefaultPaymentMethod,
   useRemovePaymentMethod,
+  useAddPaymentMethod,
 } from "@/hooks/use-subscription";
 import { useState, useEffect, useRef } from "react";
 
@@ -24,8 +25,10 @@ export function PaymentMethods() {
   const methods = usePaymentMethods();
   const setDefault = useSetDefaultPaymentMethod();
   const remove = useRemovePaymentMethod();
+  const addMethod = useAddPaymentMethod();
 
   const [removeTarget, setRemoveTarget] = useState<string | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "billing.paymentMethods.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
@@ -75,7 +78,11 @@ export function PaymentMethods() {
         >
           <FormattedMessage id="billing.paymentMethods.title" />
         </h1>
-        <Button variant="primary" size="sm" disabled>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setShowAddDialog(true)}
+        >
           <FormattedMessage id="billing.paymentMethods.add" />
         </Button>
       </div>
@@ -152,6 +159,25 @@ export function PaymentMethods() {
           ))}
         </ul>
       )}
+
+      <ConfirmationDialog
+        open={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
+        onConfirm={() => {
+          void addMethod.mutateAsync().then(() => {
+            setShowAddDialog(false);
+          });
+        }}
+        title={intl.formatMessage({
+          id: "billing.paymentMethods.add.title",
+        })}
+        confirmLabel={intl.formatMessage({
+          id: "billing.paymentMethods.add.confirm",
+        })}
+        loading={addMethod.isPending}
+      >
+        <FormattedMessage id="billing.paymentMethods.add.description" />
+      </ConfirmationDialog>
 
       <ConfirmationDialog
         open={!!removeTarget}

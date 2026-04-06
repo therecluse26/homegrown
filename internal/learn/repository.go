@@ -683,7 +683,7 @@ func (r *PgSubjectTaxonomyRepository) FindBySlug(ctx context.Context, slug strin
 	err := r.db.WithContext(ctx).Where("slug = ? AND is_active = true", slug).First(&node).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, domain.ErrTaxonomyNotFound
 		}
 		return nil, shared.ErrDatabase(err)
 	}
@@ -820,7 +820,7 @@ func (r *PgProgressRepository) GetLatestSnapshot(ctx context.Context, scope *sha
 	})
 	if txErr != nil {
 		if errors.Is(txErr, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, domain.ErrSnapshotNotFound
 		}
 		return nil, shared.ErrDatabase(txErr)
 	}

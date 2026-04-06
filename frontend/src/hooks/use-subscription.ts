@@ -115,6 +115,22 @@ export function useRemovePaymentMethod() {
   });
 }
 
+export function useAddPaymentMethod() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient<PaymentMethod>("/v1/billing/payment-methods", {
+        method: "POST",
+        body: JSON.stringify({ setup_intent_client_secret: "" }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["billing", "payment-methods"],
+      });
+    },
+  });
+}
+
 // ─── Transaction Queries ────────────────────────────────────────────────────
 
 export function useTransactions(filters?: TransactionFilters) {

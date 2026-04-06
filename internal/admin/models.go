@@ -51,7 +51,7 @@ type AdminAction struct {
 	Action     string          `json:"action"`
 	TargetType string          `json:"target_type"`
 	TargetID   *uuid.UUID      `json:"target_id"`
-	Details    json.RawMessage `json:"details"`
+	Details    json.RawMessage `json:"details" swaggertype:"object"`
 }
 
 // CreateAuditLogEntry represents the data needed to create an audit log entry.
@@ -60,7 +60,7 @@ type CreateAuditLogEntry struct {
 	Action     string          `json:"action"`
 	TargetType string          `json:"target_type"`
 	TargetID   *uuid.UUID      `json:"target_id"`
-	Details    json.RawMessage `json:"details"`
+	Details    json.RawMessage `json:"details" swaggertype:"object"`
 	IPAddress  string          `json:"ip_address"`
 	UserAgent  string          `json:"user_agent"`
 }
@@ -80,6 +80,49 @@ type AdminUserSummary struct {
 	AccountStatus      string     `json:"account_status"`
 	CreatedAt          time.Time  `json:"created_at"`
 	LastActiveAt       *time.Time `json:"last_active_at"`
+}
+
+// UserSearchResult is a swagger-friendly concrete type for paginated user search responses.
+// (Go generics like PaginatedResponse[AdminUserSummary] are not supported by swag.)
+type UserSearchResult struct {
+	Data       []AdminUserSummary `json:"data"`
+	NextCursor *string            `json:"next_cursor"`
+	HasMore    bool               `json:"has_more"`
+}
+
+// AuditLogResult is a swagger-friendly concrete type for PaginatedResponse[AuditLogEntry].
+type AuditLogResult struct {
+	Data       []AuditLogEntry `json:"data"`
+	NextCursor *string         `json:"next_cursor"`
+	HasMore    bool            `json:"has_more"`
+}
+
+// ModerationQueueResult is a swagger-friendly concrete type for PaginatedResponse[ModerationQueueItem].
+type ModerationQueueResult struct {
+	Data       []ModerationQueueItem `json:"data"`
+	NextCursor *string               `json:"next_cursor"`
+	HasMore    bool                  `json:"has_more"`
+}
+
+// PendingDeletionsResult is a swagger-friendly concrete type for PaginatedResponse[DeletionSummary].
+type PendingDeletionsResult struct {
+	Data       []DeletionSummary `json:"data"`
+	NextCursor *string           `json:"next_cursor"`
+	HasMore    bool              `json:"has_more"`
+}
+
+// RecoveryRequestsResult is a swagger-friendly concrete type for PaginatedResponse[RecoverySummary].
+type RecoveryRequestsResult struct {
+	Data       []RecoverySummary `json:"data"`
+	NextCursor *string           `json:"next_cursor"`
+	HasMore    bool              `json:"has_more"`
+}
+
+// DeadLetterJobsResult is a swagger-friendly concrete type for PaginatedResponse[DeadLetterJob].
+type DeadLetterJobsResult struct {
+	Data       []DeadLetterJob `json:"data"`
+	NextCursor *string         `json:"next_cursor"`
+	HasMore    bool            `json:"has_more"`
 }
 
 // AdminUserDetail represents the detailed view of a user for admin inspection.
@@ -185,7 +228,7 @@ type DeadLetterJob struct {
 	ID           string          `json:"id"`
 	Queue        string          `json:"queue"`
 	JobType      string          `json:"job_type"`
-	Payload      json.RawMessage `json:"payload"`
+	Payload      json.RawMessage `json:"payload" swaggertype:"object"`
 	ErrorMessage string          `json:"error_message"`
 	FailedAt     time.Time       `json:"failed_at"`
 	RetryCount   int32           `json:"retry_count"`
@@ -199,7 +242,7 @@ type AuditLogEntry struct {
 	Action     string          `json:"action"`
 	TargetType string          `json:"target_type"`
 	TargetID   *uuid.UUID      `json:"target_id"`
-	Details    json.RawMessage `json:"details"`
+	Details    json.RawMessage `json:"details" swaggertype:"object"`
 	CreatedAt  time.Time       `json:"created_at"`
 }
 
@@ -229,7 +272,7 @@ type ModerationQueueItem struct {
 	FamilyID    uuid.UUID       `json:"family_id"`
 	Reason      string          `json:"reason"`
 	Status      string          `json:"status"` // "pending", "approved", "rejected"
-	Details     json.RawMessage `json:"details"`
+	Details     json.RawMessage `json:"details" swaggertype:"object"`
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
@@ -248,14 +291,14 @@ type MethodologyConfig struct {
 	Slug        string          `json:"slug"`
 	DisplayName string          `json:"display_name"`
 	Enabled     bool            `json:"enabled"`
-	Settings    json.RawMessage `json:"settings"`
+	Settings    json.RawMessage `json:"settings" swaggertype:"object"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 // UpdateMethodologyInput is the request body for PATCH /admin/methodologies/:slug.
 type UpdateMethodologyInput struct {
 	Enabled  *bool            `json:"enabled"`
-	Settings *json.RawMessage `json:"settings"`
+	Settings *json.RawMessage `json:"settings" swaggertype:"object"`
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

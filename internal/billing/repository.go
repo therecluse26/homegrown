@@ -45,7 +45,7 @@ func (r *PgSubscriptionRepository) FindByFamily(ctx context.Context, scope share
 	var sub BillSubscription
 	err := r.db.WithContext(ctx).Where("family_id = ?", scope.FamilyID()).First(&sub).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+		return nil, ErrSubscriptionNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
@@ -57,7 +57,7 @@ func (r *PgSubscriptionRepository) FindByHyperswitchID(ctx context.Context, hype
 	var sub BillSubscription
 	err := r.db.WithContext(ctx).Where("hyperswitch_subscription_id = ?", hyperswitchSubscriptionID).First(&sub).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+		return nil, ErrSubscriptionNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
@@ -213,7 +213,7 @@ func (r *PgCustomerRepository) FindByFamily(ctx context.Context, familyID uuid.U
 	var customer BillHyperswitchCustomer
 	err := r.db.WithContext(ctx).Where("family_id = ?", familyID).First(&customer).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+		return nil, ErrCustomerNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
@@ -225,7 +225,7 @@ func (r *PgCustomerRepository) FindByHyperswitchID(ctx context.Context, hyperswi
 	var customer BillHyperswitchCustomer
 	err := r.db.WithContext(ctx).Where("hyperswitch_customer_id = ?", hyperswitchCustomerID).First(&customer).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+		return nil, ErrCustomerNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)

@@ -116,6 +116,11 @@ type IamServiceForMethod interface {
 
 	// SetFamilyMethodology persists the family's methodology selection.
 	SetFamilyMethodology(ctx context.Context, scope *shared.FamilyScope, primarySlug MethodologyID, secondarySlugs []MethodologyID) error
+
+	// SetStudentMethodologyOverride persists a student's methodology override.
+	// Pass nil override to clear the override (student inherits family methodology).
+	// Delegates to iam::StudentRepository. [S§4.6]
+	SetStudentMethodologyOverride(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, override *MethodologyID) error
 }
 
 // StudentInfo is the minimal student data needed by method:: for tool resolution.

@@ -951,8 +951,8 @@ type CreateQuestionCommand struct {
 	PublisherID      uuid.UUID       `json:"publisher_id" validate:"required"`
 	QuestionType     string          `json:"question_type" validate:"required"`
 	Content          string          `json:"content" validate:"required,min=1"`
-	MediaAttachments json.RawMessage `json:"media_attachments"`
-	AnswerData       json.RawMessage `json:"answer_data" validate:"required"`
+	MediaAttachments json.RawMessage `json:"media_attachments" swaggertype:"object"`
+	AnswerData       json.RawMessage `json:"answer_data" validate:"required" swaggertype:"object"`
 	SubjectTags      []string        `json:"subject_tags"`
 	MethodologyID    *uuid.UUID      `json:"methodology_id,omitempty"`
 	DifficultyLevel  *int16          `json:"difficulty_level,omitempty"`
@@ -962,8 +962,8 @@ type CreateQuestionCommand struct {
 // UpdateQuestionCommand updates a question.
 type UpdateQuestionCommand struct {
 	Content          *string          `json:"content,omitempty"`
-	MediaAttachments *json.RawMessage `json:"media_attachments,omitempty"`
-	AnswerData       *json.RawMessage `json:"answer_data,omitempty"`
+	MediaAttachments *json.RawMessage `json:"media_attachments,omitempty" swaggertype:"object"`
+	AnswerData       *json.RawMessage `json:"answer_data,omitempty" swaggertype:"object"`
 	SubjectTags      *[]string        `json:"subject_tags,omitempty"`
 	DifficultyLevel  *int16           `json:"difficulty_level,omitempty"`
 	Points           *float64         `json:"points,omitempty"`
@@ -1009,7 +1009,7 @@ type StartQuizSessionCommand struct {
 
 // UpdateQuizSessionCommand saves progress or submits.
 type UpdateQuizSessionCommand struct {
-	Answers json.RawMessage `json:"answers,omitempty"`
+	Answers json.RawMessage `json:"answers,omitempty" swaggertype:"object"`
 	Submit  *bool           `json:"submit,omitempty"`
 }
 
@@ -1125,7 +1125,7 @@ type CreateProjectDefCommand struct {
 	Title              string          `json:"title" validate:"required,min=1,max=500"`
 	Description        *string         `json:"description,omitempty"`
 	SubjectTags        []string        `json:"subject_tags"`
-	MilestoneTemplates json.RawMessage `json:"milestone_templates"`
+	MilestoneTemplates json.RawMessage `json:"milestone_templates" swaggertype:"object"`
 	CallerID           uuid.UUID       `json:"-"`
 }
 
@@ -1134,7 +1134,7 @@ type UpdateProjectDefCommand struct {
 	Title              *string         `json:"title,omitempty" validate:"omitempty,min=1,max=500"`
 	Description        *string         `json:"description,omitempty"`
 	SubjectTags        []string        `json:"subject_tags,omitempty"`
-	MilestoneTemplates json.RawMessage `json:"milestone_templates,omitempty"`
+	MilestoneTemplates json.RawMessage `json:"milestone_templates,omitempty" swaggertype:"object"`
 	CallerID           uuid.UUID       `json:"-"`
 }
 
@@ -1170,9 +1170,9 @@ type StartProjectCommand struct {
 // UpdateProjectProgressCommand updates project progress.
 type UpdateProjectProgressCommand struct {
 	Status      *string         `json:"status,omitempty" validate:"omitempty,oneof=planning in_progress completed"`
-	Milestones  json.RawMessage `json:"milestones,omitempty"`
+	Milestones  json.RawMessage `json:"milestones,omitempty" swaggertype:"object"`
 	Notes       *string         `json:"notes,omitempty"`
-	Attachments json.RawMessage `json:"attachments,omitempty"`
+	Attachments json.RawMessage `json:"attachments,omitempty" swaggertype:"object"`
 }
 
 // --- Grading Scale Commands (Phase 2) -----------------------------------------
@@ -1181,14 +1181,14 @@ type UpdateProjectProgressCommand struct {
 type CreateGradingScaleCommand struct {
 	Name      string          `json:"name" validate:"required,min=1,max=200"`
 	ScaleType string          `json:"scale_type" validate:"required,oneof=letter pass_fail custom"`
-	Grades    json.RawMessage `json:"grades" validate:"required"`
+	Grades    json.RawMessage `json:"grades" validate:"required" swaggertype:"object"`
 	IsDefault bool            `json:"is_default"`
 }
 
 // UpdateGradingScaleCommand updates a grading scale.
 type UpdateGradingScaleCommand struct {
 	Name      *string         `json:"name,omitempty" validate:"omitempty,min=1,max=200"`
-	Grades    json.RawMessage `json:"grades,omitempty"`
+	Grades    json.RawMessage `json:"grades,omitempty" swaggertype:"object"`
 	IsDefault *bool           `json:"is_default,omitempty"`
 }
 
@@ -1315,8 +1315,8 @@ type QuestionResponse struct {
 	PublisherID      uuid.UUID       `json:"publisher_id"`
 	QuestionType     string          `json:"question_type"`
 	Content          string          `json:"content"`
-	MediaAttachments json.RawMessage `json:"media_attachments"`
-	AnswerData       json.RawMessage `json:"answer_data"`
+	MediaAttachments json.RawMessage `json:"media_attachments" swaggertype:"object"`
+	AnswerData       json.RawMessage `json:"answer_data" swaggertype:"object"`
 	SubjectTags      []string        `json:"subject_tags"`
 	MethodologyID    *uuid.UUID      `json:"methodology_id,omitempty"`
 	DifficultyLevel  *int16          `json:"difficulty_level,omitempty"`
@@ -1366,7 +1366,7 @@ type QuizQuestionResponse struct {
 	Points         float64         `json:"points"`
 	QuestionType   string          `json:"question_type"`
 	Content        string          `json:"content"`
-	AnswerData     json.RawMessage `json:"answer_data,omitempty"` // omitted for student view
+	AnswerData     json.RawMessage `json:"answer_data,omitempty" swaggertype:"object"` // omitted for student view
 	AutoScorable   bool            `json:"auto_scorable"`
 }
 
@@ -1382,7 +1382,7 @@ type QuizSessionResponse struct {
 	Score       *float64        `json:"score,omitempty"`
 	MaxScore    *float64        `json:"max_score,omitempty"`
 	Passed      *bool           `json:"passed,omitempty"`
-	Answers     json.RawMessage `json:"answers"`
+	Answers     json.RawMessage `json:"answers" swaggertype:"object"`
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
@@ -1421,7 +1421,7 @@ type SequenceProgressResponse struct {
 	SequenceDefID    uuid.UUID       `json:"sequence_def_id"`
 	CurrentItemIndex int16           `json:"current_item_index"`
 	Status           string          `json:"status"`
-	ItemCompletions  json.RawMessage `json:"item_completions"`
+	ItemCompletions  json.RawMessage `json:"item_completions" swaggertype:"object"`
 	StartedAt        *time.Time      `json:"started_at,omitempty"`
 	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
@@ -1497,7 +1497,7 @@ type ProjectDefResponse struct {
 	Title              string          `json:"title"`
 	Description        *string         `json:"description,omitempty"`
 	SubjectTags        []string        `json:"subject_tags"`
-	MilestoneTemplates json.RawMessage `json:"milestone_templates"`
+	MilestoneTemplates json.RawMessage `json:"milestone_templates" swaggertype:"object"`
 	CreatedAt          time.Time       `json:"created_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`
 }
@@ -1661,11 +1661,11 @@ type ProjectProgressResponse struct {
 	StudentID    uuid.UUID       `json:"student_id"`
 	ProjectDefID uuid.UUID       `json:"project_def_id"`
 	Status       string          `json:"status"`
-	Milestones   json.RawMessage `json:"milestones"`
+	Milestones   json.RawMessage `json:"milestones" swaggertype:"object"`
 	StartedAt    *time.Time      `json:"started_at,omitempty"`
 	CompletedAt  *time.Time      `json:"completed_at,omitempty"`
 	Notes        *string         `json:"notes,omitempty"`
-	Attachments  json.RawMessage `json:"attachments"`
+	Attachments  json.RawMessage `json:"attachments" swaggertype:"object"`
 	CreatedAt    time.Time       `json:"created_at"`
 }
 
@@ -1674,7 +1674,7 @@ type GradingScaleResponse struct {
 	ID        uuid.UUID       `json:"id"`
 	Name      string          `json:"name"`
 	ScaleType string          `json:"scale_type"`
-	Grades    json.RawMessage `json:"grades"`
+	Grades    json.RawMessage `json:"grades" swaggertype:"object"`
 	IsDefault bool            `json:"is_default"`
 	CreatedAt time.Time       `json:"created_at"`
 }

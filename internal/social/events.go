@@ -21,7 +21,7 @@ type PostCreated struct {
 	FamilyID    uuid.UUID       `json:"family_id"`
 	PostType    string          `json:"post_type"`
 	Content     *string         `json:"content,omitempty"`
-	Attachments json.RawMessage `json:"attachments,omitempty"`
+	Attachments json.RawMessage `json:"attachments,omitempty" swaggertype:"object"`
 	GroupID     *uuid.UUID      `json:"group_id,omitempty"`
 }
 

@@ -243,7 +243,9 @@ export function CreatorVerification() {
                 type="text"
                 value={taxId}
                 onChange={(e) => setTaxId(e.target.value)}
-                placeholder="XXX-XX-XXXX"
+                placeholder={intl.formatMessage({
+                  id: "marketplace.creator.verification.form.taxId.placeholder",
+                })}
                 required
                 autoComplete="off"
                 aria-describedby="tax-id-hint"

@@ -18,6 +18,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/method"
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/homegrown-academy/homegrown-academy/internal/notify"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/plan"
@@ -118,14 +119,19 @@ func NewApp(state *AppState) *echo.Echo {
 	e.Validator = &customValidator{v: validator.New()}
 
 	// ─── Global Middleware (outermost applied first) ──────────────────
-	// Order: RequestLogger → SecurityHeaders → CORS → (rate limit added per-group/route)
+	// Order: Metrics → RequestLogger → SecurityHeaders → CORS → CSRF → (rate limit added per-group/route)
+	e.Use(middleware.Metrics())
 	e.Use(echomw.RequestLoggerWithConfig(requestLoggerConfig()))
 	e.Use(middleware.SecurityHeaders())
 	e.Use(echomw.CORSWithConfig(corsConfig(state.Config)))
+	e.Use(middleware.CSRF()) // Double-submit cookie CSRF protection [CRIT-2]
 
 	// ─── Public Routes ────────────────────────────────────────────────
 	// GET /health — unauthenticated, used by ALB health checks and UptimeRobot. [§5.4]
 	e.GET("/health", healthHandler(state))
+	// GET /metrics — unauthenticated Prometheus scrape endpoint. [P2-1]
+	// Exposes default Go runtime metrics and HTTP request count/duration histograms.
+	e.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
 
 	// ─── Webhook Routes ───────────────────────────────────────────────
 	// Domain webhooks are registered here with rate limiting (10 req/60s per IP).
@@ -144,12 +150,17 @@ func NewApp(state *AppState) *echo.Echo {
 	pub := e.Group("/v1")
 	pub.Use(middleware.RateLimit(state, 100, 60*time.Second))
 
+	// ─── Student Session Routes (tighter rate limit) ─────────────────
+	// Student token validation is separate: bearer token auth, stricter rate limit. [P2-6]
+	studentPub := e.Group("/v1")
+	studentPub.Use(middleware.RateLimit(state, 10, 60*time.Second)) // 10 req/60s per IP
+
 	// ─── Domain Route Registration ────────────────────────────────────
-	iam.NewHandler(state.IAM, state.Config.AuthWebhookSecret).Register(auth, hooks)
+	iam.NewHandler(state.IAM, state.Config.AuthWebhookSecret).RegisterWithStudentSession(auth, hooks, studentPub)
 	method.NewHandler(state.Method).Register(pub, auth)
 	discover.NewHandler(state.Discover).Register(pub, auth)
 	onboard.NewHandler(state.Onboard).Register(auth)
-	social.NewHandler(state.Social, state.PubSub, state.Config.CORSAllowedOrigins).Register(auth)
+	social.NewHandler(state.Social, state.PubSub, state.Config.CORSAllowedOrigins, state.Auth).Register(auth)
 	learn.NewHandler(state.Learn).Register(auth)
 	media.NewHandler(state.Media).Register(auth)
 	mkt.NewHandler(state.Marketplace, state.Cache).Register(auth, hooks, pub)
@@ -172,24 +183,58 @@ func NewApp(state *AppState) *echo.Echo {
 
 // HealthResponse is the JSON response for GET /health.
 type HealthResponse struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
+	Status  string            `json:"status"`
+	Version string            `json:"version"`
+	Checks  map[string]string `json:"checks,omitempty"` // per-dependency health status [P2-2]
 }
 
 // healthHandler returns the health check handler.
-// No database connectivity check — DB is validated at startup. [§5.4]
+// Verifies DB, Redis, and Kratos connectivity. Returns 503 if any dependency is unhealthy. [P2-2]
 //
 // HealthCheck godoc
 // @Summary Health check
 // @Tags health
 // @Produce json
 // @Success 200 {object} HealthResponse
+// @Failure 503 {object} HealthResponse
 // @Router /health [get]
 func healthHandler(state *AppState) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		return c.JSON(http.StatusOK, HealthResponse{
-			Status:  "ok",
+		ctx := c.Request().Context()
+		checks := make(map[string]string)
+		healthy := true
+
+		// Check database connectivity
+		sqlDB, err := state.DB.WithContext(ctx).DB()
+		if err != nil {
+			checks["database"] = "error: " + err.Error()
+			healthy = false
+		} else if err := sqlDB.PingContext(ctx); err != nil {
+			checks["database"] = "error: " + err.Error()
+			healthy = false
+		} else {
+			checks["database"] = "ok"
+		}
+
+		// Check Redis connectivity
+		if err := state.Cache.Ping(ctx); err != nil {
+			checks["redis"] = "error: " + err.Error()
+			healthy = false
+		} else {
+			checks["redis"] = "ok"
+		}
+
+		status := "ok"
+		statusCode := http.StatusOK
+		if !healthy {
+			status = "degraded"
+			statusCode = http.StatusServiceUnavailable
+		}
+
+		return c.JSON(statusCode, HealthResponse{
+			Status:  status,
 			Version: state.Version,
+			Checks:  checks,
 		})
 	}
 }

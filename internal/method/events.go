@@ -20,6 +20,17 @@ type FamilyMethodologyChanged struct {
 
 func (FamilyMethodologyChanged) EventName() string { return "method.FamilyMethodologyChanged" }
 
+// StudentMethodologyChanged is published when a student's methodology override is set or cleared.
+// Subscribers:
+//   - learn:: recalculates the student's active tool set
+type StudentMethodologyChanged struct {
+	FamilyID                uuid.UUID      `json:"family_id"`
+	StudentID               uuid.UUID      `json:"student_id"`
+	MethodologyOverrideSlug *MethodologyID `json:"methodology_override_slug"` // nil means override cleared
+}
+
+func (StudentMethodologyChanged) EventName() string { return "method.StudentMethodologyChanged" }
+
 // MethodologyConfigUpdated is published when admin changes methodology definitions
 // or tool activations (Phase 3+). All domains invalidate methodology config caches.
 type MethodologyConfigUpdated struct{}

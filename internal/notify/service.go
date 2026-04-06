@@ -481,10 +481,17 @@ func (s *NotificationServiceImpl) HandleMessageSent(ctx context.Context, event M
 }
 
 func (s *NotificationServiceImpl) HandleEventCancelled(ctx context.Context, event EventCancelledEvent) error {
-	// TODO(phase2): Use emailAdapter.SendBatch() for multi-family email delivery
-	// instead of per-family CreateNotification email paths. [08-notify §17.4]
+	if len(event.GoingFamilyIDs) == 0 {
+		return nil
+	}
+
+	templateAlias, hasTemplate := TypeToTemplateAlias[TypeEventCancelled]
+
+	// Collect email messages for batch delivery instead of sending one at a time.
+	var emailBatch []BatchEmailMessage
+
 	for _, familyID := range event.GoingFamilyIDs {
-		err := s.CreateNotification(ctx, CreateNotificationCommand{
+		cmd := CreateNotificationCommand{
 			FamilyID:         familyID,
 			NotificationType: TypeEventCancelled,
 			Title:            fmt.Sprintf("'%s' has been cancelled", event.Title),
@@ -494,12 +501,166 @@ func (s *NotificationServiceImpl) HandleEventCancelled(ctx context.Context, even
 				"source_event_id": event.EventID.String(),
 				"event_title":     event.Title,
 			},
-		})
+		}
+
+		// ─── In-App Path (per-family) ───────────────────────────────
+		if err := s.createInAppNotification(ctx, cmd); err != nil {
+			slog.Error("event cancelled in-app notification failed", "family_id", familyID, "error", err)
+			continue
+		}
+
+		// ─── Email Path (collect for batch) ─────────────────────────
+		if !hasTemplate {
+			continue
+		}
+		emailMsg, err := s.buildEmailMessage(ctx, cmd, templateAlias)
 		if err != nil {
-			slog.Error("event cancelled notification failed", "family_id", familyID, "error", err)
+			slog.Error("event cancelled email build failed", "family_id", familyID, "error", err)
+			continue
+		}
+		if emailMsg != nil {
+			emailBatch = append(emailBatch, *emailMsg)
 		}
 	}
+
+	// Enqueue batch emails in chunks of MaxBatchEmailSize. [08-notify §7.2]
+	s.enqueueBatchEmails(ctx, emailBatch)
 	return nil
+}
+
+// createInAppNotification handles the in-app notification path: idempotency check,
+// preference check, DB insert, and WebSocket push. Separated from email to support
+// batch email delivery for broadcast notifications. [08-notify §17.4]
+func (s *NotificationServiceImpl) createInAppNotification(ctx context.Context, cmd CreateNotificationCommand) error {
+	category, ok := TypeToCategory[cmd.NotificationType]
+	if !ok {
+		return &NotifyError{Err: ErrInvalidNotificationType}
+	}
+
+	isCritical := IsSystemCritical(cmd.NotificationType)
+
+	// Idempotency check via source_event_id in metadata.
+	if sourceEventID, ok := cmd.Metadata["source_event_id"]; ok {
+		if sid, ok := sourceEventID.(string); ok && sid != "" {
+			exists, err := s.notificationRepo.ExistsBySourceEvent(ctx, cmd.FamilyID, cmd.NotificationType, sid)
+			if err != nil {
+				slog.Error("idempotency check failed", "error", err)
+			} else if exists {
+				return nil // Duplicate — silently skip.
+			}
+		}
+	}
+
+	inAppEnabled := isCritical
+	if !isCritical {
+		enabled, err := s.preferenceRepo.IsEnabled(ctx, cmd.FamilyID, cmd.NotificationType, ChannelInApp)
+		if err != nil {
+			slog.Error("preference check failed (in_app)", "error", err)
+			enabled = true
+		}
+		inAppEnabled = enabled
+	}
+
+	if !inAppEnabled {
+		return nil
+	}
+
+	metadataJSON, err := json.Marshal(cmd.Metadata)
+	if err != nil {
+		return &NotifyError{Err: fmt.Errorf("marshal metadata: %w", err)}
+	}
+
+	created, err := s.notificationRepo.Create(ctx, CreateNotification{
+		FamilyID:         cmd.FamilyID,
+		NotificationType: cmd.NotificationType,
+		Category:         category,
+		Title:            cmd.Title,
+		Body:             cmd.Body,
+		ActionURL:        cmd.ActionURL,
+		Metadata:         metadataJSON,
+	})
+	if err != nil {
+		return &NotifyError{Err: fmt.Errorf("create notification: %w", err)}
+	}
+
+	// WebSocket push via Redis pub/sub. [08-notify §11]
+	resp := notificationToResponse(*created)
+	frame := WebSocketFrame{MsgType: "notification", Data: resp}
+	frameJSON, err := json.Marshal(frame)
+	if err != nil {
+		slog.Error("marshal websocket frame", "error", err)
+	} else {
+		channel := fmt.Sprintf("notifications:%s", cmd.FamilyID)
+		if pubErr := s.pubsub.Publish(ctx, channel, frameJSON); pubErr != nil {
+			slog.Error("websocket publish failed", "error", pubErr)
+		}
+	}
+
+	return nil
+}
+
+// buildEmailMessage builds a BatchEmailMessage for a notification command,
+// checking email preferences and resolving the family's primary email.
+// Returns nil if email is disabled or unavailable.
+func (s *NotificationServiceImpl) buildEmailMessage(ctx context.Context, cmd CreateNotificationCommand, templateAlias string) (*BatchEmailMessage, error) {
+	isCritical := IsSystemCritical(cmd.NotificationType)
+
+	emailEnabled := isCritical
+	if !isCritical {
+		enabled, err := s.preferenceRepo.IsEnabled(ctx, cmd.FamilyID, cmd.NotificationType, ChannelEmail)
+		if err != nil {
+			slog.Error("preference check failed (email)", "error", err)
+			enabled = true
+		}
+		emailEnabled = enabled
+	}
+	if !emailEnabled {
+		return nil, nil
+	}
+
+	email, _, emailErr := s.iamService.GetFamilyPrimaryEmail(ctx, cmd.FamilyID)
+	if emailErr != nil {
+		return nil, fmt.Errorf("email lookup failed for family %s: %w", cmd.FamilyID, emailErr)
+	}
+	if email == "" {
+		return nil, nil
+	}
+
+	templateModel := make(map[string]any)
+	maps.Copy(templateModel, cmd.Metadata)
+
+	// Add unsubscribe URL for CAN-SPAM compliance. [08-notify §13]
+	unsubToken, tokenErr := s.GenerateUnsubscribeToken(cmd.FamilyID, cmd.NotificationType, ChannelEmail)
+	if tokenErr != nil {
+		slog.Error("generate unsubscribe token", "error", tokenErr)
+	} else {
+		templateModel["unsubscribe_url"] = fmt.Sprintf("/v1/notifications/unsubscribe?token=%s", unsubToken)
+	}
+
+	return &BatchEmailMessage{
+		To:            email,
+		TemplateAlias: templateAlias,
+		TemplateModel: templateModel,
+	}, nil
+}
+
+// enqueueBatchEmails enqueues email messages in chunks of MaxBatchEmailSize.
+// Each chunk is a single SendBatchEmailTaskPayload job. [08-notify §7.2]
+func (s *NotificationServiceImpl) enqueueBatchEmails(ctx context.Context, messages []BatchEmailMessage) {
+	for i := 0; i < len(messages); i += MaxBatchEmailSize {
+		end := i + MaxBatchEmailSize
+		if end > len(messages) {
+			end = len(messages)
+		}
+		chunk := messages[i:end]
+		taskPayload := SendBatchEmailTaskPayload{Messages: chunk}
+		if err := s.jobEnqueuer.Enqueue(ctx, taskPayload); err != nil {
+			slog.Error("batch email task enqueue failed",
+				"batch_size", len(chunk),
+				"error", err,
+			)
+		}
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

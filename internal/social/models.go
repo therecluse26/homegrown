@@ -340,7 +340,7 @@ func (m *EventRSVP) BeforeCreate(_ *gorm.DB) error {
 type UpdateProfileCommand struct {
 	Bio             *string          `json:"bio"              validate:"omitempty,max=2000"`
 	ProfilePhotoURL *string          `json:"profile_photo_url" validate:"omitempty,url"`
-	PrivacySettings *json.RawMessage `json:"privacy_settings"`
+	PrivacySettings *json.RawMessage `json:"privacy_settings" swaggertype:"object"`
 	LocationVisible *bool            `json:"location_visible"`
 }
 
@@ -348,7 +348,7 @@ type UpdateProfileCommand struct {
 type CreatePostCommand struct {
 	PostType    string          `json:"post_type"    validate:"required,oneof=text photo milestone event_share marketplace_review resource_share"`
 	Content     *string         `json:"content"`
-	Attachments json.RawMessage `json:"attachments"`
+	Attachments json.RawMessage `json:"attachments" swaggertype:"object"`
 	GroupID     *uuid.UUID      `json:"group_id"`
 }
 
@@ -356,7 +356,7 @@ type CreatePostCommand struct {
 // Author only. Sets is_edited = true. Pointer fields allow partial updates.
 type UpdatePostCommand struct {
 	Content     *string          `json:"content"`
-	Attachments *json.RawMessage `json:"attachments"`
+	Attachments *json.RawMessage `json:"attachments" swaggertype:"object"`
 }
 
 // CreateCommentCommand is the request body for POST /v1/social/posts/:id/comments. [05-social §8.1]
@@ -374,7 +374,7 @@ type CreateConversationCommand struct {
 // SendMessageCommand is the request body for POST /v1/social/conversations/:id/messages. [05-social §8.1]
 type SendMessageCommand struct {
 	Content     string          `json:"content"     validate:"required,min=1"`
-	Attachments json.RawMessage `json:"attachments"`
+	Attachments json.RawMessage `json:"attachments" swaggertype:"object"`
 }
 
 // CreateGroupCommand is the request body for POST /v1/social/groups. [05-social §8.1]
@@ -447,7 +447,7 @@ type ProfileResponse struct {
 	MethodologyNames []string               `json:"methodology_names,omitempty"`
 	LocationRegion   *string                `json:"location_region,omitempty"`
 	LocationVisible  *bool                  `json:"location_visible,omitempty"`
-	PrivacySettings  *json.RawMessage       `json:"privacy_settings,omitempty"`
+	PrivacySettings  *json.RawMessage       `json:"privacy_settings,omitempty" swaggertype:"object"`
 	FriendshipStatus *string                `json:"friendship_status,omitempty"`
 	IsFriend         bool                   `json:"is_friend"`
 }
@@ -476,7 +476,7 @@ type PostResponse struct {
 	AuthorPhotoURL *string         `json:"author_photo_url,omitempty"`
 	PostType       string          `json:"post_type"`
 	Content        *string         `json:"content,omitempty"`
-	Attachments    json.RawMessage `json:"attachments"`
+	Attachments    json.RawMessage `json:"attachments" swaggertype:"object"`
 	GroupID        *uuid.UUID      `json:"group_id,omitempty"`
 	GroupName      *string         `json:"group_name,omitempty"`
 	Visibility     string          `json:"visibility"`
@@ -547,7 +547,7 @@ type MessageResponse struct {
 	SenderParentID uuid.UUID       `json:"sender_parent_id"`
 	SenderName     string          `json:"sender_name"`
 	Content        string          `json:"content"`
-	Attachments    json.RawMessage `json:"attachments"`
+	Attachments    json.RawMessage `json:"attachments" swaggertype:"object"`
 	CreatedAt      time.Time       `json:"created_at"`
 }
 

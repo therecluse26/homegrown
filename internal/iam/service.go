@@ -624,11 +624,12 @@ func (s *IamServiceImpl) AcceptInvite(ctx context.Context, auth *shared.AuthCont
 			return shared.ErrDatabase(err)
 		}
 
+		// Compare all entries to avoid leaking match position via timing. [P3-6]
 		var matched *CoParentInviteModel
 		for i := range models {
 			if err := bcrypt.CompareHashAndPassword([]byte(models[i].TokenHash), []byte(token)); err == nil {
 				matched = &models[i]
-				break
+				// Continue iterating all entries — constant-time over the set.
 			}
 		}
 		if matched == nil {
@@ -912,11 +913,12 @@ func (s *IamServiceImpl) GetStudentSessionMe(ctx context.Context, token string) 
 			return shared.ErrDatabase(err)
 		}
 
+		// Compare all entries to avoid leaking match position via timing. [P3-6]
 		var matched *StudentSessionModel
 		for i := range models {
 			if err := bcrypt.CompareHashAndPassword([]byte(models[i].TokenHash), []byte(token)); err == nil {
 				matched = &models[i]
-				break
+				// Continue iterating all entries — constant-time over the set.
 			}
 		}
 		if matched == nil {

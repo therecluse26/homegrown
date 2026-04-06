@@ -17,7 +17,10 @@ var (
 	ErrSubscriptionNotPaused     = errors.New("subscription is not paused")
 	ErrInvalidBillingInterval    = errors.New("invalid billing interval")
 
-	// ─── Payment Method Errors ──────────────────────────────────────────
+	// ─── Customer Errors ───────────────────────────────────────────────
+	ErrCustomerNotFound = errors.New("customer not found")
+
+	// ��── Payment Method Errors ──────────────────────────────────────────
 	ErrPaymentMethodNotFound         = errors.New("payment method not found")
 	ErrCannotRemoveLastPaymentMethod = errors.New("cannot remove last payment method with active subscription")
 
@@ -58,6 +61,8 @@ func (e *BillingError) toAppError() *shared.AppError {
 		return &shared.AppError{Code: "subscription_not_paused", Message: "Subscription is not currently paused", StatusCode: http.StatusConflict}
 	case errors.Is(e.Err, ErrInvalidBillingInterval):
 		return &shared.AppError{Code: "invalid_billing_interval", Message: "Invalid billing interval — must be 'monthly' or 'annual'", StatusCode: http.StatusUnprocessableEntity}
+	case errors.Is(e.Err, ErrCustomerNotFound):
+		return &shared.AppError{Code: "customer_not_found", Message: "Customer not found", StatusCode: http.StatusNotFound}
 	case errors.Is(e.Err, ErrPaymentMethodNotFound):
 		return &shared.AppError{Code: "payment_method_not_found", Message: "Payment method not found", StatusCode: http.StatusNotFound}
 	case errors.Is(e.Err, ErrCannotRemoveLastPaymentMethod):

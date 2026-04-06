@@ -790,6 +790,39 @@ type UpdateReview struct {
 	IsAnonymous *bool
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Swagger-friendly paginated response aliases
+// (Go generics like PaginatedResponse[T] are not supported by swag.)
+// ════════════════════════════════════════════════════���══════════════════════════
+
+// CreatorListingsResult is a swagger-friendly type for PaginatedResponse[ListingDetailResponse].
+type CreatorListingsResult struct {
+	Data       []ListingDetailResponse `json:"data"`
+	NextCursor *string                 `json:"next_cursor"`
+	HasMore    bool                    `json:"has_more"`
+}
+
+// BrowseListingsResult is a swagger-friendly type for PaginatedResponse[ListingBrowseResponse].
+type BrowseListingsResult struct {
+	Data       []ListingBrowseResponse `json:"data"`
+	NextCursor *string                 `json:"next_cursor"`
+	HasMore    bool                    `json:"has_more"`
+}
+
+// PurchaseListResult is a swagger-friendly type for PaginatedResponse[PurchaseResponse].
+type PurchaseListResult struct {
+	Data       []PurchaseResponse `json:"data"`
+	NextCursor *string            `json:"next_cursor"`
+	HasMore    bool               `json:"has_more"`
+}
+
+// ReviewListResult is a swagger-friendly type for PaginatedResponse[ReviewResponse].
+type ReviewListResult struct {
+	Data       []ReviewResponse `json:"data"`
+	NextCursor *string          `json:"next_cursor"`
+	HasMore    bool             `json:"has_more"`
+}
+
 // ValidContentTypes is the set of valid content types for listings. [S§9.2.1]
 var ValidContentTypes = map[string]bool{
 	"curriculum":       true,

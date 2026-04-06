@@ -277,7 +277,7 @@ func TestService_RegisterCreator_AlreadyExists_ConflictError(t *testing.T) {
 func TestService_GetListing_NotFound_ReturnsNotFound(t *testing.T) {
 	listingRepo := &mockListingRepo{}
 	listingRepo.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).
-		Return(nil, nil) // nil, nil = not found
+		Return(nil, ErrListingNotFound)
 
 	svc := newMktService(mktServiceDeps{
 		creators:     &mockCreatorRepo{},
@@ -289,9 +289,7 @@ func TestService_GetListing_NotFound_ReturnsNotFound(t *testing.T) {
 	_, err := svc.GetListing(context.Background(), uuid.New())
 
 	require.Error(t, err)
-	var appErr *shared.AppError
-	require.True(t, errors.As(err, &appErr))
-	assert.Equal(t, 404, appErr.StatusCode)
+	assert.True(t, errors.Is(err, ErrListingNotFound))
 	listingRepo.AssertExpectations(t)
 }
 

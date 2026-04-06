@@ -11,9 +11,10 @@ import (
 // The adapter pattern allows method:: to depend on iam:: without importing the iam package
 // directly. Wired in cmd/server/main.go. [ARCH §4.2]
 type iamAdapter struct {
-	getFamilyMethodologyIDs func(ctx context.Context, scope *shared.FamilyScope) (MethodologyID, []MethodologyID, error)
-	getStudent              func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*StudentInfo, error)
-	setFamilyMethodology    func(ctx context.Context, scope *shared.FamilyScope, primarySlug MethodologyID, secondarySlugs []MethodologyID) error
+	getFamilyMethodologyIDs       func(ctx context.Context, scope *shared.FamilyScope) (MethodologyID, []MethodologyID, error)
+	getStudent                    func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*StudentInfo, error)
+	setFamilyMethodology          func(ctx context.Context, scope *shared.FamilyScope, primarySlug MethodologyID, secondarySlugs []MethodologyID) error
+	setStudentMethodologyOverride func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, override *MethodologyID) error
 }
 
 func (a *iamAdapter) GetFamilyMethodologyIDs(ctx context.Context, scope *shared.FamilyScope) (MethodologyID, []MethodologyID, error) {
@@ -28,16 +29,22 @@ func (a *iamAdapter) SetFamilyMethodology(ctx context.Context, scope *shared.Fam
 	return a.setFamilyMethodology(ctx, scope, primarySlug, secondarySlugs)
 }
 
+func (a *iamAdapter) SetStudentMethodologyOverride(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, override *MethodologyID) error {
+	return a.setStudentMethodologyOverride(ctx, scope, studentID, override)
+}
+
 // NewIamAdapter creates an IamServiceForMethod adapter from raw functions.
 // This is the wiring point used in cmd/server/main.go.
 func NewIamAdapter(
 	getFamilyMethodologyIDs func(ctx context.Context, scope *shared.FamilyScope) (MethodologyID, []MethodologyID, error),
 	getStudent func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*StudentInfo, error),
 	setFamilyMethodology func(ctx context.Context, scope *shared.FamilyScope, primarySlug MethodologyID, secondarySlugs []MethodologyID) error,
+	setStudentMethodologyOverride func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, override *MethodologyID) error,
 ) IamServiceForMethod {
 	return &iamAdapter{
-		getFamilyMethodologyIDs: getFamilyMethodologyIDs,
-		getStudent:              getStudent,
-		setFamilyMethodology:    setFamilyMethodology,
+		getFamilyMethodologyIDs:       getFamilyMethodologyIDs,
+		getStudent:                    getStudent,
+		setFamilyMethodology:          setFamilyMethodology,
+		setStudentMethodologyOverride: setStudentMethodologyOverride,
 	}
 }

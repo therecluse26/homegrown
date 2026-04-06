@@ -225,6 +225,13 @@ func LoadConfig() (*AppConfig, error) {
 	}
 	billingWebhookSecret := envOrDefault("BILLING_WEBHOOK_SECRET", "")
 
+	// Validate critical secrets at startup in non-development environments. [P3-8]
+	if env != EnvironmentDevelopment {
+		if billingWebhookSecret == "" {
+			slog.Warn("BILLING_WEBHOOK_SECRET not set — billing webhooks will fail signature verification")
+		}
+	}
+
 	// Optional object storage config (omit to use noop adapter)
 	objectStorageEndpoint := envOrDefault("OBJECT_STORAGE_ENDPOINT", "")
 	objectStorageRegion := envOrDefault("OBJECT_STORAGE_REGION", "auto")
@@ -233,6 +240,9 @@ func LoadConfig() (*AppConfig, error) {
 	objectStorageSecretAccessKey := envOrDefault("OBJECT_STORAGE_SECRET_ACCESS_KEY", "")
 	objectStoragePublicURL := os.Getenv("OBJECT_STORAGE_PUBLIC_URL")
 	if objectStoragePublicURL == "" {
+		if env == EnvironmentProduction {
+			return nil, fmt.Errorf("required environment variable OBJECT_STORAGE_PUBLIC_URL is not set") //nolint:goerr113
+		}
 		slog.Warn("OBJECT_STORAGE_PUBLIC_URL not set; media URLs will be relative — set this env var in production")
 		objectStoragePublicURL = "https://media.localhost"
 	}
@@ -241,6 +251,9 @@ func LoadConfig() (*AppConfig, error) {
 	postmarkServerToken := envOrDefault("POSTMARK_SERVER_TOKEN", "")
 	unsubscribeSecret := os.Getenv("UNSUBSCRIBE_SECRET")
 	if unsubscribeSecret == "" {
+		if env == EnvironmentProduction {
+			return nil, fmt.Errorf("required environment variable UNSUBSCRIBE_SECRET is not set") //nolint:goerr113
+		}
 		slog.Warn("UNSUBSCRIBE_SECRET not set; email unsubscribe tokens will fail — set this env var in production")
 	}
 

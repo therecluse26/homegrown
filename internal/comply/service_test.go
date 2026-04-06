@@ -48,7 +48,7 @@ func TestUpsertFamilyConfig_CreatesNewConfig(t *testing.T) {
 			if code == "TX" {
 				return &ComplyStateConfig{StateCode: "TX", StateName: "Texas"}, nil
 			}
-			return nil, nil
+			return nil, ErrStateConfigNotFound
 		},
 	}
 	familyRepo := &stubFamilyConfigRepo{
@@ -86,7 +86,7 @@ func TestUpsertFamilyConfig_RejectsInvalidStateCode(t *testing.T) {
 	scope := testScope()
 	stateRepo := &stubStateConfigRepo{
 		findByStateCodeFn: func(_ context.Context, _ string) (*ComplyStateConfig, error) {
-			return nil, nil // not found
+			return nil, ErrStateConfigNotFound
 		},
 	}
 	svc := newTestService(stateRepo, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -173,7 +173,7 @@ func TestUpsertFamilyConfig_ValidatesCustomScheduleID(t *testing.T) {
 	}
 	schedRepo := &stubScheduleRepo{
 		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyCustomSchedule, error) {
-			return nil, nil // not found
+			return nil, ErrScheduleNotFound
 		},
 	}
 	svc := newTestService(stateRepo, &stubFamilyConfigRepo{}, schedRepo, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -195,7 +195,7 @@ func TestGetFamilyConfig_ReturnsNilForMissingConfig(t *testing.T) {
 	scope := testScope()
 	familyRepo := &stubFamilyConfigRepo{
 		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
-			return nil, nil
+			return nil, ErrFamilyConfigNotFound
 		},
 	}
 	svc := newTestService(&stubStateConfigRepo{}, familyRepo, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -268,7 +268,7 @@ func TestGetStateConfig_ReturnsConfigForValidCode(t *testing.T) {
 			if code == "TX" {
 				return &ComplyStateConfig{StateCode: "TX", StateName: "Texas", RegulationLevel: "low"}, nil
 			}
-			return nil, nil
+			return nil, ErrStateConfigNotFound
 		},
 	}
 	svc := newTestService(stateRepo, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -285,7 +285,7 @@ func TestGetStateConfig_ReturnsConfigForValidCode(t *testing.T) {
 func TestGetStateConfig_ReturnsNotFoundForUnknown(t *testing.T) {
 	stateRepo := &stubStateConfigRepo{
 		findByStateCodeFn: func(_ context.Context, _ string) (*ComplyStateConfig, error) {
-			return nil, nil
+			return nil, ErrStateConfigNotFound
 		},
 	}
 	svc := newTestService(stateRepo, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -369,7 +369,7 @@ func TestUpdateSchedule_UpdatesExisting(t *testing.T) {
 			if id == schedID {
 				return &ComplyCustomSchedule{ID: schedID, Name: "Old Name"}, nil
 			}
-			return nil, nil
+			return nil, ErrScheduleNotFound
 		},
 		updateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, updates UpdateScheduleRow) (*ComplyCustomSchedule, error) {
 			return &ComplyCustomSchedule{ID: schedID, Name: *updates.Name}, nil
@@ -390,7 +390,7 @@ func TestUpdateSchedule_ReturnsNotFoundForNonExistent(t *testing.T) {
 	scope := testScope()
 	schedRepo := &stubScheduleRepo{
 		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyCustomSchedule, error) {
-			return nil, nil
+			return nil, ErrScheduleNotFound
 		},
 	}
 	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, schedRepo, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -416,7 +416,7 @@ func TestDeleteSchedule_DeletesScheduleNotInUse(t *testing.T) {
 	}
 	familyRepo := &stubFamilyConfigRepo{
 		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
-			return nil, nil // no config → schedule not in use
+			return nil, ErrFamilyConfigNotFound // no config → schedule not in use
 		},
 	}
 	svc := newTestService(&stubStateConfigRepo{}, familyRepo, schedRepo, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, &stubIamService{}, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -699,7 +699,7 @@ func TestUpdateAttendance_UpdatesExistingRecord(t *testing.T) {
 			if id == attID {
 				return &ComplyAttendance{ID: attID, StudentID: studentID, Status: "present_full"}, nil
 			}
-			return nil, nil
+			return nil, ErrAttendanceNotFound
 		},
 		updateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, updates UpdateAttendanceRow) (*ComplyAttendance, error) {
 			return &ComplyAttendance{ID: attID, StudentID: studentID, Status: *updates.Status}, nil
@@ -727,7 +727,7 @@ func TestUpdateAttendance_ReturnsNotFound(t *testing.T) {
 	}
 	attRepo := &stubAttendanceRepo{
 		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyAttendance, error) {
-			return nil, nil
+			return nil, ErrAttendanceNotFound
 		},
 	}
 	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, attRepo, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -822,7 +822,7 @@ func TestGetAttendanceSummary_ReturnsCorrectCounts(t *testing.T) {
 	}
 	familyRepo := &stubFamilyConfigRepo{
 		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
-			return nil, nil // no config
+			return nil, ErrFamilyConfigNotFound // no config
 		},
 	}
 	svc := newTestService(&stubStateConfigRepo{}, familyRepo, &stubScheduleRepo{}, attRepo, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -1001,7 +1001,7 @@ func TestUpdateAssessment_UpdatesExisting(t *testing.T) {
 			if id == assessID {
 				return &ComplyAssessmentRecord{ID: assessID, StudentID: studentID}, nil
 			}
-			return nil, nil
+			return nil, ErrAssessmentNotFound
 		},
 		updateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, updates UpdateAssessmentRow) (*ComplyAssessmentRecord, error) {
 			return &ComplyAssessmentRecord{ID: assessID, StudentID: studentID, Title: *updates.Title}, nil
@@ -1029,7 +1029,7 @@ func TestUpdateAssessment_ReturnsNotFound(t *testing.T) {
 	}
 	assessRepo := &stubAssessmentRepo{
 		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyAssessmentRecord, error) {
-			return nil, nil
+			return nil, ErrAssessmentNotFound
 		},
 	}
 	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, assessRepo, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -1560,7 +1560,7 @@ func TestGetPortfolio_ReturnsNotFound(t *testing.T) {
 	}
 	portfolioRepo := &stubPortfolioRepo{
 		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyPortfolio, error) {
-			return nil, nil
+			return nil, ErrPortfolioNotFound
 		},
 	}
 	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, portfolioRepo, &stubPortfolioItemRepo{}, &stubTranscriptRepo{}, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
@@ -1697,7 +1697,7 @@ func TestHandleActivityLogged_CreatesAutoAttendance(t *testing.T) {
 	created := false
 	attRepo := &stubAttendanceRepo{
 		findByStudentAndDateFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope, _ time.Time) (*ComplyAttendance, error) {
-			return nil, nil // no existing record
+			return nil, ErrAttendanceNotFound // no existing record
 		},
 		upsertFn: func(_ context.Context, _ shared.FamilyScope, input UpsertAttendanceRow) (*ComplyAttendance, error) {
 			if !input.IsAuto {
@@ -1865,7 +1865,7 @@ func TestGetDashboard_ReturnsNullConfigWhenUnconfigured(t *testing.T) {
 	scope := testScope()
 	familyRepo := &stubFamilyConfigRepo{
 		findByFamilyFn: func(_ context.Context, _ shared.FamilyScope) (*ComplyFamilyConfig, error) {
-			return nil, nil
+			return nil, ErrFamilyConfigNotFound
 		},
 	}
 	iamSvc := &stubIamService{}
@@ -1978,7 +1978,7 @@ func TestGenerateTranscript_TransitionsToGenerating(t *testing.T) {
 					Status: string(PortfolioStatusConfiguring),
 				}, nil
 			}
-			return nil, nil
+			return nil, ErrTranscriptNotFound
 		},
 		updateStatusFn: func(_ context.Context, _ uuid.UUID, status string, _ *uuid.UUID, _ *float64, _ *float64, _ *string) (*ComplyTranscript, error) {
 			return &ComplyTranscript{

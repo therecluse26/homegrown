@@ -44,6 +44,8 @@ var (
 
 // ─── Subject Taxonomy Errors ────────────────────────────────────────────────
 
+var ErrTaxonomyNotFound = errors.New("taxonomy node not found")
+
 // ErrInvalidSubjectTag indicates an invalid subject tag.
 type ErrInvalidSubjectTag struct {
 	Tag string
@@ -54,6 +56,10 @@ func (e *ErrInvalidSubjectTag) Error() string {
 }
 
 var ErrDuplicateCustomSubject = errors.New("duplicate custom subject")
+
+// ─── Progress Errors ────────────────────────────────────────────────────────
+
+var ErrSnapshotNotFound = errors.New("progress snapshot not found")
 
 // ─── Validation Errors ──────────────────────────────────────────────────────
 

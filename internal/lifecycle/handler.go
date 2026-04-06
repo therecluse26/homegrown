@@ -39,6 +39,18 @@ func (h *Handler) Register(authGroup, unauthGroup *echo.Group) {
 	unauthGroup.GET("/account/recovery/:id", h.getRecoveryStatus)
 }
 
+// requestExport godoc
+//
+// @Summary     Request a data export
+// @Tags        lifecycle
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body RequestExportInput true "Export options"
+// @Success     202 {object} map[string]any
+// @Failure     401 {object} shared.AppError
+// @Failure     500 {object} shared.AppError
+// @Router      /account/export [post]
 func (h *Handler) requestExport(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -68,6 +80,17 @@ func (h *Handler) requestExport(c echo.Context) error {
 	})
 }
 
+// getExportStatus godoc
+//
+// @Summary     Get export status
+// @Tags        lifecycle
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id path string true "Export ID"
+// @Success     200 {object} ExportStatusResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /account/export/{id} [get]
 func (h *Handler) getExportStatus(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -87,6 +110,17 @@ func (h *Handler) getExportStatus(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// listExports godoc
+//
+// @Summary     List data exports
+// @Tags        lifecycle
+// @Produce     json
+// @Security    BearerAuth
+// @Param       limit  query int false "Results per page"
+// @Param       offset query int false "Offset"
+// @Success     200 {object} PaginatedExports
+// @Failure     401 {object} shared.AppError
+// @Router      /account/exports [get]
 func (h *Handler) listExports(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -106,6 +140,19 @@ func (h *Handler) listExports(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// requestDeletion godoc
+//
+// @Summary     Request account deletion
+// @Tags        lifecycle
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body RequestDeletionInput true "Deletion confirmation"
+// @Success     202 {object} map[string]any
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /account/deletion [post]
 func (h *Handler) requestDeletion(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -134,6 +181,16 @@ func (h *Handler) requestDeletion(c echo.Context) error {
 	})
 }
 
+// getDeletionStatus godoc
+//
+// @Summary     Get account deletion status
+// @Tags        lifecycle
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} DeletionStatusResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /account/deletion [get]
 func (h *Handler) getDeletionStatus(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -148,6 +205,16 @@ func (h *Handler) getDeletionStatus(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// cancelDeletion godoc
+//
+// @Summary     Cancel pending account deletion
+// @Tags        lifecycle
+// @Security    BearerAuth
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Failure     409 {object} shared.AppError
+// @Router      /account/deletion [delete]
 func (h *Handler) cancelDeletion(c echo.Context) error {
 	scope, err := shared.GetFamilyScope(c)
 	if err != nil {
@@ -161,6 +228,15 @@ func (h *Handler) cancelDeletion(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// listSessions godoc
+//
+// @Summary     List active sessions
+// @Tags        lifecycle
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} map[string]any
+// @Failure     401 {object} shared.AppError
+// @Router      /account/sessions [get]
 func (h *Handler) listSessions(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -177,6 +253,16 @@ func (h *Handler) listSessions(c echo.Context) error {
 	})
 }
 
+// revokeSession godoc
+//
+// @Summary     Revoke a session
+// @Tags        lifecycle
+// @Security    BearerAuth
+// @Param       id path string true "Session ID"
+// @Success     204
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Router      /account/sessions/{id} [delete]
 func (h *Handler) revokeSession(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -195,6 +281,15 @@ func (h *Handler) revokeSession(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// revokeAllSessions godoc
+//
+// @Summary     Revoke all other sessions
+// @Tags        lifecycle
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} map[string]any
+// @Failure     401 {object} shared.AppError
+// @Router      /account/sessions [delete]
 func (h *Handler) revokeAllSessions(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -211,6 +306,16 @@ func (h *Handler) revokeAllSessions(c echo.Context) error {
 	})
 }
 
+// initiateRecovery godoc
+//
+// @Summary     Initiate account recovery
+// @Tags        lifecycle
+// @Accept      json
+// @Produce     json
+// @Param       body body InitiateRecoveryInput true "Recovery details"
+// @Success     202 {object} map[string]any
+// @Failure     400 {object} shared.AppError
+// @Router      /account/recovery [post]
 func (h *Handler) initiateRecovery(c echo.Context) error {
 	var req InitiateRecoveryInput
 	if err := c.Bind(&req); err != nil {
@@ -232,6 +337,16 @@ func (h *Handler) initiateRecovery(c echo.Context) error {
 	})
 }
 
+// getRecoveryStatus godoc
+//
+// @Summary     Get account recovery status
+// @Tags        lifecycle
+// @Produce     json
+// @Param       id path string true "Recovery ID"
+// @Success     200 {object} RecoveryStatusResponse
+// @Failure     400 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /account/recovery/{id} [get]
 func (h *Handler) getRecoveryStatus(c echo.Context) error {
 	recoveryID, err := uuid.Parse(c.Param("id"))
 	if err != nil {

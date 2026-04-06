@@ -118,9 +118,6 @@ func (s *marketplaceServiceImpl) CreateOnboardingLink(ctx context.Context, creat
 	if err != nil {
 		return "", err
 	}
-	if creator == nil {
-		return "", shared.ErrNotFound()
-	}
 
 	if creator.OnboardingStatus == "active" {
 		return "", shared.ErrBadRequest("creator is already active")
@@ -204,9 +201,6 @@ func (s *marketplaceServiceImpl) UpdatePublisher(ctx context.Context, cmd Update
 	if err != nil {
 		return err
 	}
-	if pub == nil {
-		return shared.ErrNotFound()
-	}
 	if pub.IsPlatform {
 		return shared.ErrForbidden()
 	}
@@ -214,9 +208,12 @@ func (s *marketplaceServiceImpl) UpdatePublisher(ctx context.Context, cmd Update
 	// Check role — only owner/admin can update
 	role, err := s.publishers.GetMemberRole(ctx, publisherID, creatorID)
 	if err != nil {
+		if errors.Is(err, ErrNotPublisherMember) {
+			return shared.ErrForbidden()
+		}
 		return err
 	}
-	if role == nil || (*role != "owner" && *role != "admin") {
+	if *role != "owner" && *role != "admin" {
 		return shared.ErrForbidden()
 	}
 
@@ -229,9 +226,6 @@ func (s *marketplaceServiceImpl) AddPublisherMember(ctx context.Context, publish
 	if err != nil {
 		return err
 	}
-	if pub == nil {
-		return shared.ErrNotFound()
-	}
 	if pub.IsPlatform {
 		return shared.ErrForbidden()
 	}
@@ -239,9 +233,12 @@ func (s *marketplaceServiceImpl) AddPublisherMember(ctx context.Context, publish
 	// Only owner/admin can add members
 	role, err := s.publishers.GetMemberRole(ctx, publisherID, actingCreatorID)
 	if err != nil {
+		if errors.Is(err, ErrNotPublisherMember) {
+			return shared.ErrForbidden()
+		}
 		return err
 	}
-	if role == nil || (*role != "owner" && *role != "admin") {
+	if *role != "owner" && *role != "admin" {
 		return shared.ErrForbidden()
 	}
 
@@ -253,9 +250,6 @@ func (s *marketplaceServiceImpl) RemovePublisherMember(ctx context.Context, publ
 	if err != nil {
 		return err
 	}
-	if pub == nil {
-		return shared.ErrNotFound()
-	}
 	if pub.IsPlatform {
 		return shared.ErrForbidden()
 	}
@@ -263,6 +257,9 @@ func (s *marketplaceServiceImpl) RemovePublisherMember(ctx context.Context, publ
 	// Only owner can remove members
 	role, err := s.publishers.GetMemberRole(ctx, publisherID, actingCreatorID)
 	if err != nil {
+		if errors.Is(err, ErrNotPublisherMember) {
+			return shared.ErrForbidden()
+		}
 		return err
 	}
 	if role == nil || *role != "owner" {
@@ -298,12 +295,12 @@ func (s *marketplaceServiceImpl) CreateListing(ctx context.Context, cmd CreateLi
 	}
 
 	// Creator must be member of the publisher
-	role, err := s.publishers.GetMemberRole(ctx, cmd.PublisherID, creatorID)
+	_, err := s.publishers.GetMemberRole(ctx, cmd.PublisherID, creatorID)
 	if err != nil {
+		if errors.Is(err, ErrNotPublisherMember) {
+			return uuid.Nil, shared.ErrForbidden()
+		}
 		return uuid.Nil, err
-	}
-	if role == nil {
-		return uuid.Nil, shared.ErrForbidden()
 	}
 
 	listing, err := s.listings.Create(ctx, CreateListing{
@@ -332,9 +329,6 @@ func (s *marketplaceServiceImpl) UpdateListing(ctx context.Context, cmd UpdateLi
 	listing, err := s.listings.GetByID(ctx, listingID)
 	if err != nil {
 		return err
-	}
-	if listing == nil {
-		return shared.ErrNotFound()
 	}
 	if listing.CreatorID != creatorID {
 		return shared.ErrForbidden()
@@ -416,9 +410,6 @@ func (s *marketplaceServiceImpl) SubmitListing(ctx context.Context, listingID, c
 	if err != nil {
 		return err
 	}
-	if listing == nil {
-		return shared.ErrNotFound()
-	}
 	if listing.CreatorID != creatorID {
 		return shared.ErrForbidden()
 	}
@@ -460,9 +451,6 @@ func (s *marketplaceServiceImpl) PublishListing(ctx context.Context, listingID, 
 	listing, err := s.listings.GetByID(ctx, listingID)
 	if err != nil {
 		return err
-	}
-	if listing == nil {
-		return shared.ErrNotFound()
 	}
 	if listing.CreatorID != creatorID {
 		return shared.ErrForbidden()
@@ -508,9 +496,6 @@ func (s *marketplaceServiceImpl) ArchiveListing(ctx context.Context, listingID, 
 	if err != nil {
 		return err
 	}
-	if listing == nil {
-		return shared.ErrNotFound()
-	}
 	if listing.CreatorID != creatorID {
 		return shared.ErrForbidden()
 	}
@@ -549,9 +534,6 @@ func (s *marketplaceServiceImpl) UploadListingFile(ctx context.Context, cmd Uplo
 	listing, err := s.listings.GetByID(ctx, listingID)
 	if err != nil {
 		return uuid.Nil, err
-	}
-	if listing == nil {
-		return uuid.Nil, shared.ErrNotFound()
 	}
 	if listing.CreatorID != creatorID {
 		return uuid.Nil, shared.ErrForbidden()
@@ -600,17 +582,17 @@ func (s *marketplaceServiceImpl) AddToCart(ctx context.Context, listingID uuid.U
 	if err != nil {
 		return err
 	}
-	if listing == nil || listing.Status != "published" {
+	if listing.Status != "published" {
 		return shared.ErrNotFound()
 	}
 
 	// Check not already purchased
-	existing, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
-	if err != nil {
-		return err
-	}
-	if existing != nil {
+	_, err = s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+	if err == nil {
 		return shared.ErrConflict(ErrAlreadyPurchased.Error())
+	}
+	if !errors.Is(err, ErrPurchaseNotFound) {
+		return err
 	}
 
 	return s.cart.AddItem(ctx, listingID, parentID, scope)
@@ -704,12 +686,12 @@ func (s *marketplaceServiceImpl) HandlePaymentWebhook(ctx context.Context, paylo
 
 func (s *marketplaceServiceImpl) handlePaymentSucceeded(ctx context.Context, event *PaymentEvent) error {
 	// Idempotency check [07-mkt §11]
-	existing, err := s.purchases.GetByPaymentSessionID(ctx, event.PaymentID)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-	if existing != nil {
+	_, err := s.purchases.GetByPaymentSessionID(ctx, event.PaymentID)
+	if err == nil {
 		return nil // Already processed
+	}
+	if !errors.Is(err, ErrPurchaseNotFound) {
+		return err
 	}
 
 	familyIDStr, ok := event.Metadata["family_id"]
@@ -740,7 +722,7 @@ func (s *marketplaceServiceImpl) handlePaymentSucceeded(ctx context.Context, eve
 
 		for _, row := range cartRows {
 			listing, listingErr := s.listings.GetByID(ctx, row.ListingID)
-			if listingErr != nil || listing == nil {
+			if listingErr != nil {
 				continue
 			}
 
@@ -786,11 +768,11 @@ func (s *marketplaceServiceImpl) handlePaymentSucceeded(ctx context.Context, eve
 func (s *marketplaceServiceImpl) handleRefundSucceeded(ctx context.Context, event *PaymentEvent) error {
 	purchase, err := s.purchases.GetByPaymentSessionID(ctx, event.PaymentID)
 	if err != nil {
+		if errors.Is(err, ErrPurchaseNotFound) {
+			slog.Warn("refund webhook for unknown purchase", "payment_id", event.PaymentID)
+			return nil
+		}
 		return err
-	}
-	if purchase == nil {
-		slog.Warn("refund webhook for unknown purchase", "payment_id", event.PaymentID)
-		return nil
 	}
 
 	if setErr := s.purchases.SetRefund(ctx, purchase.ID, event.RefundID, int32(event.AmountCents)); setErr != nil {
@@ -815,10 +797,10 @@ func (s *marketplaceServiceImpl) CreateReview(ctx context.Context, cmd CreateRev
 	// Verify purchase exists [S§9.5]
 	purchase, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
 	if err != nil {
+		if errors.Is(err, ErrPurchaseNotFound) {
+			return uuid.Nil, shared.ErrForbidden()
+		}
 		return uuid.Nil, err
-	}
-	if purchase == nil {
-		return uuid.Nil, shared.ErrForbidden()
 	}
 
 	isAnonymous := true
@@ -867,9 +849,6 @@ func (s *marketplaceServiceImpl) UpdateReview(ctx context.Context, cmd UpdateRev
 	if err != nil {
 		return err
 	}
-	if review == nil {
-		return shared.ErrNotFound()
-	}
 	if review.FamilyID != scope.FamilyID() {
 		return shared.ErrForbidden()
 	}
@@ -892,9 +871,6 @@ func (s *marketplaceServiceImpl) DeleteReview(ctx context.Context, reviewID uuid
 	if err != nil {
 		return err
 	}
-	if review == nil {
-		return shared.ErrNotFound()
-	}
 	if review.FamilyID != scope.FamilyID() {
 		return shared.ErrForbidden()
 	}
@@ -916,16 +892,13 @@ func (s *marketplaceServiceImpl) RespondToReview(ctx context.Context, cmd Respon
 	if err != nil {
 		return err
 	}
-	if review == nil {
-		return shared.ErrNotFound()
-	}
 
 	// Verify creator owns the listing
 	listing, err := s.listings.GetByID(ctx, review.ListingID)
 	if err != nil {
 		return err
 	}
-	if listing == nil || listing.CreatorID != creatorID {
+	if listing.CreatorID != creatorID {
 		return shared.ErrForbidden()
 	}
 
@@ -940,9 +913,6 @@ func (s *marketplaceServiceImpl) GetFreeListing(ctx context.Context, listingID u
 	listing, err := s.listings.GetByID(ctx, listingID)
 	if err != nil {
 		return uuid.Nil, err
-	}
-	if listing == nil {
-		return uuid.Nil, shared.ErrNotFound()
 	}
 	if listing.PriceCents != 0 {
 		return uuid.Nil, shared.ErrBadRequest(ErrListingNotFree.Error())
@@ -995,9 +965,6 @@ func (s *marketplaceServiceImpl) RequestPayout(ctx context.Context, creatorID uu
 	if err != nil {
 		return nil, err
 	}
-	if creator == nil {
-		return nil, shared.ErrNotFound()
-	}
 	if creator.OnboardingStatus != "active" {
 		return nil, shared.ErrBadRequest(ErrCreatorNotActive.Error())
 	}
@@ -1033,7 +1000,7 @@ func (s *marketplaceServiceImpl) ArchiveListingByContentKey(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	if file == nil {
+	if errors.Is(err, ErrFileNotFound) {
 		slog.Warn("mkt: no listing file found for content key", "content_key", contentKey)
 		return nil
 	}
@@ -1043,10 +1010,10 @@ func (s *marketplaceServiceImpl) ArchiveListingByContentKey(ctx context.Context,
 func (s *marketplaceServiceImpl) HandleContentFlagged(ctx context.Context, listingID uuid.UUID, reason string) error {
 	listing, err := s.listings.GetByID(ctx, listingID)
 	if err != nil {
+		if errors.Is(err, ErrListingNotFound) {
+			return nil
+		}
 		return err
-	}
-	if listing == nil {
-		return nil
 	}
 
 	// Archive flagged listings
@@ -1111,10 +1078,10 @@ func (s *marketplaceServiceImpl) HandleFamilyDeletionScheduled(ctx context.Conte
 func (s *marketplaceServiceImpl) GetCreatorByParentID(ctx context.Context, parentID uuid.UUID) (*CreatorResponse, error) {
 	creator, err := s.creators.GetByParentID(ctx, parentID)
 	if err != nil {
+		if errors.Is(err, ErrCreatorNotFound) {
+			return nil, nil
+		}
 		return nil, err
-	}
-	if creator == nil {
-		return nil, nil
 	}
 	return toCreatorResponse(creator), nil
 }
@@ -1199,9 +1166,6 @@ func (s *marketplaceServiceImpl) GetPublisher(ctx context.Context, publisherID u
 	if err != nil {
 		return nil, err
 	}
-	if pub == nil {
-		return nil, shared.ErrNotFound()
-	}
 	memberCount, err := s.publishers.CountMembers(ctx, publisherID)
 	if err != nil {
 		return nil, err
@@ -1211,12 +1175,12 @@ func (s *marketplaceServiceImpl) GetPublisher(ctx context.Context, publisherID u
 
 func (s *marketplaceServiceImpl) GetPublisherMembers(ctx context.Context, publisherID, creatorID uuid.UUID) ([]PublisherMemberResponse, error) {
 	// Verify caller is a member
-	role, err := s.publishers.GetMemberRole(ctx, publisherID, creatorID)
+	_, err := s.publishers.GetMemberRole(ctx, publisherID, creatorID)
 	if err != nil {
+		if errors.Is(err, ErrNotPublisherMember) {
+			return nil, shared.ErrForbidden()
+		}
 		return nil, err
-	}
-	if role == nil {
-		return nil, shared.ErrForbidden()
 	}
 
 	rows, err := s.publishers.GetMembers(ctx, publisherID)
@@ -1285,9 +1249,6 @@ func (s *marketplaceServiceImpl) GetListing(ctx context.Context, listingID uuid.
 	listing, err := s.listings.GetByID(ctx, listingID)
 	if err != nil {
 		return nil, err
-	}
-	if listing == nil {
-		return nil, shared.ErrNotFound()
 	}
 
 	files, err := s.listingFiles.ListByListing(ctx, listingID)
@@ -1434,20 +1395,17 @@ func (s *marketplaceServiceImpl) GetPurchases(ctx context.Context, scope shared.
 
 func (s *marketplaceServiceImpl) GetDownloadURL(ctx context.Context, listingID, fileID uuid.UUID, scope shared.FamilyScope) (*DownloadResponse, error) {
 	// Verify purchase — no subscription tier check [S§9.4]
-	purchase, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+	_, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
 	if err != nil {
+		if errors.Is(err, ErrPurchaseNotFound) {
+			return nil, shared.ErrForbidden()
+		}
 		return nil, err
-	}
-	if purchase == nil {
-		return nil, shared.ErrForbidden()
 	}
 
 	file, err := s.listingFiles.GetByID(ctx, listingID, fileID)
 	if err != nil {
 		return nil, err
-	}
-	if file == nil {
-		return nil, shared.ErrNotFound()
 	}
 
 	// Generate 1-hour signed URL [ARCH §8.3]
@@ -1467,9 +1425,6 @@ func (s *marketplaceServiceImpl) GetListingFile(ctx context.Context, listingID, 
 	if err != nil {
 		return nil, err
 	}
-	if file == nil {
-		return nil, shared.ErrNotFound()
-	}
 	return &ListingFileResponse{
 		ID:            file.ID,
 		FileName:      file.FileName,
@@ -1483,9 +1438,6 @@ func (s *marketplaceServiceImpl) GetReview(ctx context.Context, reviewID uuid.UU
 	review, err := s.reviews.GetByID(ctx, reviewID)
 	if err != nil {
 		return nil, err
-	}
-	if review == nil {
-		return nil, shared.ErrNotFound()
 	}
 	return &ReviewResponse{
 		ID:                review.ID,

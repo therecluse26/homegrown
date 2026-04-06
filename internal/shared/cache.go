@@ -24,6 +24,9 @@ type Cache interface {
 	// first increment. Returns the new counter value. Used by rate limiting. [§13.2]
 	IncrementWithExpiry(ctx context.Context, key string, window time.Duration) (int64, error)
 
+	// Ping checks connectivity to the cache backend. Used by health checks. [P2-2]
+	Ping(ctx context.Context) error
+
 	// Close releases the underlying connection pool.
 	Close() error
 }

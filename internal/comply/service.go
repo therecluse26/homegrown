@@ -3,6 +3,7 @@ package comply
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"time"
 
@@ -80,10 +81,10 @@ func (s *ComplianceServiceImpl) UpsertFamilyConfig(ctx context.Context, cmd Upse
 	// Validate state code exists
 	state, err := s.stateConfigRepo.FindByStateCode(ctx, cmd.StateCode)
 	if err != nil {
+		if errors.Is(err, ErrStateConfigNotFound) {
+			return nil, ErrInvalidStateCode
+		}
 		return nil, err
-	}
-	if state == nil {
-		return nil, ErrInvalidStateCode
 	}
 
 	// Validate school year range
@@ -93,12 +94,8 @@ func (s *ComplianceServiceImpl) UpsertFamilyConfig(ctx context.Context, cmd Upse
 
 	// Validate custom schedule belongs to family if provided
 	if cmd.CustomScheduleID != nil {
-		sched, err := s.scheduleRepo.FindByID(ctx, *cmd.CustomScheduleID, scope)
-		if err != nil {
+		if _, err := s.scheduleRepo.FindByID(ctx, *cmd.CustomScheduleID, scope); err != nil {
 			return nil, err
-		}
-		if sched == nil {
-			return nil, ErrScheduleNotFound
 		}
 	}
 
@@ -131,12 +128,8 @@ func (s *ComplianceServiceImpl) CreateSchedule(ctx context.Context, cmd CreateSc
 }
 
 func (s *ComplianceServiceImpl) UpdateSchedule(ctx context.Context, scheduleID uuid.UUID, cmd UpdateScheduleCommand, scope shared.FamilyScope) (*ScheduleResponse, error) {
-	existing, err := s.scheduleRepo.FindByID(ctx, scheduleID, scope)
-	if err != nil {
+	if _, err := s.scheduleRepo.FindByID(ctx, scheduleID, scope); err != nil {
 		return nil, err
-	}
-	if existing == nil {
-		return nil, ErrScheduleNotFound
 	}
 
 	// Validate school days length if provided
@@ -166,17 +159,13 @@ func (s *ComplianceServiceImpl) UpdateSchedule(ctx context.Context, scheduleID u
 }
 
 func (s *ComplianceServiceImpl) DeleteSchedule(ctx context.Context, scheduleID uuid.UUID, scope shared.FamilyScope) error {
-	existing, err := s.scheduleRepo.FindByID(ctx, scheduleID, scope)
-	if err != nil {
+	if _, err := s.scheduleRepo.FindByID(ctx, scheduleID, scope); err != nil {
 		return err
-	}
-	if existing == nil {
-		return ErrScheduleNotFound
 	}
 
 	// Check if schedule is in use by family config
 	config, err := s.familyConfigRepo.FindByFamily(ctx, scope)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrFamilyConfigNotFound) {
 		return err
 	}
 	if config != nil && config.CustomScheduleID != nil && *config.CustomScheduleID == scheduleID {
@@ -251,12 +240,8 @@ func (s *ComplianceServiceImpl) UpdateAttendance(ctx context.Context, studentID 
 		return nil, err
 	}
 
-	existing, err := s.attendanceRepo.FindByID(ctx, attendanceID, scope)
-	if err != nil {
+	if _, err := s.attendanceRepo.FindByID(ctx, attendanceID, scope); err != nil {
 		return nil, err
-	}
-	if existing == nil {
-		return nil, ErrAttendanceNotFound
 	}
 
 	updated, err := s.attendanceRepo.Update(ctx, attendanceID, scope, UpdateAttendanceRow(cmd))
@@ -271,12 +256,8 @@ func (s *ComplianceServiceImpl) DeleteAttendance(ctx context.Context, studentID 
 		return err
 	}
 
-	existing, err := s.attendanceRepo.FindByID(ctx, attendanceID, scope)
-	if err != nil {
+	if _, err := s.attendanceRepo.FindByID(ctx, attendanceID, scope); err != nil {
 		return err
-	}
-	if existing == nil {
-		return ErrAttendanceNotFound
 	}
 
 	return s.attendanceRepo.Delete(ctx, attendanceID, scope)
@@ -312,12 +293,8 @@ func (s *ComplianceServiceImpl) UpdateAssessment(ctx context.Context, studentID 
 		return nil, err
 	}
 
-	existing, err := s.assessmentRepo.FindByID(ctx, assessmentID, scope)
-	if err != nil {
+	if _, err := s.assessmentRepo.FindByID(ctx, assessmentID, scope); err != nil {
 		return nil, err
-	}
-	if existing == nil {
-		return nil, ErrAssessmentNotFound
 	}
 
 	updated, err := s.assessmentRepo.Update(ctx, assessmentID, scope, UpdateAssessmentRow(cmd))
@@ -332,11 +309,11 @@ func (s *ComplianceServiceImpl) DeleteAssessment(ctx context.Context, studentID 
 		return err
 	}
 
-	existing, err := s.assessmentRepo.FindByID(ctx, assessmentID, scope)
+	record, err := s.assessmentRepo.FindByID(ctx, assessmentID, scope)
 	if err != nil {
 		return err
 	}
-	if existing == nil {
+	if record == nil {
 		return ErrAssessmentNotFound
 	}
 
@@ -420,9 +397,6 @@ func (s *ComplianceServiceImpl) AddPortfolioItems(ctx context.Context, studentID
 	if err != nil {
 		return nil, err
 	}
-	if portfolio == nil {
-		return nil, ErrPortfolioNotFound
-	}
 	if portfolio.Status != string(PortfolioStatusConfiguring) {
 		return nil, domain.ErrPortfolioNotConfiguring
 	}
@@ -470,9 +444,6 @@ func (s *ComplianceServiceImpl) GeneratePortfolio(ctx context.Context, studentID
 	portfolio, err := s.portfolioRepo.FindByID(ctx, portfolioID, scope)
 	if err != nil {
 		return nil, err
-	}
-	if portfolio == nil {
-		return nil, ErrPortfolioNotFound
 	}
 
 	// Count items
@@ -523,9 +494,6 @@ func (s *ComplianceServiceImpl) GenerateTranscript(ctx context.Context, studentI
 	if err != nil {
 		return nil, err
 	}
-	if transcript == nil {
-		return nil, ErrTranscriptNotFound
-	}
 
 	if err := domain.ValidateTranscriptTransition(transcript.Status, string(PortfolioStatusGenerating)); err != nil {
 		return nil, err
@@ -543,12 +511,8 @@ func (s *ComplianceServiceImpl) DeleteTranscript(ctx context.Context, studentID 
 		return err
 	}
 
-	transcript, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope)
-	if err != nil {
+	if _, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope); err != nil {
 		return err
-	}
-	if transcript == nil {
-		return ErrTranscriptNotFound
 	}
 
 	return s.transcriptRepo.Delete(ctx, transcriptID, scope)
@@ -604,14 +568,14 @@ func (s *ComplianceServiceImpl) DeleteCourse(ctx context.Context, studentID uuid
 func (s *ComplianceServiceImpl) GetFamilyConfig(ctx context.Context, scope shared.FamilyScope) (*FamilyConfigResponse, error) {
 	config, err := s.familyConfigRepo.FindByFamily(ctx, scope)
 	if err != nil {
+		if errors.Is(err, ErrFamilyConfigNotFound) {
+			return nil, nil // no config yet — valid state
+		}
 		return nil, err
-	}
-	if config == nil {
-		return nil, nil
 	}
 
 	state, err := s.stateConfigRepo.FindByStateCode(ctx, config.StateCode)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrStateConfigNotFound) {
 		return nil, err
 	}
 	stateName := ""
@@ -643,9 +607,6 @@ func (s *ComplianceServiceImpl) GetStateConfig(ctx context.Context, stateCode st
 	config, err := s.stateConfigRepo.FindByStateCode(ctx, stateCode)
 	if err != nil {
 		return nil, err
-	}
-	if config == nil {
-		return nil, ErrStateConfigNotFound
 	}
 	return mapStateConfigToResponse(config), nil
 }
@@ -703,12 +664,12 @@ func (s *ComplianceServiceImpl) GetAttendanceSummary(ctx context.Context, studen
 
 	// Get family config for pace calculation
 	config, err := s.familyConfigRepo.FindByFamily(ctx, scope)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrFamilyConfigNotFound) {
 		return nil, err
 	}
 	if config != nil {
 		stateConfig, err := s.stateConfigRepo.FindByStateCode(ctx, config.StateCode)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrStateConfigNotFound) {
 			return nil, err
 		}
 		if stateConfig != nil && stateConfig.AttendanceRequired {
@@ -769,9 +730,6 @@ func (s *ComplianceServiceImpl) GetPortfolio(ctx context.Context, studentID uuid
 	if err != nil {
 		return nil, err
 	}
-	if portfolio == nil {
-		return nil, ErrPortfolioNotFound
-	}
 
 	items, err := s.portfolioItemRepo.ListByPortfolio(ctx, portfolioID)
 	if err != nil {
@@ -821,9 +779,6 @@ func (s *ComplianceServiceImpl) GetPortfolioDownloadURL(ctx context.Context, stu
 	if err != nil {
 		return "", err
 	}
-	if portfolio == nil {
-		return "", ErrPortfolioNotFound
-	}
 
 	if portfolio.Status != string(PortfolioStatusReady) {
 		return "", ErrPortfolioNotReady
@@ -838,18 +793,18 @@ func (s *ComplianceServiceImpl) GetPortfolioDownloadURL(ctx context.Context, stu
 }
 
 func (s *ComplianceServiceImpl) GetDashboard(ctx context.Context, scope shared.FamilyScope) (*ComplianceDashboardResponse, error) {
-	config, err := s.familyConfigRepo.FindByFamily(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
-
 	resp := &ComplianceDashboardResponse{
 		Students: []StudentComplianceSummary{},
 	}
 
+	config, err := s.familyConfigRepo.FindByFamily(ctx, scope)
+	if err != nil && !errors.Is(err, ErrFamilyConfigNotFound) {
+		return nil, err
+	}
+
 	if config != nil {
 		state, err := s.stateConfigRepo.FindByStateCode(ctx, config.StateCode)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrStateConfigNotFound) {
 			return nil, err
 		}
 		stateName := ""
@@ -870,9 +825,6 @@ func (s *ComplianceServiceImpl) GetTranscript(ctx context.Context, studentID uui
 	transcript, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope)
 	if err != nil {
 		return nil, err
-	}
-	if transcript == nil {
-		return nil, ErrTranscriptNotFound
 	}
 
 	courses, err := s.courseRepo.ListByStudent(ctx, studentID, scope, nil)
@@ -927,9 +879,6 @@ func (s *ComplianceServiceImpl) GetTranscriptDownloadURL(ctx context.Context, st
 	transcript, err := s.transcriptRepo.FindByID(ctx, transcriptID, scope)
 	if err != nil {
 		return "", err
-	}
-	if transcript == nil {
-		return "", ErrTranscriptNotFound
 	}
 
 	if transcript.Status != string(PortfolioStatusReady) {
@@ -1131,9 +1080,11 @@ func (s *ComplianceServiceImpl) HandleActivityLogged(ctx context.Context, event 
 	// Check if a manual record already exists for this date — do not override. [14-comply §17.4]
 	existing, err := s.attendanceRepo.FindByStudentAndDate(ctx, event.StudentID, scope, event.ActivityDate)
 	if err != nil {
-		return err
-	}
-	if existing != nil && existing.ManualOverride {
+		if !errors.Is(err, ErrAttendanceNotFound) {
+			return err
+		}
+		// No existing record — proceed to upsert.
+	} else if existing.ManualOverride {
 		return nil // manual record takes precedence
 	}
 
@@ -1430,10 +1381,10 @@ func coursesToGpaInput(courses []ComplyCourse) []domain.CourseForGpa {
 func (s *ComplianceServiceImpl) getGpaScaleForFamily(ctx context.Context, scope shared.FamilyScope) (domain.GpaScale, json.RawMessage, error) {
 	config, err := s.familyConfigRepo.FindByFamily(ctx, scope)
 	if err != nil {
+		if errors.Is(err, ErrFamilyConfigNotFound) {
+			return domain.GpaScaleStandard4, nil, nil // no config — use defaults
+		}
 		return domain.GpaScaleStandard4, nil, err
-	}
-	if config == nil {
-		return domain.GpaScaleStandard4, nil, nil
 	}
 	return domain.GpaScale(config.GpaScale), config.GpaCustomConfig, nil
 }

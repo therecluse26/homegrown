@@ -5,6 +5,7 @@ package billing
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -178,11 +179,11 @@ func TestHandler_ListTransactions_200(t *testing.T) {
 	}
 }
 
-func TestHandler_HyperswitchWebhook_AlwaysReturns200(t *testing.T) {
-	// Webhook endpoint must always return 200 to prevent Hyperswitch retries. [10-billing §14]
+func TestHandler_HyperswitchWebhook_Returns500OnProcessingError(t *testing.T) {
+	// Webhook endpoint returns 500 on processing errors so the payment provider retries. [P1-1]
 	svc := &mockBillingService{
 		processWebhookFn: func(_ context.Context, _ []byte, _ string) error {
-			return shared.ErrBadRequest("simulated internal error") // ignored by design
+			return shared.ErrBadRequest("simulated processing error")
 		},
 	}
 	e, h := setupBillingHandlerTest(svc)
@@ -191,10 +192,30 @@ func TestHandler_HyperswitchWebhook_AlwaysReturns200(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	if err := h.hyperswitchWebhook(c); err != nil {
-		t.Fatalf("webhook handler must not return an error, got: %v", err)
+		t.Fatalf("webhook handler must not return an Echo error, got: %v", err)
 	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("want 200, got %d (webhook must always 200)", rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 on processing error, got %d", rec.Code)
+	}
+}
+
+func TestHandler_HyperswitchWebhook_Returns400OnBadSignature(t *testing.T) {
+	// Webhook endpoint returns 400 on signature failure (permanent — don't retry). [P1-1]
+	svc := &mockBillingService{
+		processWebhookFn: func(_ context.Context, _ []byte, _ string) error {
+			return fmt.Errorf("bad sig: %w", ErrInvalidWebhookSignature)
+		},
+	}
+	e, h := setupBillingHandlerTest(svc)
+	req := httptest.NewRequest(http.MethodPost, "/hooks/hyperswitch/billing", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.hyperswitchWebhook(c); err != nil {
+		t.Fatalf("webhook handler must not return an Echo error, got: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("want 400 on bad signature, got %d", rec.Code)
 	}
 }
 

@@ -78,6 +78,10 @@ func (r *redisCache) IncrementWithExpiry(ctx context.Context, key string, window
 	return count, nil
 }
 
+func (r *redisCache) Ping(ctx context.Context) error {
+	return r.client.Ping(ctx).Err()
+}
+
 func (r *redisCache) Close() error {
 	return r.client.Close()
 }

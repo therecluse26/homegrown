@@ -1177,6 +1177,9 @@
   "billing.paymentMethods.title": "Payment Methods",
   "billing.paymentMethods.description": "Manage your saved payment methods for subscriptions and purchases.",
   "billing.paymentMethods.add": "Add payment method",
+  "billing.paymentMethods.add.title": "Add Payment Method",
+  "billing.paymentMethods.add.confirm": "Continue to payment provider",
+  "billing.paymentMethods.add.description": "You'll be redirected to our secure payment provider to enter your card details. Your card information is handled securely and never stored on our servers.",
   "billing.paymentMethods.default": "Default",
   "billing.paymentMethods.makeDefault": "Make default",
   "billing.paymentMethods.remove": "Remove",
@@ -1549,6 +1552,7 @@
   "marketplace.creator.verification.form.legalName.placeholder": "Your full legal name",
   "marketplace.creator.verification.form.taxId": "Tax ID (SSN or EIN)",
   "marketplace.creator.verification.form.taxId.hint": "Your information is encrypted and used only for tax compliance. We store only the last 4 digits after verification.",
+  "marketplace.creator.verification.form.taxId.placeholder": "XXX-XX-XXXX",
   "marketplace.creator.verification.form.submit": "Submit Verification",
   "marketplace.creator.verification.resubmit.title": "Resubmit Verification",
 

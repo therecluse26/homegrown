@@ -34,6 +34,18 @@ func (h *Handler) Register(authGroup *echo.Group) {
 
 // ─── POST /v1/media/uploads ───────────────────────────────────────────────────
 
+// requestUpload godoc
+//
+// @Summary     Request a media upload
+// @Tags        media
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body RequestUploadCommand true "Upload details"
+// @Success     201 {object} UploadResponse
+// @Failure     401 {object} shared.AppError
+// @Failure     422 {object} shared.AppError
+// @Router      /media/uploads [post]
 func (h *Handler) requestUpload(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -65,6 +77,17 @@ func (h *Handler) requestUpload(c echo.Context) error {
 
 // ─── POST /v1/media/uploads/:upload_id/confirm ───────────────────────────────
 
+// confirmUpload godoc
+//
+// @Summary     Confirm a media upload
+// @Tags        media
+// @Produce     json
+// @Security    BearerAuth
+// @Param       upload_id path string true "Upload ID"
+// @Success     200 {object} UploadInfo
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /media/uploads/{upload_id}/confirm [post]
 func (h *Handler) confirmUpload(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -86,6 +109,17 @@ func (h *Handler) confirmUpload(c echo.Context) error {
 
 // ─── GET /v1/media/uploads/:upload_id ─────────────────────────────────────────
 
+// getUpload godoc
+//
+// @Summary     Get upload details
+// @Tags        media
+// @Produce     json
+// @Security    BearerAuth
+// @Param       upload_id path string true "Upload ID"
+// @Success     200 {object} UploadInfo
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /media/uploads/{upload_id} [get]
 func (h *Handler) getUpload(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -107,6 +141,16 @@ func (h *Handler) getUpload(c echo.Context) error {
 
 // ─── DELETE /v1/media/uploads/:upload_id ──────────────────────────────────────
 
+// deleteUpload godoc
+//
+// @Summary     Delete an upload
+// @Tags        media
+// @Security    BearerAuth
+// @Param       upload_id path string true "Upload ID"
+// @Success     204
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /media/uploads/{upload_id} [delete]
 func (h *Handler) deleteUpload(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -124,6 +168,18 @@ func (h *Handler) deleteUpload(c echo.Context) error {
 
 // ─── GET /v1/media/uploads ────────────────────────────────────────────────────
 
+// listUploads godoc
+//
+// @Summary     List uploads for the family
+// @Tags        media
+// @Produce     json
+// @Security    BearerAuth
+// @Param       limit  query  int     false  "Max items to return (default 20, max 100)"
+// @Param       after  query  string  false  "Cursor: upload ID to start after"
+// @Success     200 {object} UploadListResponse
+// @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
+// @Router      /media/uploads [get]
 func (h *Handler) listUploads(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {
@@ -156,6 +212,16 @@ func (h *Handler) listUploads(c echo.Context) error {
 
 // ─── POST /v1/media/uploads/:upload_id/reprocess ──────────────────────────────
 
+// reprocessUpload godoc
+//
+// @Summary     Reprocess an upload
+// @Tags        media
+// @Security    BearerAuth
+// @Param       upload_id path string true "Upload ID"
+// @Success     202
+// @Failure     401 {object} shared.AppError
+// @Failure     404 {object} shared.AppError
+// @Router      /media/uploads/{upload_id}/reprocess [post]
 func (h *Handler) reprocessUpload(c echo.Context) error {
 	auth, err := shared.GetAuthContext(c)
 	if err != nil {

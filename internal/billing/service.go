@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -55,15 +56,14 @@ func NewBillingService(
 func (s *BillingServiceImpl) GetSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error) {
 	sub, err := s.subscriptionRepo.FindByFamily(ctx, scope)
 	if err != nil {
+		// No subscription — return free-tier default. [10-billing §4.1]
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			return &SubscriptionResponse{
+				Tier:              TierFree,
+				CancelAtPeriodEnd: false,
+			}, nil
+		}
 		return nil, &BillingError{Err: fmt.Errorf("get subscription: %w", err)}
-	}
-
-	// No subscription — return free-tier default. [10-billing §4.1]
-	if sub == nil {
-		return &SubscriptionResponse{
-			Tier:              TierFree,
-			CancelAtPeriodEnd: false,
-		}, nil
 	}
 
 	return subscriptionToResponse(sub), nil
@@ -109,10 +109,10 @@ func (s *BillingServiceImpl) ListTransactions(ctx context.Context, params Transa
 func (s *BillingServiceImpl) ListInvoices(ctx context.Context, params InvoiceListParams, scope shared.FamilyScope) (*InvoiceListResponse, error) {
 	customer, err := s.customerRepo.FindByFamily(ctx, scope.FamilyID())
 	if err != nil {
+		if errors.Is(err, ErrCustomerNotFound) {
+			return &InvoiceListResponse{Invoices: []InvoiceResponse{}}, nil
+		}
 		return nil, &BillingError{Err: fmt.Errorf("list invoices: %w", err)}
-	}
-	if customer == nil {
-		return &InvoiceListResponse{Invoices: []InvoiceResponse{}}, nil
 	}
 
 	limit := uint32(20)
@@ -137,10 +137,10 @@ func (s *BillingServiceImpl) ListInvoices(ctx context.Context, params InvoiceLis
 func (s *BillingServiceImpl) ListPaymentMethods(ctx context.Context, scope shared.FamilyScope) ([]PaymentMethodResponse, error) {
 	customer, err := s.customerRepo.FindByFamily(ctx, scope.FamilyID())
 	if err != nil {
+		if errors.Is(err, ErrCustomerNotFound) {
+			return []PaymentMethodResponse{}, nil
+		}
 		return nil, &BillingError{Err: fmt.Errorf("list payment methods: %w", err)}
-	}
-	if customer == nil {
-		return []PaymentMethodResponse{}, nil
 	}
 
 	methods, err := s.adapter.ListPaymentMethods(ctx, customer.HyperswitchCustomerID)
@@ -163,20 +163,19 @@ func (s *BillingServiceImpl) EstimateSubscription(ctx context.Context, query Est
 
 	customer, err := s.customerRepo.FindByFamily(ctx, scope.FamilyID())
 	if err != nil {
+		if errors.Is(err, ErrCustomerNotFound) {
+			return nil, &BillingError{Err: fmt.Errorf("estimate: %w", ErrPaymentAdapterUnavailable)}
+		}
 		return nil, &BillingError{Err: fmt.Errorf("estimate: %w", err)}
-	}
-	if customer == nil {
-		return nil, &BillingError{Err: fmt.Errorf("estimate: %w", ErrPaymentAdapterUnavailable)}
 	}
 
 	// Check if there's an existing subscription for proration calculation
+	var currentSubID *string
 	sub, err := s.subscriptionRepo.FindByFamily(ctx, scope)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrSubscriptionNotFound) {
 		return nil, &BillingError{Err: fmt.Errorf("estimate: %w", err)}
 	}
-
-	var currentSubID *string
-	if sub != nil {
+	if err == nil {
 		currentSubID = &sub.HyperswitchSubscriptionID
 	}
 
@@ -241,12 +240,12 @@ func (s *BillingServiceImpl) ListPayouts(ctx context.Context, params PayoutListP
 
 func (s *BillingServiceImpl) CreateSubscription(ctx context.Context, cmd CreateSubscriptionCommand, scope shared.FamilyScope) (*SubscriptionResponse, error) {
 	// Check if subscription already exists
-	existing, err := s.subscriptionRepo.FindByFamily(ctx, scope)
-	if err != nil {
-		return nil, &BillingError{Err: fmt.Errorf("create subscription: %w", err)}
-	}
-	if existing != nil {
+	_, err := s.subscriptionRepo.FindByFamily(ctx, scope)
+	if err == nil {
 		return nil, &BillingError{Err: ErrSubscriptionAlreadyExists}
+	}
+	if !errors.Is(err, ErrSubscriptionNotFound) {
+		return nil, &BillingError{Err: fmt.Errorf("create subscription: %w", err)}
 	}
 
 	priceID, err := s.resolvePriceID(cmd.BillingInterval)
@@ -294,9 +293,6 @@ func (s *BillingServiceImpl) UpdateSubscription(ctx context.Context, cmd UpdateS
 	if err != nil {
 		return nil, &BillingError{Err: fmt.Errorf("update subscription: %w", err)}
 	}
-	if sub == nil {
-		return nil, &BillingError{Err: ErrSubscriptionNotFound}
-	}
 	if sub.Status != SubscriptionStatusActive {
 		return nil, &BillingError{Err: ErrSubscriptionNotActive}
 	}
@@ -328,9 +324,6 @@ func (s *BillingServiceImpl) CancelSubscription(ctx context.Context, scope share
 	if err != nil {
 		return nil, &BillingError{Err: fmt.Errorf("cancel subscription: %w", err)}
 	}
-	if sub == nil {
-		return nil, &BillingError{Err: ErrSubscriptionNotFound}
-	}
 	if sub.Status != SubscriptionStatusActive || sub.CancelAtPeriodEnd {
 		return nil, &BillingError{Err: ErrSubscriptionNotActive}
 	}
@@ -359,9 +352,6 @@ func (s *BillingServiceImpl) ReactivateSubscription(ctx context.Context, scope s
 	if err != nil {
 		return nil, &BillingError{Err: fmt.Errorf("reactivate subscription: %w", err)}
 	}
-	if sub == nil {
-		return nil, &BillingError{Err: ErrSubscriptionNotFound}
-	}
 	if !sub.CancelAtPeriodEnd || sub.Status != SubscriptionStatusActive {
 		return nil, &BillingError{Err: ErrCannotReactivate}
 	}
@@ -388,9 +378,6 @@ func (s *BillingServiceImpl) PauseSubscription(ctx context.Context, scope shared
 	if err != nil {
 		return nil, &BillingError{Err: fmt.Errorf("pause subscription: %w", err)}
 	}
-	if sub == nil {
-		return nil, &BillingError{Err: ErrSubscriptionNotFound}
-	}
 	if sub.Status != SubscriptionStatusActive {
 		return nil, &BillingError{Err: ErrSubscriptionNotActive}
 	}
@@ -413,9 +400,6 @@ func (s *BillingServiceImpl) ResumeSubscription(ctx context.Context, scope share
 	sub, err := s.subscriptionRepo.FindByFamily(ctx, scope)
 	if err != nil {
 		return nil, &BillingError{Err: fmt.Errorf("resume subscription: %w", err)}
-	}
-	if sub == nil {
-		return nil, &BillingError{Err: ErrSubscriptionNotFound}
 	}
 	if sub.Status != SubscriptionStatusPaused {
 		return nil, &BillingError{Err: ErrSubscriptionNotPaused}
@@ -459,17 +443,17 @@ func (s *BillingServiceImpl) AttachPaymentMethod(ctx context.Context, _ AttachPa
 func (s *BillingServiceImpl) DetachPaymentMethod(ctx context.Context, paymentMethodID string, scope shared.FamilyScope) error {
 	// Check if there's an active subscription
 	sub, err := s.subscriptionRepo.FindByFamily(ctx, scope)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrSubscriptionNotFound) {
 		return &BillingError{Err: fmt.Errorf("detach payment method: %w", err)}
 	}
 
-	if sub != nil && sub.Status == SubscriptionStatusActive {
+	if err == nil && sub.Status == SubscriptionStatusActive {
 		// Verify this isn't the last payment method
 		customer, err := s.customerRepo.FindByFamily(ctx, scope.FamilyID())
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrCustomerNotFound) {
 			return &BillingError{Err: fmt.Errorf("detach payment method: %w", err)}
 		}
-		if customer != nil {
+		if err == nil {
 			methods, err := s.adapter.ListPaymentMethods(ctx, customer.HyperswitchCustomerID)
 			if err != nil {
 				return &BillingError{Err: fmt.Errorf("list methods for detach check: %w", err)}
@@ -564,14 +548,14 @@ func (s *BillingServiceImpl) ProcessHyperswitchWebhook(ctx context.Context, payl
 	valid, err := s.adapter.VerifyWebhook(ctx, payload, signature)
 	if err != nil || !valid {
 		slog.Warn("invalid webhook signature", "error", err)
-		return nil // always return nil — webhook endpoint returns 200 regardless
+		return fmt.Errorf("webhook signature verification failed: %w", ErrInvalidWebhookSignature)
 	}
 
 	// Step 2: Parse event
 	event, err := s.adapter.ParseWebhookEvent(ctx, payload)
 	if err != nil {
 		slog.Error("failed to parse webhook event", "error", err)
-		return nil
+		return fmt.Errorf("webhook event parsing failed: %w", err)
 	}
 
 	// Step 3: Dispatch by event type
@@ -599,12 +583,12 @@ func (s *BillingServiceImpl) handleWebhookSubscriptionCreated(ctx context.Contex
 
 	// Upsert local subscription record
 	existing, err := s.subscriptionRepo.FindByHyperswitchID(ctx, data.Subscription.ID)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrSubscriptionNotFound) {
 		slog.Error("webhook subscription.created: find error", "error", err)
-		return nil
+		return fmt.Errorf("webhook subscription.created: %w", err)
 	}
 
-	if existing != nil {
+	if err == nil {
 		// Already exists — update fields
 		_, err = s.subscriptionRepo.Update(ctx, existing.ID, SubscriptionUpdate{
 			Status:             &data.Subscription.Status,
@@ -614,15 +598,16 @@ func (s *BillingServiceImpl) handleWebhookSubscriptionCreated(ctx context.Contex
 		})
 		if err != nil {
 			slog.Error("webhook subscription.created: update error", "error", err)
+			return fmt.Errorf("webhook subscription.created update: %w", err)
 		}
 		return nil
 	}
 
 	// Find customer by Hyperswitch customer ID to get family_id
 	customer, err := s.customerRepo.FindByHyperswitchID(ctx, data.Subscription.CustomerID)
-	if err != nil || customer == nil {
-		slog.Error("webhook subscription.created: customer not found", "customer_id", data.Subscription.CustomerID)
-		return nil
+	if err != nil {
+		slog.Error("webhook subscription.created: customer lookup error", "customer_id", data.Subscription.CustomerID, "error", err)
+		return fmt.Errorf("webhook subscription.created customer lookup: %w", err)
 	}
 
 	_, err = s.subscriptionRepo.Create(ctx, CreateSubscriptionRow{
@@ -640,6 +625,7 @@ func (s *BillingServiceImpl) handleWebhookSubscriptionCreated(ctx context.Contex
 	})
 	if err != nil {
 		slog.Error("webhook subscription.created: create error", "error", err)
+		return fmt.Errorf("webhook subscription.created create: %w", err)
 	}
 	return nil
 }
@@ -650,9 +636,9 @@ func (s *BillingServiceImpl) handleWebhookSubscriptionUpdated(ctx context.Contex
 	}
 
 	sub, err := s.subscriptionRepo.FindByHyperswitchID(ctx, data.Subscription.ID)
-	if err != nil || sub == nil {
-		slog.Error("webhook subscription.updated: subscription not found", "subscription_id", data.Subscription.ID)
-		return nil
+	if err != nil {
+		slog.Error("webhook subscription.updated: lookup error", "subscription_id", data.Subscription.ID, "error", err)
+		return fmt.Errorf("webhook subscription.updated lookup: %w", err)
 	}
 
 	wasActive := sub.Status == SubscriptionStatusActive
@@ -669,7 +655,7 @@ func (s *BillingServiceImpl) handleWebhookSubscriptionUpdated(ctx context.Contex
 	})
 	if err != nil {
 		slog.Error("webhook subscription.updated: update error", "error", err)
-		return nil
+		return fmt.Errorf("webhook subscription.updated update: %w", err)
 	}
 
 	// Publish domain events based on state transition
@@ -701,9 +687,9 @@ func (s *BillingServiceImpl) handleWebhookSubscriptionDeleted(ctx context.Contex
 	}
 
 	sub, err := s.subscriptionRepo.FindByHyperswitchID(ctx, data.SubscriptionID)
-	if err != nil || sub == nil {
-		slog.Error("webhook subscription.deleted: subscription not found", "subscription_id", data.SubscriptionID)
-		return nil
+	if err != nil {
+		slog.Error("webhook subscription.deleted: lookup error", "subscription_id", data.SubscriptionID, "error", err)
+		return fmt.Errorf("webhook subscription.deleted lookup: %w", err)
 	}
 
 	canceledStatus := SubscriptionStatusCanceled
@@ -712,7 +698,7 @@ func (s *BillingServiceImpl) handleWebhookSubscriptionDeleted(ctx context.Contex
 	})
 	if err != nil {
 		slog.Error("webhook subscription.deleted: update error", "error", err)
-		return nil
+		return fmt.Errorf("webhook subscription.deleted update: %w", err)
 	}
 
 	// Publish SubscriptionCancelled event
@@ -733,7 +719,7 @@ func (s *BillingServiceImpl) handleWebhookInvoicePaid(ctx context.Context, data 
 	exists, err := s.transactionRepo.ExistsByPaymentID(ctx, data.PaymentID, TransactionTypeSubscriptionPayment)
 	if err != nil {
 		slog.Error("webhook invoice.paid: idempotency check error", "error", err)
-		return nil
+		return fmt.Errorf("webhook invoice.paid idempotency check: %w", err)
 	}
 	if exists {
 		return nil // duplicate — already processed
@@ -741,9 +727,9 @@ func (s *BillingServiceImpl) handleWebhookInvoicePaid(ctx context.Context, data 
 
 	// Find subscription to get family_id
 	sub, err := s.subscriptionRepo.FindByHyperswitchID(ctx, data.SubscriptionID)
-	if err != nil || sub == nil {
-		slog.Error("webhook invoice.paid: subscription not found", "subscription_id", data.SubscriptionID)
-		return nil
+	if err != nil {
+		slog.Error("webhook invoice.paid: subscription lookup error", "subscription_id", data.SubscriptionID, "error", err)
+		return fmt.Errorf("webhook invoice.paid lookup: %w", err)
 	}
 
 	desc := "Premium subscription payment"
@@ -759,6 +745,7 @@ func (s *BillingServiceImpl) handleWebhookInvoicePaid(ctx context.Context, data 
 	})
 	if err != nil {
 		slog.Error("webhook invoice.paid: create transaction error", "error", err)
+		return fmt.Errorf("webhook invoice.paid create: %w", err)
 	}
 	return nil
 }
@@ -773,9 +760,9 @@ func (s *BillingServiceImpl) handleWebhookPaymentFailed(ctx context.Context, dat
 	}
 
 	sub, err := s.subscriptionRepo.FindByHyperswitchID(ctx, *data.SubscriptionID)
-	if err != nil || sub == nil {
-		slog.Error("webhook payment.failed: subscription not found", "subscription_id", *data.SubscriptionID)
-		return nil
+	if err != nil {
+		slog.Error("webhook payment.failed: subscription lookup error", "subscription_id", *data.SubscriptionID, "error", err)
+		return fmt.Errorf("webhook payment.failed lookup: %w", err)
 	}
 
 	pastDueStatus := SubscriptionStatusPastDue
@@ -784,6 +771,7 @@ func (s *BillingServiceImpl) handleWebhookPaymentFailed(ctx context.Context, dat
 	})
 	if err != nil {
 		slog.Error("webhook payment.failed: update error", "error", err)
+		return fmt.Errorf("webhook payment.failed update: %w", err)
 	}
 	return nil
 }
@@ -795,10 +783,10 @@ func (s *BillingServiceImpl) handleWebhookPaymentFailed(ctx context.Context, dat
 func (s *BillingServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, event FamilyDeletionScheduledEvent) error {
 	// Cancel subscription in Hyperswitch immediately (no end-of-term wait)
 	sub, err := s.subscriptionRepo.FindByFamily(ctx, shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: event.FamilyID}))
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrSubscriptionNotFound) {
 		return fmt.Errorf("handle family deletion: %w", err)
 	}
-	if sub != nil && sub.Status == SubscriptionStatusActive {
+	if err == nil && sub.Status == SubscriptionStatusActive {
 		if _, err := s.adapter.CancelSubscription(ctx, sub.HyperswitchSubscriptionID); err != nil {
 			slog.Error("failed to cancel subscription on family deletion", "family_id", event.FamilyID, "error", err)
 		}
@@ -813,8 +801,11 @@ func (s *BillingServiceImpl) HandleFamilyDeletionScheduled(ctx context.Context, 
 
 func (s *BillingServiceImpl) HandlePrimaryParentTransferred(ctx context.Context, event PrimaryParentTransferredEvent) error {
 	customer, err := s.customerRepo.FindByFamily(ctx, event.FamilyID)
-	if err != nil || customer == nil {
-		return nil // no Hyperswitch customer — nothing to update
+	if err != nil {
+		if errors.Is(err, ErrCustomerNotFound) {
+			return nil // no Hyperswitch customer — nothing to update
+		}
+		return nil // non-critical event handler — log and continue
 	}
 
 	// Look up the new primary's email directly from IAM (authoritative source).
@@ -869,10 +860,10 @@ func (s *BillingServiceImpl) resolvePriceID(interval string) (string, error) {
 // getOrCreateCustomer ensures a Hyperswitch customer exists for the family.
 func (s *BillingServiceImpl) getOrCreateCustomer(ctx context.Context, familyID uuid.UUID) (string, error) {
 	existing, err := s.customerRepo.FindByFamily(ctx, familyID)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrCustomerNotFound) {
 		return "", fmt.Errorf("find customer: %w", err)
 	}
-	if existing != nil {
+	if err == nil {
 		return existing.HyperswitchCustomerID, nil
 	}
 
