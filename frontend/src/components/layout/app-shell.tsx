@@ -140,7 +140,7 @@ function Header() {
   const { handleLogout, isLoggingOut } = useLogout();
 
   return (
-    <header className="flex items-center justify-between py-4 lg:py-6">
+    <header className="flex items-center justify-between py-2 lg:py-3">
       <div className="lg:hidden">
         <p className="type-title-md text-primary font-semibold">
           {intl.formatMessage({ id: "app.name", defaultMessage: "Homegrown Academy" })}
@@ -188,8 +188,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
         className="min-h-screen bg-surface lg:pl-[var(--width-sidebar)]"
         data-context="parent"
       >
+        <div className="sticky top-0 z-[var(--z-sticky)] bg-surface/80 backdrop-blur-[20px]">
+          <div className="max-w-[var(--width-content)] mx-auto px-spacing-page-x lg:px-spacing-page-x-lg">
+            <Header />
+          </div>
+        </div>
         <div className="max-w-[var(--width-content)] mx-auto px-spacing-page-x lg:px-spacing-page-x-lg">
-          <Header />
           <CoppaReverificationBanner />
           <main id="main-content" key={location.pathname}>
             <Suspense
