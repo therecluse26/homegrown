@@ -1,4 +1,10 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -330,6 +336,21 @@ export function useFeed(params?: { offset?: number; limit?: number }) {
   });
 }
 
+export function useInfiniteFeed(params?: { limit?: number }) {
+  const limit = params?.limit ?? 20;
+  return useInfiniteQuery({
+    queryKey: ["social", "feed", { limit }],
+    queryFn: ({ pageParam }) =>
+      apiClient<FeedResponse>(
+        `/v1/social/feed?offset=${pageParam}&limit=${limit}`,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (_lastPage, _allPages, lastPageParam) =>
+      _lastPage.posts.length >= limit ? lastPageParam + limit : undefined,
+    staleTime: 1000 * 30,
+  });
+}
+
 export function usePostDetail(postId: string | undefined) {
   return useQuery({
     queryKey: ["social", "posts", postId],
@@ -388,22 +409,25 @@ function optimisticLikeToggle(
   postId: string,
   liked: boolean,
 ) {
-  // Update feed caches
-  qc.setQueriesData<FeedResponse>(
+  // Update infinite feed caches
+  qc.setQueriesData<InfiniteData<FeedResponse>>(
     { queryKey: ["social", "feed"] },
     (old) => {
       if (!old) return old;
       return {
         ...old,
-        posts: old.posts.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                is_liked_by_me: liked,
-                likes_count: p.likes_count + (liked ? 1 : -1),
-              }
-            : p,
-        ),
+        pages: old.pages.map((page) => ({
+          ...page,
+          posts: page.posts.map((p) =>
+            p.id === postId
+              ? {
+                  ...p,
+                  is_liked_by_me: liked,
+                  likes_count: p.likes_count + (liked ? 1 : -1),
+                }
+              : p,
+          ),
+        })),
       };
     },
   );

@@ -19,6 +19,7 @@ import {
   Card,
   EmptyState,
   Icon,
+  InfiniteScroll,
   Skeleton,
   Avatar,
   DropdownMenu,
@@ -27,7 +28,7 @@ import {
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
 import {
-  useFeed,
+  useInfiniteFeed,
   useCreatePost,
   useLikePost,
   useUnlikePost,
@@ -336,8 +337,17 @@ function PostCard({ post }: { post: PostResponse }) {
 
 export function Feed() {
   const intl = useIntl();
-  const [offset, setOffset] = useState(0);
-  const { data, isPending, isError } = useFeed({ offset, limit: 20 });
+  const {
+    data,
+    isPending,
+    isError,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useInfiniteFeed();
+
+  // Flatten all pages into a single post array
+  const posts = data?.pages.flatMap((page) => page.posts) ?? [];
 
   return (
     <div className="max-w-content-narrow mx-auto">
@@ -370,18 +380,13 @@ export function Feed() {
             <p className="type-body-md text-on-surface-variant">
               <FormattedMessage id="social.feed.error" />
             </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-3"
-              onClick={() => setOffset(0)}
-            >
+            <Button variant="secondary" size="sm" className="mt-3">
               <FormattedMessage id="common.retry" />
             </Button>
           </Card>
         )}
 
-        {data && data.posts.length === 0 && (
+        {data && posts.length === 0 && (
           <EmptyState
             illustration={<Icon icon={Users} size="xl" />}
             message={intl.formatMessage({ id: "social.feed.empty.title" })}
@@ -399,32 +404,16 @@ export function Feed() {
           />
         )}
 
-        {/* Post list with aria-live for new posts */}
-        <div aria-live="polite" aria-relevant="additions">
-          {data?.posts.map((post) => <PostCard key={post.id} post={post} />)}
-        </div>
-
-        {/* Pagination */}
-        {data && data.posts.length >= 20 && (
-          <div className="flex justify-center gap-3 py-4">
-            {offset > 0 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setOffset(Math.max(0, offset - 20))}
-              >
-                <FormattedMessage id="common.previous" />
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setOffset(offset + 20)}
-            >
-              <FormattedMessage id="common.next" />
-            </Button>
+        {/* Post list with infinite scroll */}
+        <InfiniteScroll
+          onLoadMore={() => fetchNextPage()}
+          loading={isFetchingNextPage}
+          hasMore={hasNextPage ?? false}
+        >
+          <div aria-live="polite" aria-relevant="additions" className="flex flex-col gap-[var(--spacing-list-gap)]">
+            {posts.map((post) => <PostCard key={post.id} post={post} />)}
           </div>
-        )}
+        </InfiniteScroll>
       </div>
     </div>
   );
