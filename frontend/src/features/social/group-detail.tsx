@@ -58,7 +58,7 @@ export function GroupDetail() {
   const { groupId } = useParams<{ groupId: string }>();
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
-  const { data: group, isPending } = useGroupDetail(groupId);
+  const { data: group, isPending, error } = useGroupDetail(groupId);
   const { data: members } = useGroupMembers(groupId);
   const { data: posts } = useGroupPosts(groupId);
   const joinGroup = useJoinGroup();
@@ -74,7 +74,7 @@ export function GroupDetail() {
     );
   }
 
-  if (!group) return <ResourceNotFound backTo="/groups" />;
+  if (error || !group) return <ResourceNotFound backTo="/groups" />;
 
   const summary = group.summary;
 

@@ -69,19 +69,22 @@ export function ProgressView() {
     date_to: dateTo || undefined,
   };
 
+  // Only pass a valid UUID to hooks — prevents firing with "select" or other invalid route params.
+  const safeStudentId = isValidId ? studentId : "";
+
   const { data: summary, isPending: summaryLoading } = useStudentProgress(
-    studentId ?? "",
+    safeStudentId,
     dateParams,
   );
   const { data: subjectProgress, isPending: subjectsLoading } =
-    useSubjectProgress(studentId ?? "", dateParams);
+    useSubjectProgress(safeStudentId, dateParams);
   const {
     data: timelinePages,
     isPending: timelineLoading,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useProgressTimeline(studentId ?? "", dateParams);
+  } = useProgressTimeline(safeStudentId, dateParams);
 
   const timeline = timelinePages?.pages.flatMap((p) => p.data) ?? [];
 

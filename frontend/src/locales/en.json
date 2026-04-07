@@ -770,7 +770,7 @@
   "social.events.rsvp.full": "Full",
   "social.events.spots": "{remaining} of {total} spots",
   "social.events.virtual": "Virtual event",
-  "social.events.attendees": "{count} attendees",
+  "social.events.attendees": "{count, plural, one {# attendee} other {# attendees}}",
   "social.events.cancel": "Cancel Event",
   "social.events.cancel.title": "Cancel event?",
   "social.events.cancel.description": "All attendees will be notified that this event has been cancelled.",

@@ -74,10 +74,10 @@ function MethodologyRow({ config }: { config: MethodologyConfigFull }) {
         aria-controls={`methodology-${config.slug}-body`}
       >
         <div>
-          <span className="type-title-sm text-on-surface font-semibold">
+          <span className="type-title-sm text-on-surface font-semibold block">
             {displayName}
           </span>
-          <span className="ml-2 type-label-sm text-on-surface-variant font-mono">
+          <span className="type-label-sm text-on-surface-variant font-mono block">
             {config.slug}
           </span>
         </div>

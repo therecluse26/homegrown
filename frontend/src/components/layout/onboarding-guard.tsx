@@ -4,7 +4,7 @@ import { useAuthContext } from "@/features/auth/auth-provider";
 import { Spinner } from "@/components/ui";
 
 export function OnboardingGuard() {
-  const { isAuthenticated } = useAuthContext();
+  const { isAuthenticated, isPlatformAdmin } = useAuthContext();
   const location = useLocation();
 
   const { data: progress, isLoading } = useOnboardingProgress();
@@ -17,8 +17,11 @@ export function OnboardingGuard() {
     );
   }
 
+  // Platform admins bypass onboarding — they don't need the wizard.
   const isComplete =
-    progress?.status === "completed" || progress?.status === "skipped";
+    isPlatformAdmin ||
+    progress?.status === "completed" ||
+    progress?.status === "skipped";
 
   if (!isComplete && location.pathname !== "/onboarding") {
     return <Navigate to="/onboarding" replace />;

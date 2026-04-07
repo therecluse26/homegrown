@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useIntl, FormattedMessage } from "react-intl";
 import {
   Badge,
@@ -1081,6 +1081,13 @@ function CoParentsTab() {
 
 export function FamilySettings() {
   const intl = useIntl();
+
+  // Set document title for browser tab
+  const pageTitle = intl.formatMessage({ id: "settings.title" });
+  useEffect(() => {
+    const appName = intl.formatMessage({ id: "app.name" });
+    document.title = `${pageTitle} — ${appName}`;
+  }, [pageTitle, intl]);
 
   const tabs = [
     {

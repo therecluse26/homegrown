@@ -93,15 +93,15 @@ export type FlowResult =
 
 // ─── Field error extraction ───────────────────────────────────────────────────
 
-/** Map raw Kratos field names to user-friendly display names. */
+/** Map raw Kratos field names to user-friendly display names (sentence-case). */
 const FRIENDLY_FIELD_NAMES: Record<string, string> = {
-  identifier: "Email",
-  password: "Password",
-  "traits.name": "Name",
-  "traits.email": "Email",
-  "traits.name.first": "First name",
-  "traits.name.last": "Last name",
-  code: "Verification code",
+  identifier: "email",
+  password: "password",
+  "traits.name": "name",
+  "traits.email": "email",
+  "traits.name.first": "first name",
+  "traits.name.last": "last name",
+  code: "verification code",
 };
 
 /** Humanize a Kratos validation message by replacing raw field references. */

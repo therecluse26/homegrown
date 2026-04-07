@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
 import { AlertTriangle, Download, XCircle } from "lucide-react";
@@ -12,6 +12,12 @@ import {
 
 export function AccountDeletion() {
   const intl = useIntl();
+
+  // Set document title
+  useEffect(() => {
+    const appName = intl.formatMessage({ id: "app.name" });
+    document.title = `${intl.formatMessage({ id: "settings.account.delete" })} — ${appName}`;
+  }, [intl]);
   const profile = useFamilyProfile();
   const deletionStatus = useDeletionStatus();
   const requestDeletion = useRequestDeletion();

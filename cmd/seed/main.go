@@ -49,7 +49,8 @@ const (
 	studentSession1ID = "01900000-0000-7000-8000-000000000033"
 
 	// Onboard
-	seedWizardProgressID = "01900000-0000-7000-8000-000000000131"
+	seedWizardProgressID  = "01900000-0000-7000-8000-000000000131"
+	adminWizardProgressID = "01900000-0000-7000-8000-000000000132"
 
 	// Social
 	friendshipID     = "01900000-0000-7000-8000-000000000041"
@@ -729,6 +730,17 @@ func seedOnboard(db *gorm.DB) error {
 			seedWizardProgressID, seedFamilyID,
 		).Error; err != nil {
 			return fmt.Errorf("insert wizard progress: %w", err)
+		}
+
+		// Admin family wizard progress — skipped so admins bypass the onboarding guard.
+		if err := tx.Exec(`
+			INSERT INTO onb_wizard_progress
+				(id, family_id, status, current_step, completed_steps)
+			VALUES (?, ?, 'skipped', 'family_profile', '{}')
+			ON CONFLICT (family_id) DO NOTHING`,
+			adminWizardProgressID, platformFamilyID,
+		).Error; err != nil {
+			return fmt.Errorf("insert admin wizard progress: %w", err)
 		}
 		return nil
 	})
