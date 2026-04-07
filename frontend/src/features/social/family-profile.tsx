@@ -14,10 +14,12 @@ import {
   useFamilyProfileView,
   useSendFriendRequest,
 } from "@/hooks/use-social";
+import { useAuth } from "@/hooks/use-auth";
 
 export function FamilyProfile() {
   const intl = useIntl();
   const { familyId } = useParams<{ familyId: string }>();
+  const { user } = useAuth();
   const { data: profile, isPending } = useFamilyProfileView(familyId);
   const sendRequest = useSendFriendRequest();
 
@@ -107,7 +109,7 @@ export function FamilyProfile() {
             )}
 
             {/* Actions */}
-            {!profile.is_friend && profile.friendship_status !== "pending" && (
+            {!profile.is_friend && profile.friendship_status !== "pending" && profile.family_id !== user?.family_id && (
               <div className="mt-4">
                 <Button
                   variant="primary"

@@ -194,18 +194,13 @@ export function CreateListing() {
           >
             {({ id }) => (
               <div>
-                <Input
+                <p
                   id={id}
-                  value={form.publisher_id ?? ""}
-                  onChange={(e) => updateField("publisher_id", e.target.value)}
-                  placeholder={creatorProfile?.store_name ?? "Publisher ID"}
-                  required
-                />
-                {creatorProfile?.store_name && form.publisher_id === creatorProfile.id && (
-                  <p className="type-label-sm text-on-surface-variant mt-1">
-                    {creatorProfile.store_name}
-                  </p>
-                )}
+                  className="type-body-md text-on-surface rounded-radius-sm bg-surface-container px-3 py-2"
+                >
+                  {creatorProfile?.store_name ?? form.publisher_id ?? "—"}
+                </p>
+                <input type="hidden" name="publisher_id" value={form.publisher_id ?? ""} />
               </div>
             )}
           </FormField>

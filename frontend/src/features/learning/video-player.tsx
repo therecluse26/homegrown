@@ -157,6 +157,12 @@ export function VideoPlayer() {
     );
   }
 
+  if (!videoDef) {
+    return (
+      <EmptyState message={intl.formatMessage({ id: "video.notFound" })} />
+    );
+  }
+
   return (
     <div className="mx-auto max-w-content-narrow space-y-6">
       {/* Header */}

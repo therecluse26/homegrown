@@ -369,9 +369,8 @@ export function useCreatePost() {
         body: data,
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({
+      await qc.resetQueries({
         queryKey: ["social", "feed"],
-        refetchType: "active",
       });
     },
   });

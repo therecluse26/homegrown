@@ -8,6 +8,7 @@ import {
   Input,
 } from "@/components/ui";
 import { FormField } from "@/components/ui/form-field";
+import { useToast } from "@/components/ui/toast";
 import { useCreateGroup } from "@/hooks/use-social";
 import { useState, useEffect, useRef } from "react";
 
@@ -36,6 +37,7 @@ const JOIN_POLICIES = [
 export function GroupCreation() {
   const intl = useIntl();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const createGroup = useCreateGroup();
 
@@ -59,6 +61,9 @@ export function GroupCreation() {
       {
         onSuccess: (data) => {
           void navigate(`/groups/${data.summary.id}`);
+        },
+        onError: () => {
+          toast(intl.formatMessage({ id: "groups.create.error" }), "error");
         },
       },
     );

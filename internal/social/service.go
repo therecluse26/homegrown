@@ -468,7 +468,8 @@ func (s *socialServiceImpl) ListOutgoingRequests(ctx context.Context, scope *sha
 
 func (s *socialServiceImpl) ListBlocks(ctx context.Context, scope *shared.FamilyScope) ([]BlockedFamilyResponse, error) {
 	var blocks []Block
-	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
+	// BypassRLS: blocks are queried by blocker_family_id WHERE clause, not RLS tenant. (H4 fix)
+	err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		repo := &PgBlockRepository{db: tx}
 		var findErr error
 		blocks, findErr = repo.ListByBlocker(ctx, scope.FamilyID())
@@ -565,6 +566,7 @@ func (s *socialServiceImpl) CreatePost(ctx context.Context, auth *shared.AuthCon
 		LikesCount:    0,
 		CommentsCount: 0,
 		IsLikedByMe:   false,
+		IsMine:        true,
 		CreatedAt:     post.CreatedAt,
 	}, nil
 }
@@ -616,6 +618,7 @@ func (s *socialServiceImpl) UpdatePost(ctx context.Context, auth *shared.AuthCon
 		CommentsCount: updated.CommentsCount,
 		IsEdited:      true,
 		IsLikedByMe:   false,
+		IsMine:        true,
 		CreatedAt:     updated.CreatedAt,
 	}, nil
 }
@@ -704,10 +707,12 @@ func (s *socialServiceImpl) GetPost(ctx context.Context, auth *shared.AuthContex
 	if err != nil {
 		return nil, err
 	}
-	commentResponses := make([]CommentResponse, 0, len(comments))
+	// Build flat list of comment responses, then assemble into tree. (H1 fix)
+	commentByID := make(map[uuid.UUID]*CommentResponse, len(comments))
+	allResponses := make([]CommentResponse, 0, len(comments))
 	for _, c := range comments {
 		cAuthor, _ := s.iam.GetParentDisplayName(ctx, c.AuthorParentID)
-		commentResponses = append(commentResponses, CommentResponse{
+		cr := CommentResponse{
 			ID:              c.ID,
 			PostID:          c.PostID,
 			FamilyID:        c.FamilyID,
@@ -715,7 +720,22 @@ func (s *socialServiceImpl) GetPost(ctx context.Context, auth *shared.AuthContex
 			ParentCommentID: c.ParentCommentID,
 			Content:         c.Content,
 			CreatedAt:       c.CreatedAt,
-		})
+		}
+		allResponses = append(allResponses, cr)
+		commentByID[c.ID] = &allResponses[len(allResponses)-1]
+	}
+
+	// Attach replies to parents; collect top-level comments.
+	topLevel := make([]CommentResponse, 0, len(comments))
+	for i := range allResponses {
+		cr := &allResponses[i]
+		if cr.ParentCommentID != nil {
+			if parent, ok := commentByID[*cr.ParentCommentID]; ok {
+				parent.Replies = append(parent.Replies, *cr)
+				continue
+			}
+		}
+		topLevel = append(topLevel, *cr)
 	}
 
 	return &PostDetailResponse{
@@ -732,9 +752,10 @@ func (s *socialServiceImpl) GetPost(ctx context.Context, auth *shared.AuthContex
 			CommentsCount: post.CommentsCount,
 			IsEdited:      post.IsEdited,
 			IsLikedByMe:   liked,
+			IsMine:        post.FamilyID == auth.FamilyID,
 			CreatedAt:     post.CreatedAt,
 		},
-		Comments: commentResponses,
+		Comments: topLevel,
 	}, nil
 }
 
@@ -810,6 +831,7 @@ func (s *socialServiceImpl) GetFeed(ctx context.Context, auth *shared.AuthContex
 			CommentsCount: p.CommentsCount,
 			IsEdited:      p.IsEdited,
 			IsLikedByMe:   likedMap[p.ID],
+			IsMine:        p.FamilyID == auth.FamilyID,
 			CreatedAt:     p.CreatedAt,
 		}
 	}
@@ -1625,6 +1647,7 @@ func (s *socialServiceImpl) ListGroupPosts(ctx context.Context, auth *shared.Aut
 			CommentsCount: p.CommentsCount,
 			IsEdited:      p.IsEdited,
 			IsLikedByMe:   liked,
+			IsMine:        p.FamilyID == auth.FamilyID,
 			CreatedAt:     p.CreatedAt,
 		}
 	}

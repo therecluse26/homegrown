@@ -175,6 +175,22 @@ export function PayoutSetup() {
     );
   }
 
+  if (configQuery.error || methodsQuery.error || verificationQuery.error) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <PageTitle
+          title={intl.formatMessage({ id: "marketplace.payouts.title" })}
+          className="mb-6"
+        />
+        <Card className="bg-error-container">
+          <p className="type-body-md text-on-error-container">
+            <FormattedMessage id="error.generic" />
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   if (!isVerified) {
     return (
       <div className="mx-auto max-w-2xl">

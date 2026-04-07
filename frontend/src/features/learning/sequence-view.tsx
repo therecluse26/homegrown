@@ -153,6 +153,12 @@ export function SequenceView() {
     );
   }
 
+  if (!progress || !sequenceDef) {
+    return (
+      <EmptyState message={intl.formatMessage({ id: "sequence.notFound" })} />
+    );
+  }
+
   return (
     <div className="mx-auto max-w-content-narrow space-y-6">
       {/* Header */}

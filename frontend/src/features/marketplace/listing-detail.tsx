@@ -75,6 +75,7 @@ export function ListingDetail() {
   const handleAddToCart = useCallback(() => {
     addToCart.mutate(listing?.id ?? "", {
       onSuccess: () => toast(intl.formatMessage({ id: "marketplace.addedToCart" }), "success"),
+      onError: () => toast(intl.formatMessage({ id: "marketplace.alreadyInCart" }), "error"),
     });
   }, [addToCart, listing?.id, toast, intl]);
   const createReview = useCreateReview(id ?? "");

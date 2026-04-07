@@ -534,6 +534,7 @@
   "progress.timeline.empty": "No activity recorded yet",
 
   "quiz.noSession": "Quiz session not found",
+  "quiz.notFound": "Quiz not found",
   "quiz.true": "True",
   "quiz.false": "False",
   "quiz.shortAnswer.placeholder": "Type your answer…",
@@ -819,6 +820,7 @@
   "marketplace.sort.newest": "Newest",
   "marketplace.addToCart": "Add to Cart",
   "marketplace.addedToCart": "Item added to cart",
+  "marketplace.alreadyInCart": "This item is already in your cart.",
   "marketplace.listing.notFound": "This listing could not be found. It may have been removed or is no longer available.",
   "marketplace.listing.notFound.title": "Listing not found",
   "marketplace.getFree": "Get Free",
@@ -839,6 +841,7 @@
   "marketplace.cart.remove": "Remove from cart",
   "marketplace.cart.total": "Total",
   "marketplace.cart.checkout": "Proceed to Checkout",
+  "marketplace.cart.checkout.error": "Checkout failed. Please try again or contact support.",
 
   "marketplace.purchases.title": "Purchase History",
   "marketplace.purchases.empty.title": "No purchases yet",
@@ -1334,6 +1337,7 @@
   "groups.create.joinPolicy.request": "Request — members must be approved",
   "groups.create.joinPolicy.invite": "Invite only — members must be invited",
   "groups.create.submit": "Create group",
+  "groups.create.error": "Could not create group. Please check your input and try again.",
   "groups.manage.title": "Group Settings",
   "groups.manage.members": "Members",
   "groups.manage.role.owner": "Owner",
@@ -1388,6 +1392,7 @@
   "compliance.attendance.heatmap": "Attendance calendar",
   "compliance.attendance.legend": "Legend",
   "compliance.attendance.saved": "Attendance recorded",
+  "compliance.attendance.record.error": "Could not record attendance. Please try again.",
   "compliance.attendance.summary": "{count} of {required} days ({percentage}%)",
 
   "compliance.assessments.title": "Assessment Records",

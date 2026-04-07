@@ -611,6 +611,7 @@ export function useAccountStatus() {
     queryKey: ["safety", "account-status"],
     queryFn: () =>
       apiClient<AccountStatusResponse>("/v1/safety/account-status"),
+    retry: false,
   });
 }
 
@@ -618,6 +619,7 @@ export function useMyAppeals() {
   return useQuery({
     queryKey: ["safety", "my-appeals"],
     queryFn: () => apiClient<AppealResponse[]>("/v1/safety/appeals"),
+    retry: false,
   });
 }
 

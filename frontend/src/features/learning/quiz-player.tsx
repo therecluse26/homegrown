@@ -381,6 +381,12 @@ export function QuizPlayer() {
     );
   }
 
+  if (!session || !quizDef) {
+    return (
+      <EmptyState message={intl.formatMessage({ id: "quiz.notFound" })} />
+    );
+  }
+
   const statusLabel = (s: QuizSessionStatus) =>
     intl.formatMessage({ id: `quiz.status.${s}` });
 

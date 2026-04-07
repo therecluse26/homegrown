@@ -10,6 +10,7 @@ import {
   Skeleton,
 } from "@/components/ui";
 import { TierGate } from "@/components/common/tier-gate";
+import { useToast } from "@/components/ui/toast";
 import {
   useAttendance,
   useAttendanceSummary,
@@ -150,6 +151,7 @@ function AttendanceHeatmap({
 
 export function AttendanceTracker() {
   const intl = useIntl();
+  const { toast } = useToast();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { tier } = useAuth();
   const students = useStudents();
@@ -206,6 +208,7 @@ export function AttendanceTracker() {
       },
       {
         onSuccess: () => setSelectedDate(null),
+        onError: () => toast(intl.formatMessage({ id: "compliance.attendance.record.error" }), "error"),
       },
     );
   };

@@ -348,7 +348,7 @@ func (r *PgPostRepository) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]Po
 		return nil, nil
 	}
 	var posts []Post
-	err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&posts).Error
+	err := r.db.WithContext(ctx).Where("id IN ?", ids).Order("created_at DESC").Find(&posts).Error
 	if err != nil {
 		return nil, shared.ErrDatabase(err)
 	}

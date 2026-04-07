@@ -489,6 +489,7 @@ type PostResponse struct {
 	CommentsCount  int             `json:"comments_count"`
 	IsEdited       bool            `json:"is_edited"`
 	IsLikedByMe    bool            `json:"is_liked_by_me"`
+	IsMine         bool            `json:"is_mine"`
 	CreatedAt      time.Time       `json:"created_at"`
 }
 

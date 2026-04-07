@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
+import { Link as RouterLink } from "react-router";
 import {
   Calendar,
   MapPin,
@@ -108,7 +109,11 @@ function EventCard({ event }: { event: EventDetailResponse }) {
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="type-title-sm text-on-surface">{event.title}</h3>
+          <h3 className="type-title-sm text-on-surface">
+            <RouterLink to={`/events/${event.id}`} className="hover:underline">
+              {event.title}
+            </RouterLink>
+          </h3>
 
           <div className="flex flex-wrap items-center gap-3 mt-1.5 type-label-sm text-on-surface-variant">
             <span className="flex items-center gap-1">

@@ -220,7 +220,7 @@ export function ReadingLists() {
                 <Card
                   key={list.id}
                   interactive
-                  onClick={() => navigate(`/reading-lists/${list.id}`)}
+                  onClick={() => navigate(`/learning/reading-lists/${list.id}`)}
                   className="cursor-pointer"
                 >
                   <div className="flex items-center justify-between mb-2">
