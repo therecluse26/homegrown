@@ -28,6 +28,7 @@ func (h *Handler) Register(authGroup *echo.Group, adminGroup *echo.Group) {
 	g.GET("/reports/:id", h.getMyReport)
 	g.GET("/account-status", h.getAccountStatus)
 	g.POST("/appeals", h.submitAppeal)
+	g.GET("/appeals", h.listMyAppeals)
 	g.GET("/appeals/:id", h.getMyAppeal)
 
 	// Phase 2: Parental controls (user-facing)
@@ -242,6 +243,29 @@ func (h *Handler) getMyAppeal(c echo.Context) error {
 	}
 
 	resp, err := h.svc.GetMyAppeal(c.Request().Context(), scope, id)
+	if err != nil {
+		return mapSafetyError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// listMyAppeals godoc
+//
+// @Summary     List my appeals
+// @Tags        safety
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {array}  AppealResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /safety/appeals [get]
+func (h *Handler) listMyAppeals(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return shared.ErrUnauthorized()
+	}
+	scope := shared.NewFamilyScopeFromAuth(auth)
+
+	resp, err := h.svc.ListMyAppeals(c.Request().Context(), scope)
 	if err != nil {
 		return mapSafetyError(err)
 	}

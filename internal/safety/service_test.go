@@ -1706,6 +1706,53 @@ func TestGetMyAppeal_not_found(t *testing.T) { // [11-safety §4.3]
 	}
 }
 
+func TestListMyAppeals_returns_family_appeals(t *testing.T) { // [11-safety §4.3]
+	h := newTestHarness()
+	familyID := uuid.Must(uuid.NewV7())
+	appealID1 := uuid.Must(uuid.NewV7())
+	appealID2 := uuid.Must(uuid.NewV7())
+
+	h.appealRepo.listByFamilyIDFn = func(_ context.Context, fid uuid.UUID) ([]Appeal, error) {
+		if fid != familyID {
+			t.Errorf("familyID = %v, want %v", fid, familyID)
+		}
+		return []Appeal{
+			{ID: appealID1, FamilyID: familyID, Status: "pending", AppealText: "First"},
+			{ID: appealID2, FamilyID: familyID, Status: "granted", AppealText: "Second"},
+		}, nil
+	}
+
+	resp, err := h.svc.ListMyAppeals(context.Background(), testScope(familyID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp) != 2 {
+		t.Fatalf("len = %d, want 2", len(resp))
+	}
+	if resp[0].ID != appealID1 {
+		t.Errorf("resp[0].ID = %v, want %v", resp[0].ID, appealID1)
+	}
+	if resp[1].Status != "granted" {
+		t.Errorf("resp[1].Status = %q, want %q", resp[1].Status, "granted")
+	}
+}
+
+func TestListMyAppeals_empty(t *testing.T) { // [11-safety §4.3]
+	h := newTestHarness()
+
+	h.appealRepo.listByFamilyIDFn = func(_ context.Context, _ uuid.UUID) ([]Appeal, error) {
+		return []Appeal{}, nil
+	}
+
+	resp, err := h.svc.ListMyAppeals(context.Background(), testScope(uuid.Must(uuid.NewV7())))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp) != 0 {
+		t.Errorf("len = %d, want 0", len(resp))
+	}
+}
+
 func TestAdminListReports(t *testing.T) { // [11-safety §4.4]
 	h := newTestHarness()
 

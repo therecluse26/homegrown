@@ -32,11 +32,13 @@ const WS_BASE =
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const RECONNECT_BACKOFF_FACTOR = 2;
+const MAX_RETRIES = 5;
 
 let socket: WebSocket | null = null;
 let reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let isManuallyDisconnected = false;
+let retryCount = 0;
 
 const handlers = new Set<WsMessageHandler>();
 
@@ -48,7 +50,8 @@ function clearReconnectTimer() {
 }
 
 function scheduleReconnect() {
-  if (isManuallyDisconnected || reconnectTimer) return;
+  if (isManuallyDisconnected || reconnectTimer || retryCount >= MAX_RETRIES) return;
+  retryCount++;
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
@@ -77,6 +80,7 @@ function connect() {
 
   socket.addEventListener("open", () => {
     reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
+    retryCount = 0;
   });
 
   socket.addEventListener("message", (event: MessageEvent<string>) => {
@@ -108,6 +112,7 @@ export function subscribe(handler: WsMessageHandler): () => void {
 /** Connect to the WebSocket server (idempotent). */
 export function wsConnect() {
   isManuallyDisconnected = false;
+  retryCount = 0;
   connect();
 }
 

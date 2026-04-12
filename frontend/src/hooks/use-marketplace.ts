@@ -580,7 +580,7 @@ export function usePayoutConfig() {
   return useQuery({
     queryKey: ["marketplace", "payouts", "config"],
     queryFn: () =>
-      apiClient<PayoutConfig>("/v1/marketplace/payouts/config"),
+      apiClient<PayoutConfig>("/v1/marketplace/creators/payouts/config"),
   });
 }
 
@@ -588,7 +588,7 @@ export function usePayoutMethods() {
   return useQuery({
     queryKey: ["marketplace", "payouts", "methods"],
     queryFn: () =>
-      apiClient<PayoutMethod[]>("/v1/marketplace/payouts/methods"),
+      apiClient<PayoutMethod[]>("/v1/marketplace/creators/payouts/methods"),
   });
 }
 
@@ -596,7 +596,7 @@ export function usePayoutHistory() {
   return useQuery({
     queryKey: ["marketplace", "payouts", "history"],
     queryFn: () =>
-      apiClient<PayoutHistory[]>("/v1/marketplace/payouts/history"),
+      apiClient<PayoutHistory[]>("/v1/marketplace/creators/payouts/history"),
   });
 }
 
@@ -610,7 +610,7 @@ export function useAddPayoutMethod() {
       routing_number?: string;
       paypal_email?: string;
     }) =>
-      apiClient<PayoutMethod>("/v1/marketplace/payouts/methods", {
+      apiClient<PayoutMethod>("/v1/marketplace/creators/payouts/methods", {
         method: "POST",
         body: cmd,
       }),
@@ -624,7 +624,7 @@ export function useRemovePayoutMethod() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (methodId: string) =>
-      apiClient<void>(`/v1/marketplace/payouts/methods/${methodId}`, {
+      apiClient<void>(`/v1/marketplace/creators/payouts/methods/${methodId}`, {
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -637,7 +637,7 @@ export function useSetDefaultPayoutMethod() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (methodId: string) =>
-      apiClient<void>(`/v1/marketplace/payouts/methods/${methodId}/default`, {
+      apiClient<void>(`/v1/marketplace/creators/payouts/methods/${methodId}/default`, {
         method: "PUT",
       }),
     onSuccess: () => {
@@ -659,7 +659,7 @@ export function useCreatorVerification() {
   return useQuery({
     queryKey: ["marketplace", "creator", "verification"],
     queryFn: () =>
-      apiClient<CreatorVerification>("/v1/marketplace/creator/verification"),
+      apiClient<CreatorVerification>("/v1/marketplace/creators/verification"),
   });
 }
 
@@ -667,7 +667,7 @@ export function useSubmitVerification() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (cmd: { legal_name: string; tax_id: string }) =>
-      apiClient<CreatorVerification>("/v1/marketplace/creator/verification", {
+      apiClient<CreatorVerification>("/v1/marketplace/creators/verification", {
         method: "POST",
         body: cmd,
       }),

@@ -587,6 +587,14 @@ func (r *PgAppealRepository) Update(_ context.Context, appealID uuid.UUID, updat
 	return &appeal, nil
 }
 
+func (r *PgAppealRepository) ListByFamilyID(_ context.Context, familyID uuid.UUID) ([]Appeal, error) {
+	var appeals []Appeal
+	if err := r.db.Where("family_id = ?", familyID).Order("created_at DESC").Find(&appeals).Error; err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return appeals, nil
+}
+
 func (r *PgAppealRepository) CountByStatus(_ context.Context, status string) (int64, error) {
 	var count int64
 	if err := r.db.Model(&Appeal{}).Where("status = ?", status).Count(&count).Error; err != nil {
