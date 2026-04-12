@@ -191,6 +191,17 @@ export function SearchResults() {
     setLocalQuery(q);
   }, [q]);
 
+  // Auto-search with debounce: fire search 400ms after user stops typing
+  useEffect(() => {
+    const trimmed = localQuery.trim();
+    // Don't update if it matches current URL param or too short
+    if (trimmed === q || trimmed.length < 2) return;
+    const timer = setTimeout(() => {
+      setSearchParams({ q: trimmed, scope });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [localQuery, q, scope, setSearchParams]);
+
   const { data, isPending } = useSearch(
     q.length >= 2 ? { q, scope } : null,
   );

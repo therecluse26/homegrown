@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
+import { createBrowserRouter, Navigate, useParams, type RouteObject } from "react-router";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthLayout } from "@/components/layout/auth-layout";
 import { OnboardingLayout } from "@/components/layout/onboarding-layout";
@@ -12,6 +12,16 @@ import { AdminGuard } from "@/components/layout/admin-guard";
 import { StudentGuard } from "@/components/layout/student-guard";
 import { RouteErrorBoundary } from "@/components/layout/route-error-boundary";
 import { NotFoundPage } from "@/components/layout/not-found-page";
+
+/** Redirect that interpolates route params into the target path. */
+function ParamRedirect({ to }: { to: string }) {
+  const params = useParams();
+  let target = to;
+  for (const [key, value] of Object.entries(params)) {
+    if (value && key !== "*") target = target.replace(`:${key}`, value);
+  }
+  return <Navigate to={target} replace />;
+}
 
 // ─── Lazy-loaded feature pages ──────────────────────────────────────────────
 // Each feature module is code-split into its own chunk via React.lazy.
@@ -289,12 +299,56 @@ const routes: RouteObject[] = [
               { path: "creator/earnings", element: <ComingSoonStub title="Creator Earnings" description="Track your marketplace earnings and payout history." backTo="/creator" backLabel="Back to Creator Dashboard" /> },
               { path: "creator/analytics", element: <ComingSoonStub title="Creator Analytics" description="View performance metrics for your marketplace listings." backTo="/creator" backLabel="Back to Creator Dashboard" /> },
               { path: "marketplace/library", element: <ComingSoonStub title="My Library" description="Access your purchased resources and downloads." backTo="/marketplace" backLabel="Back to Marketplace" /> },
+              // Learning detail stubs
+              { path: "learning/journals/:id", element: <ComingSoonStub title="Journal Entry" description="View and edit journal entries." backTo="/learning/journals" backLabel="Back to Journals" /> },
+              { path: "learning/nature-journal/:id", element: <ComingSoonStub title="Nature Journal Entry" description="View nature journal observations." backTo="/learning/nature-journal" backLabel="Back to Nature Journal" /> },
+              { path: "learning/trivium-tracker/:id", element: <ComingSoonStub title="Trivium Entry" description="View trivium stage details." backTo="/learning/trivium-tracker" backLabel="Back to Trivium Tracker" /> },
+              { path: "learning/grades/new", element: <ComingSoonStub title="New Grade Entry" description="Record a new grade or test score." backTo="/learning/grades" backLabel="Back to Grades" /> },
+              { path: "learning/grades/:id", element: <ComingSoonStub title="Grade Details" description="View grade and score details." backTo="/learning/grades" backLabel="Back to Grades" /> },
+              { path: "learning/reading-lists/:id", element: <ComingSoonStub title="Reading List" description="View and manage this reading list." backTo="/learning/reading-lists" backLabel="Back to Reading Lists" /> },
+              { path: "learning/reading-lists/:id/books", element: <ComingSoonStub title="Books" description="Browse books in this reading list." backTo="/learning/reading-lists" backLabel="Back to Reading Lists" /> },
+              { path: "learning/activities/new", element: <ComingSoonStub title="Log Activity" description="Record a new learning activity." backTo="/learning/activities" backLabel="Back to Activities" /> },
+              { path: "learning/activities/:id", element: <ComingSoonStub title="Activity Details" description="View activity details and notes." backTo="/learning/activities" backLabel="Back to Activities" /> },
+              // Marketplace stubs
+              { path: "marketplace/categories", element: <ComingSoonStub title="Categories" description="Browse marketplace content by category." backTo="/marketplace" backLabel="Back to Marketplace" /> },
+              // Billing stubs
+              { path: "billing/micro-charges", element: <ComingSoonStub title="COPPA Micro-Charges" description="View COPPA verification micro-charge history." backTo="/billing" backLabel="Back to Billing" /> },
 
               // ─── Redirects ──────────────────────────────────────────────────
               { path: "settings/billing", element: <Navigate to="/billing" replace /> },
               { path: "notifications/history", element: <Navigate to="/settings/notifications/history" replace /> },
               { path: "settings/moderation", element: <Navigate to="/settings/account/appeals" replace /> },
               { path: "profile", element: <ProfileRedirect /> },
+              // Learning redirects
+              { path: "learning/habit-tracker", element: <Navigate to="/learning/habit-tracking" replace /> },
+              { path: "learning/interest-led", element: <Navigate to="/learning/interest-led-log" replace /> },
+              // Marketplace redirects
+              { path: "marketplace/refund/:id", element: <ParamRedirect to="/marketplace/purchases/:id/refund" /> },
+              // Creator redirects
+              { path: "creator/listings", element: <Navigate to="/creator" replace /> },
+              { path: "creator/quizzes", element: <Navigate to="/creator/quiz-builder" replace /> },
+              { path: "creator/quizzes/new", element: <Navigate to="/creator/quiz-builder" replace /> },
+              { path: "creator/quizzes/:id", element: <ParamRedirect to="/creator/quiz-builder/:id" /> },
+              { path: "creator/sequences", element: <Navigate to="/creator/sequence-builder" replace /> },
+              { path: "creator/sequences/new", element: <Navigate to="/creator/sequence-builder" replace /> },
+              { path: "creator/sequences/:id", element: <ParamRedirect to="/creator/sequence-builder/:id" /> },
+              // Billing redirects
+              { path: "billing/history", element: <Navigate to="/billing/transactions" replace /> },
+              // Settings redirects
+              { path: "settings/family", element: <Navigate to="/settings" replace /> },
+              { path: "settings/family/students", element: <Navigate to="/settings" replace /> },
+              { path: "settings/family/parents", element: <Navigate to="/settings" replace /> },
+              { path: "settings/account/privacy", element: <Navigate to="/settings/privacy" replace /> },
+              { path: "settings/methodology", element: <Navigate to="/settings" replace /> },
+              { path: "settings/blocked", element: <Navigate to="/settings/blocks" replace /> },
+              // Calendar/Planning redirects
+              { path: "calendar/week", element: <Navigate to="/calendar" replace /> },
+              { path: "calendar/month", element: <Navigate to="/calendar" replace /> },
+              { path: "calendar/new", element: <Navigate to="/schedule/new" replace /> },
+              { path: "calendar/schedules", element: <Navigate to="/calendar" replace /> },
+              { path: "calendar/templates", element: <Navigate to="/planning/templates" replace /> },
+              { path: "calendar/templates/new", element: <Navigate to="/planning/templates" replace /> },
+              { path: "calendar/routines", element: <Navigate to="/calendar" replace /> },
 
               // 404
               { path: "*", element: <NotFoundPage /> },
@@ -347,6 +401,8 @@ const routes: RouteObject[] = [
     element: <ProtectedRoute />,
     errorElement: <RouteErrorBoundary />,
     children: [
+      // Student login is outside StudentGuard — it's the entry point
+      { path: "student/login", element: <ComingSoonStub title="Student Login" description="Students sign in with their family code to access their dashboard." backTo="/" backLabel="Back to Home" /> },
       {
         path: "student",
         element: <StudentGuard />,
@@ -360,6 +416,10 @@ const routes: RouteObject[] = [
               { path: "video/:videoId", element: <StudentVideo /> },
               { path: "read/:contentId", element: <StudentReader /> },
               { path: "sequence/:progressId", element: <StudentSequence /> },
+              // Student stubs
+              { path: "journal", element: <ComingSoonStub title="My Journal" description="Write and review your journal entries." backTo="/student" backLabel="Back to Dashboard" /> },
+              { path: "activities", element: <ComingSoonStub title="My Activities" description="View your learning activities and progress." backTo="/student" backLabel="Back to Dashboard" /> },
+              { path: "reading-list", element: <ComingSoonStub title="My Reading List" description="Browse your assigned reading list." backTo="/student" backLabel="Back to Dashboard" /> },
             ],
           },
         ],
@@ -387,6 +447,12 @@ const routes: RouteObject[] = [
               { path: "flags", element: <FeatureFlags /> },
               { path: "audit", element: <AuditLog /> },
               { path: "methodologies", element: <MethodologyConfigPage /> },
+              // Admin stubs
+              { path: "content-flags", element: <ComingSoonStub title="Content Flags" description="Review flagged content across the platform." backTo="/admin" backLabel="Back to Admin" /> },
+              { path: "appeals", element: <ComingSoonStub title="Appeals" description="Review user moderation appeals." backTo="/admin" backLabel="Back to Admin" /> },
+              { path: "reports", element: <ComingSoonStub title="Reports" description="View platform analytics and usage reports." backTo="/admin" backLabel="Back to Admin" /> },
+              // Admin redirects
+              { path: "feature-flags", element: <Navigate to="/admin/flags" replace /> },
             ],
           },
         ],
@@ -412,6 +478,12 @@ const routes: RouteObject[] = [
           { path: "portfolios/:studentId/:id", element: <PortfolioBuilder /> },
           { path: "transcripts", element: <TranscriptList /> },
           { path: "transcripts/:studentId/:id", element: <TranscriptBuilder /> },
+          // Compliance stubs
+          { path: "portfolios/new", element: <ComingSoonStub title="New Portfolio" description="Create a new student portfolio for compliance records." backTo="/compliance/portfolios" backLabel="Back to Portfolios" /> },
+          { path: "portfolios/:id", element: <ComingSoonStub title="Portfolio" description="View portfolio details and artifacts." backTo="/compliance/portfolios" backLabel="Back to Portfolios" /> },
+          { path: "immunization", element: <ComingSoonStub title="Immunization Records" description="Track immunization records for compliance." backTo="/compliance" backLabel="Back to Compliance" /> },
+          { path: "submissions", element: <ComingSoonStub title="Submissions" description="View and manage compliance document submissions." backTo="/compliance" backLabel="Back to Compliance" /> },
+          { path: "requirements", element: <ComingSoonStub title="Requirements" description="View state-specific homeschooling requirements." backTo="/compliance" backLabel="Back to Compliance" /> },
         ],
       },
     ],

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useParams, useNavigate, Link as RouterLink } from "react-router";
 import {
@@ -50,12 +50,14 @@ export function ProgressView() {
 
   // Handle non-UUID studentId (e.g. "select") — redirect to first student
   const isValidId = studentId && /^[0-9a-f-]{36}$/i.test(studentId);
-  if (!isValidId && students && students.length > 0) {
-    const firstId = students[0]?.id;
-    if (firstId) {
-      void navigate(`/learning/progress/${firstId}`, { replace: true });
+  useEffect(() => {
+    if (!isValidId && students && students.length > 0) {
+      const firstId = students[0]?.id;
+      if (firstId) {
+        void navigate(`/learning/progress/${firstId}`, { replace: true });
+      }
     }
-  }
+  }, [isValidId, students, navigate]);
 
   const student = students?.find((s) => s.id === studentId);
 
@@ -112,7 +114,7 @@ export function ProgressView() {
           <FormattedMessage
             id="progress.title"
             values={{
-              name: student?.display_name ?? "",
+              name: student?.display_name || intl.formatMessage({ id: "progress.defaultName" }),
               tool: toolLabel("progress-tracking", intl.formatMessage({ id: "learning.action.progress" })),
             }}
           />

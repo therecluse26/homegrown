@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useIntl, FormattedMessage } from "react-intl";
+import { Link as RouterLink } from "react-router";
 import {
   Badge,
   Button,
@@ -16,11 +17,18 @@ import {
 } from "@/components/ui";
 import { MethodologyCard } from "@/components/common/methodology-card";
 import {
+  Bell,
+  CreditCard,
+  Download,
+  Lock,
   Mail,
+  Monitor,
   Pencil,
   Plus,
   Shield,
+  ShieldOff,
   Trash2,
+  User,
   UserMinus,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -1077,6 +1085,40 @@ function CoParentsTab() {
   );
 }
 
+// ─── Settings Hub Navigation ─────────────────────────────────────────────────
+
+const SETTINGS_LINKS = [
+  { to: "/settings/account", icon: User, labelId: "settings.nav.account" },
+  { to: "/settings/notifications", icon: Bell, labelId: "settings.nav.notifications" },
+  { to: "/settings/privacy", icon: Lock, labelId: "settings.nav.privacy" },
+  { to: "/settings/subscription", icon: CreditCard, labelId: "settings.nav.subscription" },
+  { to: "/settings/blocks", icon: ShieldOff, labelId: "settings.nav.blocks" },
+  { to: "/settings/account/sessions", icon: Monitor, labelId: "settings.nav.sessions" },
+  { to: "/settings/account/export", icon: Download, labelId: "settings.nav.export" },
+] as const;
+
+function SettingsNav() {
+  const intl = useIntl();
+  return (
+    <nav aria-label={intl.formatMessage({ id: "settings.nav.label" })} className="mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {SETTINGS_LINKS.map((link) => (
+          <RouterLink
+            key={link.to}
+            to={link.to}
+            className="group flex items-center gap-3 rounded-radius-md bg-surface-container-low p-4 no-underline transition-colors hover:bg-surface-container"
+          >
+            <Icon icon={link.icon} size="md" className="text-on-surface-variant group-hover:text-primary shrink-0" />
+            <span className="type-label-md text-on-surface">
+              {intl.formatMessage({ id: link.labelId })}
+            </span>
+          </RouterLink>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 // ─── Main Settings Page ─────────────────────────────────────────────────────
 
 export function FamilySettings() {
@@ -1112,6 +1154,7 @@ export function FamilySettings() {
       <h1 className="type-headline-md text-on-surface font-semibold mb-6">
         <FormattedMessage id="settings.title" />
       </h1>
+      <SettingsNav />
       <Tabs tabs={tabs} defaultTab="profile" />
     </div>
   );

@@ -75,7 +75,7 @@ Used for admin-only routes (`/admin/*`).
 1. mcp__pw__browser_navigate → http://localhost:5673/auth/login
 2. mcp__pw__browser_fill_form → fields:
    - { name: "Email", type: "textbox", ref: <email-field-ref>, value: "admin@example.com" }
-   - { name: "Password", type: "textbox", ref: <password-field-ref>, value: "AdminPassword123!" }
+   - { name: "Password", type: "textbox", ref: <password-field-ref>, value: "SeedPassword123!" }
 3. mcp__pw__browser_click → Submit button
 4. mcp__pw__browser_wait_for → text: "Admin" or redirect to admin dashboard
 5. Handle onboarding gate if needed (same as §2.1)

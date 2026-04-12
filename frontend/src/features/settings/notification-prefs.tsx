@@ -88,8 +88,7 @@ export function NotificationPrefs() {
   const intl = useIntl();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { data: preferences, isLoading } = useNotificationPreferences();
-  const { mutate: updatePrefs, isPending } =
-    useUpdateNotificationPreferences();
+  const { mutate: updatePrefs } = useUpdateNotificationPreferences();
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "settings.notifications.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
@@ -212,7 +211,7 @@ export function NotificationPrefs() {
                             <input
                               type="checkbox"
                               checked={enabled}
-                              disabled={isPending || isCritical}
+                              disabled={isCritical}
                               onChange={() =>
                                 handleToggle(nt, ch, enabled)
                               }

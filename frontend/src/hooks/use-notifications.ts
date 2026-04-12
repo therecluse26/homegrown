@@ -132,7 +132,43 @@ export function useUpdateNotificationPreferences() {
         method: "PATCH",
         body: { preferences },
       }),
-    onSuccess: () => {
+    onMutate: async (updates) => {
+      // Cancel in-flight queries so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({
+        queryKey: ["notifications", "preferences"],
+      });
+      // Snapshot previous data for rollback
+      const previous = queryClient.getQueryData<NotificationPreference[]>([
+        "notifications",
+        "preferences",
+      ]);
+      // Optimistically update the cache
+      if (previous) {
+        queryClient.setQueryData<NotificationPreference[]>(
+          ["notifications", "preferences"],
+          previous.map((pref) => {
+            const update = updates.find(
+              (u) =>
+                u.notification_type === pref.notification_type &&
+                u.channel === pref.channel,
+            );
+            return update ? { ...pref, enabled: update.enabled } : pref;
+          }),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      // Rollback to snapshot on error
+      if (context?.previous) {
+        queryClient.setQueryData(
+          ["notifications", "preferences"],
+          context.previous,
+        );
+      }
+    },
+    onSettled: () => {
+      // Refetch to reconcile with server truth
       void queryClient.invalidateQueries({
         queryKey: ["notifications", "preferences"],
       });

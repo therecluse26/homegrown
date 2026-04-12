@@ -239,6 +239,15 @@
   "settings.notifications.channel.email": "Email",
   "settings.notifications.channel.push": "Push",
 
+  "settings.nav.label": "Settings navigation",
+  "settings.nav.account": "Account",
+  "settings.nav.notifications": "Notifications",
+  "settings.nav.privacy": "Privacy",
+  "settings.nav.subscription": "Subscription",
+  "settings.nav.blocks": "Blocked Users",
+  "settings.nav.sessions": "Active Sessions",
+  "settings.nav.export": "Data Export",
+
   "settings.subscription.title": "Subscription",
   "settings.subscription.description": "Choose the plan that works for your family.",
   "settings.subscription.current": "Current",
@@ -520,6 +529,7 @@
   "reading.status.completed": "Finished",
 
   "progress.title": "{name}'s {tool}",
+  "progress.defaultName": "Student",
   "progress.noStudent": "No student selected",
   "progress.dateFrom": "From",
   "progress.dateTo": "To",
