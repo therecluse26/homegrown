@@ -682,6 +682,7 @@ export function useGroupDetail(groupId: string | undefined) {
     queryFn: () =>
       apiClient<GroupDetailResponse>(`/v1/social/groups/${groupId ?? ""}`),
     enabled: !!groupId,
+    retry: false,
   });
 }
 
@@ -693,6 +694,7 @@ export function useGroupMembers(groupId: string | undefined) {
         `/v1/social/groups/${groupId ?? ""}/members`,
       ),
     enabled: !!groupId,
+    retry: false,
   });
 }
 
@@ -709,6 +711,7 @@ export function useGroupPosts(
         `/v1/social/groups/${groupId ?? ""}/posts?offset=${offset}&limit=${limit}`,
       ),
     enabled: !!groupId,
+    retry: false,
   });
 }
 

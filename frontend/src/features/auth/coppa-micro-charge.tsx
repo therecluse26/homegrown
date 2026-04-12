@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useNavigate, useLocation } from "react-router";
 import { ShieldCheck, CreditCard, CheckCircle } from "lucide-react";
@@ -30,11 +30,14 @@ export function CoppaMicroCharge() {
   const [verifyError, setVerifyError] = useState(false);
 
   // Redirect unauthenticated users to login with return URL
-  if (!authLoading && !isAuthenticated) {
-    const returnUrl = encodeURIComponent(location.pathname);
-    navigate(`/auth/login?return_to=${returnUrl}`, { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      const returnUrl = encodeURIComponent(location.pathname);
+      navigate(`/auth/login?return_to=${returnUrl}`, { replace: true });
+    }
+  }, [authLoading, isAuthenticated, location.pathname, navigate]);
+
+  if (!authLoading && !isAuthenticated) return null;
 
   const status = statusQuery.data;
 

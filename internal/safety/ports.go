@@ -17,6 +17,7 @@ type SafetyService interface {
 	GetMyReport(ctx context.Context, scope shared.FamilyScope, reportID uuid.UUID) (*ReportResponse, error)
 	GetAccountStatus(ctx context.Context, scope shared.FamilyScope) (*AccountStatusResponse, error)
 	GetMyAppeal(ctx context.Context, scope shared.FamilyScope, appealID uuid.UUID) (*AppealResponse, error)
+	ListMyAppeals(ctx context.Context, scope shared.FamilyScope) ([]AppealResponse, error)
 
 	// ─── User-Facing Commands ───────────────────────────────────────────
 	SubmitReport(ctx context.Context, scope shared.FamilyScope, auth *shared.AuthContext, cmd CreateReportCommand) (*ReportResponse, error)
@@ -122,6 +123,7 @@ type AppealRepository interface {
 	FindByID(ctx context.Context, scope shared.FamilyScope, appealID uuid.UUID) (*Appeal, error)
 	FindByIDUnscoped(ctx context.Context, appealID uuid.UUID) (*Appeal, error)
 	FindByActionID(ctx context.Context, actionID uuid.UUID) (*Appeal, error)
+	ListByFamilyID(ctx context.Context, familyID uuid.UUID) ([]Appeal, error)
 	ListFiltered(ctx context.Context, filter AppealFilter, pagination shared.PaginationParams) ([]Appeal, error)
 	Update(ctx context.Context, appealID uuid.UUID, updates AppealUpdate) (*Appeal, error)
 	CountByStatus(ctx context.Context, status string) (int64, error)

@@ -1108,7 +1108,31 @@ func (s *learningServiceImpl) GetSubjectTaxonomy(ctx context.Context, scope *sha
 			IsCustom: true,
 		})
 	}
-	return results, nil
+
+	// Build tree: index by ID, then attach children to parents.
+	byID := make(map[uuid.UUID]*SubjectTaxonomyResponse, len(results))
+	for i := range results {
+		byID[results[i].ID] = &results[i]
+	}
+	var roots []SubjectTaxonomyResponse
+	for i := range results {
+		node := &results[i]
+		if node.ParentID != nil {
+			if parent, ok := byID[*node.ParentID]; ok {
+				parent.Children = append(parent.Children, *node)
+				continue
+			}
+		}
+		roots = append(roots, *node)
+	}
+	// Sort roots and children alphabetically for consistent ordering.
+	sort.Slice(roots, func(i, j int) bool { return roots[i].Name < roots[j].Name })
+	for i := range roots {
+		sort.Slice(roots[i].Children, func(a, b int) bool {
+			return roots[i].Children[a].Name < roots[i].Children[b].Name
+		})
+	}
+	return roots, nil
 }
 
 func (s *learningServiceImpl) CreateCustomSubject(ctx context.Context, scope *shared.FamilyScope, cmd CreateCustomSubjectCommand) (CustomSubjectResponse, error) {

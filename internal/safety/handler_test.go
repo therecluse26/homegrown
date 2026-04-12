@@ -323,6 +323,55 @@ func TestHandler_GetMyAppeal_404(t *testing.T) {
 	}
 }
 
+// ─── GET /v1/safety/appeals ──────────────────────────────────────────────────────
+
+func TestHandler_ListMyAppeals_200(t *testing.T) {
+	e := setupEcho()
+	svc := &mockSafetyService{}
+	h := NewHandler(svc)
+
+	appealID := uuid.Must(uuid.NewV7())
+	svc.listMyAppealsFn = func(_ context.Context, _ shared.FamilyScope) ([]AppealResponse, error) {
+		return []AppealResponse{{ID: appealID, Status: "pending"}}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/safety/appeals", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setUserAuth(c)
+
+	err := h.listMyAppeals(c)
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestHandler_ListMyAppeals_empty(t *testing.T) {
+	e := setupEcho()
+	svc := &mockSafetyService{}
+	h := NewHandler(svc)
+
+	svc.listMyAppealsFn = func(_ context.Context, _ shared.FamilyScope) ([]AppealResponse, error) {
+		return []AppealResponse{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/safety/appeals", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setUserAuth(c)
+
+	err := h.listMyAppeals(c)
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
 // ─── Admin: GET /v1/admin/safety/reports ────────────────────────────────────────
 
 func TestHandler_AdminListReports_200(t *testing.T) {

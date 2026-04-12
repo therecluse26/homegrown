@@ -16651,6 +16651,25 @@ paths:
       tags:
       - safety
   /safety/appeals:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/safety.AppealResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List my appeals
+      tags:
+      - safety
     post:
       consumes:
       - application/json

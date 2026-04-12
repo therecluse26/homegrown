@@ -451,6 +451,7 @@ const routes: RouteObject[] = [
               { path: "content-flags", element: <ComingSoonStub title="Content Flags" description="Review flagged content across the platform." backTo="/admin" backLabel="Back to Admin" /> },
               { path: "appeals", element: <ComingSoonStub title="Appeals" description="Review user moderation appeals." backTo="/admin" backLabel="Back to Admin" /> },
               { path: "reports", element: <ComingSoonStub title="Reports" description="View platform analytics and usage reports." backTo="/admin" backLabel="Back to Admin" /> },
+              { path: "system", element: <ComingSoonStub title="System Configuration" description="System health monitoring and configuration." backTo="/admin" backLabel="Back to Admin" /> },
               // Admin redirects
               { path: "feature-flags", element: <Navigate to="/admin/flags" replace /> },
             ],

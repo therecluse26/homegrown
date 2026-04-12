@@ -208,6 +208,7 @@ type mockAppealRepo struct {
 	findByIDFn        func(ctx context.Context, scope shared.FamilyScope, appealID uuid.UUID) (*Appeal, error)
 	findByIDUnscopedFn func(ctx context.Context, appealID uuid.UUID) (*Appeal, error)
 	findByActionIDFn  func(ctx context.Context, actionID uuid.UUID) (*Appeal, error)
+	listByFamilyIDFn  func(ctx context.Context, familyID uuid.UUID) ([]Appeal, error)
 	listFilteredFn    func(ctx context.Context, filter AppealFilter, pagination shared.PaginationParams) ([]Appeal, error)
 	updateFn          func(ctx context.Context, appealID uuid.UUID, updates AppealUpdate) (*Appeal, error)
 	countByStatusFn   func(ctx context.Context, status string) (int64, error)
@@ -238,6 +239,12 @@ func (m *mockAppealRepo) FindByActionID(ctx context.Context, actionID uuid.UUID)
 		return m.findByActionIDFn(ctx, actionID)
 	}
 	panic("AppealRepo.FindByActionID not mocked")
+}
+func (m *mockAppealRepo) ListByFamilyID(ctx context.Context, familyID uuid.UUID) ([]Appeal, error) {
+	if m.listByFamilyIDFn != nil {
+		return m.listByFamilyIDFn(ctx, familyID)
+	}
+	return []Appeal{}, nil
 }
 func (m *mockAppealRepo) ListFiltered(ctx context.Context, f AppealFilter, p shared.PaginationParams) ([]Appeal, error) {
 	if m.listFilteredFn != nil {
@@ -400,6 +407,7 @@ type mockSafetyService struct {
 	getMyReportFn    func(ctx context.Context, scope shared.FamilyScope, id uuid.UUID) (*ReportResponse, error)
 	getAccountStatusFn func(ctx context.Context, scope shared.FamilyScope) (*AccountStatusResponse, error)
 	getMyAppealFn    func(ctx context.Context, scope shared.FamilyScope, id uuid.UUID) (*AppealResponse, error)
+	listMyAppealsFn  func(ctx context.Context, scope shared.FamilyScope) ([]AppealResponse, error)
 
 	// User-facing commands
 	submitReportFn func(ctx context.Context, scope shared.FamilyScope, auth *shared.AuthContext, cmd CreateReportCommand) (*ReportResponse, error)
@@ -469,6 +477,12 @@ func (m *mockSafetyService) GetMyAppeal(ctx context.Context, scope shared.Family
 		return m.getMyAppealFn(ctx, scope, id)
 	}
 	panic("GetMyAppeal not mocked")
+}
+func (m *mockSafetyService) ListMyAppeals(ctx context.Context, scope shared.FamilyScope) ([]AppealResponse, error) {
+	if m.listMyAppealsFn != nil {
+		return m.listMyAppealsFn(ctx, scope)
+	}
+	return []AppealResponse{}, nil
 }
 func (m *mockSafetyService) SubmitReport(ctx context.Context, scope shared.FamilyScope, auth *shared.AuthContext, cmd CreateReportCommand) (*ReportResponse, error) {
 	if m.submitReportFn != nil {

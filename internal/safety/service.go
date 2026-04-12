@@ -215,6 +215,18 @@ func (s *safetyServiceImpl) GetMyAppeal(ctx context.Context, scope shared.Family
 	return appealToResponse(appeal), nil
 }
 
+func (s *safetyServiceImpl) ListMyAppeals(ctx context.Context, scope shared.FamilyScope) ([]AppealResponse, error) {
+	appeals, err := s.appealRepo.ListByFamilyID(ctx, scope.FamilyID())
+	if err != nil {
+		return nil, fmt.Errorf("list appeals: %w", err)
+	}
+	results := make([]AppealResponse, len(appeals))
+	for i, a := range appeals {
+		results[i] = *appealToResponse(&a)
+	}
+	return results, nil
+}
+
 // ─── Admin Queries ──────────────────────────────────────────────────────────────
 
 func (s *safetyServiceImpl) AdminListReports(ctx context.Context, _ *shared.AuthContext, filter ReportFilter, pagination shared.PaginationParams) (*shared.PaginatedResponse[AdminReportResponse], error) {

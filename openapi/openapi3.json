@@ -21416,6 +21416,42 @@
             }
         },
         "/safety/appeals": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "safety"
+                ],
+                "summary": "List my appeals",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/safety.AppealResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
