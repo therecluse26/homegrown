@@ -53,14 +53,23 @@ export function JournalList() {
         <h1 className="type-headline-md text-on-surface font-semibold">
           {toolLabel("journaling", intl.formatMessage({ id: "journals.title" }))}
         </h1>
-        <RouterLink to="/learning/journals/new" className="no-underline">
-          <Button variant="primary" size="sm" disabled={!effectiveStudent}>
+        {effectiveStudent ? (
+          <RouterLink to="/learning/journals/new" className="no-underline">
+            <Button variant="primary" size="sm">
+              <Icon icon={Plus} size="sm" aria-hidden />
+              <span className="ml-1.5">
+                <FormattedMessage id="journals.new" />
+              </span>
+            </Button>
+          </RouterLink>
+        ) : (
+          <Button variant="primary" size="sm" disabled>
             <Icon icon={Plus} size="sm" aria-hidden />
             <span className="ml-1.5">
               <FormattedMessage id="journals.new" />
             </span>
           </Button>
-        </RouterLink>
+        )}
       </div>
 
       {/* Filters */}

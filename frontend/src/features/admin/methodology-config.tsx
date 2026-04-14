@@ -22,7 +22,7 @@ function MethodologyRow({ config }: { config: MethodologyConfigFull }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [displayName, setDisplayName] = useState(config.display_name);
   const [philosophy, setPhilosophy] = useState(config.philosophy);
-  const [tools, setTools] = useState<MethodologyTool[]>(config.tools);
+  const [tools, setTools] = useState<MethodologyTool[]>(config.tools ?? []);
   const [dirty, setDirty] = useState(false);
 
   function handleDisplayNameChange(v: string) {
@@ -59,7 +59,7 @@ function MethodologyRow({ config }: { config: MethodologyConfigFull }) {
   function handleReset() {
     setDisplayName(config.display_name);
     setPhilosophy(config.philosophy);
-    setTools(config.tools);
+    setTools(config.tools ?? []);
     setDirty(false);
   }
 

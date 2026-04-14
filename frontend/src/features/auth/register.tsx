@@ -182,6 +182,18 @@ export function Register() {
       return;
     }
 
+    const strength = measurePasswordStrength(form.password);
+    if (!strength || strength === "weak") {
+      setFieldErrors((prev) => ({
+        ...prev,
+        password: intl.formatMessage({
+          id: "auth.register.passwordTooWeak",
+          defaultMessage: "Please choose a stronger password",
+        }),
+      }));
+      return;
+    }
+
     if (!captchaToken) {
       setFieldErrors((prev) => ({
         ...prev,

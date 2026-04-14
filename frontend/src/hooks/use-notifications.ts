@@ -82,7 +82,45 @@ export function useMarkRead() {
   return useMutation({
     mutationFn: (id: string) =>
       apiClient<void>(`/v1/notifications/${id}/read`, { method: "PATCH" }),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["notifications"] });
+      // Snapshot for rollback
+      const previous = queryClient.getQueriesData<NotificationListResponse>({
+        queryKey: ["notifications"],
+      });
+      // Optimistically mark the notification as read
+      queryClient.setQueriesData<NotificationListResponse>(
+        { queryKey: ["notifications"] },
+        (old) => {
+          if (!old?.notifications) return old;
+          const wasUnread = old.notifications.some(
+            (n) => n.id === id && !n.read,
+          );
+          return {
+            ...old,
+            unread_count: wasUnread
+              ? Math.max(0, old.unread_count - 1)
+              : old.unread_count,
+            notifications: old.notifications.map((n) =>
+              n.id === id ? { ...n, read: true } : n,
+            ),
+          };
+        },
+      );
+      // Also update unread badge count
+      queryClient.setQueriesData<{ count: number }>(
+        { queryKey: ["notifications", "unread-count"] },
+        (old) => (old ? { count: Math.max(0, old.count - 1) } : old),
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      // Rollback all notification queries
+      context?.previous?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
@@ -93,7 +131,38 @@ export function useMarkAllRead() {
   return useMutation({
     mutationFn: () =>
       apiClient<void>("/v1/notifications/read-all", { method: "PATCH" }),
-    onSuccess: () => {
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["notifications"] });
+      const previous = queryClient.getQueriesData<NotificationListResponse>({
+        queryKey: ["notifications"],
+      });
+      // Optimistically mark all as read
+      queryClient.setQueriesData<NotificationListResponse>(
+        { queryKey: ["notifications"] },
+        (old) => {
+          if (!old?.notifications) return old;
+          return {
+            ...old,
+            unread_count: 0,
+            notifications: old.notifications.map((n) => ({
+              ...n,
+              read: true,
+            })),
+          };
+        },
+      );
+      queryClient.setQueriesData<{ count: number }>(
+        { queryKey: ["notifications", "unread-count"] },
+        () => ({ count: 0 }),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      context?.previous?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });

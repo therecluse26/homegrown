@@ -95,9 +95,11 @@ export function useDeletionStatus() {
       try {
         return await apiClient<DeletionRequest>("/v1/account/deletion");
       } catch (err: unknown) {
-        // "not_found" = no active deletion request — return default "none" state
+        // No active deletion request — return default "none" state.
+        // Check both structured error code and raw HTTP 404.
         const code = (err as { error?: { code?: string } })?.error?.code;
-        if (code === "not_found") {
+        const status = (err as { status?: number })?.status;
+        if (code === "not_found" || status === 404) {
           return { status: "none" };
         }
         throw err;

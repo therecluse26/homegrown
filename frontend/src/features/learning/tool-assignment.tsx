@@ -235,7 +235,7 @@ export function ToolAssignment() {
                       </div>
                     </div>
                     <Checkbox
-                      checked={tool.enabled}
+                      checked={tool.enabled ?? false}
                       onChange={(e) =>
                         handleToggle(tool.slug, e.target.checked)
                       }

@@ -48,7 +48,7 @@ function AddActivityForm({
         duration_minutes: durationMinutes
           ? Number(durationMinutes)
           : undefined,
-        activity_date: activityDate ? `${activityDate}T00:00:00Z` : undefined,
+        activity_date: activityDate || undefined,
       },
       {
         onSuccess: () => {

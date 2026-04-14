@@ -368,10 +368,24 @@ export function useCreatePost() {
         method: "POST",
         body: data,
       }),
-    onSuccess: async () => {
-      await qc.resetQueries({
-        queryKey: ["social", "feed"],
-      });
+    onSuccess: (newPost) => {
+      // Optimistically prepend the new post to the first page of the feed
+      qc.setQueriesData<InfiniteData<FeedResponse>>(
+        { queryKey: ["social", "feed"] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page, i) =>
+              i === 0
+                ? { ...page, posts: [newPost, ...page.posts] }
+                : page,
+            ),
+          };
+        },
+      );
+      // Background refetch to reconcile with server
+      void qc.invalidateQueries({ queryKey: ["social", "feed"] });
     },
   });
 }
