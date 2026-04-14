@@ -9157,6 +9157,36 @@ paths:
       summary: Add items to a portfolio
       tags:
       - compliance
+  /compliance/students/{student_id}/portfolios/candidates:
+    get:
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List portfolio artifact candidates for a student
+      tags:
+      - compliance
   /compliance/students/{student_id}/tests:
     get:
       parameters:

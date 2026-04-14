@@ -1262,18 +1262,12 @@ func (h *Handler) getCreatorVerification(c echo.Context) error {
 
 // getCreatorReviews returns reviews for a creator (stub — always empty).
 func (h *Handler) getCreatorReviews(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]any{
-		"reviews":        []any{},
-		"average_rating": 0,
-		"total_reviews":  0,
-	})
+	return c.JSON(http.StatusOK, []any{})
 }
 
 // getListingVersions returns version history for a listing (stub — always empty).
 func (h *Handler) getListingVersions(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]any{
-		"versions": []any{},
-	})
+	return c.JSON(http.StatusOK, []any{})
 }
 
 // getPayoutConfig returns payout configuration (stub — not configured).

@@ -197,6 +197,7 @@ const routes: RouteObject[] = [
               { path: "groups/:groupId/manage", element: <GroupManagement /> },
               { path: "events", element: <EventsList />, errorElement: <RouteErrorBoundary /> },
               { path: "events/new", element: <EventCreation /> },
+              { path: "events/create", element: <Navigate to="/events/new" replace /> },
               { path: "events/:eventId", element: <EventDetail /> },
               { path: "post/:postId", element: <PostDetail /> },
 

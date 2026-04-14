@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, useParams } from "react-router";
 import {
   ArrowLeft,
   Plus,
@@ -17,8 +17,10 @@ import {
   Input,
   FormField,
   Badge,
+  Skeleton,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { useSequenceDef } from "@/hooks/use-sequences";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -186,10 +188,34 @@ function StepEditor({
 
 export function SequenceBuilder() {
   const intl = useIntl();
+  const { id } = useParams<{ id: string }>();
+  const { data: seqDef, isPending: loadingDef } = useSequenceDef(id ?? "");
+  const isEditing = !!id;
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [steps, setSteps] = useState<SequenceStep[]>([]);
   const [reorderAnnouncement, setReorderAnnouncement] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Populate form state when existing sequence data loads
+  useEffect(() => {
+    if (seqDef && !hydrated) {
+      setTitle(seqDef.title);
+      setDescription(seqDef.description ?? "");
+      setSteps(
+        (seqDef.items ?? []).map((item) => ({
+          id: genStepId(),
+          title: `Step ${item.sort_order + 1}`,
+          description: "",
+          content_type: item.content_type,
+          content_id: item.content_id,
+          duration_minutes: 15,
+        })),
+      );
+      setHydrated(true);
+    }
+  }, [seqDef, hydrated]);
 
   const addStep = useCallback(() => {
     setSteps((prev) => [
@@ -232,10 +258,22 @@ export function SequenceBuilder() {
     0,
   );
 
+  if (isEditing && loadingDef) {
+    return (
+      <div className="max-w-content-narrow mx-auto space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-32 w-full rounded-radius-md" />
+        <Skeleton className="h-48 w-full rounded-radius-md" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-content-narrow mx-auto">
       <PageTitle
-        title={intl.formatMessage({ id: "marketplace.sequence.builder" })}
+        title={isEditing
+          ? intl.formatMessage({ id: "marketplace.sequence.editBuilder" }, { fallback: "Edit Sequence" })
+          : intl.formatMessage({ id: "marketplace.sequence.builder" })}
       />
 
       <RouterLink

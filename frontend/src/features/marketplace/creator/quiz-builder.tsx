@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, useParams } from "react-router";
 import {
   ArrowLeft,
   Plus,
@@ -16,8 +16,10 @@ import {
   Input,
   FormField,
   Badge,
+  Skeleton,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { useQuizDef } from "@/hooks/use-quiz";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -269,9 +271,37 @@ function QuestionEditor({
 
 export function QuizBuilder() {
   const intl = useIntl();
+  const { id } = useParams<{ id: string }>();
+  const { data: quizDef, isPending: loadingDef } = useQuizDef(id ?? "");
+  const isEditing = !!id;
+
   const [quizTitle, setQuizTitle] = useState("");
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [reorderAnnouncement, setReorderAnnouncement] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Populate form state when existing quiz data loads
+  useEffect(() => {
+    if (quizDef && !hydrated) {
+      setQuizTitle(quizDef.title);
+      setQuestions(
+        (quizDef.questions ?? []).map((q) => ({
+          id: genId(),
+          type: (q.question_type as QuestionType) ?? "multiple_choice",
+          text: q.content,
+          options: Array.isArray((q.answer_data as Record<string, unknown>)?.options)
+            ? ((q.answer_data as Record<string, unknown>).options as string[])
+            : [],
+          correct_answer:
+            typeof (q.answer_data as Record<string, unknown>)?.correct === "string"
+              ? ((q.answer_data as Record<string, unknown>).correct as string)
+              : "",
+          points: q.points,
+        })),
+      );
+      setHydrated(true);
+    }
+  }, [quizDef, hydrated]);
 
   const addQuestion = useCallback(() => {
     setQuestions((prev) => [
@@ -311,10 +341,22 @@ export function QuizBuilder() {
 
   const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
 
+  if (isEditing && loadingDef) {
+    return (
+      <div className="max-w-content-narrow mx-auto space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-32 w-full rounded-radius-md" />
+        <Skeleton className="h-48 w-full rounded-radius-md" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-content-narrow mx-auto">
       <PageTitle
-        title={intl.formatMessage({ id: "marketplace.quiz.builder" })}
+        title={isEditing
+          ? intl.formatMessage({ id: "marketplace.quiz.editBuilder" }, { fallback: "Edit Quiz" })
+          : intl.formatMessage({ id: "marketplace.quiz.builder" })}
       />
 
       <RouterLink

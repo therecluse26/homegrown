@@ -92,7 +92,11 @@ export function OnboardingWizard() {
   }, [stepIndex]);
 
   async function handleSkipAll() {
-    await skipOnboarding.mutateAsync();
+    try {
+      await skipOnboarding.mutateAsync();
+    } catch {
+      // 409 = already completed — treat as success
+    }
     void navigate("/", { replace: true });
   }
 

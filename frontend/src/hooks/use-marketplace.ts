@@ -718,7 +718,7 @@ export function useCreatorReviews() {
   return useQuery({
     queryKey: ["marketplace", "creator", "reviews"],
     queryFn: () =>
-      apiClient<CreatorReview[]>("/v1/marketplace/creator/reviews"),
+      apiClient<CreatorReview[]>("/v1/marketplace/creators/reviews"),
   });
 }
 

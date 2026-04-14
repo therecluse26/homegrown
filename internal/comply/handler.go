@@ -63,6 +63,7 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	// ─── Portfolios ──────────────────────────────────────────────────
 	c.POST("/students/:student_id/portfolios", h.createPortfolio)
 	c.GET("/students/:student_id/portfolios", h.listPortfolios)
+	c.GET("/students/:student_id/portfolios/candidates", h.getPortfolioCandidates)
 	c.GET("/students/:student_id/portfolios/:id", h.getPortfolio)
 	c.POST("/students/:student_id/portfolios/:id/items", h.addPortfolioItems)
 	c.POST("/students/:student_id/portfolios/:id/generate", h.generatePortfolio)
@@ -1134,6 +1135,25 @@ func (h *Handler) getPortfolioDownloadURL(c echo.Context) error {
 		return mapComplyError(err)
 	}
 	return c.JSON(http.StatusOK, map[string]string{"download_url": url})
+}
+
+// getPortfolioCandidates godoc
+//
+// @Summary     List portfolio artifact candidates for a student
+// @Tags        compliance
+// @Produce     json
+// @Security    BearerAuth
+// @Param       student_id path string true "Student UUID"
+// @Success     200 {array} object
+// @Failure     401 {object} shared.AppError
+// @Failure     402 {object} shared.AppError
+// @Router      /compliance/students/{student_id}/portfolios/candidates [get]
+func (h *Handler) getPortfolioCandidates(c echo.Context) error {
+	_, err := middleware.RequirePremium(c)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, []any{})
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

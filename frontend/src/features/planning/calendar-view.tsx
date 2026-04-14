@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, useParams, useLocation } from "react-router";
 import {
   ChevronLeft,
   ChevronRight,
@@ -453,9 +453,28 @@ type ViewMode = "week" | "day";
 
 export function CalendarView() {
   const intl = useIntl();
+  const { date: dateParam } = useParams<{ date: string }>();
+  const location = useLocation();
   const today = useMemo(() => new Date(), []);
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
-  const [selectedDate, setSelectedDate] = useState(today);
+
+  // Derive initial view mode from the URL path segment
+  const initialViewMode = useMemo((): ViewMode => {
+    if (location.pathname.includes("/calendar/day/")) return "day";
+    if (location.pathname.includes("/calendar/week/")) return "week";
+    return "week";
+  }, [location.pathname]);
+
+  // Parse :date param into a Date, falling back to today
+  const initialDate = useMemo(() => {
+    if (dateParam) {
+      const parsed = new Date(dateParam + "T00:00:00");
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return today;
+  }, [dateParam, today]);
+
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [studentFilter, setStudentFilter] = useState<string | undefined>();
 
   const { data: students } = useStudents();
