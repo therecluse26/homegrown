@@ -47,3 +47,24 @@ export function useVerifyMicroCharge() {
     },
   });
 }
+
+// ─── Micro-Charge History ─────────────────────────────────────────────────────
+
+export interface MicroChargeHistoryItem {
+  id: string;
+  amount_cents: number;
+  status: "pending" | "verified" | "failed";
+  purpose: string;
+  created_at: string;
+  verified_at?: string;
+}
+
+export function useMicroChargeHistory() {
+  return useQuery({
+    queryKey: ["billing", "micro-charge", "history"],
+    queryFn: () =>
+      apiClient<MicroChargeHistoryItem[]>(
+        "/v1/billing/micro-charge/history",
+      ),
+  });
+}

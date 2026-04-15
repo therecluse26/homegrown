@@ -59,6 +59,19 @@ export function useGradingScales() {
   });
 }
 
+// ─── Single Assessment ──────────────────────────────────────────────────────
+
+export function useAssessment(studentId: string, id: string) {
+  return useQuery({
+    queryKey: ["learning", "assessments", studentId, id],
+    queryFn: () =>
+      apiClient<AssessmentResponse>(
+        `/v1/learning/students/${studentId}/assessments/${id}`,
+      ),
+    enabled: !!studentId && !!id,
+  });
+}
+
 // ─── Assessment Queries ─────────────────────────────────────────────────────
 
 export function useAssessments(
@@ -144,6 +157,25 @@ export function useUpdateAssessment(studentId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({
         queryKey: ["learning", "assessments", studentId],
+      });
+    },
+  });
+}
+
+export function useDeleteAssessment(studentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient<void>(
+        `/v1/learning/students/${studentId}/assessments/${id}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: ["learning", "assessments", studentId],
+      });
+      void qc.invalidateQueries({
+        queryKey: ["learning", "progress", studentId],
       });
     },
   });

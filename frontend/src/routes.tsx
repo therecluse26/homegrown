@@ -81,6 +81,15 @@ const HabitTracking = lazy(() => import("@/features/learning/habit-tracking").th
 const InterestLedLog = lazy(() => import("@/features/learning/interest-led-log").then(m => ({ default: m.InterestLedLog })));
 const HandworkProjects = lazy(() => import("@/features/learning/handwork-projects").then(m => ({ default: m.HandworkProjects })));
 const PracticalLife = lazy(() => import("@/features/learning/practical-life").then(m => ({ default: m.PracticalLife })));
+const JournalDetail = lazy(() => import("@/features/learning/journal-detail").then(m => ({ default: m.JournalDetail })));
+const ActivityNew = lazy(() => import("@/features/learning/activity-new").then(m => ({ default: m.ActivityNew })));
+const ActivityDetail = lazy(() => import("@/features/learning/activity-detail").then(m => ({ default: m.ActivityDetail })));
+const GradeNew = lazy(() => import("@/features/learning/grade-new").then(m => ({ default: m.GradeNew })));
+const GradeDetail = lazy(() => import("@/features/learning/grade-detail").then(m => ({ default: m.GradeDetail })));
+const ReadingListDetail = lazy(() => import("@/features/learning/reading-list-detail").then(m => ({ default: m.ReadingListDetail })));
+const ReadingListBooks = lazy(() => import("@/features/learning/reading-list-books").then(m => ({ default: m.ReadingListBooks })));
+const NatureJournalDetail = lazy(() => import("@/features/learning/nature-journal-detail").then(m => ({ default: m.NatureJournalDetail })));
+const TriviumDetail = lazy(() => import("@/features/learning/trivium-detail").then(m => ({ default: m.TriviumDetail })));
 
 // Student
 const StudentDashboardPage = lazy(() => import("@/features/student/student-dashboard").then(m => ({ default: m.StudentDashboard })));
@@ -88,6 +97,10 @@ const StudentQuiz = lazy(() => import("@/features/student/student-quiz").then(m 
 const StudentVideo = lazy(() => import("@/features/student/student-video").then(m => ({ default: m.StudentVideo })));
 const StudentReader = lazy(() => import("@/features/student/student-reader").then(m => ({ default: m.StudentReader })));
 const StudentSequence = lazy(() => import("@/features/student/student-sequence").then(m => ({ default: m.StudentSequence })));
+const StudentJournal = lazy(() => import("@/features/student/student-journal").then(m => ({ default: m.StudentJournal })));
+const StudentActivities = lazy(() => import("@/features/student/student-activities").then(m => ({ default: m.StudentActivities })));
+const StudentReadingList = lazy(() => import("@/features/student/student-reading-list").then(m => ({ default: m.StudentReadingList })));
+const StudentLogin = lazy(() => import("@/features/student/student-login").then(m => ({ default: m.StudentLogin })));
 
 // Social
 const Feed = lazy(() => import("@/features/social/feed").then(m => ({ default: m.Feed })));
@@ -120,6 +133,10 @@ const PayoutSetup = lazy(() => import("@/features/marketplace/payout-setup").the
 const CreatorVerification = lazy(() => import("@/features/marketplace/creator-verification").then(m => ({ default: m.CreatorVerification })));
 const CreatorReviews = lazy(() => import("@/features/marketplace/creator-reviews").then(m => ({ default: m.CreatorReviews })));
 const ListingVersionHistory = lazy(() => import("@/features/marketplace/listing-version-history").then(m => ({ default: m.ListingVersionHistory })));
+const MyLibrary = lazy(() => import("@/features/marketplace/my-library").then(m => ({ default: m.MyLibrary })));
+const CategoryBrowse = lazy(() => import("@/features/marketplace/category-browse").then(m => ({ default: m.CategoryBrowse })));
+const CreatorEarnings = lazy(() => import("@/features/marketplace/creator/creator-earnings").then(m => ({ default: m.CreatorEarnings })));
+const CreatorAnalytics = lazy(() => import("@/features/marketplace/creator/creator-analytics").then(m => ({ default: m.CreatorAnalytics })));
 
 // Stub / redirect pages
 const ComingSoonStub = lazy(() => import("@/components/common/coming-soon-stub").then(m => ({ default: m.ComingSoonStub })));
@@ -132,6 +149,7 @@ const PaymentMethods = lazy(() => import("@/features/billing/payment-methods").t
 const TransactionHistory = lazy(() => import("@/features/billing/transaction-history").then(m => ({ default: m.TransactionHistory })));
 const SubscriptionManagement = lazy(() => import("@/features/billing/subscription-management").then(m => ({ default: m.SubscriptionManagement })));
 const InvoiceHistory = lazy(() => import("@/features/billing/invoice-history").then(m => ({ default: m.InvoiceHistory })));
+const MicroChargeHistory = lazy(() => import("@/features/billing/micro-charge-history").then(m => ({ default: m.MicroChargeHistory })));
 
 // Recommendations
 const RecommendationsPage = lazy(() => import("@/features/recommendations/recommendations-page").then(m => ({ default: m.RecommendationsPage })));
@@ -147,6 +165,10 @@ const ModerationQueue = lazy(() => import("@/features/admin/moderation-queue").t
 const AuditLog = lazy(() => import("@/features/admin/audit-log").then(m => ({ default: m.AuditLog })));
 const FeatureFlags = lazy(() => import("@/features/admin/feature-flags").then(m => ({ default: m.FeatureFlags })));
 const MethodologyConfigPage = lazy(() => import("@/features/admin/methodology-config").then(m => ({ default: m.MethodologyConfig })));
+const AdminAppeals = lazy(() => import("@/features/admin/appeals").then(m => ({ default: m.Appeals })));
+const AdminContentFlags = lazy(() => import("@/features/admin/content-flags").then(m => ({ default: m.ContentFlags })));
+const AdminSafetyReports = lazy(() => import("@/features/admin/safety-reports").then(m => ({ default: m.SafetyReports })));
+const AdminSystemDashboard = lazy(() => import("@/features/admin/system-dashboard").then(m => ({ default: m.SystemDashboard })));
 
 // Planning
 const CalendarView = lazy(() => import("@/features/planning/calendar-view").then(m => ({ default: m.CalendarView })));
@@ -164,6 +186,8 @@ const PortfolioList = lazy(() => import("@/features/compliance/portfolio-list").
 const PortfolioBuilder = lazy(() => import("@/features/compliance/portfolio-builder").then(m => ({ default: m.PortfolioBuilder })));
 const TranscriptList = lazy(() => import("@/features/compliance/transcript-list").then(m => ({ default: m.TranscriptList })));
 const TranscriptBuilder = lazy(() => import("@/features/compliance/transcript-builder").then(m => ({ default: m.TranscriptBuilder })));
+const PortfolioNew = lazy(() => import("@/features/compliance/portfolio-new").then(m => ({ default: m.PortfolioNew })));
+const ComplianceRequirements = lazy(() => import("@/features/compliance/requirements").then(m => ({ default: m.Requirements })));
 
 // Legal
 const TermsOfService = lazy(() => import("@/features/legal/terms-of-service").then(m => ({ default: m.TermsOfService })));
@@ -296,24 +320,24 @@ const routes: RouteObject[] = [
               // Notifications
               { path: "notifications", element: <NotificationCenter /> },
 
-              // ─── Stub pages (coming soon) ───────────────────────────────────
-              { path: "creator/earnings", element: <ComingSoonStub title="Creator Earnings" description="Track your marketplace earnings and payout history." backTo="/creator" backLabel="Back to Creator Dashboard" /> },
-              { path: "creator/analytics", element: <ComingSoonStub title="Creator Analytics" description="View performance metrics for your marketplace listings." backTo="/creator" backLabel="Back to Creator Dashboard" /> },
-              { path: "marketplace/library", element: <ComingSoonStub title="My Library" description="Access your purchased resources and downloads." backTo="/marketplace" backLabel="Back to Marketplace" /> },
-              // Learning detail stubs
-              { path: "learning/journals/:id", element: <ComingSoonStub title="Journal Entry" description="View and edit journal entries." backTo="/learning/journals" backLabel="Back to Journals" /> },
-              { path: "learning/nature-journal/:id", element: <ComingSoonStub title="Nature Journal Entry" description="View nature journal observations." backTo="/learning/nature-journal" backLabel="Back to Nature Journal" /> },
-              { path: "learning/trivium-tracker/:id", element: <ComingSoonStub title="Trivium Entry" description="View trivium stage details." backTo="/learning/trivium-tracker" backLabel="Back to Trivium Tracker" /> },
-              { path: "learning/grades/new", element: <ComingSoonStub title="New Grade Entry" description="Record a new grade or test score." backTo="/learning/grades" backLabel="Back to Grades" /> },
-              { path: "learning/grades/:id", element: <ComingSoonStub title="Grade Details" description="View grade and score details." backTo="/learning/grades" backLabel="Back to Grades" /> },
-              { path: "learning/reading-lists/:id", element: <ComingSoonStub title="Reading List" description="View and manage this reading list." backTo="/learning/reading-lists" backLabel="Back to Reading Lists" /> },
-              { path: "learning/reading-lists/:id/books", element: <ComingSoonStub title="Books" description="Browse books in this reading list." backTo="/learning/reading-lists" backLabel="Back to Reading Lists" /> },
-              { path: "learning/activities/new", element: <ComingSoonStub title="Log Activity" description="Record a new learning activity." backTo="/learning/activities" backLabel="Back to Activities" /> },
-              { path: "learning/activities/:id", element: <ComingSoonStub title="Activity Details" description="View activity details and notes." backTo="/learning/activities" backLabel="Back to Activities" /> },
-              // Marketplace stubs
-              { path: "marketplace/categories", element: <ComingSoonStub title="Categories" description="Browse marketplace content by category." backTo="/marketplace" backLabel="Back to Marketplace" /> },
-              // Billing stubs
-              { path: "billing/micro-charges", element: <ComingSoonStub title="COPPA Micro-Charges" description="View COPPA verification micro-charge history." backTo="/billing" backLabel="Back to Billing" /> },
+              // ─── Learning detail pages ────────────────────────────────────
+              { path: "learning/journals/:id", element: <JournalDetail /> },
+              { path: "learning/nature-journal/:id", element: <NatureJournalDetail /> },
+              { path: "learning/trivium-tracker/:id", element: <TriviumDetail /> },
+              { path: "learning/grades/new", element: <GradeNew /> },
+              { path: "learning/grades/:id", element: <GradeDetail /> },
+              { path: "learning/reading-lists/:id/books", element: <ReadingListBooks /> },
+              { path: "learning/reading-lists/:id", element: <ReadingListDetail /> },
+              { path: "learning/activities/new", element: <ActivityNew /> },
+              { path: "learning/activities/:id", element: <ActivityDetail /> },
+              // Marketplace pages
+              { path: "marketplace/library", element: <MyLibrary /> },
+              { path: "marketplace/categories", element: <CategoryBrowse /> },
+              // Creator pages
+              { path: "creator/earnings", element: <CreatorEarnings /> },
+              { path: "creator/analytics", element: <CreatorAnalytics /> },
+              // Billing pages
+              { path: "billing/micro-charges", element: <MicroChargeHistory /> },
 
               // ─── Redirects ──────────────────────────────────────────────────
               { path: "settings/billing", element: <Navigate to="/billing" replace /> },
@@ -403,7 +427,7 @@ const routes: RouteObject[] = [
     errorElement: <RouteErrorBoundary />,
     children: [
       // Student login is outside StudentGuard — it's the entry point
-      { path: "student/login", element: <ComingSoonStub title="Student Login" description="Students sign in with their family code to access their dashboard." backTo="/" backLabel="Back to Home" /> },
+      { path: "student/login", element: <StudentLogin /> },
       {
         path: "student",
         element: <StudentGuard />,
@@ -417,10 +441,10 @@ const routes: RouteObject[] = [
               { path: "video/:videoId", element: <StudentVideo /> },
               { path: "read/:contentId", element: <StudentReader /> },
               { path: "sequence/:progressId", element: <StudentSequence /> },
-              // Student stubs
-              { path: "journal", element: <ComingSoonStub title="My Journal" description="Write and review your journal entries." backTo="/student" backLabel="Back to Dashboard" /> },
-              { path: "activities", element: <ComingSoonStub title="My Activities" description="View your learning activities and progress." backTo="/student" backLabel="Back to Dashboard" /> },
-              { path: "reading-list", element: <ComingSoonStub title="My Reading List" description="Browse your assigned reading list." backTo="/student" backLabel="Back to Dashboard" /> },
+              // Student views
+              { path: "journal", element: <StudentJournal /> },
+              { path: "activities", element: <StudentActivities /> },
+              { path: "reading-list", element: <StudentReadingList /> },
             ],
           },
         ],
@@ -448,11 +472,11 @@ const routes: RouteObject[] = [
               { path: "flags", element: <FeatureFlags /> },
               { path: "audit", element: <AuditLog /> },
               { path: "methodologies", element: <MethodologyConfigPage /> },
-              // Admin stubs
-              { path: "content-flags", element: <ComingSoonStub title="Content Flags" description="Review flagged content across the platform." backTo="/admin" backLabel="Back to Admin" /> },
-              { path: "appeals", element: <ComingSoonStub title="Appeals" description="Review user moderation appeals." backTo="/admin" backLabel="Back to Admin" /> },
-              { path: "reports", element: <ComingSoonStub title="Reports" description="View platform analytics and usage reports." backTo="/admin" backLabel="Back to Admin" /> },
-              { path: "system", element: <ComingSoonStub title="System Configuration" description="System health monitoring and configuration." backTo="/admin" backLabel="Back to Admin" /> },
+              // Admin pages
+              { path: "content-flags", element: <AdminContentFlags /> },
+              { path: "appeals", element: <AdminAppeals /> },
+              { path: "reports", element: <AdminSafetyReports /> },
+              { path: "system", element: <AdminSystemDashboard /> },
               // Admin redirects
               { path: "feature-flags", element: <Navigate to="/admin/flags" replace /> },
             ],
@@ -480,12 +504,12 @@ const routes: RouteObject[] = [
           { path: "portfolios/:studentId/:id", element: <PortfolioBuilder /> },
           { path: "transcripts", element: <TranscriptList /> },
           { path: "transcripts/:studentId/:id", element: <TranscriptBuilder /> },
-          // Compliance stubs
-          { path: "portfolios/new", element: <ComingSoonStub title="New Portfolio" description="Create a new student portfolio for compliance records." backTo="/compliance/portfolios" backLabel="Back to Portfolios" /> },
-          { path: "portfolios/:id", element: <ComingSoonStub title="Portfolio" description="View portfolio details and artifacts." backTo="/compliance/portfolios" backLabel="Back to Portfolios" /> },
+          // Compliance pages
+          { path: "portfolios/new", element: <PortfolioNew /> },
+          { path: "requirements", element: <ComplianceRequirements /> },
+          // Deferred — need new backend models
           { path: "immunization", element: <ComingSoonStub title="Immunization Records" description="Track immunization records for compliance." backTo="/compliance" backLabel="Back to Compliance" /> },
           { path: "submissions", element: <ComingSoonStub title="Submissions" description="View and manage compliance document submissions." backTo="/compliance" backLabel="Back to Compliance" /> },
-          { path: "requirements", element: <ComingSoonStub title="Requirements" description="View state-specific homeschooling requirements." backTo="/compliance" backLabel="Back to Compliance" /> },
         ],
       },
     ],

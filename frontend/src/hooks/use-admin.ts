@@ -333,6 +333,28 @@ export function useJobStatus() {
   });
 }
 
+export function useDeadLetterJobs() {
+  return useQuery({
+    queryKey: ["admin", "dead-letter"],
+    queryFn: () =>
+      apiClient<DeadLetterJob[]>("/v1/admin/system/dead-letter"),
+  });
+}
+
+export function useRetryDeadLetterJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) =>
+      apiClient<void>(`/v1/admin/system/dead-letter/${jobId}/retry`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "dead-letter"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    },
+  });
+}
+
 // ─── Admin: Moderation Queue ─────────────────────────────────────────────────
 
 export function useAdminModerationQueue(status?: string) {
