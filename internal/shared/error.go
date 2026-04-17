@@ -49,6 +49,21 @@ func ErrPremiumRequired() *AppError {
 	return &AppError{Code: "premium_required", Message: "Premium subscription required", StatusCode: http.StatusPaymentRequired}
 }
 
+// ErrTierRequired returns 402 Payment Required for any tier gate. The code
+// `tier_required` allows the frontend to surface the specific tier (free/plus/premium)
+// needed for the requested capability. [S§3.2]
+func ErrTierRequired(required SubscriptionTier) *AppError {
+	label := string(required)
+	if len(label) > 0 {
+		label = strings.ToUpper(label[:1]) + label[1:]
+	}
+	return &AppError{
+		Code:       "tier_required",
+		Message:    fmt.Sprintf("%s subscription required", label),
+		StatusCode: http.StatusPaymentRequired,
+	}
+}
+
 func ErrCoppaConsentRequired() *AppError {
 	return &AppError{Code: "coppa_consent_required", Message: "COPPA parental consent required", StatusCode: http.StatusForbidden}
 }

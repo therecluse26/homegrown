@@ -99,6 +99,7 @@ type NotificationRepository interface {
 	Create(ctx context.Context, cmd CreateNotification) (*NotifyNotification, error)
 	GetByID(ctx context.Context, notificationID uuid.UUID, scope *shared.FamilyScope) (*NotifyNotification, error)
 	List(ctx context.Context, params *NotificationListParams, scope *shared.FamilyScope) ([]NotifyNotification, error)
+	CountAll(ctx context.Context, params *NotificationListParams, scope *shared.FamilyScope) (int64, error)
 	CountUnread(ctx context.Context, scope *shared.FamilyScope) (int64, error)
 	MarkRead(ctx context.Context, notificationID uuid.UUID, scope *shared.FamilyScope) (bool, error)
 	MarkAllRead(ctx context.Context, scope *shared.FamilyScope, category *string) (int64, error)
@@ -219,8 +220,8 @@ type MilestoneAchievedEvent struct {
 
 // BookCompletedEvent mirrors learn.BookCompleted.
 type BookCompletedEvent struct {
-	FamilyID        uuid.UUID
-	StudentID       uuid.UUID
+	FamilyID         uuid.UUID
+	StudentID        uuid.UUID
 	ReadingItemTitle string
 }
 

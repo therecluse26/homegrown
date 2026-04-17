@@ -14,6 +14,13 @@
 
   "action.cancel": "Cancel",
 
+  "tier.gate.title": "Upgrade to unlock {featureName}",
+  "tier.gate.body.plus": "This feature is available on Plus and Premium plans. Upgrade your subscription to access it.",
+  "tier.gate.body.premium": "This feature is available on the Premium plan. Upgrade your subscription to access it.",
+  "tier.gate.cta": "View Plans",
+  "tier.plus": "Plus",
+  "tier.premium": "Premium",
+
   "auth.login": "Log In",
   "auth.login.title": "Welcome back",
   "auth.login.subtitle": "Sign in to your Homegrown Academy account",
@@ -1192,6 +1199,14 @@
   "billing.pricing.upgrade": "Upgrade",
   "billing.pricing.downgrade": "Downgrade",
   "billing.pricing.popular": "Most Popular",
+  "billing.pricing.confirm.title": "Confirm Plan Change",
+  "billing.pricing.confirm.upgradeBody": "Switch to the {planName} plan ({interval})? Your subscription will be updated and a prorated charge will apply for the remainder of the current billing period.",
+  "billing.pricing.confirm.downgradeBody": "Switch to the {planName} plan ({interval})? The change takes effect at the end of your current billing period. You'll keep your existing features until then.",
+  "billing.pricing.confirm.intervalBody": "Switch your {planName} plan to {interval} billing? A prorated adjustment will appear on your next invoice.",
+  "billing.pricing.confirm.freeBody": "To start a paid plan, please add a payment method first, then return to this page to subscribe.",
+  "billing.pricing.confirm.confirm": "Confirm change",
+  "billing.pricing.confirm.addPaymentMethod": "Add payment method",
+  "billing.pricing.tierChangeUnavailable": "Cross-tier subscription changes aren't available yet. Please contact support to switch between Plus and Premium.",
 
   "billing.paymentMethods.title": "Payment Methods",
   "billing.paymentMethods.description": "Manage your saved payment methods for subscriptions and purchases.",
@@ -1254,6 +1269,8 @@
   "billing.subscription.linkPaymentMethodsDesc": "Manage your saved cards and payment methods.",
   "billing.subscription.linkTransactions": "Transaction History",
   "billing.subscription.linkTransactionsDesc": "View all past payments and invoices.",
+  "billing.subscription.changePlan": "Change plan",
+  "billing.subscription.viewPlans": "View other plans",
 
   "billing.invoice.title": "Invoices",
   "billing.invoice.description": "View and download your billing invoices.",

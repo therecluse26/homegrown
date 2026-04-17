@@ -28638,6 +28638,9 @@
                             "$ref": "#/components/schemas/notify.NotificationResponse"
                         }
                     },
+                    "total": {
+                        "type": "integer"
+                    },
                     "unread_count": {
                         "type": "integer"
                     }

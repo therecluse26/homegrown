@@ -22422,6 +22422,7 @@ export interface components {
         "notify.NotificationListResponse": {
             next_cursor?: string;
             notifications?: components["schemas"]["notify.NotificationResponse"][];
+            total?: number;
             unread_count?: number;
         };
         "notify.NotificationResponse": {

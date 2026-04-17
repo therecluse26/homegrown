@@ -180,11 +180,13 @@ export function SubscriptionManagement() {
                     id={`billing.subscription.tier.${sub.tier}`}
                   />
                 </Badge>
-                <Badge variant={getStatusVariant(sub.status)}>
-                  <FormattedMessage
-                    id={`billing.subscription.status.${sub.status}`}
-                  />
-                </Badge>
+                {sub.status && (
+                  <Badge variant={getStatusVariant(sub.status)}>
+                    <FormattedMessage
+                      id={`billing.subscription.status.${sub.status}`}
+                    />
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -242,6 +244,17 @@ export function SubscriptionManagement() {
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-3 mb-8">
+        <Link to="/billing">
+          <Button variant="primary" size="sm">
+            <FormattedMessage
+              id={
+                sub.tier === "free"
+                  ? "billing.subscription.viewPlans"
+                  : "billing.subscription.changePlan"
+              }
+            />
+          </Button>
+        </Link>
         {sub.cancel_at_period_end ? (
           <Button
             variant="primary"

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"github.com/labstack/echo/v4"
 )
@@ -75,8 +76,11 @@ func (h *Handler) Register(authGroup *echo.Group) {
 
 	// Progress (Layer 3 — computed on-the-fly)
 	learn.GET("/students/:studentId/progress", h.getProgressSummary)
-	learn.GET("/students/:studentId/progress/subjects", h.getSubjectBreakdown)
-	learn.GET("/students/:studentId/progress/timeline", h.getActivityTimeline)
+
+	// Advanced analytics — Plus tier or higher [S§3.2]
+	plusAnalytics := learn.Group("", middleware.RequireTierMiddleware(shared.SubscriptionTierPlus))
+	plusAnalytics.GET("/students/:studentId/progress/subjects", h.getSubjectBreakdown)
+	plusAnalytics.GET("/students/:studentId/progress/timeline", h.getActivityTimeline)
 
 	// Export (Layer 3)
 	learn.POST("/export", h.requestDataExport)
@@ -126,43 +130,47 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	learn.PATCH("/students/:studentId/video-progress", h.updateVideoProgress)
 	learn.GET("/students/:studentId/video-progress/:videoDefId", h.getVideoProgress)
 
-	// Assessment Definitions (Layer 1 — Phase 2)
-	learn.POST("/assessment-defs", h.createAssessmentDef)
-	learn.GET("/assessment-defs", h.listAssessmentDefs)
-	learn.GET("/assessment-defs/:id", h.getAssessmentDef)
-	learn.PATCH("/assessment-defs/:id", h.updateAssessmentDef)
-	learn.DELETE("/assessment-defs/:id", h.deleteAssessmentDef)
-
-	// Project Definitions (Layer 1 — Phase 2)
-	learn.POST("/project-defs", h.createProjectDef)
-	learn.GET("/project-defs", h.listProjectDefs)
-	learn.GET("/project-defs/:id", h.getProjectDef)
-	learn.PATCH("/project-defs/:id", h.updateProjectDef)
-	learn.DELETE("/project-defs/:id", h.deleteProjectDef)
-
-	// Assessment Results (Layer 3 — student-scoped, Phase 2)
-	learn.POST("/students/:studentId/assessments", h.recordAssessmentResult)
-	learn.GET("/students/:studentId/assessments", h.listAssessmentResults)
-	learn.GET("/students/:studentId/assessments/:id", h.getAssessmentResult)
-	learn.PATCH("/students/:studentId/assessments/:id", h.updateAssessmentResult)
-	learn.DELETE("/students/:studentId/assessments/:id", h.deleteAssessmentResult)
-
-	// Project Progress (Layer 3 — student-scoped, Phase 2)
-	learn.POST("/students/:studentId/projects", h.startProject)
-	learn.GET("/students/:studentId/projects", h.listProjectProgress)
-	learn.GET("/students/:studentId/projects/:id", h.getProjectProgress)
-	learn.PATCH("/students/:studentId/projects/:id", h.updateProjectProgress)
-	learn.DELETE("/students/:studentId/projects/:id", h.deleteProjectProgress)
-
 	// Streak (stub — Phase 3)
 	learn.GET("/students/:studentId/streak", h.getStudentStreak)
 
+	// Advanced learning tools — Plus tier or higher [S§3.2]
+	// Includes assessments, projects, and grading scales.
+	plusTools := learn.Group("", middleware.RequireTierMiddleware(shared.SubscriptionTierPlus))
+
+	// Assessment Definitions (Layer 1 — Phase 2)
+	plusTools.POST("/assessment-defs", h.createAssessmentDef)
+	plusTools.GET("/assessment-defs", h.listAssessmentDefs)
+	plusTools.GET("/assessment-defs/:id", h.getAssessmentDef)
+	plusTools.PATCH("/assessment-defs/:id", h.updateAssessmentDef)
+	plusTools.DELETE("/assessment-defs/:id", h.deleteAssessmentDef)
+
+	// Project Definitions (Layer 1 — Phase 2)
+	plusTools.POST("/project-defs", h.createProjectDef)
+	plusTools.GET("/project-defs", h.listProjectDefs)
+	plusTools.GET("/project-defs/:id", h.getProjectDef)
+	plusTools.PATCH("/project-defs/:id", h.updateProjectDef)
+	plusTools.DELETE("/project-defs/:id", h.deleteProjectDef)
+
+	// Assessment Results (Layer 3 — student-scoped, Phase 2)
+	plusTools.POST("/students/:studentId/assessments", h.recordAssessmentResult)
+	plusTools.GET("/students/:studentId/assessments", h.listAssessmentResults)
+	plusTools.GET("/students/:studentId/assessments/:id", h.getAssessmentResult)
+	plusTools.PATCH("/students/:studentId/assessments/:id", h.updateAssessmentResult)
+	plusTools.DELETE("/students/:studentId/assessments/:id", h.deleteAssessmentResult)
+
+	// Project Progress (Layer 3 — student-scoped, Phase 2)
+	plusTools.POST("/students/:studentId/projects", h.startProject)
+	plusTools.GET("/students/:studentId/projects", h.listProjectProgress)
+	plusTools.GET("/students/:studentId/projects/:id", h.getProjectProgress)
+	plusTools.PATCH("/students/:studentId/projects/:id", h.updateProjectProgress)
+	plusTools.DELETE("/students/:studentId/projects/:id", h.deleteProjectProgress)
+
 	// Grading Scales (Layer 3 — family-scoped, Phase 2)
-	learn.POST("/grading-scales", h.createGradingScale)
-	learn.GET("/grading-scales", h.listGradingScales)
-	learn.GET("/grading-scales/:id", h.getGradingScale)
-	learn.PATCH("/grading-scales/:id", h.updateGradingScale)
-	learn.DELETE("/grading-scales/:id", h.deleteGradingScale)
+	plusTools.POST("/grading-scales", h.createGradingScale)
+	plusTools.GET("/grading-scales", h.listGradingScales)
+	plusTools.GET("/grading-scales/:id", h.getGradingScale)
+	plusTools.PATCH("/grading-scales/:id", h.updateGradingScale)
+	plusTools.DELETE("/grading-scales/:id", h.deleteGradingScale)
 }
 
 // ─── Activity Definition Handlers ───────────────────────────────────────────

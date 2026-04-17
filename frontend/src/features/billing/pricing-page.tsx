@@ -1,7 +1,18 @@
 import { FormattedMessage, useIntl } from "react-intl";
 import { Check, Star } from "lucide-react";
-import { Badge, Button, Card, Icon } from "@/components/ui";
+import { useNavigate } from "react-router";
+import {
+  Badge,
+  Button,
+  Card,
+  ConfirmationDialog,
+  Icon,
+} from "@/components/ui";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  useChangePlan,
+  useSubscription,
+} from "@/hooks/use-subscription";
 import { useState, useEffect, useRef } from "react";
 
 // ─── Plan configuration ────────────────────────────────────────────────────
@@ -80,9 +91,14 @@ const TIER_ORDER: Record<PlanTier, number> = { free: 0, plus: 1, premium: 2 };
 
 export function PricingPage() {
   const intl = useIntl();
+  const navigate = useNavigate();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { tier: currentTier } = useAuth();
-  const [interval, setInterval] = useState<BillingInterval>("annual");
+  const subscription = useSubscription();
+  const changePlan = useChangePlan();
+  const [interval, setBillingInterval] = useState<BillingInterval>("annual");
+  const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "billing.pricing.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
@@ -94,6 +110,68 @@ export function PricingPage() {
     if (TIER_ORDER[planTier] > TIER_ORDER[(currentTier ?? "free") as PlanTier]) return "upgrade";
     return "downgrade";
   }
+
+  // ─── Plan-change handlers ─────────────────────────────────────────────────
+  // Backend currently supports billing-interval changes only (not tier
+  // migration). For cross-tier transitions we route users through the correct
+  // next step (payment-method setup, contact support) rather than silently
+  // failing. [S§10.2, 10-billing §5]
+
+  const intervalLabelId =
+    interval === "annual"
+      ? "billing.pricing.annual"
+      : "billing.pricing.monthly";
+
+  function bodyMessageIdFor(plan: Plan): string {
+    const action = getButtonAction(plan.tier);
+    const tier = (currentTier ?? "free") as PlanTier;
+    if (tier === "free") return "billing.pricing.confirm.freeBody";
+    if (plan.tier === tier) return "billing.pricing.confirm.intervalBody";
+    if (action === "upgrade") return "billing.pricing.confirm.upgradeBody";
+    return "billing.pricing.confirm.downgradeBody";
+  }
+
+  function handleConfirm() {
+    if (!pendingPlan) return;
+    setErrorMessage(null);
+    const tier = (currentTier ?? "free") as PlanTier;
+
+    // Free → paid: requires a payment method + subscription creation flow that
+    // does not exist on the backend yet. Direct users to add a payment method
+    // and surface a clear next step.
+    if (tier === "free") {
+      setPendingPlan(null);
+      navigate("/billing/payment-methods");
+      return;
+    }
+
+    // Same tier, different interval: backend supports this via PATCH.
+    if (pendingPlan.tier === tier) {
+      changePlan.mutate(
+        { billing_interval: interval },
+        {
+          onSuccess: () => setPendingPlan(null),
+          onError: () =>
+            setErrorMessage(intl.formatMessage({ id: "error.generic" })),
+        },
+      );
+      return;
+    }
+
+    // Cross-tier change: not supported by backend yet.
+    setErrorMessage(
+      intl.formatMessage({ id: "billing.pricing.tierChangeUnavailable" }),
+    );
+  }
+
+  const isBusy = changePlan.isPending;
+  const onFreeTier = (currentTier ?? "free") === "free";
+  // Free-tier users are routed to payment methods regardless of whether they
+  // already have one saved — the subscription creation flow requires
+  // explicit payment method selection today.
+  const confirmLabelId = onFreeTier
+    ? "billing.pricing.confirm.addPaymentMethod"
+    : "billing.pricing.confirm.confirm";
 
   function getButtonLabelId(action: string) {
     switch (action) {
@@ -131,7 +209,7 @@ export function PricingPage() {
                 ? "bg-primary text-on-primary"
                 : "text-on-surface-variant hover:bg-surface-container-highest"
             }`}
-            onClick={() => setInterval("monthly")}
+            onClick={() => setBillingInterval("monthly")}
           >
             <FormattedMessage id="billing.pricing.monthly" />
           </button>
@@ -142,7 +220,7 @@ export function PricingPage() {
                 ? "bg-primary text-on-primary"
                 : "text-on-surface-variant hover:bg-surface-container-highest"
             }`}
-            onClick={() => setInterval("annual")}
+            onClick={() => setBillingInterval("annual")}
           >
             <FormattedMessage id="billing.pricing.annual" />
             <Badge variant="secondary" className="text-xs">
@@ -216,8 +294,13 @@ export function PricingPage() {
               </ul>
               <Button
                 variant={isCurrent ? "tertiary" : plan.highlighted ? "primary" : "secondary"}
-                disabled={isCurrent}
+                disabled={isCurrent || isBusy}
                 className="w-full"
+                onClick={() => {
+                  if (isCurrent) return;
+                  setErrorMessage(null);
+                  setPendingPlan(plan);
+                }}
               >
                 <FormattedMessage id={getButtonLabelId(action)} />
               </Button>
@@ -225,6 +308,36 @@ export function PricingPage() {
           );
         })}
       </div>
+
+      {/* Plan change confirmation */}
+      <ConfirmationDialog
+        open={pendingPlan !== null}
+        onClose={() => {
+          setPendingPlan(null);
+          setErrorMessage(null);
+        }}
+        onConfirm={handleConfirm}
+        title={intl.formatMessage({ id: "billing.pricing.confirm.title" })}
+        confirmLabel={intl.formatMessage({ id: confirmLabelId })}
+        loading={isBusy || subscription.isPending}
+      >
+        {pendingPlan && (
+          <div className="flex flex-col gap-3">
+            <FormattedMessage
+              id={bodyMessageIdFor(pendingPlan)}
+              values={{
+                planName: intl.formatMessage({ id: pendingPlan.nameId }),
+                interval: intl.formatMessage({ id: intervalLabelId }),
+              }}
+            />
+            {errorMessage && (
+              <p className="type-body-sm text-error" role="alert">
+                {errorMessage}
+              </p>
+            )}
+          </div>
+        )}
+      </ConfirmationDialog>
     </div>
   );
 }

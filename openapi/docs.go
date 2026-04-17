@@ -24252,6 +24252,9 @@ const docTemplate = `{
                         "$ref": "#/definitions/notify.NotificationResponse"
                     }
                 },
+                "total": {
+                    "type": "integer"
+                },
                 "unread_count": {
                     "type": "integer"
                 }

@@ -293,9 +293,12 @@ export function LearningDashboard() {
         )}
       </section>
 
-      {/* Premium features gate */}
+      {/* Advanced analytics — Plus tier or higher [S§3.2] */}
       {tier === "free" && (
-        <TierGate featureName="Advanced Learning Analytics" />
+        <TierGate
+          featureName="Advanced Learning Analytics"
+          requiredTier="plus"
+        />
       )}
     </div>
   );

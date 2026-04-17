@@ -36,6 +36,12 @@ var (
 )
 
 func setupLearnRoutes(e *echo.Echo, svc LearningService) {
+	setupLearnRoutesWithTier(e, svc, shared.SubscriptionTierPremium)
+}
+
+// setupLearnRoutesWithTier allows tests to inject a specific tier into the auth
+// context, letting tier-gate tests assert that free-tier users hit 402. [S§3.2]
+func setupLearnRoutesWithTier(e *echo.Echo, svc LearningService, tier shared.SubscriptionTier) {
 	auth := e.Group("/v1")
 	auth.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -43,6 +49,7 @@ func setupLearnRoutes(e *echo.Echo, svc LearningService) {
 				ParentID:           testParentID,
 				FamilyID:           testFamilyID,
 				CoppaConsentStatus: "consented",
+				SubscriptionTier:   tier,
 			})
 			return next(c)
 		}
@@ -588,6 +595,38 @@ func TestGetActivityTimeline_Success(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestTierGate_FreeBlockedFromAdvancedAnalytics verifies that a free-tier family
+// cannot access Plus-gated advanced analytics routes. [S§3.2]
+func TestTierGate_FreeBlockedFromAdvancedAnalytics(t *testing.T) {
+	e := newTestEcho()
+	mock := newMockLearningService()
+	setupLearnRoutesWithTier(e, mock, shared.SubscriptionTierFree)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/learning/students/"+testStudentID.String()+"/progress/subjects", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusPaymentRequired {
+		t.Errorf("expected 402 Payment Required for free tier, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestTierGate_FreeBlockedFromAdvancedTools verifies that a free-tier family
+// cannot access Plus-gated advanced learning tools (assessment-defs). [S§3.2]
+func TestTierGate_FreeBlockedFromAdvancedTools(t *testing.T) {
+	e := newTestEcho()
+	mock := newMockLearningService()
+	setupLearnRoutesWithTier(e, mock, shared.SubscriptionTierFree)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/learning/assessment-defs", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusPaymentRequired {
+		t.Errorf("expected 402 Payment Required for free tier, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -48,7 +48,8 @@ other spec sections are included where the billing domain is involved.
 | Requirement | SPEC Reference | Domain Spec Section |
 |-------------|---------------|---------------------|
 | Free tier: social, basic learning, marketplace access, methodology, discovery, onboarding, data export | `[S§15.1]` | §10 (tier system — free is default) |
-| Premium tier: compliance reporting, portfolio/transcript, advanced analytics, AI, enhanced storage, advanced mastery paths, methodology-specific tools | `[S§15.2]` | §10 (premium features), §16 (events → `iam::` tier sync) |
+| Plus tier: everything in Free plus advanced learning tools (assessments, projects, grading scales) and advanced analytics (subject breakdown, timeline) | `[S§3.2]` | §10 (plus features), §16 (events → `iam::` tier sync) |
+| Premium tier: everything in Plus plus compliance reporting, portfolio/transcript, AI recommendations, enhanced storage, priority support | `[S§15.2]` | §10 (premium features), §16 (events → `iam::` tier sync) |
 | Family-level billing (one subscription per family) | `[S§15.3]` | §3.2 (`bill_subscriptions` — `UNIQUE(family_id)`) |
 | Monthly + annual billing cycles | `[S§15.3]` | §3.1 (`billing_interval` CHECK), §10 |
 | Annual discount | `[S§15.3]` | §10, §11 (pricing via Hyperswitch `item_price_id`) |
@@ -165,7 +166,7 @@ CREATE TABLE bill_subscriptions (
     hyperswitch_subscription_id TEXT NOT NULL UNIQUE,   -- Hyperswitch subscription ID
     hyperswitch_customer_id   TEXT NOT NULL,            -- denormalized for webhook fast-path
     tier                      TEXT NOT NULL DEFAULT 'premium'
-                              CHECK (tier IN ('free', 'premium')),
+                              CHECK (tier IN ('free', 'plus', 'premium')),
     status                    TEXT NOT NULL DEFAULT 'incomplete'
                               CHECK (status IN (
                                   'active', 'trialing', 'past_due',
@@ -968,7 +969,7 @@ type PayoutListParams struct {
 ```go
 // SubscriptionResponse is the subscription status response.
 type SubscriptionResponse struct {
-    Tier              string     `json:"tier"`                           // "free" | "premium"
+    Tier              string     `json:"tier"`                           // "free" | "plus" | "premium"
     Status            *string    `json:"status"`                        // null if free tier (no subscription)
     BillingInterval   *string    `json:"billing_interval,omitempty"`
     CurrentPeriodEnd  *time.Time `json:"current_period_end,omitempty"`

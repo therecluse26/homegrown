@@ -22,20 +22,20 @@ func (BillHyperswitchCustomer) TableName() string { return "bill_hyperswitch_cus
 
 // BillSubscription mirrors Hyperswitch subscription state. [10-billing §3.2]
 type BillSubscription struct {
-	ID                        uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	FamilyID                  uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex"`
-	HyperswitchSubscriptionID string     `gorm:"not null;uniqueIndex"`
-	HyperswitchCustomerID     string     `gorm:"not null"`
-	Tier                      string     `gorm:"not null;default:premium"`
-	Status                    string     `gorm:"not null;default:incomplete"`
-	BillingInterval           string     `gorm:"not null"`
-	CurrentPeriodStart        time.Time  `gorm:"not null"`
-	CurrentPeriodEnd          time.Time  `gorm:"not null"`
-	CancelAtPeriodEnd         bool       `gorm:"not null;default:false"`
+	ID                        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	FamilyID                  uuid.UUID `gorm:"type:uuid;not null;uniqueIndex"`
+	HyperswitchSubscriptionID string    `gorm:"not null;uniqueIndex"`
+	HyperswitchCustomerID     string    `gorm:"not null"`
+	Tier                      string    `gorm:"not null;default:premium"`
+	Status                    string    `gorm:"not null;default:incomplete"`
+	BillingInterval           string    `gorm:"not null"`
+	CurrentPeriodStart        time.Time `gorm:"not null"`
+	CurrentPeriodEnd          time.Time `gorm:"not null"`
+	CancelAtPeriodEnd         bool      `gorm:"not null;default:false"`
 	CanceledAt                *time.Time
-	AmountCents               int64  `gorm:"not null"`
-	Currency                  string `gorm:"not null;default:usd"`
-	HyperswitchPriceID        string `gorm:"not null"`
+	AmountCents               int64     `gorm:"not null"`
+	Currency                  string    `gorm:"not null;default:usd"`
+	HyperswitchPriceID        string    `gorm:"not null"`
 	CreatedAt                 time.Time `gorm:"not null;autoCreateTime"`
 	UpdatedAt                 time.Time `gorm:"not null;autoUpdateTime"`
 }
@@ -55,17 +55,17 @@ func (m *BillSubscription) BeforeCreate(_ *gorm.DB) error {
 
 // BillTransaction records a financial transaction. [10-billing §3.2]
 type BillTransaction struct {
-	ID                     uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	FamilyID               uuid.UUID  `gorm:"type:uuid;not null"`
-	TransactionType        string     `gorm:"not null"`
-	Status                 string     `gorm:"not null;default:pending"`
-	AmountCents            int64      `gorm:"not null"`
-	Currency               string     `gorm:"not null;default:usd"`
-	HyperswitchPaymentID   *string
-	HyperswitchInvoiceID   *string
-	Description            *string
-	Metadata               map[string]any `gorm:"type:jsonb;serializer:json;not null;default:'{}'"`
-	CreatedAt              time.Time      `gorm:"not null;autoCreateTime"`
+	ID                   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	FamilyID             uuid.UUID `gorm:"type:uuid;not null"`
+	TransactionType      string    `gorm:"not null"`
+	Status               string    `gorm:"not null;default:pending"`
+	AmountCents          int64     `gorm:"not null"`
+	Currency             string    `gorm:"not null;default:usd"`
+	HyperswitchPaymentID *string
+	HyperswitchInvoiceID *string
+	Description          *string
+	Metadata             map[string]any `gorm:"type:jsonb;serializer:json;not null;default:'{}'"`
+	CreatedAt            time.Time      `gorm:"not null;autoCreateTime"`
 }
 
 func (BillTransaction) TableName() string { return "bill_transactions" }
@@ -83,19 +83,19 @@ func (m *BillTransaction) BeforeCreate(_ *gorm.DB) error {
 
 // BillPayout is a creator payout aggregation record. (Phase 2) [10-billing §3.2]
 type BillPayout struct {
-	ID                    uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	CreatorID             uuid.UUID  `gorm:"type:uuid;not null"`
-	Status                string     `gorm:"not null;default:pending"`
-	AmountCents           int64      `gorm:"not null"`
-	Currency              string     `gorm:"not null;default:usd"`
-	PeriodStart           time.Time  `gorm:"not null"`
-	PeriodEnd             time.Time  `gorm:"not null"`
-	PurchaseCount         int32      `gorm:"not null;default:0"`
-	RefundDeductionCents  int64      `gorm:"not null;default:0"`
-	HyperswitchPayoutID   *string
-	ProcessedAt           *time.Time
-	CreatedAt             time.Time `gorm:"not null;autoCreateTime"`
-	UpdatedAt             time.Time `gorm:"not null;autoUpdateTime"`
+	ID                   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	CreatorID            uuid.UUID `gorm:"type:uuid;not null"`
+	Status               string    `gorm:"not null;default:pending"`
+	AmountCents          int64     `gorm:"not null"`
+	Currency             string    `gorm:"not null;default:usd"`
+	PeriodStart          time.Time `gorm:"not null"`
+	PeriodEnd            time.Time `gorm:"not null"`
+	PurchaseCount        int32     `gorm:"not null;default:0"`
+	RefundDeductionCents int64     `gorm:"not null;default:0"`
+	HyperswitchPayoutID  *string
+	ProcessedAt          *time.Time
+	CreatedAt            time.Time `gorm:"not null;autoCreateTime"`
+	UpdatedAt            time.Time `gorm:"not null;autoUpdateTime"`
 }
 
 func (BillPayout) TableName() string { return "bill_payouts" }

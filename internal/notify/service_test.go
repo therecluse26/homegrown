@@ -43,6 +43,11 @@ func (m *mockNotificationRepo) List(ctx context.Context, params *NotificationLis
 	return args.Get(0).([]NotifyNotification), args.Error(1)
 }
 
+func (m *mockNotificationRepo) CountAll(ctx context.Context, params *NotificationListParams, scope *shared.FamilyScope) (int64, error) {
+	args := m.Called(ctx, params, scope)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *mockNotificationRepo) CountUnread(ctx context.Context, scope *shared.FamilyScope) (int64, error) {
 	args := m.Called(ctx, scope)
 	return args.Get(0).(int64), args.Error(1)
@@ -470,12 +475,14 @@ func TestNotificationCRUD(t *testing.T) {
 		notifRepo := new(mockNotificationRepo)
 		notifRepo.On("List", mock.Anything, mock.Anything, mock.Anything).Return([]NotifyNotification{sampleNotif}, nil)
 		notifRepo.On("CountUnread", mock.Anything, mock.Anything).Return(int64(5), nil)
+		notifRepo.On("CountAll", mock.Anything, mock.Anything, mock.Anything).Return(int64(1), nil)
 		svc := newTestService(notifRepo, new(mockPreferenceRepo), new(mockIamService), new(mockCache))
 
 		result, err := svc.ListNotifications(ctx, NotificationListParams{}, &scope)
 		require.NoError(t, err)
 		assert.Equal(t, 1, len(result.Notifications))
 		assert.Equal(t, int64(5), result.UnreadCount)
+		assert.Equal(t, int64(1), result.Total)
 	})
 
 	// C2. ListNotifications passes category filter.
@@ -484,6 +491,7 @@ func TestNotificationCRUD(t *testing.T) {
 		cat := CategorySocial
 		notifRepo.On("List", mock.Anything, mock.Anything, mock.Anything).Return([]NotifyNotification{sampleNotif}, nil)
 		notifRepo.On("CountUnread", mock.Anything, mock.Anything).Return(int64(1), nil)
+		notifRepo.On("CountAll", mock.Anything, mock.Anything, mock.Anything).Return(int64(1), nil)
 		svc := newTestService(notifRepo, new(mockPreferenceRepo), new(mockIamService), new(mockCache))
 
 		result, err := svc.ListNotifications(ctx, NotificationListParams{Category: &cat}, &scope)
@@ -497,6 +505,7 @@ func TestNotificationCRUD(t *testing.T) {
 		unread := true
 		notifRepo.On("List", mock.Anything, mock.Anything, mock.Anything).Return([]NotifyNotification{sampleNotif}, nil)
 		notifRepo.On("CountUnread", mock.Anything, mock.Anything).Return(int64(1), nil)
+		notifRepo.On("CountAll", mock.Anything, mock.Anything, mock.Anything).Return(int64(1), nil)
 		svc := newTestService(notifRepo, new(mockPreferenceRepo), new(mockIamService), new(mockCache))
 
 		result, err := svc.ListNotifications(ctx, NotificationListParams{UnreadOnly: &unread}, &scope)
@@ -1192,8 +1201,8 @@ func TestLearnEventHandlers(t *testing.T) {
 		svc := newTestServiceFull(notifRepo, prefRepo, new(mockIamService), new(mockCache), shared.NoopPubSub{}, shared.NoopJobEnqueuer{})
 
 		err := svc.HandleBookCompleted(ctx, BookCompletedEvent{
-			FamilyID:        familyID,
-			StudentID:       uuid.New(),
+			FamilyID:         familyID,
+			StudentID:        uuid.New(),
 			ReadingItemTitle: "Charlotte's Web",
 		})
 		require.NoError(t, err)
@@ -1690,6 +1699,7 @@ func TestCursorPagination(t *testing.T) {
 		notifRepo := new(mockNotificationRepo)
 		notifRepo.On("List", mock.Anything, mock.Anything, mock.Anything).Return([]NotifyNotification{}, nil)
 		notifRepo.On("CountUnread", mock.Anything, mock.Anything).Return(int64(0), nil)
+		notifRepo.On("CountAll", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), nil)
 		svc := newTestService(notifRepo, new(mockPreferenceRepo), new(mockIamService), new(mockCache))
 
 		result, err := svc.ListNotifications(ctx, NotificationListParams{}, &scope)
@@ -1705,6 +1715,7 @@ func TestCursorPagination(t *testing.T) {
 		notifRepo := new(mockNotificationRepo)
 		notifRepo.On("List", mock.Anything, mock.Anything, mock.Anything).Return(notifs, nil)
 		notifRepo.On("CountUnread", mock.Anything, mock.Anything).Return(int64(5), nil)
+		notifRepo.On("CountAll", mock.Anything, mock.Anything, mock.Anything).Return(int64(5), nil)
 		svc := newTestService(notifRepo, new(mockPreferenceRepo), new(mockIamService), new(mockCache))
 
 		result, err := svc.ListNotifications(ctx, NotificationListParams{Limit: &limit}, &scope)
@@ -1720,6 +1731,7 @@ func TestCursorPagination(t *testing.T) {
 		notifRepo := new(mockNotificationRepo)
 		notifRepo.On("List", mock.Anything, mock.Anything, mock.Anything).Return(notifs, nil)
 		notifRepo.On("CountUnread", mock.Anything, mock.Anything).Return(int64(10), nil)
+		notifRepo.On("CountAll", mock.Anything, mock.Anything, mock.Anything).Return(int64(10), nil)
 		svc := newTestService(notifRepo, new(mockPreferenceRepo), new(mockIamService), new(mockCache))
 
 		result, err := svc.ListNotifications(ctx, NotificationListParams{Limit: &limit}, &scope)
@@ -1742,6 +1754,7 @@ func TestCursorPagination(t *testing.T) {
 		notifRepo := new(mockNotificationRepo)
 		notifRepo.On("List", mock.Anything, mock.Anything, mock.Anything).Return(notifs, nil)
 		notifRepo.On("CountUnread", mock.Anything, mock.Anything).Return(int64(5), nil)
+		notifRepo.On("CountAll", mock.Anything, mock.Anything, mock.Anything).Return(int64(5), nil)
 		svc := newTestService(notifRepo, new(mockPreferenceRepo), new(mockIamService), new(mockCache))
 
 		result, err := svc.ListNotifications(ctx, NotificationListParams{Limit: &limit}, &scope)
@@ -1750,4 +1763,3 @@ func TestCursorPagination(t *testing.T) {
 		assert.Nil(t, result.NextCursor, "no extra row means no more pages")
 	})
 }
-

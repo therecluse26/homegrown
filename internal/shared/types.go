@@ -37,8 +37,8 @@ type ParentID struct {
 
 func NewParentID(id uuid.UUID) ParentID { return ParentID{UUID: id} }
 
-func (id ParentID) MarshalJSON() ([]byte, error)      { return json.Marshal(id.UUID) }
-func (id *ParentID) UnmarshalJSON(data []byte) error  { return json.Unmarshal(data, &id.UUID) }
+func (id ParentID) MarshalJSON() ([]byte, error)     { return json.Marshal(id.UUID) }
+func (id *ParentID) UnmarshalJSON(data []byte) error { return json.Unmarshal(data, &id.UUID) }
 
 // StudentID is a type-safe wrapper for student UUIDs.
 type StudentID struct {
@@ -47,8 +47,8 @@ type StudentID struct {
 
 func NewStudentID(id uuid.UUID) StudentID { return StudentID{UUID: id} }
 
-func (id StudentID) MarshalJSON() ([]byte, error)      { return json.Marshal(id.UUID) }
-func (id *StudentID) UnmarshalJSON(data []byte) error  { return json.Unmarshal(data, &id.UUID) }
+func (id StudentID) MarshalJSON() ([]byte, error)     { return json.Marshal(id.UUID) }
+func (id *StudentID) UnmarshalJSON(data []byte) error { return json.Unmarshal(data, &id.UUID) }
 
 // CreatorID is a type-safe wrapper for creator UUIDs.
 type CreatorID struct {
@@ -57,27 +57,51 @@ type CreatorID struct {
 
 func NewCreatorID(id uuid.UUID) CreatorID { return CreatorID{UUID: id} }
 
-func (id CreatorID) MarshalJSON() ([]byte, error)      { return json.Marshal(id.UUID) }
-func (id *CreatorID) UnmarshalJSON(data []byte) error  { return json.Unmarshal(data, &id.UUID) }
+func (id CreatorID) MarshalJSON() ([]byte, error)     { return json.Marshal(id.UUID) }
+func (id *CreatorID) UnmarshalJSON(data []byte) error { return json.Unmarshal(data, &id.UUID) }
 
 // ─── Subscription Tier ────────────────────────────────────────────────────────
 
 // SubscriptionTier represents the family's subscription level.
+// Ordered: free < plus < premium. See tierRank() for comparison. [S§3.2]
 type SubscriptionTier string
 
 const (
 	SubscriptionTierFree    SubscriptionTier = "free"
+	SubscriptionTierPlus    SubscriptionTier = "plus"
 	SubscriptionTierPremium SubscriptionTier = "premium"
 )
 
 // ParseSubscriptionTier parses a string into a SubscriptionTier.
+// Unknown values default to Free (safe-deny).
 func ParseSubscriptionTier(s string) SubscriptionTier {
 	switch s {
 	case "premium":
 		return SubscriptionTierPremium
+	case "plus":
+		return SubscriptionTierPlus
 	default:
 		return SubscriptionTierFree
 	}
+}
+
+// tierRank returns the numeric rank of a tier for comparison.
+// Higher rank = more access. free=0, plus=1, premium=2. [S§3.2]
+func tierRank(t SubscriptionTier) int {
+	switch t {
+	case SubscriptionTierPremium:
+		return 2
+	case SubscriptionTierPlus:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// MeetsTier reports whether the current tier meets or exceeds the required tier.
+// Used by RequireTier middleware helper. [S§3.2]
+func (t SubscriptionTier) MeetsTier(required SubscriptionTier) bool {
+	return tierRank(t) >= tierRank(required)
 }
 
 // ─── AuthContext ──────────────────────────────────────────────────────────────
@@ -88,9 +112,9 @@ type AuthContext struct {
 	ParentID           uuid.UUID        `json:"parent_id"`
 	FamilyID           uuid.UUID        `json:"family_id"`
 	IdentityID         uuid.UUID        `json:"identity_id"`
-	DisplayName        string           `json:"display_name"`         // parent's display name
+	DisplayName        string           `json:"display_name"` // parent's display name
 	IsPrimaryParent    bool             `json:"is_primary_parent"`
-	IsPlatformAdmin    bool             `json:"is_platform_admin"`  // [S§3.1.5, 11-safety §9]
+	IsPlatformAdmin    bool             `json:"is_platform_admin"` // [S§3.1.5, 11-safety §9]
 	SubscriptionTier   SubscriptionTier `json:"subscription_tier"`
 	CoppaConsentStatus string           `json:"coppa_consent_status"` // [§20.6]
 	Email              string           `json:"-"`                    // NOT logged or serialized — PII [CODING §5.2]

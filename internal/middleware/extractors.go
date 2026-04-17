@@ -29,6 +29,42 @@ func RequirePremium(c echo.Context) (*shared.AuthContext, error) {
 	return auth, nil
 }
 
+// RequireTier extracts AuthContext and verifies the user's subscription tier meets
+// or exceeds the required tier. Tier ordering: free < plus < premium. [S§3.2]
+//
+// Returns 402 Payment Required (code `tier_required`) if the user's tier is too low.
+// Populated from AuthContext.SubscriptionTier — no DB query per request.
+//
+// Consuming domains: learn:: (advanced tools/analytics → plus), comply::/recs:: (premium).
+func RequireTier(c echo.Context, required shared.SubscriptionTier) (*shared.AuthContext, error) {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return nil, err
+	}
+
+	if !auth.SubscriptionTier.MeetsTier(required) {
+		return nil, shared.ErrTierRequired(required)
+	}
+
+	return auth, nil
+}
+
+// RequireTierMiddleware returns an Echo middleware that blocks requests whose
+// subscription tier is below `required`. Use to gate entire route groups. [S§3.2]
+//
+// Handlers inside the gated group may still call shared.GetAuthContext — the
+// middleware does not consume or alter the auth context.
+func RequireTierMiddleware(required shared.SubscriptionTier) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if _, err := RequireTier(c, required); err != nil {
+				return err
+			}
+			return next(c)
+		}
+	}
+}
+
 // RequireCoppaConsent extracts AuthContext and verifies the family has active COPPA consent.
 // Returns 403 Forbidden with code `coppa_consent_required` if consent status is not
 // "consented" or "re_verified". [ARCH §6.3]

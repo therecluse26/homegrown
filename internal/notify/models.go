@@ -86,27 +86,27 @@ var SystemCriticalTypes = []string{
 
 // ValidNotificationTypes is the set of all registered notification types.
 var ValidNotificationTypes = map[string]bool{
-	TypeFriendRequestSent:     true,
-	TypeFriendRequestAccepted: true,
-	TypeMessageReceived:       true,
-	TypeEventCancelled:        true,
-	TypeMethodologyChanged:    true,
-	TypeOnboardingCompleted:   true,
-	TypeActivityStreak:        true,
-	TypeMilestoneAchieved:     true,
-	TypeBookCompleted:         true,
-	TypeDataExportReady:       true,
-	TypePurchaseCompleted:     true,
-	TypePurchaseRefunded:      true,
-	TypeCreatorOnboarded:      true,
-	TypeContentFlagged:        true,
-	TypeCoParentAdded:         true,
+	TypeFriendRequestSent:       true,
+	TypeFriendRequestAccepted:   true,
+	TypeMessageReceived:         true,
+	TypeEventCancelled:          true,
+	TypeMethodologyChanged:      true,
+	TypeOnboardingCompleted:     true,
+	TypeActivityStreak:          true,
+	TypeMilestoneAchieved:       true,
+	TypeBookCompleted:           true,
+	TypeDataExportReady:         true,
+	TypePurchaseCompleted:       true,
+	TypePurchaseRefunded:        true,
+	TypeCreatorOnboarded:        true,
+	TypeContentFlagged:          true,
+	TypeCoParentAdded:           true,
 	TypeFamilyDeletionScheduled: true,
-	TypeSubscriptionCreated:   true,
-	TypeSubscriptionChanged:   true,
-	TypeSubscriptionCancelled: true,
-	TypePayoutCompleted:       true,
-	TypeRecommendationsReady: true,
+	TypeSubscriptionCreated:     true,
+	TypeSubscriptionChanged:     true,
+	TypeSubscriptionCancelled:   true,
+	TypePayoutCompleted:         true,
+	TypeRecommendationsReady:    true,
 }
 
 // ValidCategories is the set of valid notification categories.
@@ -298,9 +298,12 @@ type NotificationResponse struct {
 }
 
 // NotificationListResponse is a paginated notification list with unread badge count.
+// Total is the total number of notifications matching the filter (ignores pagination),
+// allowing the frontend to render accurate "N notifications" labels. [08-notify §4]
 type NotificationListResponse struct {
 	Notifications []NotificationResponse `json:"notifications"`
 	UnreadCount   int64                  `json:"unread_count"`
+	Total         int64                  `json:"total"`
 	NextCursor    *string                `json:"next_cursor,omitempty"`
 }
 
@@ -462,7 +465,7 @@ func (CoParentAddedEvent) EventName() string { return "iam.CoParentAdded" }
 
 // FamilyDeletionScheduledEvent mirrors iam::FamilyDeletionScheduled. [08-notify §17.1]
 type FamilyDeletionScheduledEvent struct {
-	FamilyID       uuid.UUID `json:"family_id"`
+	FamilyID        uuid.UUID `json:"family_id"`
 	DeleteAfterDate time.Time `json:"delete_after_date"`
 }
 

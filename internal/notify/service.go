@@ -18,14 +18,14 @@ import (
 
 // NotificationServiceImpl implements NotificationService. [08-notify §5]
 type NotificationServiceImpl struct {
-	notificationRepo NotificationRepository
-	preferenceRepo   PreferenceRepository
-	digestRepo       DigestRepository
-	emailAdapter     EmailAdapter
-	iamService       IamServiceForNotify
-	cache            shared.Cache
-	pubsub           shared.PubSub
-	jobEnqueuer      shared.JobEnqueuer
+	notificationRepo  NotificationRepository
+	preferenceRepo    PreferenceRepository
+	digestRepo        DigestRepository
+	emailAdapter      EmailAdapter
+	iamService        IamServiceForNotify
+	cache             shared.Cache
+	pubsub            shared.PubSub
+	jobEnqueuer       shared.JobEnqueuer
 	unsubscribeSecret string
 }
 
@@ -69,6 +69,13 @@ func (s *NotificationServiceImpl) ListNotifications(ctx context.Context, params 
 		return nil, &NotifyError{Err: fmt.Errorf("count unread: %w", err)}
 	}
 
+	// Total respects filters (category, unread_only) but ignores pagination —
+	// lets the UI render "N notifications" instead of guessing from the current page.
+	total, err := s.notificationRepo.CountAll(ctx, &params, scope)
+	if err != nil {
+		return nil, &NotifyError{Err: fmt.Errorf("count all: %w", err)}
+	}
+
 	// Determine effective limit for hasMore detection (repo fetches limit+1).
 	limit := 20
 	if params.Limit != nil && *params.Limit > 0 && *params.Limit <= 100 {
@@ -92,6 +99,7 @@ func (s *NotificationServiceImpl) ListNotifications(ctx context.Context, params 
 	return &NotificationListResponse{
 		Notifications: items,
 		UnreadCount:   unreadCount,
+		Total:         total,
 		NextCursor:    nextCursor,
 	}, nil
 }
@@ -445,7 +453,7 @@ func (s *NotificationServiceImpl) HandleFriendRequestSent(ctx context.Context, e
 		Body:             "You have a new friend request",
 		ActionURL:        strPtr("/friends/requests"),
 		Metadata: map[string]any{
-			"source_event_id":    event.FriendshipID.String(),
+			"source_event_id":     event.FriendshipID.String(),
 			"requester_family_id": event.RequesterFamilyID.String(),
 		},
 	})
@@ -459,7 +467,7 @@ func (s *NotificationServiceImpl) HandleFriendRequestAccepted(ctx context.Contex
 		Body:             "Your friend request was accepted",
 		ActionURL:        strPtr("/friends"),
 		Metadata: map[string]any{
-			"source_event_id":   event.FriendshipID.String(),
+			"source_event_id":    event.FriendshipID.String(),
 			"accepter_family_id": event.AccepterFamilyID.String(),
 		},
 	})
@@ -473,9 +481,9 @@ func (s *NotificationServiceImpl) HandleMessageSent(ctx context.Context, event M
 		Body:             "You have a new message",
 		ActionURL:        strPtr(fmt.Sprintf("/messages/%s", event.ConversationID)),
 		Metadata: map[string]any{
-			"source_event_id":    event.MessageID.String(),
-			"conversation_id":    event.ConversationID.String(),
-			"sender_family_id":   event.SenderFamilyID.String(),
+			"source_event_id":  event.MessageID.String(),
+			"conversation_id":  event.ConversationID.String(),
+			"sender_family_id": event.SenderFamilyID.String(),
 		},
 	})
 }

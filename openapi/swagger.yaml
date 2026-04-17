@@ -4283,6 +4283,8 @@ definitions:
         items:
           $ref: '#/definitions/notify.NotificationResponse'
         type: array
+      total:
+        type: integer
       unread_count:
         type: integer
     type: object

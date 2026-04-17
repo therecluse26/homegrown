@@ -82,6 +82,27 @@ func (r *PgNotificationRepository) List(ctx context.Context, params *Notificatio
 	return notifications, nil
 }
 
+// CountAll returns the total number of notifications matching the filter, ignoring
+// pagination. Used to populate NotificationListResponse.Total so the UI can render
+// accurate counts without guessing from the current page.
+func (r *PgNotificationRepository) CountAll(ctx context.Context, params *NotificationListParams, scope *shared.FamilyScope) (int64, error) {
+	tx := r.db.WithContext(ctx).Model(&NotifyNotification{}).
+		Where("family_id = ?", scope.FamilyID())
+
+	if params.Category != nil {
+		tx = tx.Where("category = ?", *params.Category)
+	}
+	if params.UnreadOnly != nil && *params.UnreadOnly {
+		tx = tx.Where("is_read = false")
+	}
+
+	var count int64
+	if err := tx.Count(&count).Error; err != nil {
+		return 0, shared.ErrDatabase(err)
+	}
+	return count, nil
+}
+
 func (r *PgNotificationRepository) CountUnread(ctx context.Context, scope *shared.FamilyScope) (int64, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).Model(&NotifyNotification{}).

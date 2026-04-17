@@ -133,39 +133,46 @@ A Creator Account enables an individual or organization to sell content through 
 
 ### 3.2 Permission Matrix
 
-| Capability | Unauthenticated | Free Parent | Premium Parent | Student (supervised) | Creator | Admin |
-|-----------|:-:|:-:|:-:|:-:|:-:|:-:|
-| View public discovery content | ✓ | ✓ | ✓ | — | ✓ | ✓ |
-| Take methodology quiz | ✓ | ✓ | ✓ | — | ✓ | ✓ |
-| Create account | ✓ | — | — | — | — | — |
-| Manage family profile | — | ✓ | ✓ | — | — | ✓* |
-| Select methodologies | — | ✓ | ✓ | — | — | — |
-| Use basic learning tools | — | ✓ | ✓ | ✓ | — | — |
-| Use advanced learning tools | — | — | ✓ | ✓** | — | — |
-| Take quizzes / assessments | — | ✓ | ✓ | ✓ | — | — |
-| Watch video lessons | — | ✓ | ✓ | ✓ | — | — |
-| View in-platform content | — | ✓ | ✓ | ✓ | — | — |
-| Progress through sequences | — | ✓ | ✓ | ✓ | — | — |
-| View assigned content | — | — | — | ✓ | — | — |
-| View basic progress tracking | — | ✓ | ✓ | — | — | — |
-| View advanced analytics | — | — | ✓ | — | — | — |
-| Access compliance reporting | — | — | ✓ | — | — | — |
-| Access AI recommendations | — | — | ✓ | — | — | — |
-| Post to timeline | — | ✓ | ✓ | — | — | — |
-| Comment on posts | — | ✓ | ✓ | — | — | — |
-| Send direct messages | — | ✓ | ✓ | — | — | — |
-| Join/create groups | — | ✓ | ✓ | — | — | — |
-| Create/discover events | — | ✓ | ✓ | — | — | — |
-| Browse marketplace | — | ✓ | ✓ | — | ✓ | ✓ |
-| Purchase marketplace content | — | ✓ | ✓ | — | — | — |
-| List/manage marketplace content | — | — | — | — | ✓ | ✓* |
-| Use authoring tools (quiz/sequence builder) | — | — | — | — | ✓ | ✓* |
-| Receive payouts | — | — | — | — | ✓ | — |
-| Moderate content | — | — | — | — | — | ✓ |
-| Manage users/accounts | — | — | — | — | — | ✓ |
+Subscription tiers are ordered: **free < plus < premium**. A capability gated
+at Plus is also available to Premium families. Backend enforcement uses
+`middleware.RequireTierMiddleware(shared.SubscriptionTierPlus)` for Plus-gated
+route groups and `middleware.RequirePremium` for Premium-only gates.
+
+| Capability | Unauthenticated | Free Parent | Plus Parent | Premium Parent | Student (supervised) | Creator | Admin |
+|-----------|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| View public discovery content | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| Take methodology quiz | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| Create account | ✓ | — | — | — | — | — | — |
+| Manage family profile | — | ✓ | ✓ | ✓ | — | — | ✓* |
+| Select methodologies | — | ✓ | ✓ | ✓ | — | — | — |
+| Use basic learning tools | — | ✓ | ✓ | ✓ | ✓ | — | — |
+| Use advanced learning tools | — | — | ✓ | ✓ | ✓** | — | — |
+| Take quizzes / assessments | — | ✓ | ✓ | ✓ | ✓ | — | — |
+| Watch video lessons | — | ✓ | ✓ | ✓ | ✓ | — | — |
+| View in-platform content | — | ✓ | ✓ | ✓ | ✓ | — | — |
+| Progress through sequences | — | ✓ | ✓ | ✓ | ✓ | — | — |
+| View assigned content | — | — | — | — | ✓ | — | — |
+| View basic progress tracking | — | ✓ | ✓ | ✓ | — | — | — |
+| View advanced analytics | — | — | ✓ | ✓ | — | — | — |
+| Access compliance reporting | — | — | — | ✓ | — | — | — |
+| Create portfolios & transcripts | — | — | — | ✓ | — | — | — |
+| Access AI recommendations | — | — | — | ✓ | — | — | — |
+| Priority support | — | — | — | ✓ | — | — | — |
+| Post to timeline | — | ✓ | ✓ | ✓ | — | — | — |
+| Comment on posts | — | ✓ | ✓ | ✓ | — | — | — |
+| Send direct messages | — | ✓ | ✓ | ✓ | — | — | — |
+| Join/create groups | — | ✓ | ✓ | ✓ | — | — | — |
+| Create/discover events | — | ✓ | ✓ | ✓ | — | — | — |
+| Browse marketplace | — | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| Purchase marketplace content | — | ✓ | ✓ | ✓ | — | — | — |
+| List/manage marketplace content | — | — | — | — | — | ✓ | ✓* |
+| Use authoring tools (quiz/sequence builder) | — | — | — | — | — | ✓ | ✓* |
+| Receive payouts | — | — | — | — | — | ✓ | — |
+| Moderate content | — | — | — | — | — | — | ✓ |
+| Manage users/accounts | — | — | — | — | — | — | ✓ |
 
 *Admin access is for support/moderation purposes with audit logging.
-**Student access to advanced tools requires parent's family to have premium subscription.
+**Student access to advanced tools requires parent's family to have Plus or Premium subscription.
 
 > **Student (supervised)** — Students aged 10+ with a parent-initiated supervised session. They can view and interact with assigned content (quizzes, videos, readings, sequences) but have no access to social features, marketplace, messaging, or account settings. See §8.6.
 
