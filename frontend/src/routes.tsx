@@ -5,6 +5,7 @@ import { AuthLayout } from "@/components/layout/auth-layout";
 import { OnboardingLayout } from "@/components/layout/onboarding-layout";
 import { StudentShell } from "@/components/layout/student-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
+import { DiscoverLayout } from "@/components/layout/discover-layout";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { GuestRoute } from "@/components/layout/guest-route";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
@@ -193,6 +194,13 @@ const ComplianceRequirements = lazy(() => import("@/features/compliance/requirem
 const TermsOfService = lazy(() => import("@/features/legal/terms-of-service").then(m => ({ default: m.TermsOfService })));
 const PrivacyPolicy = lazy(() => import("@/features/legal/privacy-policy").then(m => ({ default: m.PrivacyPolicy })));
 const CommunityGuidelines = lazy(() => import("@/features/legal/community-guidelines").then(m => ({ default: m.CommunityGuidelines })));
+
+// Discovery (public)
+const DiscoverLanding = lazy(() => import("@/features/discover/discover-landing").then(m => ({ default: m.DiscoverLanding })));
+const MethodologyQuiz = lazy(() => import("@/features/discover/methodology-quiz").then(m => ({ default: m.MethodologyQuiz })));
+const QuizResults = lazy(() => import("@/features/discover/quiz-results").then(m => ({ default: m.QuizResults })));
+const StateGuides = lazy(() => import("@/features/discover/state-guides").then(m => ({ default: m.StateGuides })));
+const StateGuideDetail = lazy(() => import("@/features/discover/state-guide-detail").then(m => ({ default: m.StateGuideDetail })));
 
 const routes: RouteObject[] = [
   // ─── Authenticated routes ──────────────────────────────────────────────────
@@ -522,6 +530,19 @@ const routes: RouteObject[] = [
       { path: "terms", element: <TermsOfService /> },
       { path: "privacy", element: <PrivacyPolicy /> },
       { path: "guidelines", element: <CommunityGuidelines /> },
+    ],
+  },
+  // ─── Discovery routes (public, no auth required) ──────────────────────────
+  {
+    path: "discover",
+    element: <DiscoverLayout />,
+    errorElement: <RouteErrorBoundary />,
+    children: [
+      { index: true, element: <DiscoverLanding /> },
+      { path: "quiz", element: <MethodologyQuiz /> },
+      { path: "results/:shareId", element: <QuizResults /> },
+      { path: "states", element: <StateGuides /> },
+      { path: "states/:stateCode", element: <StateGuideDetail /> },
     ],
   },
 ];
