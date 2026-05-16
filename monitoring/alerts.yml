@@ -1,0 +1,64 @@
+groups:
+  - name: homegrown_academy
+    rules:
+
+      # Fire when 5xx responses exceed 1% of all traffic over a 5-minute window.
+      # Uses the http_requests_total counter recorded by internal/middleware/metrics.go.
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP 5xx error rate above 1%"
+          description: >
+            {{ $value | humanizePercentage }} of requests are returning 5xx over the last 5 minutes.
+            Investigate recent deployments, database connectivity, and error logs.
+          runbook_url: "https://github.com/homegrown-academy/homegrown-academy/blob/main/specs/procedures/ON_CALL_RUNBOOK.md#high-error-rate"
+
+      # Fire when p95 request latency exceeds 1 second over a 5-minute window.
+      # Uses the http_request_duration_seconds histogram (DefBuckets) from metrics middleware.
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 request latency above 1s"
+          description: >
+            The 95th-percentile response time is {{ $value | humanizeDuration }} over the last 5 minutes.
+            Check slow queries, external API calls, and background job contention.
+          runbook_url: "https://github.com/homegrown-academy/homegrown-academy/blob/main/specs/procedures/ON_CALL_RUNBOOK.md#high-latency"
+
+      # Fire immediately when GET /health returns non-200.
+      # The blackbox exporter sets probe_success=0 on any non-2xx response or connection failure.
+      - alert: HealthCheckFailing
+        expr: probe_success{job="homegrown-health"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Health check endpoint is failing"
+          description: >
+            GET /health is returning a non-200 response or is unreachable.
+            At least one critical dependency (database, Redis) is likely down.
+          runbook_url: "https://github.com/homegrown-academy/homegrown-academy/blob/main/specs/procedures/ON_CALL_RUNBOOK.md#health-check-failing"
+
+      # Warn when the API process itself disappears from Prometheus's scrape targets.
+      - alert: APIDown
+        expr: up{job="homegrown-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Homegrown Academy API is unreachable"
+          description: >
+            Prometheus cannot scrape /metrics from the API. The process may have crashed.
+          runbook_url: "https://github.com/homegrown-academy/homegrown-academy/blob/main/specs/procedures/ON_CALL_RUNBOOK.md#api-down"

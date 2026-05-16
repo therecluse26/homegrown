@@ -521,6 +521,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/billing/payouts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List creator payout report",
+                "parameters": [
+                    {
+                        "enum": [
+                            "pending",
+                            "processing",
+                            "completed",
+                            "failed"
+                        ],
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Results per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminPayoutReport"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/flags": {
             "get": {
                 "security": [
@@ -17948,6 +18010,70 @@ const docTemplate = `{
                 },
                 "is_primary": {
                     "type": "boolean"
+                }
+            }
+        },
+        "admin.AdminPayoutReport": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/admin.AdminPayoutReportItem"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                },
+                "total_amount_cents": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "admin.AdminPayoutReportItem": {
+            "type": "object",
+            "properties": {
+                "amount_cents": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "creator_id": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "hyperswitch_payout_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "period_end": {
+                    "type": "string"
+                },
+                "period_start": {
+                    "type": "string"
+                },
+                "processed_at": {
+                    "type": "string"
+                },
+                "purchase_count": {
+                    "type": "integer"
+                },
+                "refund_deduction_cents": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "store_name": {
+                    "type": "string"
                 }
             }
         },

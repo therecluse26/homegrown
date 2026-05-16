@@ -1,0 +1,162 @@
+name: Load Tests
+
+on:
+  schedule:
+    - cron: '0 10 * * 1'   # Weekly Monday 10:00 UTC (offset from ci.yml's 09:00 run)
+  workflow_dispatch:        # Allow manual trigger from GitHub UI
+    inputs:
+      base_url:
+        description: 'Target base URL (default: http://localhost:3500)'
+        required: false
+        default: 'http://localhost:3500'
+      duration:
+        description: 'Override scenario duration (e.g. 1m for quick check)'
+        required: false
+        default: ''
+
+jobs:
+  load-test:
+    name: k6 Baseline (100 VU × 5 min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: homegrown
+          POSTGRES_PASSWORD: homegrown
+          POSTGRES_DB: homegrown
+        ports:
+          - 5932:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6879:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      kratos:
+        image: oryd/kratos:v1.3
+        env:
+          DSN: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
+          SERVE_PUBLIC_BASE_URL: http://localhost:4933
+          SERVE_ADMIN_BASE_URL: http://localhost:4934
+        ports:
+          - 4935:4433  # expose as agent Kratos port to match local dev convention
+          - 4936:4434
+        options: >-
+          --health-cmd "wget --spider --quiet http://localhost:4434/health/alive"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgres://homegrown:homegrown@localhost:5932/homegrown?sslmode=disable
+        run: make migrate
+
+      - name: Seed agent database
+        env:
+          DATABASE_URL: postgres://homegrown:homegrown@localhost:5932/homegrown?sslmode=disable
+          KRATOS_ADMIN_URL: http://localhost:4936
+        run: make seed
+
+      - name: Start API server
+        env:
+          DATABASE_URL: postgres://homegrown:homegrown@localhost:5932/homegrown?sslmode=disable
+          REDIS_URL: redis://localhost:6879
+          AUTH_ADMIN_URL: http://localhost:4936
+          AUTH_PUBLIC_URL: http://localhost:4935
+          AUTH_WEBHOOK_SECRET: ci-webhook-secret
+          CORS_ALLOWED_ORIGINS: http://localhost:3500
+          SERVER_PORT: 3500
+          APP_ENV: development
+        run: |
+          go build -o /tmp/homegrown-server ./cmd/server
+          /tmp/homegrown-server &
+          # Wait for the server to be ready
+          timeout 30 bash -c 'until curl -sf http://localhost:3500/health; do sleep 1; done'
+
+      - name: Run smoke test first
+        run: k6 run tests/load/smoke.js
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3500' }}
+          KRATOS_URL: http://localhost:4935
+
+      - name: Run baseline load test
+        run: |
+          mkdir -p results
+          k6 run \
+            --out json=results/baseline.json \
+            --summary-export=results/summary.json \
+            tests/load/baseline.js
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3500' }}
+          KRATOS_URL: http://localhost:4935
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results-${{ github.run_id }}
+          path: results/
+          retention-days: 90
+
+      - name: Print p95 summary
+        if: always()
+        run: |
+          echo "## Load Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f results/summary.json ]; then
+            python3 - <<'EOF'
+          import json, sys
+
+          with open("results/summary.json") as f:
+              s = json.load(f)
+
+          metrics = s.get("metrics", {})
+          rows = []
+          for key, val in metrics.items():
+              if "http_req_duration" in key and val.get("values"):
+                  p95 = val["values"].get("p(95)", 0)
+                  rows.append((key, f"{p95:.1f} ms", "✅" if p95 <= 300 else "❌"))
+
+          if rows:
+              print("| Metric | p95 | Pass |")
+              print("|--------|-----|------|")
+              for row in rows:
+                  print(f"| `{row[0]}` | {row[1]} | {row[2]} |")
+          else:
+              print("No duration metrics found in summary.")
+          EOF
+          else
+            echo "results/summary.json not found"
+          fi >> $GITHUB_STEP_SUMMARY

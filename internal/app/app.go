@@ -121,9 +121,11 @@ func NewApp(state *AppState) *echo.Echo {
 	e.Validator = &customValidator{v: validator.New()}
 
 	// ─── Global Middleware (outermost applied first) ──────────────────
-	// Order: ErrorReporting → Metrics → RequestLogger → SecurityHeaders → CORS → CSRF → (rate limit added per-group/route)
-	// ErrorReporting must be outermost so it catches panics from all layers below. [§5.3]
+	// Order: ErrorReporting → Tracing → Metrics → RequestLogger → SecurityHeaders → CORS → CSRF
+	// ErrorReporting is outermost to catch panics. Tracing is second so the span covers
+	// all remaining middleware and the handler. [§5.3]
 	e.Use(middleware.ErrorReporting(state.Errors))
+	e.Use(middleware.Tracing())
 	e.Use(middleware.Metrics())
 	e.Use(echomw.RequestLoggerWithConfig(requestLoggerConfig()))
 	e.Use(middleware.SecurityHeaders())

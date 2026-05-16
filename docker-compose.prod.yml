@@ -1,0 +1,61 @@
+# Production Docker Compose — Homegrown Academy
+#
+# Prerequisites on the server:
+#   - /opt/homegrown-academy/.env.production  (copy .env.example, fill in secrets)
+#   - Docker 25+ with BuildKit enabled
+#
+# Deploy:
+#   IMAGE_TAG=sha-<git-sha> docker compose -f docker-compose.prod.yml up -d
+#
+# NOTE: Ory Kratos is not included here — run it as a managed sidecar or
+# separate compose stack and point AUTH_ADMIN_URL / AUTH_PUBLIC_URL at it.
+#
+services:
+  app:
+    image: ghcr.io/homegrown-academy/homegrown-academy:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgis/postgis:18-3.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-homegrown}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-homegrown}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-homegrown}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_data:

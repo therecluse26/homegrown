@@ -31,7 +31,7 @@ func InitTracerProvider(ctx context.Context, cfg *config.AppConfig, version stri
 			semconv.SchemaURL,
 			semconv.ServiceName("homegrown-academy"),
 			semconv.ServiceVersion(version),
-			semconv.DeploymentEnvironmentName(string(cfg.Environment)),
+			semconv.DeploymentEnvironment(string(cfg.Environment)),
 		),
 	)
 	if err != nil {

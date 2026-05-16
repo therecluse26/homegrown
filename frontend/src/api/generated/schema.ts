@@ -630,6 +630,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/billing/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List creator payout report */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by status */
+                    status?: "pending" | "processing" | "completed" | "failed";
+                    /** @description Pagination cursor */
+                    cursor?: string;
+                    /** @description Results per page */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["admin.AdminPayoutReport"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/flags": {
         parameters: {
             query?: never;
@@ -20568,6 +20629,27 @@ export interface components {
             email?: string;
             id?: string;
             is_primary?: boolean;
+        };
+        "admin.AdminPayoutReport": {
+            items?: components["schemas"]["admin.AdminPayoutReportItem"][];
+            next_cursor?: string;
+            total_amount_cents?: number;
+            total_count?: number;
+        };
+        "admin.AdminPayoutReportItem": {
+            amount_cents?: number;
+            created_at?: string;
+            creator_id?: string;
+            currency?: string;
+            hyperswitch_payout_id?: string;
+            id?: string;
+            period_end?: string;
+            period_start?: string;
+            processed_at?: string;
+            purchase_count?: number;
+            refund_deduction_cents?: number;
+            status?: string;
+            store_name?: string;
         };
         "admin.AdminStudentInfo": {
             display_name?: string;
