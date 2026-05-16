@@ -107,6 +107,22 @@ Alert fires
 
 ## Common Incident Playbooks
 
+### Backup Failure
+
+**Symptoms:** `homegrown-backup.service` failed; no new backup in R2/S3 within the expected window.
+
+```bash
+# Check last backup status
+journalctl -u homegrown-backup.service -n 50
+
+# Run backup manually to diagnose
+sudo systemctl start homegrown-backup.service
+journalctl -fu homegrown-backup.service
+
+# Verify backup credentials are set
+cat /opt/homegrown-academy/.env.backup   # contains RCLONE_* or S3 vars
+```
+
 ### Database Connection Pool Exhaustion
 
 **Symptoms:** High error rate; logs show `pgx: conn pool exhausted` or `too many clients`.
@@ -174,6 +190,28 @@ docker compose run --rm kratos migrate sql -e --yes --config /etc/kratos/kratos.
 2. **Within 24 hours:** Write a brief post-mortem (5 whys, timeline, action items).
 3. **Within 1 week:** Implement preventive measures from action items; add a regression test if applicable.
 4. **Update this runbook** if a new failure mode was discovered.
+
+---
+
+## Key Metrics Dashboards
+
+| Dashboard | URL |
+|-----------|-----|
+| API latency & error rate | Grafana → **Homegrown API** dashboard |
+| Background jobs (asynq) | Grafana → **Asynq Workers** dashboard |
+| Postgres | Grafana → **PostgreSQL** dashboard |
+| Uptime | UptimeRobot / Better Uptime status page |
+
+---
+
+## Contact List
+
+| Role | Contact | Availability |
+|------|---------|--------------|
+| Engineering Lead | _fill in_ | PagerDuty + phone |
+| Primary On-Call | _rotates weekly_ | PagerDuty |
+| Secondary On-Call | _rotates weekly_ | PagerDuty |
+| Database Admin | _fill in_ | Slack `#incidents` |
 
 ---
 

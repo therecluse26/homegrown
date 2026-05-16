@@ -2182,6 +2182,62 @@ func TestGetTranscriptDownloadURL_ReturnsPresignedURL(t *testing.T) {
 	}
 }
 
+func TestGetTranscriptDownloadURL_RejectsNonReady(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	transcriptID := uuid.Must(uuid.NewV7())
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyTranscript, error) {
+			return &ComplyTranscript{
+				ID:     transcriptID,
+				Status: string(PortfolioStatusGenerating),
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	_, err := svc.GetTranscriptDownloadURL(context.Background(), studentID, transcriptID, *scope)
+	if !errors.Is(err, ErrPortfolioNotReady) {
+		t.Fatalf("got %v, want ErrPortfolioNotReady", err)
+	}
+}
+
+func TestGetTranscriptDownloadURL_RejectsExpired(t *testing.T) {
+	scope := testScope()
+	studentID := uuid.Must(uuid.NewV7())
+	transcriptID := uuid.Must(uuid.NewV7())
+	uploadID := uuid.Must(uuid.NewV7())
+	past := time.Now().UTC().Add(-24 * time.Hour)
+
+	iamSvc := &stubIamService{
+		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
+			return true, nil
+		},
+	}
+	transcriptRepo := &stubTranscriptRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyTranscript, error) {
+			return &ComplyTranscript{
+				ID:        transcriptID,
+				Status:    string(PortfolioStatusReady),
+				UploadID:  &uploadID,
+				ExpiresAt: &past,
+			}, nil
+		},
+	}
+	svc := newTestService(&stubStateConfigRepo{}, &stubFamilyConfigRepo{}, &stubScheduleRepo{}, &stubAttendanceRepo{}, &stubAssessmentRepo{}, &stubTestScoreRepo{}, &stubPortfolioRepo{}, &stubPortfolioItemRepo{}, transcriptRepo, &stubCourseRepo{}, iamSvc, &stubLearningService{}, &stubDiscoveryService{}, &stubMediaService{})
+
+	_, err := svc.GetTranscriptDownloadURL(context.Background(), studentID, transcriptID, *scope)
+	if !errors.Is(err, ErrPortfolioExpired) {
+		t.Fatalf("got %v, want ErrPortfolioExpired", err)
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Group K: Courses (K1–K5)
 // ═══════════════════════════════════════════════════════════════════════════════

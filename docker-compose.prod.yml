@@ -12,7 +12,7 @@
 #
 services:
   app:
-    image: ghcr.io/homegrown-academy/homegrown-academy:${IMAGE_TAG:-latest}
+    image: ${IMAGE:-ghcr.io/homegrown-academy/homegrown-academy}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "80:80"

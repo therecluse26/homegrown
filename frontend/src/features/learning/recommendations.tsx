@@ -5,16 +5,16 @@ import { Badge, Button, Card, Icon, Skeleton } from "@/components/ui";
 import {
   useRecommendations,
   useDismissRecommendation,
-  useBlockCategory,
-  useUndoDismiss,
+  useBlockRecommendation,
+  useUndoFeedback,
   type Recommendation,
 } from "@/hooks/use-recommendations";
 
 function RecommendationCard({ rec }: { rec: Recommendation }) {
   const intl = useIntl();
   const dismiss = useDismissRecommendation();
-  const blockCategory = useBlockCategory();
-  const undoDismiss = useUndoDismiss();
+  const blockRec = useBlockRecommendation();
+  const undoFeedback = useUndoFeedback();
   const [reasonExpanded, setReasonExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -33,14 +33,14 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
 
   async function handleUndo() {
     if (!lastDismissedId) return;
-    await undoDismiss.mutateAsync(lastDismissedId);
+    await undoFeedback.mutateAsync(lastDismissedId);
     setDismissed(false);
     setLastDismissedId(null);
   }
 
   async function handleBlockCategory() {
     setMenuOpen(false);
-    await blockCategory.mutateAsync(recType);
+    await blockRec.mutateAsync(rec.id ?? "");
   }
 
   if (dismissed) {
@@ -98,7 +98,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
                   type="button"
                   role="menuitem"
                   onClick={handleBlockCategory}
-                  disabled={blockCategory.isPending}
+                  disabled={blockRec.isPending}
                   className="w-full text-left px-3 py-2 type-body-sm text-on-surface hover:bg-surface-container-high focus:outline-none focus:bg-surface-container-high"
                 >
                   <FormattedMessage

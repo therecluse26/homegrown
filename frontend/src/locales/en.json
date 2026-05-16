@@ -2313,5 +2313,16 @@
   "billing.microCharges.emptyDescription": "Micro-charges will appear here once you initiate COPPA verification.",
   "billing.microCharges.verified": "Verified",
   "billing.microCharges.pending": "Pending",
-  "billing.microCharges.failed": "Failed"
+  "billing.microCharges.failed": "Failed",
+
+  "billing.payouts.title": "Payout History",
+  "billing.payouts.description": "Your earnings paid out from marketplace sales.",
+  "billing.payouts.empty": "No payouts found.",
+  "billing.payouts.status.pending": "Pending",
+  "billing.payouts.status.processing": "Processing",
+  "billing.payouts.status.completed": "Completed",
+  "billing.payouts.status.failed": "Failed",
+  "billing.payouts.status.unknown": "Unknown",
+  "billing.payouts.purchase_count": "{count, plural, one {# sale} other {# sales}}",
+  "billing.payouts.refund_deduction": "Refund deduction: {amount}"
 }
