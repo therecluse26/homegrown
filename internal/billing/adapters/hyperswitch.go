@@ -482,6 +482,13 @@ func (a *HyperswitchSubscriptionAdapter) ParseWebhookEvent(ctx context.Context,p
 		}
 		event.InvoicePaid = &content
 
+	case "invoice.upcoming":
+		var content billing.BillingWebhookInvoiceUpcoming
+		if err := json.Unmarshal(raw.Content, &content); err != nil {
+			return nil, fmt.Errorf("malformed invoice.upcoming payload: %w", err)
+		}
+		event.InvoiceUpcoming = &content
+
 	case "payment.failed":
 		var content billing.BillingWebhookPaymentFailed
 		if err := json.Unmarshal(raw.Content, &content); err != nil {

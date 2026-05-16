@@ -64,6 +64,9 @@ func (h *Handler) Register(authGroup *echo.Group, adminGroup *echo.Group) {
 
 	// Audit Log
 	adminGroup.GET("/audit", h.searchAuditLog)
+
+	// Creator Payout Report
+	adminGroup.GET("/billing/payouts", h.listPayoutReport)
 }
 
 // ─── User Management ────────────────────────────────────────────────────────

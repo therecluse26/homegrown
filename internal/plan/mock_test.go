@@ -115,6 +115,10 @@ func (s *stubScheduleItemRepo) ListAllByFamily(ctx context.Context, scope *share
 	return []ScheduleItem{}, nil
 }
 
+func (s *stubScheduleItemRepo) ListByFamilyIDAndDateRange(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]ScheduleItem, error) {
+	return []ScheduleItem{}, nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Stub Repository: ScheduleTemplateRepository [17-planning mock pattern]
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -232,7 +236,8 @@ func (s *stubComplianceService) GetAttendanceRange(ctx context.Context, auth *sh
 // ─── stubSocialService ──────────────────────────────────────────────────────
 
 type stubSocialService struct {
-	getEventsForCalendarFn func(ctx context.Context, auth *shared.AuthContext, scope *shared.FamilyScope, start, end time.Time) ([]EventSummary, error)
+	getEventsForCalendarFn  func(ctx context.Context, auth *shared.AuthContext, scope *shared.FamilyScope, start, end time.Time) ([]EventSummary, error)
+	getCoopGroupMembersFn   func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]CoopGroupMember, error)
 }
 
 func (s *stubSocialService) GetEventsForCalendar(ctx context.Context, auth *shared.AuthContext, scope *shared.FamilyScope, start, end time.Time) ([]EventSummary, error) {
@@ -240,6 +245,13 @@ func (s *stubSocialService) GetEventsForCalendar(ctx context.Context, auth *shar
 		return s.getEventsForCalendarFn(ctx, auth, scope, start, end)
 	}
 	return []EventSummary{}, nil
+}
+
+func (s *stubSocialService) GetCoopGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]CoopGroupMember, error) {
+	if s.getCoopGroupMembersFn != nil {
+		return s.getCoopGroupMembersFn(ctx, auth, groupID)
+	}
+	return []CoopGroupMember{}, nil
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

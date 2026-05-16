@@ -84,6 +84,9 @@ func (m *mockPlanningService) DeleteTemplate(_ context.Context, _ *shared.AuthCo
 func (m *mockPlanningService) ApplyTemplate(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ uuid.UUID, _ ApplyTemplateInput) ([]uuid.UUID, error) {
 	return []uuid.UUID{}, nil
 }
+func (m *mockPlanningService) GetCoopGroupSchedules(_ context.Context, _ *shared.AuthContext, _ *shared.FamilyScope, _ uuid.UUID, _ time.Time, _ time.Time) (CoopGroupSchedulesResponse, error) {
+	return CoopGroupSchedulesResponse{Members: []CoopMemberSchedule{}}, nil
+}
 func (m *mockPlanningService) HandleEventCancelled(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
 	return nil
 }

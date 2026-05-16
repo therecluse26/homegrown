@@ -4,8 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly Monday 09:00 UTC — catch newly published CVEs
 
 jobs:
+  secrets-audit:
+    name: Dev-Default Secrets Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check .env.example for known dev-default values
+        run: bash scripts/check-dev-secrets.sh .env.example
+
   lint-and-test:
     name: Lint & Unit Tests
     runs-on: ubuntu-latest
@@ -25,6 +36,40 @@ jobs:
 
       - name: Unit tests
         run: go test ./...
+
+  migration-check:
+    name: Migration Verification
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: homegrown
+          POSTGRES_PASSWORD: homegrown
+          POSTGRES_DB: homegrown_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U homegrown"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Migrate up (all migrations)
+        run: goose -dir migrations postgres "postgres://homegrown:homegrown@localhost:5432/homegrown_ci?sslmode=disable" up
+
+      - name: Migrate down (full rollback)
+        run: goose -dir migrations postgres "postgres://homegrown:homegrown@localhost:5432/homegrown_ci?sslmode=disable" down-to 0
 
   integration-tests:
     name: Integration Tests
@@ -86,3 +131,20 @@ jobs:
 
       - name: Run a11y tests
         run: npx playwright test e2e/a11y.spec.ts
+
+  security:
+    name: Security Audit (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...

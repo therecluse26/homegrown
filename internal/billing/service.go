@@ -571,6 +571,8 @@ func (s *BillingServiceImpl) ProcessHyperswitchWebhook(ctx context.Context, payl
 		return s.handleWebhookSubscriptionDeleted(ctx, event.SubscriptionDeleted)
 	case "invoice.paid":
 		return s.handleWebhookInvoicePaid(ctx, event.InvoicePaid)
+	case "invoice.upcoming":
+		return s.handleWebhookInvoiceUpcoming(ctx, event.InvoiceUpcoming)
 	case "payment.failed":
 		return s.handleWebhookPaymentFailed(ctx, event.PaymentFailed)
 	default:
@@ -750,6 +752,31 @@ func (s *BillingServiceImpl) handleWebhookInvoicePaid(ctx context.Context, data 
 		slog.Error("webhook invoice.paid: create transaction error", "error", err)
 		return fmt.Errorf("webhook invoice.paid create: %w", err)
 	}
+	return nil
+}
+
+func (s *BillingServiceImpl) handleWebhookInvoiceUpcoming(ctx context.Context, data *BillingWebhookInvoiceUpcoming) error {
+	if data == nil {
+		return nil
+	}
+
+	sub, err := s.subscriptionRepo.FindByHyperswitchID(ctx, data.SubscriptionID)
+	if err != nil {
+		slog.Error("webhook invoice.upcoming: subscription lookup error", "subscription_id", data.SubscriptionID, "error", err)
+		return fmt.Errorf("webhook invoice.upcoming lookup: %w", err)
+	}
+
+	currency := data.Currency
+	if currency == "" {
+		currency = "usd"
+	}
+
+	_ = s.events.Publish(ctx, SubscriptionRenewalUpcoming{
+		FamilyID:    sub.FamilyID,
+		AmountCents: data.AmountCents,
+		Currency:    currency,
+		RenewsAt:    data.PeriodEnd,
+	})
 	return nil
 }
 

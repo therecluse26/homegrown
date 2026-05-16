@@ -414,6 +414,26 @@ func (h *SubscriptionCancelledHandler) Handle(ctx context.Context, event shared.
 	})
 }
 
+// SubscriptionRenewalUpcomingHandler handles billing.SubscriptionRenewalUpcoming events. [08-notify §17.1, 10-billing §14]
+type SubscriptionRenewalUpcomingHandler struct{ svc NotificationService }
+
+func NewSubscriptionRenewalUpcomingHandler(svc NotificationService) *SubscriptionRenewalUpcomingHandler {
+	return &SubscriptionRenewalUpcomingHandler{svc: svc}
+}
+
+func (h *SubscriptionRenewalUpcomingHandler) Handle(ctx context.Context, event shared.DomainEvent) error {
+	e, ok := event.(billing.SubscriptionRenewalUpcoming)
+	if !ok {
+		return fmt.Errorf("notify.SubscriptionRenewalUpcomingHandler: unexpected event type %T", event)
+	}
+	return h.svc.HandleSubscriptionRenewalUpcoming(ctx, SubscriptionRenewalUpcomingEvent{
+		FamilyID:    e.FamilyID,
+		AmountCents: e.AmountCents,
+		Currency:    e.Currency,
+		RenewsAt:    e.RenewsAt,
+	})
+}
+
 // PayoutCompletedHandler handles billing.PayoutCompleted events. [08-notify §17.1]
 type PayoutCompletedHandler struct{ svc NotificationService }
 

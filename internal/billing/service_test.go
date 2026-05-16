@@ -284,9 +284,13 @@ func (m *mockIamService) GetFamilyPrimaryEmail(ctx context.Context, familyID uui
 // ═══════════════════════════════════════════════════════════════════════════════
 
 func newTestService(subRepo *mockSubscriptionRepo, txnRepo *mockTransactionRepo, custRepo *mockCustomerRepo, payoutRepo *mockPayoutRepo, adapter *mockAdapter, iam *mockIamService) *BillingServiceImpl {
+	return newTestServiceWithBus(subRepo, txnRepo, custRepo, payoutRepo, adapter, iam, shared.NewEventBus())
+}
+
+func newTestServiceWithBus(subRepo *mockSubscriptionRepo, txnRepo *mockTransactionRepo, custRepo *mockCustomerRepo, payoutRepo *mockPayoutRepo, adapter *mockAdapter, iam *mockIamService, bus *shared.EventBus) *BillingServiceImpl {
 	return NewBillingService(
 		subRepo, txnRepo, custRepo, payoutRepo,
-		adapter, iam, shared.NewEventBus(),
+		adapter, iam, bus,
 		BillingConfig{
 			MonthlyPriceID:       "price_monthly_v1",
 			AnnualPriceID:        "price_annual_v1",
@@ -1216,6 +1220,42 @@ func TestProcessWebhook_PaymentFailed_SetsStatusPastDue(t *testing.T) {
 	subRepo.AssertCalled(t, "Update", mock.Anything, sub.ID, mock.Anything)
 }
 
+func TestProcessWebhook_InvoiceUpcoming_PublishesRenewalUpcomingEvent(t *testing.T) {
+	adapter := new(mockAdapter)
+	subRepo := new(mockSubscriptionRepo)
+	eventBus := shared.NewEventBus()
+	var capturedEvent shared.DomainEvent
+	capture := &captureHandler{captured: &capturedEvent}
+	eventBus.Subscribe(reflect.TypeOf(SubscriptionRenewalUpcoming{}), capture)
+
+	svc := newTestServiceWithBus(subRepo, new(mockTransactionRepo), new(mockCustomerRepo), new(mockPayoutRepo), adapter, new(mockIamService), eventBus)
+
+	payload := []byte(`{}`)
+	renewsAt := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second)
+	adapter.On("VerifyWebhook", mock.Anything, payload, "sig").Return(true, nil)
+	adapter.On("ParseWebhookEvent", mock.Anything, payload).Return(&BillingWebhookEvent{
+		Type: "invoice.upcoming",
+		InvoiceUpcoming: &BillingWebhookInvoiceUpcoming{
+			SubscriptionID: "sub_123",
+			AmountCents:    1499,
+			Currency:       "usd",
+			PeriodEnd:      renewsAt,
+		},
+	}, nil)
+	subRepo.On("FindByHyperswitchID", mock.Anything, "sub_123").Return(&BillSubscription{
+		FamilyID: testFamilyID(),
+	}, nil)
+
+	err := svc.ProcessHyperswitchWebhook(context.Background(), payload, "sig")
+	require.NoError(t, err)
+	require.NotNil(t, capturedEvent)
+	assert.Equal(t, "billing.SubscriptionRenewalUpcoming", capturedEvent.EventName())
+	renewal := capturedEvent.(SubscriptionRenewalUpcoming)
+	assert.Equal(t, testFamilyID(), renewal.FamilyID)
+	assert.Equal(t, int64(1499), renewal.AmountCents)
+	assert.Equal(t, "usd", renewal.Currency)
+}
+
 func TestProcessWebhook_Idempotent_DuplicateEventsAreNoOps(t *testing.T) {
 	adapter := new(mockAdapter)
 	txnRepo := new(mockTransactionRepo)
@@ -1325,6 +1365,7 @@ func TestDomainEvents_ImplementDomainEvent(t *testing.T) {
 	assert.Equal(t, "billing.SubscriptionCreated", SubscriptionCreated{}.EventName())
 	assert.Equal(t, "billing.SubscriptionChanged", SubscriptionChanged{}.EventName())
 	assert.Equal(t, "billing.SubscriptionCancelled", SubscriptionCancelled{}.EventName())
+	assert.Equal(t, "billing.SubscriptionRenewalUpcoming", SubscriptionRenewalUpcoming{}.EventName())
 	assert.Equal(t, "billing.PayoutCompleted", PayoutCompleted{}.EventName())
 }
 
@@ -1365,6 +1406,6 @@ func (h *captureHandler) Handle(_ context.Context, event shared.DomainEvent) err
 	return nil
 }
 
-func subscriptionCreatedType() reflect.Type  { return reflect.TypeOf(SubscriptionCreated{}) }
-func subscriptionChangedType() reflect.Type  { return reflect.TypeOf(SubscriptionChanged{}) }
+func subscriptionCreatedType() reflect.Type   { return reflect.TypeOf(SubscriptionCreated{}) }
+func subscriptionChangedType() reflect.Type   { return reflect.TypeOf(SubscriptionChanged{}) }
 func subscriptionCancelledType() reflect.Type { return reflect.TypeOf(SubscriptionCancelled{}) }

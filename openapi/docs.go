@@ -16154,6 +16154,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/planning/co-op/groups/{groupId}/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planning"
+                ],
+                "summary": "Get co-op group member schedules for a date range",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/plan.CoopGroupSchedulesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/planning/schedule-items": {
             "get": {
                 "security": [
@@ -24875,6 +24938,66 @@ const docTemplate = `{
                 "CalendarSourceAttendance",
                 "CalendarSourceEvents"
             ]
+        },
+        "plan.CoopGroupSchedulesResponse": {
+            "type": "object",
+            "properties": {
+                "end": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plan.CoopMemberSchedule"
+                    }
+                },
+                "start": {
+                    "type": "string"
+                }
+            }
+        },
+        "plan.CoopMemberSchedule": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "family_id": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plan.CoopScheduleItem"
+                    }
+                }
+            }
+        },
+        "plan.CoopScheduleItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/plan.ScheduleCategory"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
         },
         "plan.CreateScheduleItemInput": {
             "type": "object",

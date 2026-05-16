@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import {
   BookOpen,
@@ -7,28 +7,51 @@ import {
   Sparkles,
   X,
   Ban,
+  RotateCcw,
 } from "lucide-react";
 import {
   Badge,
   Button,
   Card,
+  Checkbox,
   EmptyState,
   Icon,
+  Radio,
   Skeleton,
   Tabs,
 } from "@/components/ui";
+import { TierGate } from "@/components/common/tier-gate";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useRecommendations,
   useDismissRecommendation,
-  useBlockCategory,
+  useBlockRecommendation,
+  useUndoFeedback,
+  useRecommendationPreferences,
+  useUpdatePreferences,
   type Recommendation,
 } from "@/hooks/use-recommendations";
 
-// ─── Type badge config ──────────────────────────────────────────────────────
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const REC_TYPES = [
+  "marketplace_content",
+  "activity_idea",
+  "reading_suggestion",
+  "community_group",
+] as const;
+
+type RecType = (typeof REC_TYPES)[number];
+
+const EXPLORATION_FREQUENCIES = ["off", "occasional", "frequent"] as const;
 
 const TYPE_CONFIG: Record<
-  string,
-  { icon: typeof BookOpen; badgeVariant: "primary" | "secondary" | "success"; labelId: string }
+  RecType,
+  {
+    icon: typeof BookOpen;
+    badgeVariant: "primary" | "secondary" | "success";
+    labelId: string;
+  }
 > = {
   marketplace_content: {
     icon: BookOpen,
@@ -66,11 +89,36 @@ function RecommendationCard({
   recommendation: Recommendation;
 }) {
   const intl = useIntl();
+  const [dismissed, setDismissed] = useState(false);
   const dismiss = useDismissRecommendation();
-  const blockCategory = useBlockCategory();
+  const block = useBlockRecommendation();
+  const undo = useUndoFeedback();
 
-  const recType = recommendation.recommendation_type ?? "marketplace_content";
+  const recType = (recommendation.recommendation_type ?? "marketplace_content") as RecType;
   const config = TYPE_CONFIG[recType] ?? DEFAULT_CONFIG;
+  const id = recommendation.id ?? "";
+
+  // Inline undo prompt shown immediately after dismissal
+  if (dismissed) {
+    return (
+      <Card className="flex items-center justify-between gap-3 bg-surface-container-low">
+        <p className="type-body-sm text-on-surface-variant">
+          <FormattedMessage id="recommendations.card.dismissed" />
+        </p>
+        <Button
+          variant="tertiary"
+          size="sm"
+          leadingIcon={<Icon icon={RotateCcw} size="xs" aria-hidden />}
+          loading={undo.isPending}
+          onClick={() => {
+            undo.mutate(id, { onSuccess: () => setDismissed(false) });
+          }}
+        >
+          <FormattedMessage id="recommendations.card.undo" />
+        </Button>
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex flex-col gap-3">
@@ -82,9 +130,9 @@ function RecommendationCard({
               <FormattedMessage id={config.labelId} />
             </span>
           </Badge>
-          <Badge variant="default">
-            {recommendation.source_signal}
-          </Badge>
+          {recommendation.source_signal && (
+            <Badge variant="default">{recommendation.source_signal}</Badge>
+          )}
           {recommendation.is_suggestion && (
             <Badge variant="warning">
               <span className="flex items-center gap-1">
@@ -100,9 +148,11 @@ function RecommendationCard({
         <h3 className="type-title-sm text-on-surface font-medium mb-1">
           {recommendation.target_entity_label}
         </h3>
-        <p className="type-body-sm text-on-surface-variant mb-2">
-          {recommendation.source_label}
-        </p>
+        {recommendation.source_label && (
+          <p className="type-body-sm text-on-surface-variant mb-2">
+            {recommendation.source_label}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2 pt-1">
@@ -110,10 +160,12 @@ function RecommendationCard({
           variant="tertiary"
           size="sm"
           leadingIcon={<Icon icon={X} size="xs" aria-hidden />}
-          onClick={() => dismiss.mutate(recommendation.id ?? "")}
           loading={dismiss.isPending}
+          onClick={() => {
+            dismiss.mutate(id, { onSuccess: () => setDismissed(true) });
+          }}
           aria-label={intl.formatMessage(
-            { id: "recommendations.dismiss.label" },
+            { id: "recommendations.card.dismiss.label" },
             { title: recommendation.target_entity_label },
           )}
         >
@@ -123,8 +175,8 @@ function RecommendationCard({
           variant="tertiary"
           size="sm"
           leadingIcon={<Icon icon={Ban} size="xs" aria-hidden />}
-          onClick={() => blockCategory.mutate(recType)}
-          loading={blockCategory.isPending}
+          loading={block.isPending}
+          onClick={() => block.mutate(id)}
           aria-label={intl.formatMessage(
             { id: "recommendations.blockCategory.label" },
             { category: recType },
@@ -158,7 +210,11 @@ function RecommendationList({
   }
 
   return (
-    <ul className="flex flex-col gap-3" role="list">
+    <ul
+      className="flex flex-col gap-3"
+      role="list"
+      aria-label={intl.formatMessage({ id: "recommendations.section.list.label" })}
+    >
       {recommendations.map((rec) => (
         <li key={rec.id}>
           <RecommendationCard recommendation={rec} />
@@ -168,11 +224,107 @@ function RecommendationList({
   );
 }
 
+// ─── Preferences panel ──────────────────────────────────────────────────────
+
+function PreferencesPanel() {
+  const intl = useIntl();
+  const { data: prefs, isPending } = useRecommendationPreferences();
+  const update = useUpdatePreferences();
+
+  const enabledTypes: string[] = prefs?.enabled_types ?? [...REC_TYPES];
+  const explorationFrequency = prefs?.exploration_frequency ?? "occasional";
+
+  function toggleType(type: string) {
+    const next = enabledTypes.includes(type)
+      ? enabledTypes.filter((t) => t !== type)
+      : [...enabledTypes, type];
+    if (next.length === 0) return; // Always keep at least one
+    update.mutate({ enabled_types: next, exploration_frequency: explorationFrequency });
+  }
+
+  function setFrequency(freq: string) {
+    update.mutate({ enabled_types: enabledTypes, exploration_frequency: freq });
+  }
+
+  if (isPending) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton height="h-6" width="w-48" />
+        <Skeleton height="h-24" />
+        <Skeleton height="h-6" width="w-48" />
+        <Skeleton height="h-24" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Card className="flex flex-col gap-4">
+        <div>
+          <h2 className="type-title-sm text-on-surface font-medium mb-1">
+            <FormattedMessage id="recommendations.preferences.types.title" />
+          </h2>
+          <p className="type-body-sm text-on-surface-variant">
+            <FormattedMessage id="recommendations.preferences.types.description" />
+          </p>
+        </div>
+        <div className="flex flex-col gap-3">
+          {REC_TYPES.map((type) => {
+            const cfg = TYPE_CONFIG[type];
+            return (
+              <Checkbox
+                key={type}
+                label={intl.formatMessage({ id: cfg.labelId })}
+                checked={enabledTypes.includes(type)}
+                onChange={() => toggleType(type)}
+                disabled={update.isPending}
+              />
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <div>
+          <h2 className="type-title-sm text-on-surface font-medium mb-1">
+            <FormattedMessage id="recommendations.preferences.exploration.title" />
+          </h2>
+          <p className="type-body-sm text-on-surface-variant">
+            <FormattedMessage id="recommendations.preferences.exploration.description" />
+          </p>
+        </div>
+        <div className="flex flex-col gap-4">
+          {EXPLORATION_FREQUENCIES.map((freq) => (
+            <div key={freq} className="flex flex-col gap-1">
+              <Radio
+                label={intl.formatMessage({
+                  id: `recommendations.preferences.exploration.${freq}`,
+                })}
+                name="exploration_frequency"
+                value={freq}
+                checked={explorationFrequency === freq}
+                onChange={() => setFrequency(freq)}
+                disabled={update.isPending}
+              />
+              <p className="type-body-sm text-on-surface-variant ml-8">
+                <FormattedMessage
+                  id={`recommendations.preferences.exploration.${freq}.description`}
+                />
+              </p>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Page component ─────────────────────────────────────────────────────────
 
 export function RecommendationsPage() {
   const intl = useIntl();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const { tier } = useAuth();
   const { data, isPending, error } = useRecommendations();
 
   useEffect(() => {
@@ -180,21 +332,36 @@ export function RecommendationsPage() {
     headingRef.current?.focus();
   }, [intl]);
 
-  const recommendations = data ?? [];
+  // ─── Premium gate ───────────────────────────────────────────────────────
+
+  if (tier === "free") {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="type-headline-md text-on-surface font-semibold outline-none mb-6"
+        >
+          <FormattedMessage id="recommendations.title" />
+        </h1>
+        <TierGate featureName="Recommendations" requiredTier="premium" />
+      </div>
+    );
+  }
 
   // ─── Loading state ──────────────────────────────────────────────────────
 
   if (isPending) {
     return (
       <div className="mx-auto max-w-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <Skeleton height="h-8" width="w-48" />
+        <div className="mb-6">
+          <Skeleton height="h-8" width="w-48" className="mb-2" />
+          <Skeleton height="h-5" width="w-80" />
         </div>
-        <Skeleton height="h-10" className="mb-4" />
         <div className="flex flex-col gap-3">
-          <Skeleton height="h-32" />
-          <Skeleton height="h-32" />
-          <Skeleton height="h-32" />
+          <Skeleton height="h-28" />
+          <Skeleton height="h-28" />
+          <Skeleton height="h-28" />
         </div>
       </div>
     );
@@ -208,7 +375,7 @@ export function RecommendationsPage() {
         <h1
           ref={headingRef}
           tabIndex={-1}
-          className="type-headline-md text-on-surface font-semibold mb-6 outline-none"
+          className="type-headline-md text-on-surface font-semibold outline-none mb-6"
         >
           <FormattedMessage id="recommendations.title" />
         </h1>
@@ -221,7 +388,7 @@ export function RecommendationsPage() {
     );
   }
 
-  // ─── Tabs definition ───────────────────────────────────────────────────
+  const recommendations = data ?? [];
 
   const filterTabs = [
     {
@@ -234,7 +401,9 @@ export function RecommendationsPage() {
       label: intl.formatMessage({ id: "recommendations.filter.content" }),
       content: (
         <RecommendationList
-          recommendations={recommendations.filter((r) => r.recommendation_type === "marketplace_content")}
+          recommendations={recommendations.filter(
+            (r) => r.recommendation_type === "marketplace_content",
+          )}
         />
       ),
     },
@@ -243,7 +412,9 @@ export function RecommendationsPage() {
       label: intl.formatMessage({ id: "recommendations.filter.activity" }),
       content: (
         <RecommendationList
-          recommendations={recommendations.filter((r) => r.recommendation_type === "activity_idea")}
+          recommendations={recommendations.filter(
+            (r) => r.recommendation_type === "activity_idea",
+          )}
         />
       ),
     },
@@ -252,13 +423,18 @@ export function RecommendationsPage() {
       label: intl.formatMessage({ id: "recommendations.filter.resource" }),
       content: (
         <RecommendationList
-          recommendations={recommendations.filter((r) => r.recommendation_type === "reading_suggestion")}
+          recommendations={recommendations.filter(
+            (r) => r.recommendation_type === "reading_suggestion",
+          )}
         />
       ),
     },
+    {
+      id: "preferences",
+      label: intl.formatMessage({ id: "recommendations.preferences.tab" }),
+      content: <PreferencesPanel />,
+    },
   ];
-
-  // ─── Main render ────────────────────────────────────────────────────────
 
   return (
     <div className="mx-auto max-w-2xl">

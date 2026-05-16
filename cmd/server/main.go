@@ -892,6 +892,7 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCreated{}), notify.NewSubscriptionCreatedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionChanged{}), notify.NewSubscriptionChangedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), notify.NewSubscriptionCancelledHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionRenewalUpcoming{}), notify.NewSubscriptionRenewalUpcomingHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.PayoutCompleted{}), notify.NewPayoutCompletedHandler(notifySvc))
 
 	// ── Step 7j: Wire safety:: domain ──────────────────────────────────────────
@@ -2537,6 +2538,22 @@ func (a *planSocialAdapter) GetEventsForCalendar(ctx context.Context, auth *shar
 			Date:      e.EventDate,
 			Location:  e.LocationName,
 			RSVPStatus: e.MyRSVP,
+		})
+	}
+	return results, nil
+}
+
+func (a *planSocialAdapter) GetCoopGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]plan.CoopGroupMember, error) {
+	members, err := a.socialSvc.ListGroupMembers(ctx, auth, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("plan social adapter: list group members: %w", err)
+	}
+	results := make([]plan.CoopGroupMember, 0, len(members))
+	for _, m := range members {
+		results = append(results, plan.CoopGroupMember{
+			FamilyID:    m.FamilyID,
+			DisplayName: m.DisplayName,
+			Status:      m.Status,
 		})
 	}
 	return results, nil

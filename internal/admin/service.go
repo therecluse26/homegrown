@@ -538,6 +538,11 @@ func (s *AdminServiceImpl) GetDeadLetterJobs(ctx context.Context, _ *shared.Auth
 	}, nil
 }
 
+// GetPayoutReport returns an aggregated creator payout report for admin. [10-billing §12]
+func (s *AdminServiceImpl) GetPayoutReport(ctx context.Context, _ *shared.AuthContext, params *AdminPayoutReportParams) (*AdminPayoutReport, error) {
+	return s.billingSvc.GetPayoutReport(ctx, params)
+}
+
 // RetryDeadLetterJob retries a dead-letter job with audit logging. [16-admin §11.2]
 func (s *AdminServiceImpl) RetryDeadLetterJob(ctx context.Context, auth *shared.AuthContext, jobID string) error {
 	if err := s.jobInspector.RetryDeadLetterJob(ctx, jobID); err != nil {

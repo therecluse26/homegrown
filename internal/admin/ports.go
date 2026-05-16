@@ -105,6 +105,11 @@ type AdminService interface {
 
 	// LogAction records an admin action (called internally by other admin methods).
 	LogAction(ctx context.Context, auth *shared.AuthContext, action *AdminAction) error
+
+	// === Creator Payout Report ===
+
+	// GetPayoutReport returns an aggregated creator payout report for admin. [10-billing §12]
+	GetPayoutReport(ctx context.Context, auth *shared.AuthContext, params *AdminPayoutReportParams) (*AdminPayoutReport, error)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -183,6 +188,7 @@ type SafetyServiceForAdmin interface {
 // Implemented by a function adapter in main.go. [ARCH §4.4]
 type BillingServiceForAdmin interface {
 	GetSubscriptionInfo(ctx context.Context, familyID uuid.UUID) (*AdminSubscriptionInfo, error)
+	GetPayoutReport(ctx context.Context, params *AdminPayoutReportParams) (*AdminPayoutReport, error)
 }
 
 // MethodologyServiceForAdmin is a consumer-defined interface for cross-domain calls to method::.

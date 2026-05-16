@@ -20151,6 +20151,88 @@
                 }
             }
         },
+        "/planning/co-op/groups/{groupId}/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "planning"
+                ],
+                "summary": "Get co-op group member schedules for a date range",
+                "parameters": [
+                    {
+                        "description": "Group ID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "end",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/plan.CoopGroupSchedulesResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/planning/schedule-items": {
             "get": {
                 "security": [
@@ -29261,6 +29343,66 @@
                     "CalendarSourceAttendance",
                     "CalendarSourceEvents"
                 ]
+            },
+            "plan.CoopGroupSchedulesResponse": {
+                "type": "object",
+                "properties": {
+                    "end": {
+                        "type": "string"
+                    },
+                    "group_id": {
+                        "type": "string"
+                    },
+                    "members": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/plan.CoopMemberSchedule"
+                        }
+                    },
+                    "start": {
+                        "type": "string"
+                    }
+                }
+            },
+            "plan.CoopMemberSchedule": {
+                "type": "object",
+                "properties": {
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "family_id": {
+                        "type": "string"
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/plan.CoopScheduleItem"
+                        }
+                    }
+                }
+            },
+            "plan.CoopScheduleItem": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "$ref": "#/components/schemas/plan.ScheduleCategory"
+                    },
+                    "date": {
+                        "type": "string"
+                    },
+                    "end_time": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "start_time": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    }
+                }
             },
             "plan.CreateScheduleItemInput": {
                 "type": "object",

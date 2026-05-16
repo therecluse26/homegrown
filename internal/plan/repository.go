@@ -212,6 +212,17 @@ func (r *PgScheduleItemRepository) ListAllByFamily(ctx context.Context, scope *s
 	return items, err
 }
 
+// ListByFamilyIDAndDateRange fetches schedule items for any family by raw ID.
+// Bypasses FamilyScope — only called after validating group membership. [17-planning §12.2]
+func (r *PgScheduleItemRepository) ListByFamilyIDAndDateRange(ctx context.Context, familyID uuid.UUID, start, end time.Time) ([]ScheduleItem, error) {
+	var items []ScheduleItem
+	err := shared.BypassRLSTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		return tx.Where("family_id = ? AND start_date >= ? AND start_date < ?", familyID, start, end).
+			Order("start_date, start_time").Find(&items).Error
+	})
+	return items, err
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PgScheduleTemplateRepository [17-planning §6]
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -108,6 +108,9 @@ func (m *mockAdminService) SearchAuditLog(_ context.Context, _ *shared.AuthConte
 func (m *mockAdminService) LogAction(_ context.Context, _ *shared.AuthContext, _ *AdminAction) error {
 	return nil
 }
+func (m *mockAdminService) GetPayoutReport(_ context.Context, _ *shared.AuthContext, _ *AdminPayoutReportParams) (*AdminPayoutReport, error) {
+	return &AdminPayoutReport{Items: []AdminPayoutReportItem{}, TotalCount: 0, TotalAmountCents: 0}, nil
+}
 
 // Compile-time check.
 var _ AdminService = (*mockAdminService)(nil)

@@ -437,3 +437,44 @@ export function useExportSchedule() {
       }),
   });
 }
+
+// ─── Co-op Coordination Types & Queries [17-planning §12] ───────────────────
+
+export interface CoopScheduleItem {
+  id: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  title: string;
+  category: ScheduleCategory;
+}
+
+export interface CoopMemberSchedule {
+  family_id: string;
+  display_name: string;
+  items: CoopScheduleItem[];
+}
+
+export interface CoopGroupSchedulesResponse {
+  group_id: string;
+  start: string;
+  end: string;
+  members: CoopMemberSchedule[];
+}
+
+export function useCoopGroupSchedules(params: {
+  groupId: string | undefined;
+  start: string;
+  end: string;
+}) {
+  return useQuery({
+    queryKey: ["planning", "coop", params.groupId, params.start, params.end],
+    queryFn: () => {
+      const qs = new URLSearchParams({ start: params.start, end: params.end });
+      return apiClient<CoopGroupSchedulesResponse>(
+        `/v1/planning/co-op/groups/${params.groupId}/schedules?${qs}`,
+      );
+    },
+    enabled: !!params.groupId,
+  });
+}
