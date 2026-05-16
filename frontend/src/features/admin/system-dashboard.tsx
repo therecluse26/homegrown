@@ -39,9 +39,6 @@ export function SystemDashboard() {
       <PageTitle
         title={intl.formatMessage({ id: "admin.system.title" })}
       />
-      <h1 className="type-headline-md text-on-surface font-semibold">
-        <FormattedMessage id="admin.system.title" />
-      </h1>
 
       {/* System Health */}
       {health && (
@@ -177,14 +174,14 @@ export function SystemDashboard() {
       )}
 
       {/* Dead Letter Queue */}
-      {!dlLoading && deadLetters && deadLetters.length > 0 && (
+      {!dlLoading && deadLetters && deadLetters.data.length > 0 && (
         <Card className="p-card-padding">
           <h2 className="type-title-md text-on-surface mb-4">
             <FormattedMessage id="admin.system.deadLetterQueue" />
           </h2>
 
           <div className="space-y-2">
-            {deadLetters.map((job) => (
+            {deadLetters.data.map((job) => (
               <div
                 key={job.id}
                 className="flex items-center justify-between py-3 border-b border-outline-variant/10 last:border-0"

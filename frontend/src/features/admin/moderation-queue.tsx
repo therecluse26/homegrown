@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Shield, Check, X, AlertTriangle } from "lucide-react";
 import {
@@ -258,6 +259,7 @@ function AppealCard({ appeal }: { appeal: AdminAppealResponse }) {
 
 export function ModerationQueue() {
   const intl = useIntl();
+  const [searchParams] = useSearchParams();
   const { data: queue, isPending: queuePending } =
     useAdminModerationQueue("pending");
   const { data: appeals, isPending: appealsPending } =
@@ -265,6 +267,7 @@ export function ModerationQueue() {
 
   const queueItems = queue?.data ?? [];
   const appealItems = appeals?.data ?? [];
+  const initialTab = searchParams.get("tab") === "appeals" ? "appeals" : "queue";
 
   return (
     <div className="max-w-content-narrow mx-auto">
@@ -273,7 +276,8 @@ export function ModerationQueue() {
       />
 
       <Tabs
-        defaultTab="queue"
+        key={initialTab}
+        defaultTab={initialTab}
         tabs={[
           {
             id: "queue",

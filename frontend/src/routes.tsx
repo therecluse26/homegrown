@@ -166,8 +166,6 @@ const ModerationQueue = lazy(() => import("@/features/admin/moderation-queue").t
 const AuditLog = lazy(() => import("@/features/admin/audit-log").then(m => ({ default: m.AuditLog })));
 const FeatureFlags = lazy(() => import("@/features/admin/feature-flags").then(m => ({ default: m.FeatureFlags })));
 const MethodologyConfigPage = lazy(() => import("@/features/admin/methodology-config").then(m => ({ default: m.MethodologyConfig })));
-const AdminAppeals = lazy(() => import("@/features/admin/appeals").then(m => ({ default: m.Appeals })));
-const AdminContentFlags = lazy(() => import("@/features/admin/content-flags").then(m => ({ default: m.ContentFlags })));
 const AdminSafetyReports = lazy(() => import("@/features/admin/safety-reports").then(m => ({ default: m.SafetyReports })));
 const AdminSystemDashboard = lazy(() => import("@/features/admin/system-dashboard").then(m => ({ default: m.SystemDashboard })));
 
@@ -481,12 +479,14 @@ const routes: RouteObject[] = [
               { path: "audit", element: <AuditLog /> },
               { path: "methodologies", element: <MethodologyConfigPage /> },
               // Admin pages
-              { path: "content-flags", element: <AdminContentFlags /> },
-              { path: "appeals", element: <AdminAppeals /> },
               { path: "reports", element: <AdminSafetyReports /> },
               { path: "system", element: <AdminSystemDashboard /> },
-              // Admin redirects
+              // Admin redirects — collapse duplicates onto canonical routes.
+              // /admin/content-flags overlapped /admin/reports (same useAdminReports hook).
+              // /admin/appeals overlapped the Appeals tab on /admin/moderation.
               { path: "feature-flags", element: <Navigate to="/admin/flags" replace /> },
+              { path: "content-flags", element: <Navigate to="/admin/reports" replace /> },
+              { path: "appeals", element: <Navigate to="/admin/moderation?tab=appeals" replace /> },
             ],
           },
         ],

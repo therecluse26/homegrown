@@ -29,6 +29,11 @@ const WS_BASE =
     ? window.location.origin.replace(/^http/, "ws")
     : "ws://localhost:5673");
 
+// Gate the WS connection behind an env flag. The dev server doesn't run a
+// WebSocket endpoint, and a failed connection prints a browser-level warning
+// on every navigation. Opt-in with `VITE_WS_ENABLED=true` once a server exists.
+const WS_ENABLED = import.meta.env["VITE_WS_ENABLED"] === "true";
+
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const RECONNECT_BACKOFF_FACTOR = 2;
@@ -109,8 +114,9 @@ export function subscribe(handler: WsMessageHandler): () => void {
   return () => handlers.delete(handler);
 }
 
-/** Connect to the WebSocket server (idempotent). */
+/** Connect to the WebSocket server (idempotent). No-op when disabled by env. */
 export function wsConnect() {
+  if (!WS_ENABLED) return;
   isManuallyDisconnected = false;
   retryCount = 0;
   connect();

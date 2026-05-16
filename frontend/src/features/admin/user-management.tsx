@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, useSearchParams } from "react-router";
 import { Search, Users } from "lucide-react";
 import {
   Card,
@@ -15,8 +14,21 @@ import { useAdminSearchUsers } from "@/hooks/use-admin";
 
 export function UserManagement() {
   const intl = useIntl();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get("q") ?? "";
+  const statusFilter = searchParams.get("status") ?? "";
+
+  const updateParam = (key: string, value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const { data, isPending } = useAdminSearchUsers({
     q: searchQuery || undefined,
@@ -41,7 +53,7 @@ export function UserManagement() {
           />
           <Input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => updateParam("q", e.target.value)}
             placeholder={intl.formatMessage({
               id: "admin.users.searchPlaceholder",
             })}
@@ -50,7 +62,7 @@ export function UserManagement() {
         </div>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => updateParam("status", e.target.value)}
           className="bg-surface-container-highest rounded-radius-md px-3 py-2 text-on-surface type-body-sm"
         >
           <option value="">All statuses</option>

@@ -337,7 +337,9 @@ export function useDeadLetterJobs() {
   return useQuery({
     queryKey: ["admin", "dead-letter"],
     queryFn: () =>
-      apiClient<DeadLetterJob[]>("/v1/admin/system/dead-letter"),
+      apiClient<PaginatedResponse<DeadLetterJob>>(
+        "/v1/admin/system/jobs/dead-letter",
+      ),
   });
 }
 
@@ -345,7 +347,7 @@ export function useRetryDeadLetterJob() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (jobId: string) =>
-      apiClient<void>(`/v1/admin/system/dead-letter/${jobId}/retry`, {
+      apiClient<void>(`/v1/admin/system/jobs/dead-letter/${jobId}/retry`, {
         method: "POST",
       }),
     onSuccess: () => {

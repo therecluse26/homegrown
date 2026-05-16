@@ -39,9 +39,6 @@ export function SafetyReports() {
       <PageTitle
         title={intl.formatMessage({ id: "admin.safetyReports.title" })}
       />
-      <h1 className="type-headline-md text-on-surface font-semibold">
-        <FormattedMessage id="admin.safetyReports.title" />
-      </h1>
 
       {/* Dashboard stats */}
       {dashboard && (

@@ -156,33 +156,38 @@ export function AdminDashboard() {
             icon={Heart}
             label={intl.formatMessage({ id: "admin.stats.pendingAppeals" })}
             value={safety.pending_appeals}
-            to="/admin/moderation"
+            to="/admin/moderation?tab=appeals"
           />
           <StatCard
             icon={Shield}
             label={intl.formatMessage({ id: "admin.stats.activeSuspensions" })}
             value={safety.active_suspensions}
+            to="/admin/users?status=suspended"
           />
           <StatCard
             icon={Users}
             label={intl.formatMessage({ id: "admin.stats.activeBans" })}
             value={safety.active_bans}
             variant={safety.active_bans > 0 ? "error" : "default"}
+            to="/admin/users?status=banned"
           />
           <StatCard
             icon={Flag}
             label={intl.formatMessage({ id: "admin.stats.unreviewedFlags" })}
             value={safety.unreviewed_flags}
+            to="/admin/reports"
           />
           <StatCard
             icon={Activity}
             label={intl.formatMessage({ id: "admin.stats.reports24h" })}
             value={safety.reports_last_24h}
+            to="/admin/reports"
           />
           <StatCard
             icon={FileText}
             label={intl.formatMessage({ id: "admin.stats.actions24h" })}
             value={safety.actions_last_24h}
+            to="/admin/audit"
           />
         </div>
       )}
