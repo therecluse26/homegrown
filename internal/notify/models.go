@@ -42,10 +42,11 @@ const (
 	TypeRecommendationsReady = "recommendations_ready"
 
 	// Billing (Phase 2)
-	TypeSubscriptionCreated   = "subscription_created"
-	TypeSubscriptionChanged   = "subscription_changed"
-	TypeSubscriptionCancelled = "subscription_cancelled"
-	TypePayoutCompleted       = "payout_completed"
+	TypeSubscriptionCreated          = "subscription_created"
+	TypeSubscriptionChanged          = "subscription_changed"
+	TypeSubscriptionCancelled        = "subscription_cancelled"
+	TypeSubscriptionRenewalUpcoming  = "subscription_renewal_upcoming"
+	TypePayoutCompleted              = "payout_completed"
 )
 
 // ─── Category Constants ──────────────────────────────────────────────────────
@@ -102,11 +103,12 @@ var ValidNotificationTypes = map[string]bool{
 	TypeContentFlagged:          true,
 	TypeCoParentAdded:           true,
 	TypeFamilyDeletionScheduled: true,
-	TypeSubscriptionCreated:     true,
-	TypeSubscriptionChanged:     true,
-	TypeSubscriptionCancelled:   true,
-	TypePayoutCompleted:         true,
-	TypeRecommendationsReady:    true,
+	TypeSubscriptionCreated:         true,
+	TypeSubscriptionChanged:         true,
+	TypeSubscriptionCancelled:       true,
+	TypeSubscriptionRenewalUpcoming: true,
+	TypePayoutCompleted:             true,
+	TypeRecommendationsReady:        true,
 }
 
 // ValidCategories is the set of valid notification categories.
@@ -149,10 +151,11 @@ var TypeToCategory = map[string]string{
 	TypeContentFlagged:          CategorySystem,
 	TypeCoParentAdded:           CategorySystem,
 	TypeFamilyDeletionScheduled: CategorySystem,
-	TypeSubscriptionCreated:     CategorySystem,
-	TypeSubscriptionChanged:     CategorySystem,
-	TypeSubscriptionCancelled:   CategorySystem,
-	TypePayoutCompleted:         CategoryMarketplace,
+	TypeSubscriptionCreated:         CategorySystem,
+	TypeSubscriptionChanged:         CategorySystem,
+	TypeSubscriptionCancelled:       CategorySystem,
+	TypeSubscriptionRenewalUpcoming: CategorySystem,
+	TypePayoutCompleted:             CategoryMarketplace,
 	TypeRecommendationsReady:    CategoryLearning,
 }
 
@@ -174,10 +177,11 @@ var TypeToTitleTemplate = map[string]string{
 	TypeContentFlagged:          "Content moderation update",
 	TypeCoParentAdded:           "A co-parent has been added to your family",
 	TypeFamilyDeletionScheduled: "Your account is scheduled for deletion",
-	TypeSubscriptionCreated:     "Welcome to Homegrown Premium!",
-	TypeSubscriptionChanged:     "Your subscription has been updated",
-	TypeSubscriptionCancelled:   "Your subscription has ended",
-	TypePayoutCompleted:         "Your payout of {amount} has been sent",
+	TypeSubscriptionCreated:         "Welcome to Homegrown Premium!",
+	TypeSubscriptionChanged:         "Your subscription has been updated",
+	TypeSubscriptionCancelled:       "Your subscription has ended",
+	TypeSubscriptionRenewalUpcoming: "Your subscription renews in 7 days",
+	TypePayoutCompleted:             "Your payout of {amount} has been sent",
 	TypeRecommendationsReady:    "New recommendations are ready for you",
 }
 
@@ -195,8 +199,9 @@ var TypeToTemplateAlias = map[string]string{
 	TypePurchaseRefunded:        "refund-confirmation",
 	TypeCreatorOnboarded:        "creator-welcome",
 	TypeContentFlagged:          "content-flagged",
-	TypeCoParentAdded:           "co-parent-added",
-	TypeFamilyDeletionScheduled: "deletion-scheduled",
+	TypeCoParentAdded:               "co-parent-added",
+	TypeFamilyDeletionScheduled:     "deletion-scheduled",
+	TypeSubscriptionRenewalUpcoming: "renewal-upcoming",
 }
 
 // ─── Validation Helpers ──────────────────────────────────────────────────────
@@ -500,6 +505,18 @@ type SubscriptionCancelledEvent struct {
 
 func (SubscriptionCancelledEvent) EventName() string { return "billing.SubscriptionCancelled" }
 
+// SubscriptionRenewalUpcomingEvent mirrors billing::SubscriptionRenewalUpcoming. [08-notify §17.1]
+type SubscriptionRenewalUpcomingEvent struct {
+	FamilyID    uuid.UUID `json:"family_id"`
+	AmountCents int64     `json:"amount_cents"`
+	Currency    string    `json:"currency"`
+	RenewsAt    time.Time `json:"renews_at"`
+}
+
+func (SubscriptionRenewalUpcomingEvent) EventName() string {
+	return "billing.SubscriptionRenewalUpcoming"
+}
+
 // PayoutCompletedEvent mirrors billing::PayoutCompleted. [08-notify §17.1]
 type PayoutCompletedEvent struct {
 	CreatorID   uuid.UUID `json:"creator_id"`
@@ -518,5 +535,6 @@ var (
 	_ shared.DomainEvent = SubscriptionCreatedEvent{}
 	_ shared.DomainEvent = SubscriptionChangedEvent{}
 	_ shared.DomainEvent = SubscriptionCancelledEvent{}
+	_ shared.DomainEvent = SubscriptionRenewalUpcomingEvent{}
 	_ shared.DomainEvent = PayoutCompletedEvent{}
 )

@@ -1,0 +1,33 @@
+# Version control
+.git
+.gitignore
+
+# Node dependencies and build cache (installed fresh in container)
+frontend/node_modules/
+frontend/dist/
+
+# Go test / coverage artifacts
+**/*_test.go
+coverage/
+*.test
+
+# Development tooling
+.air
+air.toml
+.lefthook/
+lefthook.yml
+
+# Documentation (not needed at runtime)
+specs/
+docs/
+*.md
+!README.md
+
+# Generated OpenAPI (not needed at runtime; types are compiled in)
+openapi/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo

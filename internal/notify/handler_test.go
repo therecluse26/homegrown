@@ -180,6 +180,9 @@ func (m *handlerMockService) HandleSubscriptionChanged(_ context.Context, _ Subs
 func (m *handlerMockService) HandleSubscriptionCancelled(_ context.Context, _ SubscriptionCancelledEvent) error {
 	return nil
 }
+func (m *handlerMockService) HandleSubscriptionRenewalUpcoming(_ context.Context, _ SubscriptionRenewalUpcomingEvent) error {
+	return nil
+}
 func (m *handlerMockService) HandlePayoutCompleted(_ context.Context, _ PayoutCompletedEvent) error {
 	return nil
 }

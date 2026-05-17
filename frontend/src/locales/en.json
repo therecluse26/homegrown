@@ -1728,6 +1728,17 @@
   "recommendations.blockCategory.label": "Block all {category} recommendations",
   "recommendations.empty": "No recommendations available right now.",
   "recommendations.empty.description": "Check back later — we'll suggest resources as you log more activities.",
+  "recommendations.preferences.tab": "Settings",
+  "recommendations.preferences.types.title": "Recommendation Types",
+  "recommendations.preferences.types.description": "Choose which categories of recommendations you'd like to see.",
+  "recommendations.preferences.exploration.title": "Discovery Frequency",
+  "recommendations.preferences.exploration.description": "Control how often we suggest resources outside your usual patterns.",
+  "recommendations.preferences.exploration.off": "Off",
+  "recommendations.preferences.exploration.off.description": "Only show recommendations closely matching your current patterns.",
+  "recommendations.preferences.exploration.occasional": "Occasional",
+  "recommendations.preferences.exploration.occasional.description": "Occasionally surface resources from outside your usual topics.",
+  "recommendations.preferences.exploration.frequent": "Frequent",
+  "recommendations.preferences.exploration.frequent.description": "Frequently suggest new areas and resources to explore.",
 
   "social.events.recurrence.enable": "Make this a recurring event",
   "social.events.recurrence.title": "Repeat Settings",
@@ -2302,5 +2313,16 @@
   "billing.microCharges.emptyDescription": "Micro-charges will appear here once you initiate COPPA verification.",
   "billing.microCharges.verified": "Verified",
   "billing.microCharges.pending": "Pending",
-  "billing.microCharges.failed": "Failed"
+  "billing.microCharges.failed": "Failed",
+
+  "billing.payouts.title": "Payout History",
+  "billing.payouts.description": "Your earnings paid out from marketplace sales.",
+  "billing.payouts.empty": "No payouts found.",
+  "billing.payouts.status.pending": "Pending",
+  "billing.payouts.status.processing": "Processing",
+  "billing.payouts.status.completed": "Completed",
+  "billing.payouts.status.failed": "Failed",
+  "billing.payouts.status.unknown": "Unknown",
+  "billing.payouts.purchase_count": "{count, plural, one {# sale} other {# sales}}",
+  "billing.payouts.refund_deduction": "Refund deduction: {amount}"
 }

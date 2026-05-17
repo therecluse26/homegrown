@@ -76,6 +76,7 @@ type NotificationService interface {
 	HandleSubscriptionCreated(ctx context.Context, event SubscriptionCreatedEvent) error
 	HandleSubscriptionChanged(ctx context.Context, event SubscriptionChangedEvent) error
 	HandleSubscriptionCancelled(ctx context.Context, event SubscriptionCancelledEvent) error
+	HandleSubscriptionRenewalUpcoming(ctx context.Context, event SubscriptionRenewalUpcomingEvent) error
 	HandlePayoutCompleted(ctx context.Context, event PayoutCompletedEvent) error
 
 	// ─── Queries ─────────────────────────────────────────────────────

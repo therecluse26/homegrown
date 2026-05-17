@@ -3,7 +3,6 @@ package middleware
 import (
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
@@ -63,18 +62,21 @@ func Auth(deps authDeps) echo.MiddlewareFunc {
 				return shared.ErrUnauthorized()
 			}
 
-			// Step 1: Extract session cookie.
-			cookie, err := c.Request().Cookie(kratosSessionCookieName)
-			if err != nil {
-				if err == http.ErrNoCookie {
-					return shared.ErrUnauthorized()
-				}
+			// Step 1: Extract session credential — cookie (browser) or X-Session-Token (native/API clients).
+			var kratosRef string
+			if cookie, err := c.Request().Cookie(kratosSessionCookieName); err == nil {
+				kratosRef = fmt.Sprintf("%s=%s", cookie.Name, cookie.Value)
+			} else if token := c.Request().Header.Get("X-Session-Token"); token != "" {
+				// Native API clients (e.g. mobile, load tests) pass the Kratos session token
+				// via X-Session-Token header. Prefix distinguishes it from a cookie string
+				// so the adapter can forward the correct header to Kratos /sessions/whoami.
+				kratosRef = "X-Session-Token:" + token
+			} else {
 				return shared.ErrUnauthorized()
 			}
-			cookieHeader := fmt.Sprintf("%s=%s", cookie.Name, cookie.Value)
 
 			// Step 2: Validate session with Kratos.
-			session, err := validator.ValidateSession(c.Request().Context(), cookieHeader)
+			session, err := validator.ValidateSession(c.Request().Context(), kratosRef)
 			if err != nil {
 				return shared.ErrUnauthorized()
 			}

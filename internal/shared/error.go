@@ -117,48 +117,60 @@ type ErrorBody struct {
 	Message string `json:"message"`
 }
 
-// HTTPErrorHandler is a custom Echo error handler that maps AppError to JSON responses.
+// NewHTTPErrorHandler returns an Echo HTTPErrorHandler that maps AppError to JSON responses
+// and reports 5xx errors to the provided reporter.
 // Internal error details (Err field) are logged but NEVER exposed to the client. [CODING §2.2]
-func HTTPErrorHandler(err error, c echo.Context) {
-	if c.Response().Committed {
-		return
-	}
-
-	var appErr *AppError
-	if errors.As(err, &appErr) {
-		if appErr.Err != nil {
-			slog.Error("internal server error", "error", appErr.Err)
+func NewHTTPErrorHandler(reporter ErrorReporter) func(error, echo.Context) {
+	return func(err error, c echo.Context) {
+		if c.Response().Committed {
+			return
 		}
-		_ = c.JSON(appErr.StatusCode, ErrorResponse{
+
+		var appErr *AppError
+		if errors.As(err, &appErr) {
+			if appErr.StatusCode >= http.StatusInternalServerError && appErr.Err != nil {
+				slog.Error("internal server error", "error", appErr.Err)
+				reporter.CaptureException(appErr.Err)
+			}
+			_ = c.JSON(appErr.StatusCode, ErrorResponse{
+				Error: ErrorBody{
+					Code:    appErr.Code,
+					Message: appErr.Message,
+				},
+			})
+			return
+		}
+
+		// Fallback for non-AppError errors (e.g. Echo's own HTTPError)
+		var echoErr *echo.HTTPError
+		if errors.As(err, &echoErr) {
+			if echoErr.Code >= http.StatusInternalServerError {
+				reporter.CaptureException(echoErr)
+			}
+			msg := fmt.Sprintf("%v", echoErr.Message)
+			_ = c.JSON(echoErr.Code, ErrorResponse{
+				Error: ErrorBody{
+					Code:    "error",
+					Message: msg,
+				},
+			})
+			return
+		}
+
+		slog.Error("unhandled error", "error", err)
+		reporter.CaptureException(err)
+		_ = c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error: ErrorBody{
-				Code:    appErr.Code,
-				Message: appErr.Message,
+				Code:    "internal_error",
+				Message: "An internal error occurred",
 			},
 		})
-		return
 	}
-
-	// Fallback for non-AppError errors (e.g. Echo's own HTTPError)
-	var echoErr *echo.HTTPError
-	if errors.As(err, &echoErr) {
-		msg := fmt.Sprintf("%v", echoErr.Message)
-		_ = c.JSON(echoErr.Code, ErrorResponse{
-			Error: ErrorBody{
-				Code:    "error",
-				Message: msg,
-			},
-		})
-		return
-	}
-
-	slog.Error("unhandled error", "error", err)
-	_ = c.JSON(http.StatusInternalServerError, ErrorResponse{
-		Error: ErrorBody{
-			Code:    "internal_error",
-			Message: "An internal error occurred",
-		},
-	})
 }
+
+// HTTPErrorHandler is the default error handler using a no-op reporter.
+// Tests and code without an ErrorReporter can use this directly.
+var HTTPErrorHandler = NewHTTPErrorHandler(NoopErrorReporter{})
 
 // ─── Validator Integration ────────────────────────────────────────────────────
 

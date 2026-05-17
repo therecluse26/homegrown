@@ -8,6 +8,10 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/homegrown-academy/homegrown-academy/internal/config"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // JobPayload is the data passed to a background job. Domains define their own typed
@@ -63,9 +67,11 @@ func CreateJobWorker(cfg *config.AppConfig) (JobWorker, error) {
 	srv := asynq.NewServer(redisOpt, asynq.Config{
 		Concurrency: 10,
 	})
+	mux := asynq.NewServeMux()
+	mux.Use(jobTracingMiddleware())
 	return &asynqJobWorker{
 		server: srv,
-		mux:    asynq.NewServeMux(),
+		mux:    mux,
 	}, nil
 }
 
@@ -75,9 +81,36 @@ type asynqJobWorker struct {
 }
 
 func (w *asynqJobWorker) Handle(taskType string, handler JobHandler) {
-	w.mux.HandleFunc(taskType, func(_ context.Context, t *asynq.Task) error {
-		return handler(context.Background(), t.Payload())
+	// Pass the asynq-provided context so handlers receive cancellation signals
+	// and the OTel span injected by jobTracingMiddleware.
+	w.mux.HandleFunc(taskType, func(ctx context.Context, t *asynq.Task) error {
+		return handler(ctx, t.Payload())
 	})
+}
+
+// jobTracingMiddleware is an asynq.MiddlewareFunc that creates an OTel span for
+// every background job. The span name is the task type (e.g. "media:scan_upload").
+// Errors returned by the handler are recorded on the span before it closes.
+func jobTracingMiddleware() asynq.MiddlewareFunc {
+	return func(next asynq.Handler) asynq.Handler {
+		return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
+			tracer := otel.GetTracerProvider().Tracer(dbTracerName)
+			ctx, span := tracer.Start(ctx, t.Type(),
+				trace.WithSpanKind(trace.SpanKindConsumer),
+				trace.WithAttributes(
+					semconv.MessagingSystemKey.String("asynq"),
+					semconv.MessagingDestinationName(t.Type()),
+				),
+			)
+			defer span.End()
+
+			err := next.ProcessTask(ctx, t)
+			if err != nil {
+				span.SetStatus(codes.Error, err.Error())
+			}
+			return err
+		})
+	}
 }
 
 func (w *asynqJobWorker) Start() error {

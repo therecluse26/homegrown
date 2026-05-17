@@ -443,6 +443,7 @@ type BillingWebhookEvent struct {
 	SubscriptionUpdated *BillingWebhookSubscriptionUpdated
 	SubscriptionDeleted *BillingWebhookSubscriptionDeleted
 	InvoicePaid         *BillingWebhookInvoicePaid
+	InvoiceUpcoming     *BillingWebhookInvoiceUpcoming
 	PaymentFailed       *BillingWebhookPaymentFailed
 }
 
@@ -467,6 +468,14 @@ type BillingWebhookInvoicePaid struct {
 	SubscriptionID string
 	AmountCents    int64
 	PaymentID      string
+}
+
+// BillingWebhookInvoiceUpcoming carries data for invoice.upcoming events. [10-billing §14]
+type BillingWebhookInvoiceUpcoming struct {
+	SubscriptionID string    `json:"subscription_id"`
+	AmountCents    int64     `json:"amount_cents"`
+	Currency       string    `json:"currency"`
+	PeriodEnd      time.Time `json:"period_end"`
 }
 
 // BillingWebhookPaymentFailed carries data for payment.failed events.

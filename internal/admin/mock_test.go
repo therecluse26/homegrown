@@ -192,6 +192,7 @@ func (s *stubSafetyService) TakeModerationAction(ctx context.Context, itemID uui
 
 type stubBillingService struct {
 	getSubscriptionInfoFn func(ctx context.Context, familyID uuid.UUID) (*AdminSubscriptionInfo, error)
+	getPayoutReportFn     func(ctx context.Context, params *AdminPayoutReportParams) (*AdminPayoutReport, error)
 }
 
 func (s *stubBillingService) GetSubscriptionInfo(ctx context.Context, familyID uuid.UUID) (*AdminSubscriptionInfo, error) {
@@ -199,6 +200,13 @@ func (s *stubBillingService) GetSubscriptionInfo(ctx context.Context, familyID u
 		return s.getSubscriptionInfoFn(ctx, familyID)
 	}
 	return nil, nil // safe default
+}
+
+func (s *stubBillingService) GetPayoutReport(ctx context.Context, params *AdminPayoutReportParams) (*AdminPayoutReport, error) {
+	if s.getPayoutReportFn != nil {
+		return s.getPayoutReportFn(ctx, params)
+	}
+	return &AdminPayoutReport{Items: []AdminPayoutReportItem{}, TotalCount: 0, TotalAmountCents: 0}, nil
 }
 
 // ─── stubMethodService ──────────────────────────────────────────────────────

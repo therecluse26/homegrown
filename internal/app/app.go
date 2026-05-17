@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -103,7 +105,7 @@ type customValidator struct {
 	v *validator.Validate
 }
 
-func (cv *customValidator) Validate(i interface{}) error {
+func (cv *customValidator) Validate(i any) error {
 	return cv.v.Struct(i)
 }
 
@@ -115,11 +117,15 @@ func NewApp(state *AppState) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-	e.HTTPErrorHandler = shared.HTTPErrorHandler
+	e.HTTPErrorHandler = shared.NewHTTPErrorHandler(state.Errors)
 	e.Validator = &customValidator{v: validator.New()}
 
 	// ─── Global Middleware (outermost applied first) ──────────────────
-	// Order: Metrics → RequestLogger → SecurityHeaders → CORS → CSRF → (rate limit added per-group/route)
+	// Order: ErrorReporting → Tracing → Metrics → RequestLogger → SecurityHeaders → CORS → CSRF
+	// ErrorReporting is outermost to catch panics. Tracing is second so the span covers
+	// all remaining middleware and the handler. [§5.3]
+	e.Use(middleware.ErrorReporting(state.Errors))
+	e.Use(middleware.Tracing())
 	e.Use(middleware.Metrics())
 	e.Use(echomw.RequestLoggerWithConfig(requestLoggerConfig()))
 	e.Use(middleware.SecurityHeaders())
@@ -222,6 +228,26 @@ func healthHandler(state *AppState) echo.HandlerFunc {
 			healthy = false
 		} else {
 			checks["redis"] = "ok"
+		}
+
+		// Check Kratos reachability via its liveness probe.
+		// Use a per-call timeout so a slow Kratos never stalls ALB checks.
+		kratosCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if req, err := http.NewRequestWithContext(kratosCtx, http.MethodGet, state.Config.AuthPublicURL+"/health/alive", nil); err != nil {
+			checks["kratos"] = "error: " + err.Error()
+			healthy = false
+		} else if resp, err := http.DefaultClient.Do(req); err != nil {
+			checks["kratos"] = "error: " + err.Error()
+			healthy = false
+		} else {
+			_ = resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				checks["kratos"] = fmt.Sprintf("error: unexpected status %d", resp.StatusCode)
+				healthy = false
+			} else {
+				checks["kratos"] = "ok"
+			}
 		}
 
 		status := "ok"

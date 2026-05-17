@@ -616,6 +616,59 @@ func (s *PlanningServiceImpl) ApplyTemplate(
 	return createdIDs, nil
 }
 
+// ─── Co-op Coordination [17-planning §12] ────────────────────────────────────
+
+func (s *PlanningServiceImpl) GetCoopGroupSchedules(
+	ctx context.Context,
+	auth *shared.AuthContext,
+	_ *shared.FamilyScope,
+	groupID uuid.UUID,
+	start time.Time,
+	end time.Time,
+) (CoopGroupSchedulesResponse, error) {
+	members, err := s.socialSvc.GetCoopGroupMembers(ctx, auth, groupID)
+	if err != nil {
+		return CoopGroupSchedulesResponse{}, fmt.Errorf("plan: get co-op group members: %w", err)
+	}
+
+	result := CoopGroupSchedulesResponse{
+		GroupID: groupID,
+		Start:   start.Format("2006-01-02"),
+		End:     end.Format("2006-01-02"),
+		Members: make([]CoopMemberSchedule, 0, len(members)),
+	}
+
+	for _, m := range members {
+		if m.Status != "active" {
+			continue
+		}
+		items, err := s.scheduleRepo.ListByFamilyIDAndDateRange(ctx, m.FamilyID, start, end)
+		if err != nil {
+			return CoopGroupSchedulesResponse{}, fmt.Errorf("plan: list co-op items for family %s: %w", m.FamilyID, err)
+		}
+
+		coopItems := make([]CoopScheduleItem, 0, len(items))
+		for _, item := range items {
+			coopItems = append(coopItems, CoopScheduleItem{
+				ID:        item.ID,
+				Date:      item.StartDate.Format("2006-01-02"),
+				StartTime: item.StartTime,
+				EndTime:   item.EndTime,
+				Title:     item.Title,
+				Category:  item.Category,
+			})
+		}
+
+		result.Members = append(result.Members, CoopMemberSchedule{
+			FamilyID:    m.FamilyID,
+			DisplayName: m.DisplayName,
+			Items:       coopItems,
+		})
+	}
+
+	return result, nil
+}
+
 // ─── Event Handlers [17-planning §16] ────────────────────────────────────────
 
 func (s *PlanningServiceImpl) HandleEventCancelled(

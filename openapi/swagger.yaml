@@ -24,6 +24,48 @@ definitions:
       is_primary:
         type: boolean
     type: object
+  admin.AdminPayoutReport:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/admin.AdminPayoutReportItem'
+        type: array
+      next_cursor:
+        type: string
+      total_amount_cents:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  admin.AdminPayoutReportItem:
+    properties:
+      amount_cents:
+        type: integer
+      created_at:
+        type: string
+      creator_id:
+        type: string
+      currency:
+        type: string
+      hyperswitch_payout_id:
+        type: string
+      id:
+        type: string
+      period_end:
+        type: string
+      period_start:
+        type: string
+      processed_at:
+        type: string
+      purchase_count:
+        type: integer
+      refund_deduction_cents:
+        type: integer
+      status:
+        type: string
+      store_name:
+        type: string
+    type: object
   admin.AdminStudentInfo:
     properties:
       display_name:
@@ -4703,6 +4745,45 @@ definitions:
     - CalendarSourceActivities
     - CalendarSourceAttendance
     - CalendarSourceEvents
+  plan.CoopGroupSchedulesResponse:
+    properties:
+      end:
+        type: string
+      group_id:
+        type: string
+      members:
+        items:
+          $ref: '#/definitions/plan.CoopMemberSchedule'
+        type: array
+      start:
+        type: string
+    type: object
+  plan.CoopMemberSchedule:
+    properties:
+      display_name:
+        type: string
+      family_id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/plan.CoopScheduleItem'
+        type: array
+    type: object
+  plan.CoopScheduleItem:
+    properties:
+      category:
+        $ref: '#/definitions/plan.ScheduleCategory'
+      date:
+        type: string
+      end_time:
+        type: string
+      id:
+        type: string
+      start_time:
+        type: string
+      title:
+        type: string
+    type: object
   plan.CreateScheduleItemInput:
     properties:
       category:
@@ -6082,6 +6163,46 @@ paths:
       security:
       - BearerAuth: []
       summary: Search audit log
+      tags:
+      - admin
+  /admin/billing/payouts:
+    get:
+      parameters:
+      - description: Filter by status
+        enum:
+        - pending
+        - processing
+        - completed
+        - failed
+        in: query
+        name: status
+        type: string
+      - description: Pagination cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Results per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/admin.AdminPayoutReport'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: List creator payout report
       tags:
       - admin
   /admin/flags:
@@ -16006,6 +16127,46 @@ paths:
       security:
       - BearerAuth: []
       summary: Get week view
+      tags:
+      - planning
+  /planning/co-op/groups/{groupId}/schedules:
+    get:
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plan.CoopGroupSchedulesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get co-op group member schedules for a date range
       tags:
       - planning
   /planning/schedule-items:

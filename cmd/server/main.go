@@ -83,6 +83,10 @@ func main() {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
+	// Register OTel tracing plugin for all GORM operations (queries, creates, updates, deletes).
+	if pluginErr := db.Use(shared.GormTracingPlugin{}); pluginErr != nil {
+		slog.Warn("failed to register GORM OTel plugin", "error", pluginErr)
+	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -129,6 +133,15 @@ func main() {
 		} else {
 			errReporter = sentryReporter{}
 		}
+	}
+
+	// ── Step 5.6: Init OpenTelemetry TracerProvider ───────────────────────────────
+	shutdownTracing, err := shared.InitTracerProvider(ctx, cfg, version)
+	if err != nil {
+		slog.Error("failed to init OTel tracer provider", "error", err)
+		// Non-fatal: tracing is observability infrastructure, not a core dependency.
+	} else {
+		defer shutdownTracing(ctx)
 	}
 
 	// ── Step 6: Init EventBus + register subscriptions ───────────────────────────
@@ -892,6 +905,7 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCreated{}), notify.NewSubscriptionCreatedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionChanged{}), notify.NewSubscriptionChangedHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionCancelled{}), notify.NewSubscriptionCancelledHandler(notifySvc))
+	eventBus.Subscribe(reflect.TypeOf(billing.SubscriptionRenewalUpcoming{}), notify.NewSubscriptionRenewalUpcomingHandler(notifySvc))
 	eventBus.Subscribe(reflect.TypeOf(billing.PayoutCompleted{}), notify.NewPayoutCompletedHandler(notifySvc))
 
 	// ── Step 7j: Wire safety:: domain ──────────────────────────────────────────
@@ -1307,7 +1321,7 @@ func main() {
 	// Wire real cross-domain adapters for admin. [16-admin §14]
 	iamForAdmin := &adminIamAdapter{db: db}
 	safetyForAdmin := &adminSafetyAdapter{db: db, svc: safetySvc}
-	billingForAdmin := &adminBillingAdapter{svc: billingSvc}
+	billingForAdmin := &adminBillingAdapter{svc: billingSvc, db: db}
 	methodForAdmin := &adminMethodAdapter{db: db}
 	lifecycleForAdmin := &adminLifecycleAdapter{db: db}
 	healthForAdmin := &appHealthChecker{
@@ -1863,7 +1877,10 @@ func (a *adminSafetyAdapter) TakeModerationAction(ctx context.Context, itemID uu
 
 // ─── adminBillingAdapter ─────────────────────────────────────────────────────
 
-type adminBillingAdapter struct{ svc billing.BillingService }
+type adminBillingAdapter struct {
+	svc billing.BillingService
+	db  *gorm.DB
+}
 
 func (a *adminBillingAdapter) GetSubscriptionInfo(ctx context.Context, familyID uuid.UUID) (*admin.AdminSubscriptionInfo, error) {
 	scope := shared.NewFamilyScopeFromID(familyID)
@@ -1879,6 +1896,106 @@ func (a *adminBillingAdapter) GetSubscriptionInfo(ctx context.Context, familyID 
 		Tier:      sub.Tier,
 		Status:    status,
 		ExpiresAt: sub.CurrentPeriodEnd,
+	}, nil
+}
+
+func (a *adminBillingAdapter) GetPayoutReport(ctx context.Context, params *admin.AdminPayoutReportParams) (*admin.AdminPayoutReport, error) {
+	type row struct {
+		ID                   uuid.UUID  `gorm:"column:id"`
+		CreatorID            uuid.UUID  `gorm:"column:creator_id"`
+		StoreName            string     `gorm:"column:store_name"`
+		Status               string     `gorm:"column:status"`
+		AmountCents          int64      `gorm:"column:amount_cents"`
+		Currency             string     `gorm:"column:currency"`
+		PeriodStart          time.Time  `gorm:"column:period_start"`
+		PeriodEnd            time.Time  `gorm:"column:period_end"`
+		PurchaseCount        int32      `gorm:"column:purchase_count"`
+		RefundDeductionCents int64      `gorm:"column:refund_deduction_cents"`
+		HyperswitchPayoutID  *string    `gorm:"column:hyperswitch_payout_id"`
+		ProcessedAt          *time.Time `gorm:"column:processed_at"`
+		CreatedAt            time.Time  `gorm:"column:created_at"`
+	}
+
+	limit := 50
+	if params.Limit != nil && *params.Limit > 0 && *params.Limit <= 200 {
+		limit = *params.Limit
+	}
+
+	var rows []row
+	var totalCount int64
+	var totalAmountCents int64
+
+	err := shared.BypassRLSTransaction(ctx, a.db, func(tx *gorm.DB) error {
+		q := tx.Table("bill_payouts bp").
+			Select("bp.id, bp.creator_id, mc.store_name, bp.status, bp.amount_cents, bp.currency, bp.period_start, bp.period_end, bp.purchase_count, bp.refund_deduction_cents, bp.hyperswitch_payout_id, bp.processed_at, bp.created_at").
+			Joins("JOIN mkt_creators mc ON mc.id = bp.creator_id").
+			Order("bp.created_at DESC")
+
+		if params.Status != nil && *params.Status != "" {
+			q = q.Where("bp.status = ?", *params.Status)
+		}
+		if params.Cursor != nil {
+			cursorID, cursorAt, cursorErr := shared.DecodeCursor(*params.Cursor)
+			if cursorErr != nil {
+				return cursorErr
+			}
+			q = q.Where("(bp.created_at, bp.id) < (?, ?)", cursorAt, cursorID)
+		}
+
+		// Aggregate totals across all matching rows (not just this page).
+		type totalsRow struct {
+			TotalCount       int64 `gorm:"column:total_count"`
+			TotalAmountCents int64 `gorm:"column:total_amount_cents"`
+		}
+		var totals totalsRow
+		countQ := tx.Table("bill_payouts").Select("COUNT(*) AS total_count, COALESCE(SUM(amount_cents), 0) AS total_amount_cents")
+		if params.Status != nil && *params.Status != "" {
+			countQ = countQ.Where("status = ?", *params.Status)
+		}
+		if err := countQ.Scan(&totals).Error; err != nil {
+			return fmt.Errorf("admin.GetPayoutReport totals: %w", err)
+		}
+		totalCount = totals.TotalCount
+		totalAmountCents = totals.TotalAmountCents
+
+		return q.Limit(limit + 1).Find(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admin.GetPayoutReport: %w", err)
+	}
+
+	var nextCursor *string
+	if len(rows) > limit {
+		rows = rows[:limit]
+		last := rows[limit-1]
+		c := shared.EncodeCursor(last.ID, last.CreatedAt)
+		nextCursor = &c
+	}
+
+	items := make([]admin.AdminPayoutReportItem, len(rows))
+	for i, r := range rows {
+		items[i] = admin.AdminPayoutReportItem{
+			ID:                   r.ID,
+			CreatorID:            r.CreatorID,
+			StoreName:            r.StoreName,
+			Status:               r.Status,
+			AmountCents:          r.AmountCents,
+			Currency:             r.Currency,
+			PeriodStart:          r.PeriodStart,
+			PeriodEnd:            r.PeriodEnd,
+			PurchaseCount:        r.PurchaseCount,
+			RefundDeductionCents: r.RefundDeductionCents,
+			HyperswitchPayoutID:  r.HyperswitchPayoutID,
+			ProcessedAt:          r.ProcessedAt,
+			CreatedAt:            r.CreatedAt,
+		}
+	}
+
+	return &admin.AdminPayoutReport{
+		Items:            items,
+		TotalCount:       totalCount,
+		TotalAmountCents: totalAmountCents,
+		NextCursor:       nextCursor,
 	}, nil
 }
 
@@ -2537,6 +2654,22 @@ func (a *planSocialAdapter) GetEventsForCalendar(ctx context.Context, auth *shar
 			Date:      e.EventDate,
 			Location:  e.LocationName,
 			RSVPStatus: e.MyRSVP,
+		})
+	}
+	return results, nil
+}
+
+func (a *planSocialAdapter) GetCoopGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]plan.CoopGroupMember, error) {
+	members, err := a.socialSvc.ListGroupMembers(ctx, auth, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("plan social adapter: list group members: %w", err)
+	}
+	results := make([]plan.CoopGroupMember, 0, len(members))
+	for _, m := range members {
+		results = append(results, plan.CoopGroupMember{
+			FamilyID:    m.FamilyID,
+			DisplayName: m.DisplayName,
+			Status:      m.Status,
 		})
 	}
 	return results, nil

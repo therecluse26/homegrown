@@ -321,3 +321,38 @@ type TemplateResponse struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+// ─── Co-op Coordination Types [17-planning §12] ──────────────────────────────
+
+// CoopGroupMember is a group member returned by the co-op cross-domain adapter.
+type CoopGroupMember struct {
+	FamilyID    uuid.UUID `json:"family_id"`
+	DisplayName string    `json:"display_name"`
+	Status      string    `json:"status"`
+}
+
+// CoopScheduleItem is a privacy-safe schedule item for co-op viewing.
+// Description and notes are deliberately omitted. [17-planning §12.2]
+type CoopScheduleItem struct {
+	ID        uuid.UUID        `json:"id"`
+	Date      string           `json:"date"`
+	StartTime *string          `json:"start_time"`
+	EndTime   *string          `json:"end_time"`
+	Title     string           `json:"title"`
+	Category  ScheduleCategory `json:"category"`
+}
+
+// CoopMemberSchedule holds the privacy-safe schedule for one group member.
+type CoopMemberSchedule struct {
+	FamilyID    uuid.UUID          `json:"family_id"`
+	DisplayName string             `json:"display_name"`
+	Items       []CoopScheduleItem `json:"items"`
+}
+
+// CoopGroupSchedulesResponse is the response for GET /planning/co-op/groups/:id/schedules.
+type CoopGroupSchedulesResponse struct {
+	GroupID uuid.UUID            `json:"group_id"`
+	Start   string               `json:"start"`
+	End     string               `json:"end"`
+	Members []CoopMemberSchedule `json:"members"`
+}
+

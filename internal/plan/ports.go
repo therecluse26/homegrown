@@ -163,6 +163,19 @@ type PlanningService interface {
 		input ApplyTemplateInput,
 	) ([]uuid.UUID, error)
 
+	// === Co-op Coordination [17-planning §12] ===
+
+	// GetCoopGroupSchedules returns privacy-safe schedule items for all active members
+	// of a co-op group. The requesting family must be a member of the group.
+	GetCoopGroupSchedules(
+		ctx context.Context,
+		auth *shared.AuthContext,
+		scope *shared.FamilyScope,
+		groupID uuid.UUID,
+		start time.Time,
+		end time.Time,
+	) (CoopGroupSchedulesResponse, error)
+
 	// === Event Handlers [17-planning §16] ===
 
 	// HandleEventCancelled marks linked schedule items as cancelled when a social event is cancelled.
@@ -228,6 +241,10 @@ type ScheduleItemRepository interface {
 	DeleteByStudent(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) error
 
 	ListAllByFamily(ctx context.Context, scope *shared.FamilyScope) ([]ScheduleItem, error)
+
+	// ListByFamilyIDAndDateRange returns schedule items for a specific family by ID.
+	// Bypasses FamilyScope — only called after validating group membership. [17-planning §12.2]
+	ListByFamilyIDAndDateRange(ctx context.Context, familyID uuid.UUID, start, end time.Time) ([]ScheduleItem, error)
 }
 
 // ScheduleTemplateRepository defines data access for plan_schedule_templates. [17-planning §6]
@@ -312,4 +329,12 @@ type SocialServiceForPlan interface {
 		start time.Time,
 		end time.Time,
 	) ([]EventSummary, error)
+
+	// GetCoopGroupMembers returns active members of a co-op group with their family IDs.
+	// The caller must be a member of the group; returns an error otherwise.
+	GetCoopGroupMembers(
+		ctx context.Context,
+		auth *shared.AuthContext,
+		groupID uuid.UUID,
+	) ([]CoopGroupMember, error)
 }

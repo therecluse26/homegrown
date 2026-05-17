@@ -935,6 +935,22 @@ func (s *NotificationServiceImpl) HandleSubscriptionCancelled(ctx context.Contex
 	})
 }
 
+func (s *NotificationServiceImpl) HandleSubscriptionRenewalUpcoming(ctx context.Context, event SubscriptionRenewalUpcomingEvent) error {
+	amountFormatted := fmt.Sprintf("$%.2f", float64(event.AmountCents)/100)
+	return s.CreateNotification(ctx, CreateNotificationCommand{
+		FamilyID:         event.FamilyID,
+		NotificationType: TypeSubscriptionRenewalUpcoming,
+		Title:            TypeToTitleTemplate[TypeSubscriptionRenewalUpcoming],
+		Body:             fmt.Sprintf("Your subscription will renew on %s for %s", event.RenewsAt.Format("January 2, 2006"), amountFormatted),
+		ActionURL:        strPtr("/settings/billing"),
+		Metadata: map[string]any{
+			"amount_cents": event.AmountCents,
+			"currency":     event.Currency,
+			"renews_at":    event.RenewsAt.Format(time.RFC3339),
+		},
+	})
+}
+
 func (s *NotificationServiceImpl) HandlePayoutCompleted(ctx context.Context, event PayoutCompletedEvent) error {
 	familyID, err := s.iamService.GetFamilyIDForCreator(ctx, event.CreatorID)
 	if err != nil {

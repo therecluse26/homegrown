@@ -1,0 +1,22 @@
+[Unit]
+Description=Homegrown Academy — weekly restore drill
+After=network.target
+Wants=homegrown-restore-drill.timer
+
+[Service]
+Type=oneshot
+User=homegrown-backup
+EnvironmentFile=/etc/homegrown/backup.env
+ExecStart=/opt/homegrown/scripts/backup/restore-drill.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=homegrown-restore-drill
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

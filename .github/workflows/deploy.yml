@@ -1,0 +1,288 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ── Build & push image ──────────────────────────────────────────────────────
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha-tag: sha-${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy to staging ───────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy → Staging
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
+
+    env:
+      # ─── Infrastructure ────────────────────────────────────────────────────
+      DATABASE_URL:        ${{ secrets.STAGING_DATABASE_URL }}
+      REDIS_URL:           ${{ secrets.STAGING_REDIS_URL }}
+      POSTGRES_USER:       ${{ secrets.STAGING_POSTGRES_USER }}
+      POSTGRES_PASSWORD:   ${{ secrets.STAGING_POSTGRES_PASSWORD }}
+      POSTGRES_DB:         ${{ secrets.STAGING_POSTGRES_DB }}
+      # ─── Auth (Kratos) ─────────────────────────────────────────────────────
+      AUTH_ADMIN_URL:        ${{ secrets.STAGING_AUTH_ADMIN_URL }}
+      AUTH_PUBLIC_URL:       ${{ secrets.STAGING_AUTH_PUBLIC_URL }}
+      AUTH_WEBHOOK_SECRET:   ${{ secrets.STAGING_AUTH_WEBHOOK_SECRET }}
+      CORS_ALLOWED_ORIGINS:  ${{ secrets.STAGING_CORS_ALLOWED_ORIGINS }}
+      # ─── Billing (Hyperswitch) ─────────────────────────────────────────────
+      HYPERSWITCH_BASE_URL:          ${{ secrets.STAGING_HYPERSWITCH_BASE_URL }}
+      HYPERSWITCH_API_KEY:           ${{ secrets.STAGING_HYPERSWITCH_API_KEY }}
+      HYPERSWITCH_WEBHOOK_KEY:       ${{ secrets.STAGING_HYPERSWITCH_WEBHOOK_KEY }}
+      HYPERSWITCH_BILLING_PROFILE_ID: ${{ secrets.STAGING_HYPERSWITCH_BILLING_PROFILE_ID }}
+      HYPERSWITCH_MONTHLY_PRICE_ID:  ${{ secrets.STAGING_HYPERSWITCH_MONTHLY_PRICE_ID }}
+      HYPERSWITCH_ANNUAL_PRICE_ID:   ${{ secrets.STAGING_HYPERSWITCH_ANNUAL_PRICE_ID }}
+      BILLING_WEBHOOK_SECRET:        ${{ secrets.STAGING_BILLING_WEBHOOK_SECRET }}
+      COPPA_CHARGE_CENTS:            ${{ secrets.STAGING_COPPA_CHARGE_CENTS }}
+      # ─── Notifications (Postmark) ──────────────────────────────────────────
+      POSTMARK_SERVER_TOKEN: ${{ secrets.STAGING_POSTMARK_SERVER_TOKEN }}
+      UNSUBSCRIBE_SECRET:    ${{ secrets.STAGING_UNSUBSCRIBE_SECRET }}
+      # ─── Object Storage ────────────────────────────────────────────────────
+      OBJECT_STORAGE_ENDPOINT:          ${{ secrets.STAGING_OBJECT_STORAGE_ENDPOINT }}
+      OBJECT_STORAGE_REGION:            ${{ secrets.STAGING_OBJECT_STORAGE_REGION }}
+      OBJECT_STORAGE_BUCKET:            ${{ secrets.STAGING_OBJECT_STORAGE_BUCKET }}
+      OBJECT_STORAGE_ACCESS_KEY_ID:     ${{ secrets.STAGING_OBJECT_STORAGE_ACCESS_KEY_ID }}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.STAGING_OBJECT_STORAGE_SECRET_ACCESS_KEY }}
+      OBJECT_STORAGE_PUBLIC_URL:        ${{ secrets.STAGING_OBJECT_STORAGE_PUBLIC_URL }}
+      # ─── Observability ─────────────────────────────────────────────────────
+      ERROR_REPORTING_DSN: ${{ secrets.STAGING_ERROR_REPORTING_DSN }}
+
+    steps:
+      - name: Write .env.production and deploy to staging
+        uses: appleboy/ssh-action@v1
+        env:
+          SHA_TAG: ${{ needs.build.outputs.sha-tag }}
+          IMAGE:   ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        with:
+          host:     ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key:      ${{ secrets.STAGING_SSH_KEY }}
+          envs: SHA_TAG,IMAGE,DATABASE_URL,REDIS_URL,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,AUTH_ADMIN_URL,AUTH_PUBLIC_URL,AUTH_WEBHOOK_SECRET,CORS_ALLOWED_ORIGINS,HYPERSWITCH_BASE_URL,HYPERSWITCH_API_KEY,HYPERSWITCH_WEBHOOK_KEY,HYPERSWITCH_BILLING_PROFILE_ID,HYPERSWITCH_MONTHLY_PRICE_ID,HYPERSWITCH_ANNUAL_PRICE_ID,BILLING_WEBHOOK_SECRET,COPPA_CHARGE_CENTS,POSTMARK_SERVER_TOKEN,UNSUBSCRIBE_SECRET,OBJECT_STORAGE_ENDPOINT,OBJECT_STORAGE_REGION,OBJECT_STORAGE_BUCKET,OBJECT_STORAGE_ACCESS_KEY_ID,OBJECT_STORAGE_SECRET_ACCESS_KEY,OBJECT_STORAGE_PUBLIC_URL,ERROR_REPORTING_DSN
+          script: |
+            set -e
+            cd /opt/homegrown-academy
+
+            # Write .env.production from GitHub Actions secrets — atomic replace on every deploy.
+            # printf keeps values with spaces or backslashes intact; chmod 600 restricts read access.
+            {
+              printf 'ENVIRONMENT=staging\n'
+              printf 'DATABASE_URL=%s\n'                     "${DATABASE_URL}"
+              printf 'REDIS_URL=%s\n'                        "${REDIS_URL}"
+              printf 'POSTGRES_USER=%s\n'                    "${POSTGRES_USER:-homegrown}"
+              printf 'POSTGRES_PASSWORD=%s\n'                "${POSTGRES_PASSWORD}"
+              printf 'POSTGRES_DB=%s\n'                      "${POSTGRES_DB:-homegrown}"
+              printf 'AUTH_ADMIN_URL=%s\n'                   "${AUTH_ADMIN_URL}"
+              printf 'AUTH_PUBLIC_URL=%s\n'                  "${AUTH_PUBLIC_URL}"
+              printf 'AUTH_WEBHOOK_SECRET=%s\n'              "${AUTH_WEBHOOK_SECRET}"
+              printf 'CORS_ALLOWED_ORIGINS=%s\n'             "${CORS_ALLOWED_ORIGINS}"
+              printf 'HYPERSWITCH_BASE_URL=%s\n'             "${HYPERSWITCH_BASE_URL}"
+              printf 'HYPERSWITCH_API_KEY=%s\n'              "${HYPERSWITCH_API_KEY}"
+              printf 'HYPERSWITCH_WEBHOOK_KEY=%s\n'          "${HYPERSWITCH_WEBHOOK_KEY}"
+              printf 'HYPERSWITCH_BILLING_PROFILE_ID=%s\n'   "${HYPERSWITCH_BILLING_PROFILE_ID}"
+              printf 'HYPERSWITCH_MONTHLY_PRICE_ID=%s\n'     "${HYPERSWITCH_MONTHLY_PRICE_ID}"
+              printf 'HYPERSWITCH_ANNUAL_PRICE_ID=%s\n'      "${HYPERSWITCH_ANNUAL_PRICE_ID}"
+              printf 'BILLING_WEBHOOK_SECRET=%s\n'           "${BILLING_WEBHOOK_SECRET}"
+              printf 'COPPA_CHARGE_CENTS=%s\n'               "${COPPA_CHARGE_CENTS:-50}"
+              printf 'POSTMARK_SERVER_TOKEN=%s\n'            "${POSTMARK_SERVER_TOKEN}"
+              printf 'UNSUBSCRIBE_SECRET=%s\n'               "${UNSUBSCRIBE_SECRET}"
+              printf 'OBJECT_STORAGE_ENDPOINT=%s\n'          "${OBJECT_STORAGE_ENDPOINT}"
+              printf 'OBJECT_STORAGE_REGION=%s\n'            "${OBJECT_STORAGE_REGION:-auto}"
+              printf 'OBJECT_STORAGE_BUCKET=%s\n'            "${OBJECT_STORAGE_BUCKET}"
+              printf 'OBJECT_STORAGE_ACCESS_KEY_ID=%s\n'     "${OBJECT_STORAGE_ACCESS_KEY_ID}"
+              printf 'OBJECT_STORAGE_SECRET_ACCESS_KEY=%s\n' "${OBJECT_STORAGE_SECRET_ACCESS_KEY}"
+              printf 'OBJECT_STORAGE_PUBLIC_URL=%s\n'        "${OBJECT_STORAGE_PUBLIC_URL}"
+              printf 'ERROR_REPORTING_DSN=%s\n'              "${ERROR_REPORTING_DSN}"
+            } > .env.production.tmp
+            chmod 600 .env.production.tmp
+            mv .env.production.tmp .env.production
+
+            # Log in to GHCR, pull new image, hot-swap app container only (--no-deps).
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull "${IMAGE}:${SHA_TAG}"
+            # Export .env.production vars so compose YAML interpolation works for postgres/redis services.
+            set -a && . .env.production && set +a
+            IMAGE="${IMAGE}" IMAGE_TAG="${SHA_TAG}" docker compose -f docker-compose.prod.yml up -d --no-deps --wait app
+            docker image prune -f --filter "until=24h"
+
+      - name: Smoke test — staging /health
+        run: |
+          set -e
+          for i in $(seq 1 18); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${{ secrets.STAGING_URL }}/health" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i/18: HTTP $STATUS — retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 3 minutes"
+          exit 1
+
+  # ── Deploy to production (manual gate) ─────────────────────────────────────
+  #
+  # Configure the "production" GitHub Environment with required reviewers at:
+  #   Settings → Environments → production → Deployment protection rules
+  #
+  deploy-production:
+    name: Deploy → Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')
+
+    env:
+      # ─── Infrastructure ────────────────────────────────────────────────────
+      DATABASE_URL:        ${{ secrets.PRODUCTION_DATABASE_URL }}
+      REDIS_URL:           ${{ secrets.PRODUCTION_REDIS_URL }}
+      POSTGRES_USER:       ${{ secrets.PRODUCTION_POSTGRES_USER }}
+      POSTGRES_PASSWORD:   ${{ secrets.PRODUCTION_POSTGRES_PASSWORD }}
+      POSTGRES_DB:         ${{ secrets.PRODUCTION_POSTGRES_DB }}
+      # ─── Auth (Kratos) ─────────────────────────────────────────────────────
+      AUTH_ADMIN_URL:        ${{ secrets.PRODUCTION_AUTH_ADMIN_URL }}
+      AUTH_PUBLIC_URL:       ${{ secrets.PRODUCTION_AUTH_PUBLIC_URL }}
+      AUTH_WEBHOOK_SECRET:   ${{ secrets.PRODUCTION_AUTH_WEBHOOK_SECRET }}
+      CORS_ALLOWED_ORIGINS:  ${{ secrets.PRODUCTION_CORS_ALLOWED_ORIGINS }}
+      # ─── Billing (Hyperswitch) ─────────────────────────────────────────────
+      HYPERSWITCH_BASE_URL:           ${{ secrets.PRODUCTION_HYPERSWITCH_BASE_URL }}
+      HYPERSWITCH_API_KEY:            ${{ secrets.PRODUCTION_HYPERSWITCH_API_KEY }}
+      HYPERSWITCH_WEBHOOK_KEY:        ${{ secrets.PRODUCTION_HYPERSWITCH_WEBHOOK_KEY }}
+      HYPERSWITCH_BILLING_PROFILE_ID: ${{ secrets.PRODUCTION_HYPERSWITCH_BILLING_PROFILE_ID }}
+      HYPERSWITCH_MONTHLY_PRICE_ID:   ${{ secrets.PRODUCTION_HYPERSWITCH_MONTHLY_PRICE_ID }}
+      HYPERSWITCH_ANNUAL_PRICE_ID:    ${{ secrets.PRODUCTION_HYPERSWITCH_ANNUAL_PRICE_ID }}
+      BILLING_WEBHOOK_SECRET:         ${{ secrets.PRODUCTION_BILLING_WEBHOOK_SECRET }}
+      COPPA_CHARGE_CENTS:             ${{ secrets.PRODUCTION_COPPA_CHARGE_CENTS }}
+      # ─── Notifications (Postmark) ──────────────────────────────────────────
+      POSTMARK_SERVER_TOKEN: ${{ secrets.PRODUCTION_POSTMARK_SERVER_TOKEN }}
+      UNSUBSCRIBE_SECRET:    ${{ secrets.PRODUCTION_UNSUBSCRIBE_SECRET }}
+      # ─── Object Storage ────────────────────────────────────────────────────
+      OBJECT_STORAGE_ENDPOINT:          ${{ secrets.PRODUCTION_OBJECT_STORAGE_ENDPOINT }}
+      OBJECT_STORAGE_REGION:            ${{ secrets.PRODUCTION_OBJECT_STORAGE_REGION }}
+      OBJECT_STORAGE_BUCKET:            ${{ secrets.PRODUCTION_OBJECT_STORAGE_BUCKET }}
+      OBJECT_STORAGE_ACCESS_KEY_ID:     ${{ secrets.PRODUCTION_OBJECT_STORAGE_ACCESS_KEY_ID }}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.PRODUCTION_OBJECT_STORAGE_SECRET_ACCESS_KEY }}
+      OBJECT_STORAGE_PUBLIC_URL:        ${{ secrets.PRODUCTION_OBJECT_STORAGE_PUBLIC_URL }}
+      # ─── Observability ─────────────────────────────────────────────────────
+      ERROR_REPORTING_DSN: ${{ secrets.PRODUCTION_ERROR_REPORTING_DSN }}
+
+    steps:
+      - name: Write .env.production and deploy to production
+        uses: appleboy/ssh-action@v1
+        env:
+          SHA_TAG: ${{ needs.build.outputs.sha-tag }}
+          IMAGE:   ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        with:
+          host:     ${{ secrets.PRODUCTION_SSH_HOST }}
+          username: ${{ secrets.PRODUCTION_SSH_USER }}
+          key:      ${{ secrets.PRODUCTION_SSH_KEY }}
+          envs: SHA_TAG,IMAGE,DATABASE_URL,REDIS_URL,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,AUTH_ADMIN_URL,AUTH_PUBLIC_URL,AUTH_WEBHOOK_SECRET,CORS_ALLOWED_ORIGINS,HYPERSWITCH_BASE_URL,HYPERSWITCH_API_KEY,HYPERSWITCH_WEBHOOK_KEY,HYPERSWITCH_BILLING_PROFILE_ID,HYPERSWITCH_MONTHLY_PRICE_ID,HYPERSWITCH_ANNUAL_PRICE_ID,BILLING_WEBHOOK_SECRET,COPPA_CHARGE_CENTS,POSTMARK_SERVER_TOKEN,UNSUBSCRIBE_SECRET,OBJECT_STORAGE_ENDPOINT,OBJECT_STORAGE_REGION,OBJECT_STORAGE_BUCKET,OBJECT_STORAGE_ACCESS_KEY_ID,OBJECT_STORAGE_SECRET_ACCESS_KEY,OBJECT_STORAGE_PUBLIC_URL,ERROR_REPORTING_DSN
+          script: |
+            set -e
+            cd /opt/homegrown-academy
+
+            # Write .env.production from GitHub Actions secrets — atomic replace on every deploy.
+            {
+              printf 'ENVIRONMENT=production\n'
+              printf 'DATABASE_URL=%s\n'                     "${DATABASE_URL}"
+              printf 'REDIS_URL=%s\n'                        "${REDIS_URL}"
+              printf 'POSTGRES_USER=%s\n'                    "${POSTGRES_USER:-homegrown}"
+              printf 'POSTGRES_PASSWORD=%s\n'                "${POSTGRES_PASSWORD}"
+              printf 'POSTGRES_DB=%s\n'                      "${POSTGRES_DB:-homegrown}"
+              printf 'AUTH_ADMIN_URL=%s\n'                   "${AUTH_ADMIN_URL}"
+              printf 'AUTH_PUBLIC_URL=%s\n'                  "${AUTH_PUBLIC_URL}"
+              printf 'AUTH_WEBHOOK_SECRET=%s\n'              "${AUTH_WEBHOOK_SECRET}"
+              printf 'CORS_ALLOWED_ORIGINS=%s\n'             "${CORS_ALLOWED_ORIGINS}"
+              printf 'HYPERSWITCH_BASE_URL=%s\n'             "${HYPERSWITCH_BASE_URL}"
+              printf 'HYPERSWITCH_API_KEY=%s\n'              "${HYPERSWITCH_API_KEY}"
+              printf 'HYPERSWITCH_WEBHOOK_KEY=%s\n'          "${HYPERSWITCH_WEBHOOK_KEY}"
+              printf 'HYPERSWITCH_BILLING_PROFILE_ID=%s\n'   "${HYPERSWITCH_BILLING_PROFILE_ID}"
+              printf 'HYPERSWITCH_MONTHLY_PRICE_ID=%s\n'     "${HYPERSWITCH_MONTHLY_PRICE_ID}"
+              printf 'HYPERSWITCH_ANNUAL_PRICE_ID=%s\n'      "${HYPERSWITCH_ANNUAL_PRICE_ID}"
+              printf 'BILLING_WEBHOOK_SECRET=%s\n'           "${BILLING_WEBHOOK_SECRET}"
+              printf 'COPPA_CHARGE_CENTS=%s\n'               "${COPPA_CHARGE_CENTS:-50}"
+              printf 'POSTMARK_SERVER_TOKEN=%s\n'            "${POSTMARK_SERVER_TOKEN}"
+              printf 'UNSUBSCRIBE_SECRET=%s\n'               "${UNSUBSCRIBE_SECRET}"
+              printf 'OBJECT_STORAGE_ENDPOINT=%s\n'          "${OBJECT_STORAGE_ENDPOINT}"
+              printf 'OBJECT_STORAGE_REGION=%s\n'            "${OBJECT_STORAGE_REGION:-auto}"
+              printf 'OBJECT_STORAGE_BUCKET=%s\n'            "${OBJECT_STORAGE_BUCKET}"
+              printf 'OBJECT_STORAGE_ACCESS_KEY_ID=%s\n'     "${OBJECT_STORAGE_ACCESS_KEY_ID}"
+              printf 'OBJECT_STORAGE_SECRET_ACCESS_KEY=%s\n' "${OBJECT_STORAGE_SECRET_ACCESS_KEY}"
+              printf 'OBJECT_STORAGE_PUBLIC_URL=%s\n'        "${OBJECT_STORAGE_PUBLIC_URL}"
+              printf 'ERROR_REPORTING_DSN=%s\n'              "${ERROR_REPORTING_DSN}"
+            } > .env.production.tmp
+            chmod 600 .env.production.tmp
+            mv .env.production.tmp .env.production
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull "${IMAGE}:${SHA_TAG}"
+            set -a && . .env.production && set +a
+            IMAGE="${IMAGE}" IMAGE_TAG="${SHA_TAG}" docker compose -f docker-compose.prod.yml up -d --no-deps --wait app
+            docker image prune -f --filter "until=24h"
+
+      - name: Smoke test — production /health
+        run: |
+          set -e
+          for i in $(seq 1 18); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${{ secrets.PRODUCTION_URL }}/health" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i/18: HTTP $STATUS — retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 3 minutes"
+          exit 1

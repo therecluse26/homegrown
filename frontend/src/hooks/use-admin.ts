@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
+import type { components } from "@/api/generated/schema";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+export type AdminPayoutReport = components["schemas"]["admin.AdminPayoutReport"];
+export type AdminPayoutReportItem = components["schemas"]["admin.AdminPayoutReportItem"];
 
 // User Management
 export interface AdminUserSummary {
@@ -658,5 +662,22 @@ export function useSubmitAppeal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["safety", "my-appeals"] });
     },
+  });
+}
+
+// ─── Admin: Creator Payout Report ────────────────────────────────────────────
+
+export function useAdminPayoutReport(params?: { status?: string; cursor?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.cursor) qs.set("cursor", params.cursor);
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ["admin", "billing", "payouts", params],
+    queryFn: () =>
+      apiClient<AdminPayoutReport>(
+        `/v1/admin/billing/payouts${query ? `?${query}` : ""}`,
+      ),
+    staleTime: 1000 * 30,
   });
 }

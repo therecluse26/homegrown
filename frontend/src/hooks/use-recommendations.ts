@@ -10,6 +10,8 @@ export type Recommendation =
   components["schemas"]["recs.RecommendationResponse"];
 export type RecommendationPreferences =
   components["schemas"]["recs.RecommendationPreferencesResponse"];
+export type UpdatePreferencesCommand =
+  components["schemas"]["recs.UpdatePreferencesCommand"];
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
@@ -19,7 +21,7 @@ export function useRecommendations() {
     queryFn: () =>
       apiClient<RecommendationListResponse>("/v1/recommendations"),
     select: (data) => data.recommendations ?? [],
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -31,35 +33,33 @@ export function useDismissRecommendation() {
         method: "POST",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["recommendations"] });
+      void qc.invalidateQueries({ queryKey: ["recommendations"] });
     },
   });
 }
 
-export function useUndoDismiss() {
+// Undo a dismiss or block action — DELETE /recommendations/:id/feedback [13-recs §13.2]
+export function useUndoFeedback() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiClient<void>(`/v1/recommendations/${id}/undo-dismiss`, {
-        method: "POST",
+      apiClient<void>(`/v1/recommendations/${id}/feedback`, {
+        method: "DELETE",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["recommendations"] });
+      void qc.invalidateQueries({ queryKey: ["recommendations"] });
     },
   });
 }
 
-export function useBlockCategory() {
+// Block a specific recommendation by ID — POST /recommendations/:id/block [13-recs §13.2]
+export function useBlockRecommendation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (category: string) =>
-      apiClient<void>(
-        `/v1/recommendations/categories/${encodeURIComponent(category)}/block`,
-        { method: "POST" },
-      ),
+    mutationFn: (id: string) =>
+      apiClient<void>(`/v1/recommendations/${id}/block`, { method: "POST" }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["recommendations"] });
-      qc.invalidateQueries({ queryKey: ["recommendations", "preferences"] });
+      void qc.invalidateQueries({ queryKey: ["recommendations"] });
     },
   });
 }
@@ -69,5 +69,21 @@ export function useRecommendationPreferences() {
     queryKey: ["recommendations", "preferences"],
     queryFn: () =>
       apiClient<RecommendationPreferences>("/v1/recommendations/preferences"),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useUpdatePreferences() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdatePreferencesCommand) =>
+      apiClient<RecommendationPreferences>("/v1/recommendations/preferences", {
+        method: "PATCH",
+        body,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["recommendations", "preferences"] });
+      void qc.invalidateQueries({ queryKey: ["recommendations"] });
+    },
   });
 }

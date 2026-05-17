@@ -64,6 +64,9 @@ func (h *Handler) Register(authGroup *echo.Group, adminGroup *echo.Group) {
 
 	// Audit Log
 	adminGroup.GET("/audit", h.searchAuditLog)
+
+	// Creator Payout Report
+	adminGroup.GET("/billing/payouts", h.listPayoutReport)
 }
 
 // ─── User Management ────────────────────────────────────────────────────────
@@ -824,6 +827,39 @@ func (h *Handler) searchAuditLog(c echo.Context) error {
 		return mapAdminError(err)
 	}
 	return c.JSON(http.StatusOK, result)
+}
+
+// ─── Creator Payout Report ───────────────────────────────────────────────────
+
+// listPayoutReport godoc
+//
+// @Summary     List creator payout report
+// @Tags        admin
+// @Produce     json
+// @Security    BearerAuth
+// @Param       status query string false "Filter by status" Enums(pending,processing,completed,failed)
+// @Param       cursor query string false "Pagination cursor"
+// @Param       limit  query int    false "Results per page"
+// @Success     200 {object} AdminPayoutReport
+// @Failure     401 {object} shared.AppError
+// @Failure     403 {object} shared.AppError
+// @Router      /admin/billing/payouts [get]
+func (h *Handler) listPayoutReport(c echo.Context) error {
+	auth, err := middleware.RequireAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	var params AdminPayoutReportParams
+	if err := c.Bind(&params); err != nil {
+		return shared.ErrBadRequest("invalid query parameters")
+	}
+
+	report, err := h.svc.GetPayoutReport(c.Request().Context(), auth, &params)
+	if err != nil {
+		return mapAdminError(err)
+	}
+	return c.JSON(http.StatusOK, report)
 }
 
 // ─── Feature Flag Evaluation (Public API) ────────────────────────────────────

@@ -67,6 +67,14 @@ type AppConfig struct {
 	// Error reporting DSN. Optional — omit to disable error reporting (e.g. Sentry). [ARCH §2.14]
 	ErrorReportingDSN *string
 
+	// OTLP exporter endpoint (gRPC). Optional — omit to disable OTLP export.
+	// In development, traces are emitted to stdout when this is unset.
+	// Example: "grpc://localhost:4317" or "https://api.honeycomb.io"
+	OTELEndpoint *string
+
+	// Fraction of requests to sample for tracing. Default: 1.0 (dev), 0.1 (prod/staging).
+	OTELSampleRate float64
+
 	// ─── Payments (Hyperswitch) ─────────────────────────────────────
 	// Hyperswitch base URL. Optional — omit to disable payment processing.
 	// Example: "http://hyperswitch:8080"
@@ -203,6 +211,11 @@ func LoadConfig() (*AppConfig, error) {
 		errorReportingDSN = &v
 	}
 
+	var otelEndpoint *string
+	if v, ok := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT"); ok {
+		otelEndpoint = &v
+	}
+
 	envStr := envOrDefault("ENVIRONMENT", "development")
 	var env Environment
 	switch envStr {
@@ -212,6 +225,19 @@ func LoadConfig() (*AppConfig, error) {
 		env = EnvironmentStaging
 	default:
 		env = EnvironmentDevelopment
+	}
+
+	// OTEL sample rate: default 1.0 in dev, 0.1 in prod/staging. Override with OTEL_SAMPLE_RATE.
+	otelSampleRate := 1.0
+	if env == EnvironmentProduction || env == EnvironmentStaging {
+		otelSampleRate = 0.1
+	}
+	if v, ok := os.LookupEnv("OTEL_SAMPLE_RATE"); ok {
+		parsed, parseErr := strconv.ParseFloat(v, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid OTEL_SAMPLE_RATE: %w", parseErr)
+		}
+		otelSampleRate = parsed
 	}
 
 	// Optional Hyperswitch config (omit to disable payments)
@@ -237,6 +263,18 @@ func LoadConfig() (*AppConfig, error) {
 	if env != EnvironmentDevelopment {
 		if billingWebhookSecret == "" {
 			slog.Warn("BILLING_WEBHOOK_SECRET not set — billing webhooks will fail signature verification")
+		}
+		// Reject known dev-default placeholder values — they appear in .env.example and must
+		// never reach a deployed environment. If AUTH_WEBHOOK_SECRET or UNSUBSCRIBE_SECRET are
+		// still set to these strings it means the operator copied .env.example without changing them.
+		knownDevDefaults := map[string]string{
+			"AUTH_WEBHOOK_SECRET": "dev-webhook-secret-change-in-production",
+			"UNSUBSCRIBE_SECRET":  "dev-unsubscribe-secret-change-in-production",
+		}
+		for name, badVal := range knownDevDefaults {
+			if os.Getenv(name) == badVal {
+				return nil, fmt.Errorf("environment variable %s is set to a known dev-default placeholder; replace it with a real secret before deploying", name) //nolint:goerr113
+			}
 		}
 	}
 
@@ -289,6 +327,8 @@ func LoadConfig() (*AppConfig, error) {
 		ServerPort:             serverPort,
 		LogLevel:               logLevel,
 		ErrorReportingDSN:      errorReportingDSN,
+		OTELEndpoint:           otelEndpoint,
+		OTELSampleRate:         otelSampleRate,
 		HyperswitchBaseURL:          hyperswitchBaseURL,
 		HyperswitchAPIKey:           hyperswitchAPIKey,
 		HyperswitchWebhookKey:       hyperswitchWebhookKey,

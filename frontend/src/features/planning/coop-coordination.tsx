@@ -17,8 +17,8 @@ import {
   EmptyState,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
-import { useMyGroups, useGroupMembers } from "@/hooks/use-social";
-import { useCalendar } from "@/hooks/use-planning";
+import { useMyGroups } from "@/hooks/use-social";
+import { useCoopGroupSchedules } from "@/hooks/use-planning";
 import type { CalendarItem, CalendarSource } from "@/hooks/use-planning";
 
 // ─── Date helpers ───────────────────────────────────────────────────────────
@@ -228,9 +228,6 @@ export function CoopCoordination() {
   const [selectedGroupId, setSelectedGroupId] = useState<string | undefined>();
 
   const { data: myGroups, isPending: groupsPending } = useMyGroups();
-  const { data: members, isPending: membersPending } = useGroupMembers(
-    selectedGroupId,
-  );
 
   // Select first group by default
   const activeGroupId = selectedGroupId ?? myGroups?.[0]?.summary.id;
@@ -252,46 +249,29 @@ export function CoopCoordination() {
     [weekStart],
   );
 
-  // Fetch calendar for the current family (own schedule)
-  const { data: ownCalendar, isPending: calendarPending } = useCalendar({
+  // Fetch co-op group member schedules from real API [17-planning §12]
+  const { data: coopData, isPending: coopPending } = useCoopGroupSchedules({
+    groupId: activeGroupId,
     start: formatDate(weekStart),
-    end: formatDate(weekEnd),
+    end: formatDate(addDays(weekEnd, 1)), // end is exclusive
   });
 
-  // Flatten own calendar items
-  const ownItems = useMemo(() => {
-    if (!ownCalendar?.days) return [];
-    return ownCalendar.days.flatMap((d) =>
-      d.items.filter((item) => item.source === "schedule"),
-    );
-  }, [ownCalendar]);
-
-  // Build family schedule data — in production this would come from a
-  // backend endpoint that returns co-op member schedules. For now we
-  // show our own schedule and placeholder entries for other members.
+  // Map API response to CalendarItem shape for reuse with existing rendering logic
   const familySchedules = useMemo(() => {
-    const schedules: { familyName: string; items: CalendarItem[] }[] = [];
-
-    // Own family schedule
-    schedules.push({
-      familyName: intl.formatMessage({ id: "planning.coop.myFamily" }),
-      items: ownItems,
-    });
-
-    // Other member families — show as empty until backend co-op endpoint exists
-    if (members) {
-      for (const member of members) {
-        if (member.status !== "active") continue;
-        // Skip own family (already added above)
-        schedules.push({
-          familyName: member.display_name,
-          items: [], // Populated by backend co-op API when available
-        });
-      }
-    }
-
-    return schedules;
-  }, [ownItems, members, intl]);
+    if (!coopData?.members) return [];
+    return coopData.members.map((member) => ({
+      familyName: member.display_name,
+      items: member.items.map((item): CalendarItem => ({
+        id: item.id,
+        title: item.title,
+        date: item.date,
+        start_time: item.start_time ?? undefined,
+        end_time: item.end_time ?? undefined,
+        source: "schedule" as CalendarSource,
+        details: { type: item.category },
+      })),
+    }));
+  }, [coopData]);
 
   // Detect time overlaps
   const overlaps = useMemo(
@@ -317,7 +297,7 @@ export function CoopCoordination() {
     return `${weekStart.toLocaleDateString(intl.locale, { month: "short", day: "numeric" })} – ${weekEnd.toLocaleDateString(intl.locale, { month: "short", day: "numeric", year: "numeric" })}`;
   }, [weekStart, weekEnd, intl.locale]);
 
-  const isPending = groupsPending || membersPending || calendarPending;
+  const isPending = groupsPending || coopPending;
 
   // No groups state
   if (!groupsPending && (!myGroups || myGroups.length === 0)) {

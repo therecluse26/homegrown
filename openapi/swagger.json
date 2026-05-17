@@ -515,6 +515,68 @@
                 }
             }
         },
+        "/admin/billing/payouts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List creator payout report",
+                "parameters": [
+                    {
+                        "enum": [
+                            "pending",
+                            "processing",
+                            "completed",
+                            "failed"
+                        ],
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Results per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminPayoutReport"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/flags": {
             "get": {
                 "security": [
@@ -16148,6 +16210,69 @@
                 }
             }
         },
+        "/planning/co-op/groups/{groupId}/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planning"
+                ],
+                "summary": "Get co-op group member schedules for a date range",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/plan.CoopGroupSchedulesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/planning/schedule-items": {
             "get": {
                 "security": [
@@ -17879,6 +18004,70 @@
                 },
                 "is_primary": {
                     "type": "boolean"
+                }
+            }
+        },
+        "admin.AdminPayoutReport": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/admin.AdminPayoutReportItem"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                },
+                "total_amount_cents": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "admin.AdminPayoutReportItem": {
+            "type": "object",
+            "properties": {
+                "amount_cents": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "creator_id": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "hyperswitch_payout_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "period_end": {
+                    "type": "string"
+                },
+                "period_start": {
+                    "type": "string"
+                },
+                "processed_at": {
+                    "type": "string"
+                },
+                "purchase_count": {
+                    "type": "integer"
+                },
+                "refund_deduction_cents": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "store_name": {
+                    "type": "string"
                 }
             }
         },
@@ -24869,6 +25058,66 @@
                 "CalendarSourceAttendance",
                 "CalendarSourceEvents"
             ]
+        },
+        "plan.CoopGroupSchedulesResponse": {
+            "type": "object",
+            "properties": {
+                "end": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plan.CoopMemberSchedule"
+                    }
+                },
+                "start": {
+                    "type": "string"
+                }
+            }
+        },
+        "plan.CoopMemberSchedule": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "family_id": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plan.CoopScheduleItem"
+                    }
+                }
+            }
+        },
+        "plan.CoopScheduleItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/plan.ScheduleCategory"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
         },
         "plan.CreateScheduleItemInput": {
             "type": "object",

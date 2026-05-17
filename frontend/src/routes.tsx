@@ -151,6 +151,7 @@ const TransactionHistory = lazy(() => import("@/features/billing/transaction-his
 const SubscriptionManagement = lazy(() => import("@/features/billing/subscription-management").then(m => ({ default: m.SubscriptionManagement })));
 const InvoiceHistory = lazy(() => import("@/features/billing/invoice-history").then(m => ({ default: m.InvoiceHistory })));
 const MicroChargeHistory = lazy(() => import("@/features/billing/micro-charge-history").then(m => ({ default: m.MicroChargeHistory })));
+const PayoutHistory = lazy(() => import("@/features/billing/payout-history").then(m => ({ default: m.PayoutHistory })));
 
 // Recommendations
 const RecommendationsPage = lazy(() => import("@/features/recommendations/recommendations-page").then(m => ({ default: m.RecommendationsPage })));
@@ -168,6 +169,7 @@ const FeatureFlags = lazy(() => import("@/features/admin/feature-flags").then(m 
 const MethodologyConfigPage = lazy(() => import("@/features/admin/methodology-config").then(m => ({ default: m.MethodologyConfig })));
 const AdminSafetyReports = lazy(() => import("@/features/admin/safety-reports").then(m => ({ default: m.SafetyReports })));
 const AdminSystemDashboard = lazy(() => import("@/features/admin/system-dashboard").then(m => ({ default: m.SystemDashboard })));
+const PayoutReport = lazy(() => import("@/features/admin/payout-report").then(m => ({ default: m.PayoutReport })));
 
 // Planning
 const CalendarView = lazy(() => import("@/features/planning/calendar-view").then(m => ({ default: m.CalendarView })));
@@ -344,6 +346,7 @@ const routes: RouteObject[] = [
               { path: "creator/analytics", element: <CreatorAnalytics /> },
               // Billing pages
               { path: "billing/micro-charges", element: <MicroChargeHistory /> },
+              { path: "billing/payouts", element: <PayoutHistory /> },
 
               // ─── Redirects ──────────────────────────────────────────────────
               { path: "settings/billing", element: <Navigate to="/billing" replace /> },
@@ -481,6 +484,7 @@ const routes: RouteObject[] = [
               // Admin pages
               { path: "reports", element: <AdminSafetyReports /> },
               { path: "system", element: <AdminSystemDashboard /> },
+              { path: "payouts", element: <PayoutReport /> },
               // Admin redirects — collapse duplicates onto canonical routes.
               // /admin/content-flags overlapped /admin/reports (same useAdminReports hook).
               // /admin/appeals overlapped the Appeals tab on /admin/moderation.

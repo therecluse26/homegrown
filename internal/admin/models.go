@@ -326,3 +326,39 @@ type RecoverySummary struct {
 type ResolveRecoveryInput struct {
 	Approved bool `json:"approved"`
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Creator Payout Report Types [10-billing §12, 16-admin §4]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// AdminPayoutReportParams holds query parameters for GET /admin/billing/payouts.
+type AdminPayoutReportParams struct {
+	Status *string `query:"status"`
+	Cursor *string `query:"cursor"`
+	Limit  *int    `query:"limit"`
+}
+
+// AdminPayoutReportItem is a single payout entry in the admin payout report.
+type AdminPayoutReportItem struct {
+	ID                   uuid.UUID  `json:"id"`
+	CreatorID            uuid.UUID  `json:"creator_id"`
+	StoreName            string     `json:"store_name"`
+	Status               string     `json:"status"`
+	AmountCents          int64      `json:"amount_cents"`
+	Currency             string     `json:"currency"`
+	PeriodStart          time.Time  `json:"period_start"`
+	PeriodEnd            time.Time  `json:"period_end"`
+	PurchaseCount        int32      `json:"purchase_count"`
+	RefundDeductionCents int64      `json:"refund_deduction_cents"`
+	HyperswitchPayoutID  *string    `json:"hyperswitch_payout_id,omitempty"`
+	ProcessedAt          *time.Time `json:"processed_at,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+}
+
+// AdminPayoutReport is the admin-level aggregated payout report.
+type AdminPayoutReport struct {
+	Items            []AdminPayoutReportItem `json:"items"`
+	TotalCount       int64                   `json:"total_count"`
+	TotalAmountCents int64                   `json:"total_amount_cents"`
+	NextCursor       *string                 `json:"next_cursor,omitempty"`
+}

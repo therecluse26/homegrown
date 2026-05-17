@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,7 +49,12 @@ func (a *KratosAdapterImpl) ValidateSession(ctx context.Context, sessionCookie s
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", iam.ErrKratosError, err)
 	}
-	req.Header.Set("Cookie", sessionCookie)
+	// Detect native API session token (prefixed by auth middleware) vs browser cookie.
+	if token, ok := strings.CutPrefix(sessionCookie, "X-Session-Token:"); ok {
+		req.Header.Set("X-Session-Token", token)
+	} else {
+		req.Header.Set("Cookie", sessionCookie)
+	}
 
 	resp, err := shared.RetryableHTTPDo(ctx, a.httpClient, req, nil)
 	if err != nil {

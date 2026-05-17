@@ -131,3 +131,51 @@ func TestCalculateGPA_MixedLevels(t *testing.T) {
 		t.Fatalf("TotalCredits: got %f, want %f", result.TotalCredits, totalCredits)
 	}
 }
+
+// A35: All courses have nil GradePoints → {0.0, 0.0, 0.0} (no gradeable work yet).
+func TestCalculateGPA_AllNilGradePoints(t *testing.T) {
+	courses := []CourseForGpa{
+		{GradePoints: nil, Credits: 1.0, Level: "regular"},
+		{GradePoints: nil, Credits: 2.0, Level: "honors"},
+	}
+	result := CalculateGPA(courses, GpaScaleStandard4, nil)
+	if result.Unweighted != 0.0 {
+		t.Fatalf("Unweighted: got %f, want 0.0", result.Unweighted)
+	}
+	if result.TotalCredits != 0.0 {
+		t.Fatalf("TotalCredits: got %f, want 0.0", result.TotalCredits)
+	}
+}
+
+// A36: Course with 0 credits but valid grade points → does not pollute total credits.
+func TestCalculateGPA_ZeroCreditsCourseIgnored(t *testing.T) {
+	courses := []CourseForGpa{
+		{GradePoints: floatPtr(4.0), Credits: 1.0, Level: "regular"},
+		{GradePoints: floatPtr(2.0), Credits: 0.0, Level: "regular"}, // 0 credits — contributes 0 points
+	}
+	// Only the 1-credit course contributes to the average: 4.0 / 1.0 = 4.0
+	result := CalculateGPA(courses, GpaScaleStandard4, nil)
+	if !approxEqual(result.Unweighted, 4.0) {
+		t.Fatalf("Unweighted: got %f, want 4.0", result.Unweighted)
+	}
+	if !approxEqual(result.TotalCredits, 1.0) {
+		t.Fatalf("TotalCredits: got %f, want 1.0", result.TotalCredits)
+	}
+}
+
+// A37: GpaScaleWeighted passed as scale parameter — output identical since scale is not
+// used to gate unweighted vs weighted (both are always computed). Ensures the function
+// handles any scale value without panicking.
+func TestCalculateGPA_WeightedScaleParamDoesNotPanic(t *testing.T) {
+	courses := []CourseForGpa{
+		{GradePoints: floatPtr(3.3), Credits: 1.0, Level: "ap"},
+	}
+	result := CalculateGPA(courses, GpaScaleWeighted, nil)
+	if !approxEqual(result.Unweighted, 3.3) {
+		t.Fatalf("Unweighted: got %f, want 3.3", result.Unweighted)
+	}
+	// weighted = 3.3 + 1.0 (AP boost) = 4.3
+	if !approxEqual(result.Weighted, 4.3) {
+		t.Fatalf("Weighted: got %f, want 4.3", result.Weighted)
+	}
+}

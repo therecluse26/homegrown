@@ -14,6 +14,10 @@ export type PaymentMethod =
   components["schemas"]["billing.PaymentMethodResponse"];
 export type ChangePlanRequest =
   components["schemas"]["billing.UpdateSubscriptionCommand"];
+export type Payout =
+  components["schemas"]["billing.PayoutResponse"];
+export type PayoutListResponse =
+  components["schemas"]["billing.PayoutListResponse"];
 
 // ─── Local filter type (not returned by API) ────────────────────────────────
 
@@ -148,5 +152,16 @@ export function useTransactions(filters?: TransactionFilters) {
       );
     },
     staleTime: 1000 * 30, // 30s
+  });
+}
+
+export function usePayouts(cursor?: string) {
+  return useQuery({
+    queryKey: ["billing", "payouts", cursor],
+    queryFn: () => {
+      const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+      return apiClient<PayoutListResponse>(`/v1/billing/payouts${qs}`);
+    },
+    staleTime: 1000 * 60, // 1 min
   });
 }

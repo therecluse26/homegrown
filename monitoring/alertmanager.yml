@@ -1,0 +1,64 @@
+global:
+  # Time to wait before resending an alert that has not been resolved.
+  resolve_timeout: 5m
+
+  # PagerDuty integration key (Events API v2). Set PAGERDUTY_INTEGRATION_KEY in your
+  # deployment environment; leave blank here to avoid committing secrets.
+  # Alternatively, configure OpsGenie or a webhook receiver below.
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'severity']
+  group_wait: 30s       # Wait before sending first notification (collects related alerts)
+  group_interval: 5m    # Minimum time between notifications for the same group
+  repeat_interval: 4h   # Re-notify if alert is still firing after this interval
+
+  routes:
+    # Critical alerts page immediately with no grouping delay
+    - matchers:
+        - severity = "critical"
+      receiver: 'pagerduty-critical'
+      group_wait: 0s
+      repeat_interval: 1h
+
+    # Warning alerts go to a lower-urgency channel
+    - matchers:
+        - severity = "warning"
+      receiver: 'default'
+      repeat_interval: 6h
+
+receivers:
+  # Default: webhook to a Slack-compatible endpoint or similar.
+  # Set ALERTMANAGER_WEBHOOK_URL in your environment and substitute here.
+  - name: 'default'
+    webhook_configs:
+      - url: '${ALERTMANAGER_WEBHOOK_URL}'
+        send_resolved: true
+
+  # PagerDuty receiver for critical alerts.
+  # Set PAGERDUTY_INTEGRATION_KEY in your deployment environment.
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_INTEGRATION_KEY}'
+        severity: 'critical'
+        description: '{{ template "pagerduty.default.description" . }}'
+        details:
+          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+          resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+        links:
+          - href: '{{ (index .Alerts 0).Annotations.runbook_url }}'
+            text: 'Runbook'
+    # Fallback: also send to webhook if PagerDuty key is not configured
+    webhook_configs:
+      - url: '${ALERTMANAGER_WEBHOOK_URL}'
+        send_resolved: true
+
+inhibit_rules:
+  # Suppress HighErrorRate and HighP95Latency when the API is completely down —
+  # those are symptoms, not separate root causes.
+  - source_matchers:
+      - alertname = "APIDown"
+    target_matchers:
+      - alertname =~ "HighErrorRate|HighP95Latency"
+    equal: ['env', 'app']

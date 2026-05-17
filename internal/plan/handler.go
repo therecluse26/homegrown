@@ -48,6 +48,9 @@ func (h *Handler) Register(auth *echo.Group) {
 	g.PATCH("/templates/:id", h.updateTemplate)
 	g.DELETE("/templates/:id", h.deleteTemplate)
 	g.POST("/templates/:id/apply", h.applyTemplate)
+
+	// Co-op coordination (Phase 2)
+	g.GET("/co-op/groups/:groupId/schedules", h.getCoopGroupSchedules)
 }
 
 // ─── Calendar Views ──────────────────────────────────────────────────────────
@@ -712,6 +715,49 @@ func (h *Handler) applyTemplate(c echo.Context) error {
 		return mapPlanError(err)
 	}
 	return c.JSON(http.StatusCreated, map[string][]uuid.UUID{"created_ids": ids})
+}
+
+// ─── Co-op Coordination [17-planning §12] ────────────────────────────────────
+
+// getCoopGroupSchedules godoc
+//
+//	@Summary     Get co-op group member schedules for a date range
+//	@Tags        planning
+//	@Produce     json
+//	@Security    BearerAuth
+//	@Param       groupId path  string true  "Group ID"
+//	@Param       start   query string false "Start date (YYYY-MM-DD)"
+//	@Param       end     query string false "End date (YYYY-MM-DD)"
+//	@Success     200 {object} CoopGroupSchedulesResponse
+//	@Failure     400 {object} shared.AppError
+//	@Failure     401 {object} shared.AppError
+//	@Failure     403 {object} shared.AppError
+//	@Router      /planning/co-op/groups/{groupId}/schedules [get]
+func (h *Handler) getCoopGroupSchedules(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+
+	groupID, err := uuid.Parse(c.Param("groupId"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid group ID")
+	}
+
+	params, err := parseCalendarQuery(c)
+	if err != nil {
+		return err
+	}
+
+	resp, err := h.svc.GetCoopGroupSchedules(c.Request().Context(), auth, &scope, groupID, params.Start, params.End)
+	if err != nil {
+		return mapPlanError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // ─── Error Mapping [17-planning §17] ─────────────────────────────────────────

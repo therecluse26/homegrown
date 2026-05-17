@@ -1,0 +1,23 @@
+[Unit]
+Description=Homegrown Academy — daily PostgreSQL backup
+After=network.target
+Wants=homegrown-backup.timer
+
+[Service]
+Type=oneshot
+User=homegrown-backup
+EnvironmentFile=/etc/homegrown/backup.env
+ExecStart=/opt/homegrown/scripts/backup/backup.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=homegrown-backup
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

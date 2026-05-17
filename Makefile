@@ -14,7 +14,8 @@ DATABASE_URL ?= postgres://homegrown:homegrown@localhost:5932/homegrown
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check check-full lint test type-check a11y \
         migrate db-reset seed seed-full agent-db-reset agent-kratos-reset agent-server \
-        openapi generate-types full-generate audit install-tools install-hooks
+        openapi generate-types full-generate audit install-tools install-hooks \
+        backup restore-drill
 
 # Default: run all quality gates
 default: check
@@ -151,6 +152,24 @@ agent-server:
 	DATABASE_URL=postgres://homegrown:homegrown@localhost:5932/homegrown_agent \
 	SERVER_PORT=15180 \
 	$(GO) run ./cmd/server/
+
+# ─── Backup & Restore ────────────────────────────────────────────────────────
+
+# Run a database backup now (requires .env.backup or env vars to be set).
+# Usage: make backup  (sources scripts/backup/.env.backup if present)
+backup:
+	@if [ -f scripts/backup/.env.backup ]; then \
+	  set -a && . scripts/backup/.env.backup && set +a; \
+	fi; \
+	bash scripts/backup/backup.sh
+
+# Run a restore drill: restores latest backup into a temp DB and integrity-checks it.
+# Usage: make restore-drill
+restore-drill:
+	@if [ -f scripts/backup/.env.backup ]; then \
+	  set -a && . scripts/backup/.env.backup && set +a; \
+	fi; \
+	bash scripts/backup/restore-drill.sh
 
 # ─── Security ─────────────────────────────────────────────────────────
 

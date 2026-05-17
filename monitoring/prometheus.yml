@@ -1,0 +1,42 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    env: local
+    app: homegrown-academy
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # Scrape the Go API's /metrics endpoint (Prometheus client_golang)
+  - job_name: 'homegrown-api'
+    static_configs:
+      - targets: ['host.docker.internal:3500']
+    metrics_path: /metrics
+
+  # Blackbox probe: GET /health → must return HTTP 200
+  - job_name: 'homegrown-health'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - 'http://host.docker.internal:3500/health'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # Self-monitor Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
