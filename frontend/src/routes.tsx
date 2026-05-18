@@ -225,6 +225,7 @@ const routes: RouteObject[] = [
               { path: "messages/:conversationId", element: <ConversationPage /> },
               { path: "groups", element: <GroupsList />, errorElement: <RouteErrorBoundary /> },
               { path: "groups/new", element: <GroupCreation /> },
+              { path: "groups/create", element: <Navigate to="/groups/new" replace /> },
               { path: "groups/:groupId", element: <GroupDetail /> },
               { path: "groups/:groupId/manage", element: <GroupManagement /> },
               { path: "events", element: <EventsList />, errorElement: <RouteErrorBoundary /> },
