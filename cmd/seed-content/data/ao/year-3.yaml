@@ -1,0 +1,148 @@
+# Ambleside Online Year 3 — Charlotte Mason curriculum
+# https://www.amblesideonline.org/SchYr3.shtml
+# Content Type: book_list (17 titles) + lesson_plan (3 terms) = 20 entries
+
+year: 3
+grade_min: 3
+grade_max: 4
+
+entries:
+  - title: "Robinson Crusoe"
+    description: "Daniel Defoe's classic survival story of a castaway on a tropical island — resourcefulness, faith, and self-reliance told with vivid immediacy. A Year 3 AO staple and narration treasure."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/521"
+    worldview_tags: [christian]
+
+  - title: "The Story of the Middle Ages"
+    description: "H.A. Guerber's narrative history of the medieval period — feudalism, chivalry, the Crusades, and the rise of nations — continuing the classical history spine into the medieval era."
+    content_type: book_list
+    subject_tags: [history, history.medieval, history.world]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr3-story-middle-ages"
+    worldview_tags: [secular]
+
+  - title: "A Connecticut Yankee in King Arthur's Court"
+    description: "Mark Twain's comic masterpiece — a 19th-century engineer transported to medieval Camelot — combining satire, adventure, and a fresh look at the Middle Ages through Twain's ironic lens."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.medieval]
+    preview_url: "https://www.gutenberg.org/ebooks/86"
+    worldview_tags: [secular]
+
+  - title: "Otto of the Silver Hand"
+    description: "Howard Pyle's vivid medieval tale of a gentle monk's son caught in the brutal world of warring German barons — a moving story of innocence, honor, and the cost of violence."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.medieval]
+    preview_url: "https://www.gutenberg.org/ebooks/9216"
+    worldview_tags: [christian]
+
+  - title: "Kim"
+    description: "Rudyard Kipling's rich adventure of a street boy in colonial India drawn into the Great Game of espionage — a vivid portrait of Indian society, landscape, and the search for identity."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, social-studies, social-studies.geography]
+    preview_url: "https://www.gutenberg.org/ebooks/2226"
+    worldview_tags: [secular]
+
+  - title: "The Princess and the Goblin"
+    description: "George MacDonald's magical fairy tale of Princess Irene and the boy Curdie facing the goblins beneath the mountain — a beloved Charlotte Mason fantasy rich with spiritual allegory."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/325"
+    worldview_tags: [christian]
+
+  - title: "Twenty Thousand Leagues Under the Sea"
+    description: "Jules Verne's visionary science-fiction adventure aboard the submarine Nautilus under the command of the mysterious Captain Nemo — introducing ocean science and the power of imagination."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, science, science.biology]
+    preview_url: "https://www.gutenberg.org/ebooks/164"
+    worldview_tags: [secular]
+
+  - title: "The Secret Garden"
+    description: "Frances Hodgson Burnett's luminous story of Mary Lennox and the healing power of a hidden garden — a Charlotte Mason favorite exploring nature, friendship, and the renewal of the spirit."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, science, science.biology]
+    preview_url: "https://www.gutenberg.org/ebooks/113"
+    worldview_tags: [secular]
+
+  - title: "Stories of the Nations — The Story of England"
+    description: "A narrative history of England from the Norman Conquest through the Tudor period, continuing the AO history spine with the stories, monarchs, and events that shaped the English-speaking world."
+    content_type: book_list
+    subject_tags: [history, history.world, history.medieval]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr3-story-of-england"
+    worldview_tags: [secular]
+
+  - title: "Carry On, Mr. Bowditch"
+    description: "Jean Lee Latham's inspiring story of Nathaniel Bowditch, self-taught mathematician and navigator — a living biography that exemplifies Charlotte Mason's love of heroic lives."
+    content_type: book_list
+    subject_tags: [history, history.american, math, science]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr3-carry-on-bowditch"
+    worldview_tags: [christian]
+
+  - title: "The Burgess Seashore Book for Children"
+    description: "Thornton Burgess's nature study companion exploring the creatures of the seashore — tidal pools, crabs, shells, and shore birds — through the familiar narrative format of the Burgess series."
+    content_type: book_list
+    subject_tags: [science, science.biology, social-studies, social-studies.geography]
+    preview_url: "https://www.gutenberg.org/ebooks/3145"
+    worldview_tags: [secular]
+
+  - title: "A Midsummer Night's Dream"
+    description: "Shakespeare's most beloved comedy — fairies, lovers, and mechanicals tangled in a magical midsummer forest — read in the Lamb 'Tales from Shakespeare' version or the original."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/1514"
+    worldview_tags: [secular]
+
+  - title: "A Beekeeper's Year"
+    description: "A living-books introduction to the science and wonder of beekeeping — following the seasonal life of a hive through observation and narration, ideal for nature journal integration."
+    content_type: book_list
+    subject_tags: [science, science.biology]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr3-beekeeper"
+    worldview_tags: [secular]
+
+  - title: "The Door in the Wall"
+    description: "Marguerite de Angeli's Newbery Medal story of Robin, a crippled boy in medieval England who learns courage and finds his purpose. Rich in medieval setting and Christian virtue."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.medieval]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr3-door-in-wall"
+    worldview_tags: [christian]
+
+  - title: "Farmer Boy"
+    description: "Laura Ingalls Wilder's companion to the Little House series — the boyhood of Almanzo Wilder on a prosperous New York farm in the 1860s. Rich in American history, farm life, and self-reliance."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.american]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr3-farmer-boy"
+    worldview_tags: [secular]
+
+  - title: "Ourselves (Continued)"
+    description: "Continued study of Charlotte Mason's character-formation guide, focusing on the habits of mind, will, and imagination as children move into the upper elementary years."
+    content_type: book_list
+    subject_tags: [life-skills, religion, religion.character]
+    preview_url: "https://www.amblesideonline.org/CM/vol4complete.pdf#yr3"
+    worldview_tags: [christian]
+
+  - title: "Poetry for Year 3 — Robert Frost and Emily Dickinson"
+    description: "A curated selection of poems by Robert Frost and Emily Dickinson for Year 3 memorization and recitation — exploring nature, seasons, and the inner life through two distinctly American voices."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, language-arts.writing]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr3-poetry-frost-dickinson"
+    worldview_tags: [secular]
+
+  - title: "AO Year 3 Term 1 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 3, Term 1. Includes book rotation, narration prompts, copywork passages, nature study, and picture/composer study for 12 weeks."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr3.shtml#term1"
+    worldview_tags: [christian]
+
+  - title: "AO Year 3 Term 2 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 3, Term 2. Continues Year 3 readings with narration, nature journaling, handicraft, and the medieval history spine."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr3.shtml#term2"
+    worldview_tags: [christian]
+
+  - title: "AO Year 3 Term 3 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 3, Term 3. Concludes Year 3 with poetry recitation, nature journal review, artist and composer study completion."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr3.shtml#term3"
+    worldview_tags: [christian]

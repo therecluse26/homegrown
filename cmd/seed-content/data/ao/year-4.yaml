@@ -1,0 +1,148 @@
+# Ambleside Online Year 4 — Charlotte Mason curriculum
+# https://www.amblesideonline.org/SchYr4.shtml
+# Content Type: book_list (17 titles) + lesson_plan (3 terms) = 20 entries
+
+year: 4
+grade_min: 4
+grade_max: 5
+
+entries:
+  - title: "Gulliver's Travels"
+    description: "Jonathan Swift's satirical masterpiece of Lemuel Gulliver's voyages to fantastic lands — a brilliant social satire that works on two levels: as adventure for children and as critique for adults."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, social-studies]
+    preview_url: "https://www.gutenberg.org/ebooks/829"
+    worldview_tags: [secular]
+
+  - title: "The Story of the Renaissance"
+    description: "A narrative history of the Renaissance and Reformation — Leonardo, Michelangelo, Luther, Calvin, and the sweeping transformation of European thought, art, and religion."
+    content_type: book_list
+    subject_tags: [history, history.modern, history.world, arts]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-story-renaissance"
+    worldview_tags: [secular]
+
+  - title: "Julius Caesar"
+    description: "Shakespeare's political tragedy of ambition, loyalty, and the perils of power — Caesar, Brutus, Cassius, and Antony in the last days of the Roman Republic. Read in full or in the Lamb retelling."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.ancient]
+    preview_url: "https://www.gutenberg.org/ebooks/1785"
+    worldview_tags: [secular]
+
+  - title: "Ivanhoe"
+    description: "Sir Walter Scott's sweeping medieval romance — Saxon and Norman, knight and outlaw, Rebecca and Rowena in the England of Richard the Lionheart. A Year 4 AO classic in abridged form."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.medieval]
+    preview_url: "https://www.gutenberg.org/ebooks/82"
+    worldview_tags: [secular]
+
+  - title: "Don Quixote"
+    description: "Cervantes' comic epic of the Knight of the Sad Countenance and his faithful squire Sancho Panza tilting at windmills — introduced in an abridged or retold edition for Year 4 readers."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/996"
+    worldview_tags: [secular]
+
+  - title: "Minn of the Mississippi"
+    description: "Holling C. Holling's living geography book following a snapping turtle down the full length of the Mississippi River — a masterwork of American nature writing and illustrated geography."
+    content_type: book_list
+    subject_tags: [science, science.biology, social-studies, social-studies.geography]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-minn-mississippi"
+    worldview_tags: [secular]
+
+  - title: "The Cricket on the Hearth"
+    description: "Charles Dickens's tender Christmas story of the Peerybingle family and the tiny cricket whose chirping brings blessing and truth. Ideal for Year 4 narration and character discussion."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/677"
+    worldview_tags: [christian]
+
+  - title: "Ben and Me"
+    description: "Robert Lawson's delightful retelling of Benjamin Franklin's life from the point of view of his mouse companion Amos — a charming living biography of America's most celebrated inventor."
+    content_type: book_list
+    subject_tags: [history, history.american, language-arts, language-arts.literature]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-ben-and-me"
+    worldview_tags: [secular]
+
+  - title: "The House at Pooh Corner"
+    description: "A.A. Milne's continuation of Winnie-the-Pooh — gentle, imaginative adventures in the Hundred Acre Wood. Used in AO Year 4 for its rich vocabulary and whimsical philosophical spirit."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-pooh-corner"
+    worldview_tags: [secular]
+
+  - title: "The Story of the Reformation"
+    description: "A living-books narrative of Luther, Calvin, and the Protestant Reformation — the theological controversies, political upheaval, and lasting impact on Western Christianity and culture."
+    content_type: book_list
+    subject_tags: [history, history.modern, history.world, religion, religion.history]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-story-reformation"
+    worldview_tags: [christian]
+
+  - title: "Pagoo"
+    description: "Holling C. Holling's exquisite story of a hermit crab's life in the tidal pools — a masterpiece of nature writing with detailed scientific illustrations. Perfect for Year 4 science."
+    content_type: book_list
+    subject_tags: [science, science.biology, social-studies, social-studies.geography]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-pagoo"
+    worldview_tags: [secular]
+
+  - title: "The Merchant of Venice"
+    description: "Shakespeare's complex comedy of commerce, mercy, and justice — Shylock, Portia, and the pound of flesh — read in the Lamb retelling or the original with teacher guidance."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/2243"
+    worldview_tags: [secular]
+
+  - title: "Kidnapped"
+    description: "Robert Louis Stevenson's rousing adventure of young David Balfour in 18th-century Scotland — treachery, Highland kinship, and a flight across the moors that defined the adventure novel."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.world]
+    preview_url: "https://www.gutenberg.org/ebooks/421"
+    worldview_tags: [secular]
+
+  - title: "Amos Fortune, Free Man"
+    description: "Elizabeth Yates's Newbery Medal biography of Amos Fortune, an African prince who endured slavery and purchased his freedom — a profound story of dignity, faith, and perseverance."
+    content_type: book_list
+    subject_tags: [history, history.american, language-arts, language-arts.literature]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-amos-fortune"
+    worldview_tags: [christian]
+
+  - title: "Ourselves — Volume 4 (continued)"
+    description: "Charlotte Mason's study of character habits for the upper elementary years — the faculties of mind, the habits of the will, and the cultivation of a sense of truth and justice."
+    content_type: book_list
+    subject_tags: [life-skills, religion, religion.character]
+    preview_url: "https://www.amblesideonline.org/CM/vol4complete.pdf#yr4"
+    worldview_tags: [christian]
+
+  - title: "Latin Grammar for the Charlotte Mason Student"
+    description: "A gentle introduction to Latin grammar designed for the Charlotte Mason method — vocabulary, declensions, and translation through living texts. Prepares students for upper grammar study."
+    content_type: book_list
+    subject_tags: [foreign-languages, foreign-languages.latin]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-latin-intro"
+    worldview_tags: [secular]
+
+  - title: "Poetry for Year 4 — Longfellow and Tennyson"
+    description: "Selected poems of Henry Wadsworth Longfellow and Alfred Lord Tennyson for Year 4 memorization — Hiawatha, Paul Revere's Ride, The Lady of Shalott, and other favorites."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, language-arts.writing]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr4-poetry-longfellow-tennyson"
+    worldview_tags: [secular]
+
+  - title: "AO Year 4 Term 1 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 4, Term 1. Introduces the Renaissance history spine, Year 4 literature, formal grammar, and extended narration practice."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr4.shtml#term1"
+    worldview_tags: [christian]
+
+  - title: "AO Year 4 Term 2 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 4, Term 2. Continues the Reformation history spine, literature rotation, and introduces formal Latin study."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr4.shtml#term2"
+    worldview_tags: [christian]
+
+  - title: "AO Year 4 Term 3 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 4, Term 3. Concludes Year 4 curriculum with nature journaling, poet study, Shakespeare, and art appreciation."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr4.shtml#term3"
+    worldview_tags: [christian]

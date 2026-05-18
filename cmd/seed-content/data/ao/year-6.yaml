@@ -1,0 +1,148 @@
+# Ambleside Online Year 6 — Charlotte Mason curriculum
+# https://www.amblesideonline.org/SchYr6.shtml
+# Content Type: book_list (17 titles) + lesson_plan (3 terms) = 20 entries
+
+year: 6
+grade_min: 6
+grade_max: 7
+
+entries:
+  - title: "Jane Eyre"
+    description: "Charlotte Brontë's passionate novel of a governess whose independence, moral courage, and inward dignity triumph over social disadvantage — one of the great characters in English fiction."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/1260"
+    worldview_tags: [christian]
+
+  - title: "Pride and Prejudice"
+    description: "Jane Austen's sparkling comedy of manners — Elizabeth Bennet and Mr. Darcy in a timeless exploration of character, class, and the nature of a good marriage. A Year 6 AO cornerstone."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/1342"
+    worldview_tags: [secular]
+
+  - title: "David Copperfield"
+    description: "Charles Dickens's autobiographical masterpiece — David's journey from a wretched childhood through trials of character to maturity and vocation. One of Dickens's most beloved novels."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.modern]
+    preview_url: "https://www.gutenberg.org/ebooks/766"
+    worldview_tags: [secular]
+
+  - title: "Beowulf"
+    description: "The oldest surviving English epic poem — the hero Beowulf's three battles against the monster Grendel, Grendel's mother, and the dragon. Read in a prose translation with the Anglo-Saxon cultural context."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.medieval]
+    preview_url: "https://www.gutenberg.org/ebooks/16328"
+    worldview_tags: [secular]
+
+  - title: "Paradise Lost (selected books)"
+    description: "John Milton's epic poem of the Fall of Man — Satan's rebellion, Adam and Eve in Eden, and the redemptive arc of human history. Selected books from one of the monuments of English literature."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, religion]
+    preview_url: "https://www.gutenberg.org/ebooks/26"
+    worldview_tags: [christian]
+
+  - title: "The Prince"
+    description: "Niccolò Machiavelli's pragmatic analysis of political power — how rulers acquire, maintain, and lose authority. Essential primary-source reading for Year 6 government and history."
+    content_type: book_list
+    subject_tags: [social-studies, social-studies.government, history, history.modern]
+    preview_url: "https://www.gutenberg.org/ebooks/1232"
+    worldview_tags: [secular]
+
+  - title: "A Tale of Two Cities"
+    description: "Charles Dickens's gripping novel of the French Revolution — London and Paris, Darnay and Carton, and Sydney Carton's redemptive sacrifice. 'It was the best of times, it was the worst of times.'"
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.modern]
+    preview_url: "https://www.gutenberg.org/ebooks/98"
+    worldview_tags: [secular]
+
+  - title: "The Tempest"
+    description: "Shakespeare's last great play — the magician Prospero on his enchanted island, Miranda, Caliban, and Ariel. A meditation on art, power, forgiveness, and the end of enchantment."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/23042"
+    worldview_tags: [secular]
+
+  - title: "The Story of the Victorian Age"
+    description: "A narrative history of 19th-century Britain — industrialization, empire, social reform, and the transformation of everyday life from the accession of Victoria to the Edwardian era."
+    content_type: book_list
+    subject_tags: [history, history.modern, history.world]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr6-victorian-age"
+    worldview_tags: [secular]
+
+  - title: "North and South"
+    description: "Elizabeth Gaskell's industrial novel — Margaret Hale's move from rural Hampshire to the mill town of Milton and her clashes with the manufacturer Thornton — an exploration of class, labour, and character."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.modern]
+    preview_url: "https://www.gutenberg.org/ebooks/4290"
+    worldview_tags: [secular]
+
+  - title: "The House of Seven Gables"
+    description: "Nathaniel Hawthorne's Gothic romance of the Pyncheon family curse — ancestral guilt, hidden crime, and the possibility of redemption in a decaying ancestral mansion in New England."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.american]
+    preview_url: "https://www.gutenberg.org/ebooks/77"
+    worldview_tags: [secular]
+
+  - title: "Mere Christianity"
+    description: "C.S. Lewis's rational defense of the Christian faith — originally broadcast as BBC radio talks during WWII — a logical, accessible presentation of Christian ethics and theology."
+    content_type: book_list
+    subject_tags: [religion, religion.theology, social-studies]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr6-mere-christianity"
+    worldview_tags: [christian]
+
+  - title: "The Autobiography of Frederick Douglass"
+    description: "Frederick Douglass's first-person account of his life in slavery and his escape to freedom — one of the most powerful documents in American history and a foundational text of abolitionist literature."
+    content_type: book_list
+    subject_tags: [history, history.american, language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/23"
+    worldview_tags: [secular]
+
+  - title: "Latin — Wheelock's or Henle (Year 3)"
+    description: "Advanced Latin grammar and translation for Year 6 students — reading original Latin texts, building vocabulary, and engaging the classical tradition through primary-source language study."
+    content_type: book_list
+    subject_tags: [foreign-languages, foreign-languages.latin]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr6-latin-advanced"
+    worldview_tags: [secular]
+
+  - title: "The Story of Science — Newton at the Center"
+    description: "Joy Hakim's narrative of scientific revolution — Copernicus, Galileo, and Newton reordering the cosmos — the second volume of the story of science for Charlotte Mason upper years."
+    content_type: book_list
+    subject_tags: [science, history, history.modern]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr6-newton-center"
+    worldview_tags: [secular]
+
+  - title: "Poetry for Year 6 — Milton and the Romantics"
+    description: "A curated selection of Milton's verse alongside major Romantic poets — Byron, Coleridge, and Wordsworth — for Year 6 memorization, recitation, and literary analysis."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, language-arts.writing]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr6-poetry-milton-romantics"
+    worldview_tags: [secular]
+
+  - title: "Ourselves — Volume 6"
+    description: "Charlotte Mason's final volume on character formation — reason, conscience, and the highest habits of mind for students on the threshold of adult moral responsibility."
+    content_type: book_list
+    subject_tags: [life-skills, religion, religion.character]
+    preview_url: "https://www.amblesideonline.org/CM/vol4complete.pdf#yr6"
+    worldview_tags: [christian]
+
+  - title: "AO Year 6 Term 1 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 6, Term 1. Introduces the Victorian history spine, Brontë and Dickens, advanced Latin, and formal essay composition."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr6.shtml#term1"
+    worldview_tags: [christian]
+
+  - title: "AO Year 6 Term 2 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 6, Term 2. Continues Shakespeare, Victorian history, Austen, and advanced Latin translation with original texts."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr6.shtml#term2"
+    worldview_tags: [christian]
+
+  - title: "AO Year 6 Term 3 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 6, Term 3. Completes the Year 6 curriculum with Paradise Lost, Romantic poetry, nature journaling, and final compositions."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr6.shtml#term3"
+    worldview_tags: [christian]

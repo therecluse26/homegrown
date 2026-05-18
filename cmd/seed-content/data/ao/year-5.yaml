@@ -1,0 +1,148 @@
+# Ambleside Online Year 5 — Charlotte Mason curriculum
+# https://www.amblesideonline.org/SchYr5.shtml
+# Content Type: book_list (17 titles) + lesson_plan (3 terms) = 20 entries
+
+year: 5
+grade_min: 5
+grade_max: 6
+
+entries:
+  - title: "Hamlet"
+    description: "Shakespeare's greatest tragedy — the Prince of Denmark, his murdered father's ghost, and his anguished struggle toward revenge and truth. Studied in full in the Charlotte Mason upper years."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/1787"
+    worldview_tags: [secular]
+
+  - title: "The Federalist Papers"
+    description: "Hamilton, Madison, and Jay's foundational essays arguing for ratification of the United States Constitution — essential primary-source reading for American civics and government."
+    content_type: book_list
+    subject_tags: [social-studies, social-studies.government, social-studies.civics, history, history.american]
+    preview_url: "https://www.gutenberg.org/ebooks/1404"
+    worldview_tags: [secular]
+
+  - title: "The Story of the American Republic"
+    description: "A narrative history of the founding and early growth of the United States — the Revolution, Constitution, and the expanding republic through the early 19th century. The AO Year 5 American history spine."
+    content_type: book_list
+    subject_tags: [history, history.american, social-studies, social-studies.government]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-american-republic"
+    worldview_tags: [secular]
+
+  - title: "Silas Marner"
+    description: "George Eliot's moral fable of a weaver transformed by grief and love — one of the most moving portraits of spiritual renewal in English literature. An AO Year 5 classic."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/550"
+    worldview_tags: [secular]
+
+  - title: "The Scarlet Letter"
+    description: "Nathaniel Hawthorne's examination of sin, guilt, and redemption in Puritan New England — a landmark of American literature and essential reading for understanding American moral history."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.american, religion]
+    preview_url: "https://www.gutenberg.org/ebooks/25344"
+    worldview_tags: [christian]
+
+  - title: "The Waste Land and Other Poems — Selected Verse for Year 5"
+    description: "A curated selection of significant English poetry for Year 5 study — Gerard Manley Hopkins, Christina Rossetti, and others representing Victorian and early modern English verse."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, language-arts.writing]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-poetry-selection"
+    worldview_tags: [christian]
+
+  - title: "Democracy in America (selected)"
+    description: "Alexis de Tocqueville's brilliant analysis of American democratic society and culture — selected chapters from one of the most insightful observations of America ever written."
+    content_type: book_list
+    subject_tags: [social-studies, social-studies.government, social-studies.civics, history, history.american]
+    preview_url: "https://www.gutenberg.org/ebooks/815"
+    worldview_tags: [secular]
+
+  - title: "Nicholas Nickleby (abridged)"
+    description: "Charles Dickens's exuberant story of Nicholas Nickleby battling injustice at Dotheboys Hall and on the London stage — a vibrant portrait of early Victorian England."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.modern]
+    preview_url: "https://www.gutenberg.org/ebooks/967"
+    worldview_tags: [secular]
+
+  - title: "The Invisible Man"
+    description: "H.G. Wells's gripping science-fiction tale of a scientist rendered invisible by his own experiment — a parable about isolation, power, and the dangers of unchecked ambition."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, science]
+    preview_url: "https://www.gutenberg.org/ebooks/5230"
+    worldview_tags: [secular]
+
+  - title: "Unbroken (young adult edition)"
+    description: "Laura Hillenbrand's true story of Olympic runner Louis Zamperini's survival as a WWII POW — a powerful modern living biography of resilience, faith, and forgiveness."
+    content_type: book_list
+    subject_tags: [history, history.modern, history.american, language-arts, language-arts.literature]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-unbroken"
+    worldview_tags: [christian]
+
+  - title: "The Story of Science — Aristotle Leads the Way"
+    description: "Joy Hakim's narrative history of scientific thought from the ancient Greeks through Newton — science as a story of human curiosity, making it an ideal Charlotte Mason living-books complement."
+    content_type: book_list
+    subject_tags: [science, history, history.ancient]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-story-of-science"
+    worldview_tags: [secular]
+
+  - title: "Latin — Wheelock's or Henle (Year 2)"
+    description: "Continued formal Latin study using a rigorous grammar-based program — the Charlotte Mason upper years include formal language study to cultivate precision of thought and classical literacy."
+    content_type: book_list
+    subject_tags: [foreign-languages, foreign-languages.latin]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-latin-grammar"
+    worldview_tags: [secular]
+
+  - title: "Macbeth"
+    description: "Shakespeare's dark tragedy of ambition, murder, and the destruction wrought by unchecked power — Lady Macbeth, the witches, and the inevitable consequences of betrayal."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/1533"
+    worldview_tags: [secular]
+
+  - title: "The Hiding Place"
+    description: "Corrie ten Boom's account of hiding Jews in occupied Holland during World War II and surviving the Nazi concentration camps — a witness to faith under extremity."
+    content_type: book_list
+    subject_tags: [history, history.modern, history.world, language-arts, language-arts.literature]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-hiding-place"
+    worldview_tags: [christian]
+
+  - title: "America's Story — Civil War and Reconstruction"
+    description: "A narrative history of the American Civil War and Reconstruction era — Lincoln, Lee, Grant, and the struggle to reunite and remake the nation. Primary sources and living narrative."
+    content_type: book_list
+    subject_tags: [history, history.american, social-studies, social-studies.civics]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-civil-war"
+    worldview_tags: [secular]
+
+  - title: "The War of the Worlds"
+    description: "H.G. Wells's imaginative invasion narrative — Martians overwhelming Victorian England — one of the founding texts of science fiction, raising questions of civilization and survival."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, science]
+    preview_url: "https://www.gutenberg.org/ebooks/36"
+    worldview_tags: [secular]
+
+  - title: "Poetry for Year 5 — Keats and Shelley"
+    description: "The major odes and lyrics of John Keats and Percy Bysshe Shelley for Year 5 poetry study — 'Ode to a Nightingale,' 'Ozymandias,' and other Romantic masterpieces."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, language-arts.writing]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr5-poetry-keats-shelley"
+    worldview_tags: [secular]
+
+  - title: "AO Year 5 Term 1 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 5, Term 1. Introduces the American history spine, formal composition, Shakespeare study, and extended essay narration."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr5.shtml#term1"
+    worldview_tags: [christian]
+
+  - title: "AO Year 5 Term 2 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 5, Term 2. Continues Civil War history, primary source reading, Dickens, and Latin grammar progression."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr5.shtml#term2"
+    worldview_tags: [christian]
+
+  - title: "AO Year 5 Term 3 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 5, Term 3. Completes the Year 5 curriculum with Reconstruction history, Romantic poetry study, and nature journal."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math, foreign-languages]
+    preview_url: "https://www.amblesideonline.org/SchYr5.shtml#term3"
+    worldview_tags: [christian]

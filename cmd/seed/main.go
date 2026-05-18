@@ -91,6 +91,10 @@ const (
 	friendListingID  = "01900000-0000-7000-8000-000000000216"
 	seedPurchaseID   = "01900000-0000-7000-8000-000000000223"
 
+	// Platform Content (deterministic; used by content ingestion CLI)
+	platformContentCreatorID   = "018f1234-0000-7000-8000-000000000001"
+	platformContentPublisherID = "018f1234-0000-7000-8000-000000000002"
+
 	// Marketplace Extended
 	mktCuratedItem1ID = "01900000-0000-7000-8000-000000000242"
 	mktCuratedItem2ID = "01900000-0000-7000-8000-000000000243"
@@ -525,6 +529,7 @@ func seedAll(db *gorm.DB, seedKratosID, adminKratosID string) error {
 		{"SocialExtended", seedSocialExtended},
 		{"Marketplace", seedMarketplace},
 		{"MarketplaceExtended", seedMarketplaceExtended},
+		{"PlatformContent", seedPlatformContent},
 		{"Learn", func(db *gorm.DB) error { return seedLearn(db, platformPublisherID) }},
 		{"LearnExtended", func(db *gorm.DB) error { return seedLearnExtended(db, platformPublisherID) }},
 		{"Discovery", seedDiscovery},
@@ -1170,6 +1175,49 @@ func seedMarketplaceExtended(db *gorm.DB) error {
 			mktListingFile1ID, listing1ID,
 		).Error; err != nil {
 			return fmt.Errorf("insert listing file: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ─── Platform content seed ────────────────────────────────────────────────────
+// Inserts deterministic creator + publisher rows used by the content ingestion
+// CLI (cmd/seed-content). parent_id is the admin parent so the DB FK is
+// satisfied; no Kratos identity or payout account is needed.
+
+func seedPlatformContent(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		if err := tx.Exec(`
+			INSERT INTO mkt_creators
+				(id, parent_id, onboarding_status, store_name, store_bio, tos_accepted_at)
+			VALUES (?, ?, 'active', 'Homegrown Academy',
+				'Curated free and public domain educational resources.',
+				NOW() - INTERVAL '365 days')
+			ON CONFLICT (id) DO NOTHING`,
+			platformContentCreatorID, adminParentID,
+		).Error; err != nil {
+			return fmt.Errorf("insert platform content creator: %w", err)
+		}
+
+		if err := tx.Exec(`
+			INSERT INTO mkt_publishers
+				(id, name, slug, description, is_platform, is_verified)
+			VALUES (?, 'Homegrown Academy', 'homegrown-academy-mkt',
+				'Platform-curated free content library.', true, true)
+			ON CONFLICT (id) DO NOTHING`,
+			platformContentPublisherID,
+		).Error; err != nil {
+			return fmt.Errorf("insert platform content publisher: %w", err)
+		}
+
+		if err := tx.Exec(`
+			INSERT INTO mkt_publisher_members (publisher_id, creator_id, role)
+			VALUES (?, ?, 'owner')
+			ON CONFLICT (publisher_id, creator_id) DO NOTHING`,
+			platformContentPublisherID, platformContentCreatorID,
+		).Error; err != nil {
+			return fmt.Errorf("insert platform content publisher member: %w", err)
 		}
 
 		return nil
