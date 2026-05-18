@@ -306,7 +306,7 @@ export function ProgressView() {
         ) : (
           <>
             <ul className="space-y-2" role="list">
-              {timeline.map((entry) => {
+              {timeline.filter((entry): entry is NonNullable<typeof entry> => entry != null).map((entry) => {
                 const EntryIcon =
                   TIMELINE_ICONS[entry.entry_type] ?? ClipboardList;
                 return (

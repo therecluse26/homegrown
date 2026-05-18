@@ -1,6 +1,6 @@
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
-import { Users, Globe, Lock, UserPlus } from "lucide-react";
+import { Link as RouterLink, useNavigate } from "react-router";
+import { Users, Globe, Lock, UserPlus, Plus } from "lucide-react";
 import {
   Button,
   Card,
@@ -108,13 +108,20 @@ function GroupCard({
 
 export function GroupsList() {
   const intl = useIntl();
+  const navigate = useNavigate();
   const { data: myGroups, isPending: myGroupsPending } = useMyGroups();
   const { data: platformGroups, isPending: platformPending } = usePlatformGroups();
   const { data: discoverGroups } = useDiscoverGroups();
 
   return (
     <div className="max-w-content-narrow mx-auto">
-      <PageTitle title={intl.formatMessage({ id: "social.groups.title" })} />
+      <div className="flex items-center justify-between mb-1">
+        <PageTitle title={intl.formatMessage({ id: "social.groups.title" })} />
+        <Button variant="primary" size="sm" onClick={() => void navigate("/groups/new")}>
+          <Icon icon={Plus} size="sm" className="mr-1" />
+          <FormattedMessage id="social.groups.create" />
+        </Button>
+      </div>
 
       <Tabs
         defaultTab="mine"

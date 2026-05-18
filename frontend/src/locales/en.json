@@ -751,6 +751,7 @@
   "social.messages.composer.send": "Send",
 
   "social.groups.title": "Groups",
+  "social.groups.create": "Create Group",
   "social.groups.tabs.mine": "My Groups",
   "social.groups.tabs.discover": "Discover",
   "social.groups.empty.title": "No groups yet",
