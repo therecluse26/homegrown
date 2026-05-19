@@ -34,6 +34,9 @@ type BillingService interface {
 	// ListPayouts returns creator payout history. (Phase 2)
 	ListPayouts(ctx context.Context, params PayoutListParams, creatorID uuid.UUID) (*PayoutListResponse, error)
 
+	// GetCreatorTaxSummary returns the 1099-K eligibility summary for a creator for the given year. [HOM-62]
+	GetCreatorTaxSummary(ctx context.Context, creatorID uuid.UUID, year int) (*TaxSummaryResponse, error)
+
 	// ─── Commands (write, has side effects) ─────────────────────────────
 
 	// CreateSubscription creates a new premium subscription via Hyperswitch. (Phase 2)
@@ -109,6 +112,16 @@ type CustomerRepository interface {
 	Upsert(ctx context.Context, familyID uuid.UUID, input UpsertCustomerRow) (*BillHyperswitchCustomer, error)
 	FindByFamily(ctx context.Context, familyID uuid.UUID) (*BillHyperswitchCustomer, error)
 	FindByHyperswitchID(ctx context.Context, hyperswitchCustomerID string) (*BillHyperswitchCustomer, error)
+}
+
+// CreatorTaxSummaryRepository tracks cumulative creator earnings per calendar year. [10-billing §6, HOM-62]
+type CreatorTaxSummaryRepository interface {
+	// Upsert sets the yearly earnings total for a creator. Called by AggregatePayoutsTask.
+	Upsert(ctx context.Context, creatorID uuid.UUID, year int, earningsCents int64) (*BillCreatorTaxSummary, error)
+	// FindByCreatorAndYear returns the tax summary for a creator for a given year.
+	FindByCreatorAndYear(ctx context.Context, creatorID uuid.UUID, year int) (*BillCreatorTaxSummary, error)
+	// SetThresholdReached records when the creator first crossed the 1099-K threshold. Idempotent.
+	SetThresholdReached(ctx context.Context, creatorID uuid.UUID, year int, at time.Time) (*BillCreatorTaxSummary, error)
 }
 
 // PayoutRepository is creator-scoped. (Phase 2)

@@ -613,6 +613,7 @@ func main() {
 
 	paymentAdapter := mktadapters.NewHyperswitchPaymentAdapter(
 		cfg.HyperswitchBaseURL, cfg.HyperswitchAPIKey, cfg.HyperswitchWebhookKey,
+		cfg.HyperswitchMktProfileID,
 	)
 	mediaAdapter := mktadapters.NewNoopMediaAdapter()
 
@@ -760,7 +761,7 @@ func main() {
 	// Email adapter: use Postmark when token is set, noop otherwise (dev/test). [08-notify §7]
 	var emailAdapter notify.EmailAdapter = notifyadapters.NoopEmailAdapter{}
 	if cfg.PostmarkServerToken != "" {
-		emailAdapter = notifyadapters.NewPostmarkEmailAdapter(cfg.PostmarkServerToken)
+		emailAdapter = notifyadapters.NewPostmarkEmailAdapter(cfg.PostmarkServerToken, cfg.PostmarkFromAddress)
 	}
 
 	// IAM adapter for notify: bridges iam.IamService → notify.IamServiceForNotify.
@@ -846,6 +847,7 @@ func main() {
 	billTxRepo := billing.NewPgTransactionRepository(db)
 	billCustRepo := billing.NewPgCustomerRepository(db)
 	billPayoutRepo := billing.NewPgPayoutRepository(db)
+	billTaxSummaryRepo := billing.NewPgCreatorTaxSummaryRepository(db)
 
 	// Hyperswitch billing adapter: uses billing-specific profile, separate from mkt.
 	billAdapter := billingadapters.NewHyperswitchSubscriptionAdapter(
@@ -887,7 +889,7 @@ func main() {
 	}
 
 	billingSvc := billing.NewBillingService(
-		billSubRepo, billTxRepo, billCustRepo, billPayoutRepo,
+		billSubRepo, billTxRepo, billCustRepo, billPayoutRepo, billTaxSummaryRepo,
 		billAdapter, iamForBilling,
 		eventBus, billCfg,
 	)
@@ -1505,7 +1507,7 @@ func main() {
 		}
 		return out, nil
 	})
-	billing.RegisterTaskHandlers(worker, billPayoutRepo, billAdapter, billingMktAdapter)
+	billing.RegisterTaskHandlers(worker, billPayoutRepo, billTaxSummaryRepo, billAdapter, billingMktAdapter, eventBus)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
 			slog.Error("job worker error", "error", startErr)

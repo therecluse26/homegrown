@@ -25,7 +25,14 @@ func (ExecutePayoutsPayload) TaskType() string { return "billing:execute_payouts
 
 // RegisterTaskHandlers registers asynq task handlers for billing background jobs.
 // Called from main.go during worker setup. [10-billing §12]
-func RegisterTaskHandlers(worker shared.JobWorker, payoutRepo PayoutRepository, adapter SubscriptionPaymentAdapter, mktAdapter MktServiceForBilling) {
+func RegisterTaskHandlers(
+	worker shared.JobWorker,
+	payoutRepo PayoutRepository,
+	taxSummaryRepo CreatorTaxSummaryRepository,
+	adapter SubscriptionPaymentAdapter,
+	mktAdapter MktServiceForBilling,
+	events *shared.EventBus,
+) {
 	worker.Handle("billing:aggregate_payouts", func(ctx context.Context, _ []byte) error {
 		// Aggregate previous month's creator sales into bill_payouts rows. [10-billing §12]
 		now := time.Now().UTC()
@@ -39,7 +46,6 @@ func RegisterTaskHandlers(worker shared.JobWorker, payoutRepo PayoutRepository, 
 		}
 		if len(earnings) == 0 {
 			slog.Info("billing: aggregate_payouts — no creator sales for period", "period_start", periodStart, "period_end", periodEnd)
-			return nil
 		}
 
 		var created int
@@ -63,6 +69,50 @@ func RegisterTaskHandlers(worker shared.JobWorker, payoutRepo PayoutRepository, 
 			created++
 		}
 		slog.Info("billing: aggregate_payouts completed", "payouts_created", created, "period_start", periodStart, "period_end", periodEnd)
+
+		// ── 1099-K tax summary update ─────────────────────────────────────────
+		// Compute year-to-date cumulative earnings for each creator and upsert into
+		// bill_creator_tax_summaries. Fire CreatorThresholdReached the first time
+		// a creator crosses the $600 IRS threshold. [HOM-62]
+		taxYear := now.Year()
+		ytdStart := time.Date(taxYear, 1, 1, 0, 0, 0, 0, time.UTC)
+		ytdEnd := now
+
+		ytdEarnings, ytdErr := mktAdapter.GetAllCreatorSales(ctx, ytdStart, ytdEnd)
+		if ytdErr != nil {
+			slog.Error("billing: aggregate_payouts failed to fetch YTD sales for tax summary", "error", ytdErr)
+			return nil // don't fail the payout task over tax summary errors
+		}
+
+		for _, e := range ytdEarnings {
+			ytdNet := e.TotalPayoutCents - e.RefundDeductionCents
+			if ytdNet < 0 {
+				ytdNet = 0
+			}
+
+			prev, findErr := taxSummaryRepo.FindByCreatorAndYear(ctx, e.CreatorID, taxYear)
+			wasBelow := findErr != nil || prev.EarningsCents < TaxThreshold1099KCents
+
+			summary, upsertErr := taxSummaryRepo.Upsert(ctx, e.CreatorID, taxYear, ytdNet)
+			if upsertErr != nil {
+				slog.Error("billing: tax summary upsert failed", "creator_id", e.CreatorID, "error", upsertErr)
+				continue
+			}
+
+			// Fire event if threshold newly crossed (was below, now at or above).
+			if wasBelow && summary.EarningsCents >= TaxThreshold1099KCents && summary.ThresholdReachedAt == nil {
+				reachedAt := time.Now()
+				if _, setErr := taxSummaryRepo.SetThresholdReached(ctx, e.CreatorID, taxYear, reachedAt); setErr != nil {
+					slog.Error("billing: set threshold reached failed", "creator_id", e.CreatorID, "error", setErr)
+				}
+				_ = events.Publish(ctx, CreatorThresholdReached{
+					CreatorID:     e.CreatorID,
+					TaxYear:       taxYear,
+					EarningsCents: summary.EarningsCents,
+				})
+				slog.Info("billing: creator crossed 1099-K threshold", "creator_id", e.CreatorID, "tax_year", taxYear, "earnings_cents", summary.EarningsCents)
+			}
+		}
 		return nil
 	})
 

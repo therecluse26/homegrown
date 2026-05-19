@@ -32,6 +32,9 @@ var (
 	ErrPaymentAdapterUnavailable = errors.New("payment adapter unavailable")
 	ErrInvalidWebhookSignature   = errors.New("invalid webhook signature")
 
+	// ─── Tax Summary Errors ──────────────────────────────────────────────
+	ErrTaxSummaryNotFound = errors.New("tax summary not found")
+
 	// ─── Infrastructure ─────────────────────────────────────────────────
 	ErrDatabaseError = errors.New("database error")
 	ErrAdapterError  = errors.New("adapter error")

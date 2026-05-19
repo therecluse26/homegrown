@@ -91,6 +91,11 @@ type AppConfig struct {
 	// Separate from the marketplace payment profile. [10-billing §7]
 	HyperswitchBillingProfileID string
 
+	// ─── Marketplace (Hyperswitch Payments) ───────────────────────
+	// Hyperswitch business profile ID for marketplace payments (listing purchases,
+	// split payments, creator payouts). Separate from the billing profile. [07-mkt §18.5]
+	HyperswitchMktProfileID string
+
 	// Hyperswitch price ID for the monthly subscription plan.
 	HyperswitchMonthlyPriceID string
 
@@ -106,6 +111,10 @@ type AppConfig struct {
 	// ─── Notifications (Postmark) ──────────────────────────────────
 	// Postmark server API token. Optional — omit to use NoopEmailAdapter.
 	PostmarkServerToken string
+
+	// From address for all outbound emails, e.g. "Homegrown Academy <hello@example.com>".
+	// Required when PostmarkServerToken is set.
+	PostmarkFromAddress string
 
 	// HMAC secret for generating one-click email unsubscribe tokens. [08-notify §13]
 	UnsubscribeSecret string
@@ -247,6 +256,8 @@ func LoadConfig() (*AppConfig, error) {
 
 	// Billing-specific Hyperswitch config [10-billing §7]
 	hyperswitchBillingProfileID := envOrDefault("HYPERSWITCH_BILLING_PROFILE_ID", "")
+	// Marketplace-specific Hyperswitch config [07-mkt §18.5]
+	hyperswitchMktProfileID := envOrDefault("HYPERSWITCH_MKT_PROFILE_ID", "")
 	hyperswitchMonthlyPriceID := envOrDefault("HYPERSWITCH_MONTHLY_PRICE_ID", "")
 	hyperswitchAnnualPriceID := envOrDefault("HYPERSWITCH_ANNUAL_PRICE_ID", "")
 	coppaChargeCents := int64(50) // default $0.50
@@ -295,6 +306,13 @@ func LoadConfig() (*AppConfig, error) {
 
 	// Optional Postmark config (omit to disable email)
 	postmarkServerToken := envOrDefault("POSTMARK_SERVER_TOKEN", "")
+	postmarkFromAddress := os.Getenv("POSTMARK_FROM_ADDRESS")
+	if postmarkServerToken != "" && postmarkFromAddress == "" {
+		if env == EnvironmentProduction {
+			return nil, fmt.Errorf("required environment variable POSTMARK_FROM_ADDRESS is not set") //nolint:goerr113
+		}
+		slog.Warn("POSTMARK_FROM_ADDRESS not set; Postmark will use server-level default sender — set this env var in production")
+	}
 	unsubscribeSecret := os.Getenv("UNSUBSCRIBE_SECRET")
 	if unsubscribeSecret == "" {
 		if env == EnvironmentProduction {
@@ -333,6 +351,7 @@ func LoadConfig() (*AppConfig, error) {
 		HyperswitchAPIKey:           hyperswitchAPIKey,
 		HyperswitchWebhookKey:       hyperswitchWebhookKey,
 		HyperswitchBillingProfileID: hyperswitchBillingProfileID,
+		HyperswitchMktProfileID:     hyperswitchMktProfileID,
 		HyperswitchMonthlyPriceID:   hyperswitchMonthlyPriceID,
 		HyperswitchAnnualPriceID:    hyperswitchAnnualPriceID,
 		CoppaChargeCents:            coppaChargeCents,
@@ -344,6 +363,7 @@ func LoadConfig() (*AppConfig, error) {
 		ObjectStorageSecretAccessKey: objectStorageSecretAccessKey,
 		ObjectStoragePublicURL:      objectStoragePublicURL,
 		PostmarkServerToken:     postmarkServerToken,
+		PostmarkFromAddress:     postmarkFromAddress,
 		UnsubscribeSecret:       unsubscribeSecret,
 		ThornAPIKey:             thornAPIKey,
 		ThornBaseURL:            thornBaseURL,

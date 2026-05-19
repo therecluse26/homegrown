@@ -524,6 +524,10 @@ type ListingVersionResponse struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type CheckoutRequest struct {
+	ReturnURL string `json:"return_url" validate:"required,url"`
+}
+
 type CheckoutSessionResponse struct {
 	CheckoutURL      string `json:"checkout_url"`
 	PaymentSessionID string `json:"payment_session_id"`

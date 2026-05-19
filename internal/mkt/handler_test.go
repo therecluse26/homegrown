@@ -89,7 +89,7 @@ func (m *mockMarketplaceService) AddToCart(_ context.Context, _ uuid.UUID, _ sha
 func (m *mockMarketplaceService) RemoveFromCart(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) error {
 	return nil
 }
-func (m *mockMarketplaceService) CreateCheckout(_ context.Context, _ shared.FamilyScope) (*CheckoutSessionResponse, error) {
+func (m *mockMarketplaceService) CreateCheckout(_ context.Context, _ shared.FamilyScope, _ string) (*CheckoutSessionResponse, error) {
 	return &CheckoutSessionResponse{}, nil
 }
 func (m *mockMarketplaceService) HandlePaymentWebhook(_ context.Context, _ []byte, _ string) error {

@@ -17,6 +17,7 @@ type BillingServiceImpl struct {
 	transactionRepo  TransactionRepository
 	customerRepo     CustomerRepository
 	payoutRepo       PayoutRepository
+	taxSummaryRepo   CreatorTaxSummaryRepository
 	adapter          SubscriptionPaymentAdapter
 	iamService       IamServiceForBilling
 	events           *shared.EventBus
@@ -29,6 +30,7 @@ func NewBillingService(
 	transactionRepo TransactionRepository,
 	customerRepo CustomerRepository,
 	payoutRepo PayoutRepository,
+	taxSummaryRepo CreatorTaxSummaryRepository,
 	adapter SubscriptionPaymentAdapter,
 	iamService IamServiceForBilling,
 	events *shared.EventBus,
@@ -42,6 +44,7 @@ func NewBillingService(
 		transactionRepo:  transactionRepo,
 		customerRepo:     customerRepo,
 		payoutRepo:       payoutRepo,
+		taxSummaryRepo:   taxSummaryRepo,
 		adapter:          adapter,
 		iamService:       iamService,
 		events:           events,
@@ -52,6 +55,32 @@ func NewBillingService(
 // ═══════════════════════════════════════════════════════════════════════════════
 // Queries [10-billing §5]
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// GetCreatorTaxSummary returns the 1099-K eligibility summary for a creator for the given year.
+// Data is updated by AggregatePayoutsTask (runs monthly). Returns zero-earnings response if no
+// record exists yet (creator has no sales this year). [HOM-62]
+func (s *BillingServiceImpl) GetCreatorTaxSummary(ctx context.Context, creatorID uuid.UUID, year int) (*TaxSummaryResponse, error) {
+	summary, err := s.taxSummaryRepo.FindByCreatorAndYear(ctx, creatorID, year)
+	if errors.Is(err, ErrTaxSummaryNotFound) {
+		return &TaxSummaryResponse{
+			TaxYear:           year,
+			EarningsCents:     0,
+			ThresholdCents:    TaxThreshold1099KCents,
+			ThresholdExceeded: false,
+		}, nil
+	}
+	if err != nil {
+		return nil, &BillingError{Err: fmt.Errorf("get creator tax summary: %w", err)}
+	}
+
+	return &TaxSummaryResponse{
+		TaxYear:            summary.TaxYear,
+		EarningsCents:      summary.EarningsCents,
+		ThresholdCents:     TaxThreshold1099KCents,
+		ThresholdExceeded:  summary.EarningsCents >= TaxThreshold1099KCents,
+		ThresholdReachedAt: summary.ThresholdReachedAt,
+	}, nil
+}
 
 func (s *BillingServiceImpl) GetSubscription(ctx context.Context, scope shared.FamilyScope) (*SubscriptionResponse, error) {
 	sub, err := s.subscriptionRepo.FindByFamily(ctx, scope)

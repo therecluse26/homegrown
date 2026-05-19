@@ -921,8 +921,10 @@ func (h *Handler) getCart(c echo.Context) error {
 //
 // @Summary     Create a checkout session
 // @Tags        marketplace
+// @Accept      json
 // @Produce     json
 // @Security    BearerAuth
+// @Param       body body CheckoutRequest true "Checkout request"
 // @Success     201 {object} CheckoutSessionResponse
 // @Failure     400 {object} shared.AppError
 // @Failure     401 {object} shared.AppError
@@ -934,7 +936,15 @@ func (h *Handler) createCheckout(c echo.Context) error {
 		return err
 	}
 
-	resp, err := h.svc.CreateCheckout(c.Request().Context(), scope)
+	var req CheckoutRequest
+	if err := c.Bind(&req); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&req); err != nil {
+		return shared.ValidationError(err)
+	}
+
+	resp, err := h.svc.CreateCheckout(c.Request().Context(), scope, req.ReturnURL)
 	if err != nil {
 		return mapMktError(err)
 	}

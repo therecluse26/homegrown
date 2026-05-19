@@ -101,6 +101,9 @@ func (m *mockBillingService) HandlePurchaseCompleted(_ context.Context, _ Purcha
 func (m *mockBillingService) HandlePurchaseRefunded(_ context.Context, _ PurchaseRefundedEvent) error {
 	return nil
 }
+func (m *mockBillingService) GetCreatorTaxSummary(_ context.Context, _ uuid.UUID, year int) (*TaxSummaryResponse, error) {
+	return &TaxSummaryResponse{TaxYear: year, ThresholdCents: TaxThreshold1099KCents}, nil
+}
 
 // Compile-time check.
 var _ BillingService = (*mockBillingService)(nil)

@@ -40,7 +40,7 @@ type MarketplaceService interface {
 	// Cart & checkout
 	AddToCart(ctx context.Context, listingID uuid.UUID, scope shared.FamilyScope, parentID uuid.UUID) error
 	RemoveFromCart(ctx context.Context, listingID uuid.UUID, scope shared.FamilyScope) error
-	CreateCheckout(ctx context.Context, scope shared.FamilyScope) (*CheckoutSessionResponse, error)
+	CreateCheckout(ctx context.Context, scope shared.FamilyScope, returnURL string) (*CheckoutSessionResponse, error)
 	HandlePaymentWebhook(ctx context.Context, payload []byte, signature string) error
 
 	// Reviews

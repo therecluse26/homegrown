@@ -4342,6 +4342,52 @@
                 }
             }
         },
+        "/billing/tax-summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns cumulative creator earnings for the current calendar year and whether\nthe IRS 1099-K reporting threshold ($600) has been exceeded. Data is updated\nmonthly by the payout aggregation task.",
+                "tags": [
+                    "billing"
+                ],
+                "summary": "Get 1099-K tax summary for the current year",
+                "parameters": [
+                    {
+                        "description": "Tax year (defaults to current year)",
+                        "name": "year",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/billing.TaxSummaryResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/billing/transactions": {
             "get": {
                 "security": [
@@ -16301,6 +16347,17 @@
                     "marketplace"
                 ],
                 "summary": "Create a checkout session",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/mkt.CheckoutRequest"
+                            }
+                        }
+                    },
+                    "description": "Checkout request",
+                    "required": true
+                },
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -23338,6 +23395,26 @@
                     }
                 }
             },
+            "billing.TaxSummaryResponse": {
+                "type": "object",
+                "properties": {
+                    "earnings_cents": {
+                        "type": "integer"
+                    },
+                    "tax_year": {
+                        "type": "integer"
+                    },
+                    "threshold_cents": {
+                        "type": "integer"
+                    },
+                    "threshold_exceeded": {
+                        "type": "boolean"
+                    },
+                    "threshold_reached_at": {
+                        "type": "string"
+                    }
+                }
+            },
             "billing.TransactionListResponse": {
                 "type": "object",
                 "properties": {
@@ -28130,6 +28207,17 @@
                     },
                     "total_cents": {
                         "type": "integer"
+                    }
+                }
+            },
+            "mkt.CheckoutRequest": {
+                "type": "object",
+                "required": [
+                    "return_url"
+                ],
+                "properties": {
+                    "return_url": {
+                        "type": "string"
                     }
                 }
             },

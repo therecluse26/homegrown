@@ -101,16 +101,23 @@ const SOURCE_STYLES: Record<
 
 // ─── Calendar item component ────────────────────────────────────────────────
 
-function CalendarItemCard({ item }: { item: CalendarItem }) {
+function CalendarItemCard({
+  item,
+  compact = false,
+}: {
+  item: CalendarItem;
+  compact?: boolean;
+}) {
   const style = SOURCE_STYLES[item.source];
 
   return (
     <div
-      className={`flex items-center gap-2 px-2 py-1.5 rounded-radius-sm ${style.bg} ${style.text} type-label-sm`}
+      title={item.title}
+      className={`flex items-center gap-1.5 px-1.5 py-1 rounded-radius-sm ${style.bg} ${style.text} type-label-sm`}
     >
       <Icon icon={style.icon} size="xs" className="shrink-0" />
-      <span className="truncate flex-1">{item.title}</span>
-      {item.start_time && (
+      <span className="truncate flex-1 min-w-0">{item.title}</span>
+      {!compact && item.start_time && (
         <span className="shrink-0 opacity-75">{formatTime(item.start_time)}</span>
       )}
       {item.is_completed && (
@@ -136,7 +143,7 @@ function DayColumn({
   const dayNum = date.getDate();
 
   return (
-    <div className="flex-1 min-w-0">
+    <div className="flex-1 min-w-[4.5rem]">
       <div
         className={`text-center pb-2 mb-2 border-b ${
           isToday
@@ -164,7 +171,7 @@ function DayColumn({
           </p>
         )}
         {items.map((item) => (
-          <CalendarItemCard key={`${item.source}-${item.id}`} item={item} />
+          <CalendarItemCard key={`${item.source}-${item.id}`} item={item} compact />
         ))}
       </div>
     </div>
@@ -552,7 +559,7 @@ export function CalendarView() {
   }, [viewMode, selectedDate, intl.locale]);
 
   return (
-    <div className="max-w-content mx-auto">
+    <div className="max-w-content mx-auto overflow-x-hidden">
       <PageTitle
         title={intl.formatMessage({ id: "planning.calendar.pageTitle" })}
       />

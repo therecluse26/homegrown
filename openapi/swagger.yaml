@@ -616,6 +616,19 @@ definitions:
       tier:
         type: string
     type: object
+  billing.TaxSummaryResponse:
+    properties:
+      earnings_cents:
+        type: integer
+      tax_year:
+        type: integer
+      threshold_cents:
+        type: integer
+      threshold_exceeded:
+        type: boolean
+      threshold_reached_at:
+        type: string
+    type: object
   billing.TransactionListResponse:
     properties:
       next_cursor:
@@ -3837,6 +3850,13 @@ definitions:
         type: array
       total_cents:
         type: integer
+    type: object
+  mkt.CheckoutRequest:
+    properties:
+      return_url:
+        type: string
+    required:
+    - return_url
     type: object
   mkt.CheckoutSessionResponse:
     properties:
@@ -8058,6 +8078,33 @@ paths:
       security:
       - BearerAuth: []
       summary: Resume paused subscription
+      tags:
+      - billing
+  /billing/tax-summary:
+    get:
+      description: |-
+        Returns cumulative creator earnings for the current calendar year and whether
+        the IRS 1099-K reporting threshold ($600) has been exceeded. Data is updated
+        monthly by the payout aggregation task.
+      parameters:
+      - description: Tax year (defaults to current year)
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.TaxSummaryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get 1099-K tax summary for the current year
       tags:
       - billing
   /billing/transactions:
@@ -14123,6 +14170,15 @@ paths:
       - marketplace
   /marketplace/cart/checkout:
     post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Checkout request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/mkt.CheckoutRequest'
       produces:
       - application/json
       responses:

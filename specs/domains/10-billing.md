@@ -64,12 +64,14 @@ other spec sections are included where the billing domain is involved.
 | Primary parent transfer | `[S§3.4]` | §5 (`HandlePrimaryParentTransferred`), §16 |
 | Subscription notification types | `[S§13.1]` | §16 (events → `notify::`) |
 | Premium subscription pricing (~$10-15/month, ~20% annual discount) | `[S§20.2]` | §10 (configurable via Hyperswitch price IDs, not hardcoded) |
+| 1099-K creator earnings threshold tracking ($600/year) | `[S§15.4]` | §3.2 (`bill_creator_tax_summaries`), §4.2, §5, §16.3 (`CreatorThresholdReached` event), HOM-62 |
 
 > **Coverage note on `[S§15.4]` (marketplace transactions)**: SPEC.md §15.4 covers marketplace
 > payment processing, sales tax, and 1099-K. Marketplace payments are owned by `mkt::` (split
 > payments, creator sub-merchants, payouts) `[07-mkt §7, §11, §15]`. This billing spec covers
-> only subscription payments and COPPA micro-charges. Both `mkt::` and `billing::` use the same
-> Hyperswitch instance with different business profiles `[07-mkt §18.5]`.
+> only subscription payments, COPPA micro-charges, and 1099-K threshold tracking for creator
+> earnings. Both `mkt::` and `billing::` use the same Hyperswitch instance with different
+> business profiles `[07-mkt §18.5]`.
 
 ---
 
@@ -280,6 +282,34 @@ CREATE INDEX idx_bill_payouts_pending
 CREATE UNIQUE INDEX idx_bill_payouts_creator_period
     ON bill_payouts(creator_id, period_start, period_end);
 ```
+
+```sql
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- TABLE 5: bill_creator_tax_summaries — 1099-K cumulative earnings per year
+-- Updated monthly by AggregatePayoutsTask. [HOM-62]
+-- ═══════════════════════════════════════════════════════════════════════════════
+CREATE TABLE bill_creator_tax_summaries (
+    id                   UUID        NOT NULL DEFAULT uuidv7(),
+    creator_id           UUID        NOT NULL,
+    tax_year             SMALLINT    NOT NULL,
+    earnings_cents       BIGINT      NOT NULL DEFAULT 0,
+    threshold_reached_at TIMESTAMPTZ,               -- set when $600 first exceeded; NULL = below threshold
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT pk_bill_creator_tax_summaries PRIMARY KEY (id),
+    CONSTRAINT uq_bill_creator_tax_year      UNIQUE (creator_id, tax_year),
+    CONSTRAINT chk_bill_tax_earnings_nonneg  CHECK (earnings_cents >= 0)
+);
+
+-- One row per creator per year; lookup by creator + year is the primary access pattern.
+CREATE INDEX idx_bill_creator_tax_creator_year
+    ON bill_creator_tax_summaries(creator_id, tax_year);
+```
+
+> **1099-K threshold**: IRS reports at $600/year (`TaxThreshold1099KCents = 60_000`).
+> `threshold_reached_at` is set once (idempotent) by `AggregatePayoutsTask`; never overwritten.
+> `CreatorThresholdReached` domain event is fired at that moment.
 
 ### §3.3 RLS / Family-Scoping
 
@@ -534,6 +564,27 @@ List payout records for the authenticated creator. Creator-scoped, not family-sc
 - **Query**: `PayoutListParams { cursor?, limit? }`
 - **Response**: `200 OK` → `PayoutListResponse`
 
+#### GET /v1/billing/tax-summary — 1099-K Eligibility Summary
+
+Returns the IRS 1099-K eligibility summary for the authenticated creator for a given tax
+year. Shows cumulative earnings year-to-date and whether the $600 threshold has been crossed.
+Data is updated monthly by `AggregatePayoutsTask`. `[HOM-62]`
+
+- **Auth**: `AuthContext` + `RequireCreator`
+- **Query**: `?year=2026` (defaults to current year)
+- **Response**: `200 OK` → `TaxSummaryResponse`
+
+```go
+// TaxSummaryResponse
+type TaxSummaryResponse struct {
+    TaxYear            int        `json:"tax_year"`
+    EarningsCents      int64      `json:"earnings_cents"`
+    ThresholdCents     int64      `json:"threshold_cents"`   // always 60000 ($600)
+    ThresholdExceeded  bool       `json:"threshold_exceeded"`
+    ThresholdReachedAt *time.Time `json:"threshold_reached_at,omitempty"`
+}
+```
+
 ---
 
 ## §5 Service Interface
@@ -575,6 +626,10 @@ type BillingService interface {
 
     // ListPayouts returns creator payout history. (Phase 2)
     ListPayouts(ctx context.Context, params PayoutListParams, creatorID uuid.UUID) (*PayoutListResponse, error)
+
+    // GetCreatorTaxSummary returns the 1099-K eligibility summary for a creator for the given year.
+    // Reads from bill_creator_tax_summaries (updated monthly by AggregatePayoutsTask). [HOM-62]
+    GetCreatorTaxSummary(ctx context.Context, creatorID uuid.UUID, year int) (*TaxSummaryResponse, error)
 
     // ─── Commands (write, has side effects) ─────────────────────────────
 
@@ -1490,6 +1545,16 @@ type PayoutCompleted struct {
     PayoutID    uuid.UUID `json:"payout_id"`
     AmountCents int64     `json:"amount_cents"`
     Currency    string    `json:"currency"`
+}
+
+// CreatorThresholdReached is published the first time a creator's cumulative
+// yearly earnings exceed the IRS 1099-K reporting threshold ($600/year).
+// Fired by AggregatePayoutsTask during monthly aggregation. [HOM-62]
+// Consumed by notify:: (tax advisory notification).
+type CreatorThresholdReached struct {
+    CreatorID     uuid.UUID `json:"creator_id"`
+    TaxYear       int       `json:"tax_year"`
+    EarningsCents int64     `json:"earnings_cents"`
 }
 ```
 

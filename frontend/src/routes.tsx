@@ -377,6 +377,7 @@ const routes: RouteObject[] = [
               { path: "settings/methodology", element: <Navigate to="/settings" replace /> },
               { path: "settings/blocked", element: <Navigate to="/settings/blocks" replace /> },
               // Calendar/Planning redirects
+              { path: "planning", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/week", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/month", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/new", element: <Navigate to="/schedule/new" replace /> },

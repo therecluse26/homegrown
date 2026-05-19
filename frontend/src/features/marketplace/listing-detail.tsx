@@ -147,9 +147,9 @@ export function ListingDetail() {
 
       {/* Main listing card */}
       <Card className="p-card-padding mb-6">
-        <div className="flex items-start gap-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
           {listing.thumbnail_url ? (
-            <div className="w-48 h-48 rounded-radius-md overflow-hidden shrink-0 bg-surface-container-low">
+            <div className="w-full h-48 rounded-radius-md overflow-hidden bg-surface-container-low sm:w-48 sm:shrink-0">
               <img
                 src={listing.thumbnail_url}
                 alt={listing.title}
@@ -157,7 +157,7 @@ export function ListingDetail() {
               />
             </div>
           ) : (
-            <div className="w-48 h-48 rounded-radius-md shrink-0 bg-surface-container-low flex items-center justify-center">
+            <div className="w-full h-48 rounded-radius-md bg-surface-container-low flex items-center justify-center sm:w-48 sm:shrink-0">
               <Icon
                 icon={FileText}
                 size="xl"

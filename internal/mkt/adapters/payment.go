@@ -24,12 +24,14 @@ type HyperswitchPaymentAdapter struct {
 	baseURL    string
 	apiKey     string
 	webhookKey string
+	profileID  string // Hyperswitch marketplace business profile ID [07-mkt §18.5]
 	client     *http.Client
 }
 
 // NewHyperswitchPaymentAdapter creates a new Hyperswitch payment adapter.
-// Returns nil if baseURL or apiKey are empty (Hyperswitch not configured).
-func NewHyperswitchPaymentAdapter(baseURL, apiKey, webhookKey string) mkt.PaymentAdapter {
+// profileID scopes requests to the marketplace business profile (separate from billing).
+// Returns a noopPaymentAdapter if baseURL or apiKey are empty.
+func NewHyperswitchPaymentAdapter(baseURL, apiKey, webhookKey, profileID string) mkt.PaymentAdapter {
 	if baseURL == "" || apiKey == "" {
 		return &noopPaymentAdapter{}
 	}
@@ -37,6 +39,7 @@ func NewHyperswitchPaymentAdapter(baseURL, apiKey, webhookKey string) mkt.Paymen
 		baseURL:    baseURL,
 		apiKey:     apiKey,
 		webhookKey: webhookKey,
+		profileID:  profileID,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -142,9 +145,9 @@ func (a *HyperswitchPaymentAdapter) CreatePayment(ctx context.Context,lineItems 
 	body := map[string]any{
 		"amount":     totalCents,
 		"currency":   "USD",
+		"profile_id": a.profileID,
 		"return_url": returnURL,
 		"metadata":   metadata,
-		"splits":     splitRules,
 		"order_details": func() []map[string]any {
 			details := make([]map[string]any, len(lineItems))
 			for i, item := range lineItems {
@@ -152,6 +155,7 @@ func (a *HyperswitchPaymentAdapter) CreatePayment(ctx context.Context,lineItems 
 					"product_id":   item.ListingID.String(),
 					"amount":       item.AmountCents,
 					"product_name": item.Description,
+					"quantity":     1,
 				}
 			}
 			return details

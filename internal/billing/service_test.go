@@ -283,13 +283,27 @@ func (m *mockIamService) GetFamilyPrimaryEmail(ctx context.Context, familyID uui
 // Test Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// --- CreatorTaxSummaryRepository stub (no-op for existing tests) ---
+
+type stubTaxSummaryRepo struct{}
+
+func (s *stubTaxSummaryRepo) Upsert(_ context.Context, _ uuid.UUID, _ int, _ int64) (*BillCreatorTaxSummary, error) {
+	return &BillCreatorTaxSummary{}, nil
+}
+func (s *stubTaxSummaryRepo) FindByCreatorAndYear(_ context.Context, _ uuid.UUID, _ int) (*BillCreatorTaxSummary, error) {
+	return nil, ErrTaxSummaryNotFound
+}
+func (s *stubTaxSummaryRepo) SetThresholdReached(_ context.Context, _ uuid.UUID, _ int, _ time.Time) (*BillCreatorTaxSummary, error) {
+	return &BillCreatorTaxSummary{}, nil
+}
+
 func newTestService(subRepo *mockSubscriptionRepo, txnRepo *mockTransactionRepo, custRepo *mockCustomerRepo, payoutRepo *mockPayoutRepo, adapter *mockAdapter, iam *mockIamService) *BillingServiceImpl {
 	return newTestServiceWithBus(subRepo, txnRepo, custRepo, payoutRepo, adapter, iam, shared.NewEventBus())
 }
 
 func newTestServiceWithBus(subRepo *mockSubscriptionRepo, txnRepo *mockTransactionRepo, custRepo *mockCustomerRepo, payoutRepo *mockPayoutRepo, adapter *mockAdapter, iam *mockIamService, bus *shared.EventBus) *BillingServiceImpl {
 	return NewBillingService(
-		subRepo, txnRepo, custRepo, payoutRepo,
+		subRepo, txnRepo, custRepo, payoutRepo, &stubTaxSummaryRepo{},
 		adapter, iam, bus,
 		BillingConfig{
 			MonthlyPriceID:       "price_monthly_v1",

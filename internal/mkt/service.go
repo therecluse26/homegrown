@@ -15,8 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// creatorSharePercent is the default creator revenue share. [07-mkt §11]
-const creatorSharePercent = 75
+// creatorSharePercent is the resolved creator revenue share: 70% creator / 30% platform. [S§9.6, S§20.1]
+const creatorSharePercent = 70
 
 // marketplaceServiceImpl implements MarketplaceService.
 type marketplaceServiceImpl struct {
@@ -602,7 +602,7 @@ func (s *marketplaceServiceImpl) RemoveFromCart(ctx context.Context, listingID u
 	return s.cart.RemoveItem(ctx, listingID, scope)
 }
 
-func (s *marketplaceServiceImpl) CreateCheckout(ctx context.Context, scope shared.FamilyScope) (*CheckoutSessionResponse, error) {
+func (s *marketplaceServiceImpl) CreateCheckout(ctx context.Context, scope shared.FamilyScope, returnURL string) (*CheckoutSessionResponse, error) {
 	items, err := s.cart.GetItems(ctx, scope)
 	if err != nil {
 		return nil, err
@@ -651,7 +651,7 @@ func (s *marketplaceServiceImpl) CreateCheckout(ctx context.Context, scope share
 		"family_id": scope.FamilyID().String(),
 	}
 
-	session, err := s.payment.CreatePayment(ctx, lineItems, splitRules, "/marketplace/purchases", metadata)
+	session, err := s.payment.CreatePayment(ctx, lineItems, splitRules, returnURL, metadata)
 	if err != nil {
 		return nil, err
 	}

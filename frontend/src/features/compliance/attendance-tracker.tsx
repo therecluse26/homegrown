@@ -354,7 +354,7 @@ export function AttendanceTracker() {
         )}
 
         {/* Legend */}
-        <div className="flex items-center gap-4 mt-4 pt-3 border-t border-outline-variant/20">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-outline-variant/20">
           <p className="type-label-sm text-on-surface-variant">
             <FormattedMessage id="compliance.attendance.legend" />:
           </p>

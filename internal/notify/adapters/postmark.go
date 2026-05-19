@@ -36,13 +36,16 @@ var _ notify.EmailAdapter = NoopEmailAdapter{}
 // PostmarkEmailAdapter sends email via the Postmark API. [08-notify §7]
 type PostmarkEmailAdapter struct {
 	serverToken string
+	fromAddress string
 	httpClient  *http.Client
 }
 
-// NewPostmarkEmailAdapter creates a PostmarkEmailAdapter with the given server token.
-func NewPostmarkEmailAdapter(serverToken string) *PostmarkEmailAdapter {
+// NewPostmarkEmailAdapter creates a PostmarkEmailAdapter with the given server token and
+// From address (e.g. "Homegrown Academy <hello@example.com>").
+func NewPostmarkEmailAdapter(serverToken, fromAddress string) *PostmarkEmailAdapter {
 	return &PostmarkEmailAdapter{
 		serverToken: serverToken,
+		fromAddress: fromAddress,
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -99,6 +102,7 @@ func (a *PostmarkEmailAdapter) do(ctx context.Context, url string, body any) err
 // SendTransactional sends a single transactional email via Postmark withTemplate. [08-notify §7.1]
 func (a *PostmarkEmailAdapter) SendTransactional(ctx context.Context, to, templateAlias string, templateModel map[string]any) error {
 	return a.do(ctx, postmarkBaseURL+"/email/withTemplate", postmarkTemplateRequest{
+		From:          a.fromAddress,
 		To:            to,
 		TemplateAlias: templateAlias,
 		TemplateModel: templateModel,
@@ -110,6 +114,7 @@ func (a *PostmarkEmailAdapter) SendBatch(ctx context.Context, messages []notify.
 	items := make([]postmarkBatchItem, 0, len(messages))
 	for _, m := range messages {
 		items = append(items, postmarkBatchItem{
+			From:          a.fromAddress,
 			To:            m.To,
 			TemplateAlias: m.TemplateAlias,
 			TemplateModel: m.TemplateModel,
@@ -121,6 +126,7 @@ func (a *PostmarkEmailAdapter) SendBatch(ctx context.Context, messages []notify.
 // SendBroadcast sends a broadcast email via Postmark using the broadcast message stream. [08-notify §7.3]
 func (a *PostmarkEmailAdapter) SendBroadcast(ctx context.Context, to, templateAlias string, templateModel map[string]any) error {
 	return a.do(ctx, postmarkBaseURL+"/email/withTemplate", postmarkTemplateRequest{
+		From:          a.fromAddress,
 		To:            to,
 		TemplateAlias: templateAlias,
 		TemplateModel: templateModel,

@@ -4178,6 +4178,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/tax-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get 1099-K tax summary for the current year
+         * @description Returns cumulative creator earnings for the current calendar year and whether
+         *     the IRS 1099-K reporting threshold ($600) has been exceeded. Data is updated
+         *     monthly by the payout aggregation task.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Tax year (defaults to current year) */
+                    year?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["billing.TaxSummaryResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/transactions": {
         parameters: {
             query?: never;
@@ -14737,7 +14790,12 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            /** @description Checkout request */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["mkt.CheckoutRequest"];
+                };
+            };
             responses: {
                 /** @description Created */
                 201: {
@@ -20927,6 +20985,13 @@ export interface components {
             status?: string;
             tier?: string;
         };
+        "billing.TaxSummaryResponse": {
+            earnings_cents?: number;
+            tax_year?: number;
+            threshold_cents?: number;
+            threshold_exceeded?: boolean;
+            threshold_reached_at?: string;
+        };
         "billing.TransactionListResponse": {
             next_cursor?: string;
             transactions?: components["schemas"]["billing.TransactionResponse"][];
@@ -22355,6 +22420,9 @@ export interface components {
             item_count?: number;
             items?: components["schemas"]["mkt.CartItemResponse"][];
             total_cents?: number;
+        };
+        "mkt.CheckoutRequest": {
+            return_url: string;
         };
         "mkt.CheckoutSessionResponse": {
             checkout_url?: string;

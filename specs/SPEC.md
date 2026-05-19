@@ -735,9 +735,9 @@ Listings MUST follow a lifecycle: **Draft** → **Submitted** → **Published** 
 ### 9.6 Revenue Share & Payouts `[V§9, V§10]`
 
 - The platform MUST implement a revenue share model where creators receive the majority of each sale.
-- The specific revenue share percentage is an **open question** (see §20) — recommended range is 70-75% to creator.
+- **Decided (2026-05-19)**: Creators receive **70%** of each sale, net of payment processing fees. Platform retains 30%. See §20.1.
 - Creators MUST have access to a creator dashboard showing: sales history, earnings, pending payouts, and analytics (views, conversion rate).
-- Payouts MUST follow a defined schedule (e.g., monthly, with a minimum payout threshold).
+- **Payout schedule**: Monthly on the 15th of the following month, with a **$25 minimum threshold** (earnings roll over if below threshold).
 - The platform MUST handle refund deductions from creator earnings.
 - The platform MUST issue 1099-K forms to creators meeting IRS thresholds. `[V§10]`
 
@@ -1440,11 +1440,17 @@ This section defines the key data flows between domains. These contracts are log
 
 Each question includes a recommended position based on analysis of the vision document, competitive landscape, and common platform patterns. These are starting points for decision-making, not final answers.
 
-### 20.1 Marketplace Revenue Share Percentage
+### 20.1 Marketplace Revenue Share Percentage — RESOLVED
 
 **Question**: What percentage of each marketplace sale goes to the creator vs. the platform?
 
-**Recommended Position**: **70-75% to creator**. This is competitive with Outschool (70%) and significantly better than Teachers Pay Teachers' base rate (55-60%). A creator-friendly split aligns with `[V§12]` ("Creator-friendly — fair revenue sharing") and is essential for attracting quality content in a new marketplace.
+**Resolution**: **70% creator / 30% platform**. Resolved 2026-05-19 ([HOM-57](/HOM/issues/HOM-57)).
+
+- **Creator share**: 70% of each sale, net of payment processing fees
+- **Payout schedule**: Monthly, on the 15th of the following month
+- **Minimum payout threshold**: $25 (unpaid earnings roll over to next cycle)
+- **Rationale**: Competitive with Outschool (70%) and significantly better than TPT base rate (55-60%). Creator-friendly split aligns with `[V§12]` ("Creator-friendly — fair revenue sharing") and is essential for attracting quality supply in a new marketplace. The 30% platform share covers payment processing (~3%), hosting/CDN, customer support, and platform development, targeting ~18-20% net margin at scale.
+- **Implementation**: Configure Hyperswitch split rule to route 70% to creator Stripe Connect payout account at transaction time. See §9.4 for payout implementation details.
 
 ### 20.2 Premium Subscription Pricing
 

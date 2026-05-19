@@ -39,7 +39,7 @@ import (
 )
 
 func main() {
-	dbName := flag.String("db", "homegrown_agent", "target database name")
+	dbName := flag.String("db", "homegrown", "target database name")
 	target := flag.Int("target", 200, "number of listings to insert per source")
 	dryRun := flag.Bool("dry-run", false, "print listings to stdout without writing to DB")
 	flag.Parse()

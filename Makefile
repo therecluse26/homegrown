@@ -15,7 +15,7 @@ DATABASE_URL ?= postgres://homegrown:homegrown@localhost:5932/homegrown
 .PHONY: default dev dev-api dev-web docker-up docker-down check check-full lint test type-check a11y \
         migrate db-reset seed seed-full agent-seed-full agent-db-reset agent-kratos-reset agent-server \
         openapi generate-types full-generate audit install-tools install-hooks \
-        backup restore-drill
+        backup restore-drill hs-setup
 
 # Default: run all quality gates
 default: check
@@ -160,6 +160,15 @@ agent-server:
 	DATABASE_URL=postgres://homegrown:homegrown@localhost:5932/homegrown_agent \
 	SERVER_PORT=15180 \
 	$(GO) run ./cmd/server/
+
+# ─── Hyperswitch Local Setup ─────────────────────────────────────────────────
+
+# Bootstrap Hyperswitch after `docker compose up hyperswitch-server`.
+# Creates merchant account, billing + marketplace profiles, dummy connector,
+# and a sub-merchant for the seed creator. Prints .env values to set.
+# Override URL: make hs-setup HS_URL=http://localhost:8080
+hs-setup:
+	HS_URL=$${HS_URL:-http://localhost:8080} bash scripts/hs-setup.sh
 
 # ─── Backup & Restore ────────────────────────────────────────────────────────
 

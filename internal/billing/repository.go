@@ -321,3 +321,52 @@ func (r *PgPayoutRepository) FindPending(ctx context.Context, limit uint32) ([]B
 	}
 	return payouts, nil
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PgCreatorTaxSummaryRepository [10-billing §6, HOM-62]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type PgCreatorTaxSummaryRepository struct{ db *gorm.DB }
+
+func NewPgCreatorTaxSummaryRepository(db *gorm.DB) *PgCreatorTaxSummaryRepository {
+	return &PgCreatorTaxSummaryRepository{db: db}
+}
+
+func (r *PgCreatorTaxSummaryRepository) Upsert(ctx context.Context, creatorID uuid.UUID, year int, earningsCents int64) (*BillCreatorTaxSummary, error) {
+	now := time.Now()
+	err := r.db.WithContext(ctx).Exec(`
+		INSERT INTO bill_creator_tax_summaries (id, creator_id, tax_year, earnings_cents, created_at, updated_at)
+		VALUES (uuidv7(), ?, ?, ?, ?, ?)
+		ON CONFLICT (creator_id, tax_year)
+		DO UPDATE SET earnings_cents = EXCLUDED.earnings_cents, updated_at = EXCLUDED.updated_at
+	`, creatorID, year, earningsCents, now, now).Error
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+	}
+	return r.FindByCreatorAndYear(ctx, creatorID, year)
+}
+
+func (r *PgCreatorTaxSummaryRepository) FindByCreatorAndYear(ctx context.Context, creatorID uuid.UUID, year int) (*BillCreatorTaxSummary, error) {
+	var summary BillCreatorTaxSummary
+	err := r.db.WithContext(ctx).
+		Where("creator_id = ? AND tax_year = ?", creatorID, year).
+		First(&summary).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrTaxSummaryNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+	}
+	return &summary, nil
+}
+
+func (r *PgCreatorTaxSummaryRepository) SetThresholdReached(ctx context.Context, creatorID uuid.UUID, year int, at time.Time) (*BillCreatorTaxSummary, error) {
+	err := r.db.WithContext(ctx).
+		Model(&BillCreatorTaxSummary{}).
+		Where("creator_id = ? AND tax_year = ? AND threshold_reached_at IS NULL", creatorID, year).
+		Updates(map[string]any{"threshold_reached_at": at, "updated_at": time.Now()}).Error
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+	}
+	return r.FindByCreatorAndYear(ctx, creatorID, year)
+}

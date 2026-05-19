@@ -971,41 +971,56 @@ func seedMarketplace(db *gorm.DB) error {
 
 		// 5 listings using seed creator + publisher
 		listings := []struct {
-			id          string
-			title       string
-			description string
-			priceCents  int
-			contentType string
+			id           string
+			title        string
+			description  string
+			priceCents   int
+			contentType  string
+			thumbnailURL string
 		}{
 			{listing1ID, "Charlotte Mason Year 1 Curriculum Guide",
 				"A complete first-year guide with book lists, nature study schedules, and narration prompts.",
-				2999, "curriculum"},
+				2999, "curriculum",
+				"https://picsum.photos/seed/charlotte-mason/800/450"},
 			{listing2ID, "Nature Journal Starter Pack",
 				"Illustrated worksheets for nature journaling: trees, insects, birds, and seasons.",
-				999, "worksheet"},
+				999, "worksheet",
+				"https://picsum.photos/seed/nature-journal/800/450"},
 			{listing3ID, "Living Books Read-Aloud Video Series",
 				"Twelve read-aloud video lessons featuring classic literature with narration guides.",
-				1999, "video"},
+				1999, "video",
+				"https://picsum.photos/seed/reading-books/800/450"},
 			{listing4ID, "Charlotte Mason Book List: K-5",
 				"Curated living books list organized by subject and grade level, with library links.",
-				499, "book_list"},
+				499, "book_list",
+				"https://picsum.photos/seed/library-books/800/450"},
 			{listing5ID, "Narration Assessment Rubric",
 				"Age-appropriate narration assessment tools for oral and written narration.",
-				299, "assessment"},
+				299, "assessment",
+				"https://picsum.photos/seed/writing-desk/800/450"},
 		}
 
 		for _, l := range listings {
 			if err := tx.Exec(`
 				INSERT INTO mkt_listings
 					(id, creator_id, publisher_id, title, description, price_cents,
-					 methodology_tags, subject_tags, content_type, status, published_at)
+					 methodology_tags, subject_tags, content_type, status, published_at,
+					 thumbnail_url)
 				VALUES (?, ?, ?, ?, ?, ?,
-					'{}', ARRAY['reading','language_arts'], ?, 'published', NOW() - INTERVAL '30 days')
+					'{}', ARRAY['reading','language_arts'], ?, 'published', NOW() - INTERVAL '30 days',
+					?)
 				ON CONFLICT (id) DO NOTHING`,
 				l.id, seedCreatorID, seedPublisherID,
-				l.title, l.description, l.priceCents, l.contentType,
+				l.title, l.description, l.priceCents, l.contentType, l.thumbnailURL,
 			).Error; err != nil {
 				return fmt.Errorf("insert listing %s: %w", l.id, err)
+			}
+			// Backfill thumbnail for already-seeded rows (idempotent).
+			if err := tx.Exec(
+				`UPDATE mkt_listings SET thumbnail_url = ? WHERE id = ? AND thumbnail_url IS NULL`,
+				l.thumbnailURL, l.id,
+			).Error; err != nil {
+				return fmt.Errorf("backfill thumbnail %s: %w", l.id, err)
 			}
 		}
 
@@ -1090,13 +1105,22 @@ func seedMarketplace(db *gorm.DB) error {
 		if err := tx.Exec(`
 			INSERT INTO mkt_listings
 				(id, creator_id, publisher_id, title, description, price_cents,
-				 methodology_tags, subject_tags, content_type, status, published_at)
+				 methodology_tags, subject_tags, content_type, status, published_at,
+				 thumbnail_url)
 			VALUES (?, ?, ?, 'Classical Trivium Workbook', 'A comprehensive grammar-stage workbook.', 1999,
-				'{}', ARRAY['language_arts','latin'], 'worksheet', 'published', NOW() - INTERVAL '20 days')
+				'{}', ARRAY['language_arts','latin'], 'worksheet', 'published', NOW() - INTERVAL '20 days',
+				'https://picsum.photos/seed/classical-trivium/800/450')
 			ON CONFLICT (id) DO NOTHING`,
 			friendListingID, friendCreatorID, friendPublisherID,
 		).Error; err != nil {
 			return fmt.Errorf("insert friend listing: %w", err)
+		}
+		// Backfill thumbnail for already-seeded friend listing (idempotent).
+		if err := tx.Exec(
+			`UPDATE mkt_listings SET thumbnail_url = ? WHERE id = ? AND thumbnail_url IS NULL`,
+			"https://picsum.photos/seed/classical-trivium/800/450", friendListingID,
+		).Error; err != nil {
+			return fmt.Errorf("backfill friend listing thumbnail: %w", err)
 		}
 
 		// Seed family purchase of friend listing (enables review creation in E2E)

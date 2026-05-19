@@ -3548,6 +3548,45 @@ const docTemplate = `{
                 }
             }
         },
+        "/billing/tax-summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns cumulative creator earnings for the current calendar year and whether\nthe IRS 1099-K reporting threshold ($600) has been exceeded. Data is updated\nmonthly by the payout aggregation task.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "billing"
+                ],
+                "summary": "Get 1099-K tax summary for the current year",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tax year (defaults to current year)",
+                        "name": "year",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/billing.TaxSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/billing/transactions": {
             "get": {
                 "security": [
@@ -13050,6 +13089,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -13057,6 +13099,17 @@ const docTemplate = `{
                     "marketplace"
                 ],
                 "summary": "Create a checkout session",
+                "parameters": [
+                    {
+                        "description": "Checkout request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/mkt.CheckoutRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -18918,6 +18971,26 @@ const docTemplate = `{
                 }
             }
         },
+        "billing.TaxSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "earnings_cents": {
+                    "type": "integer"
+                },
+                "tax_year": {
+                    "type": "integer"
+                },
+                "threshold_cents": {
+                    "type": "integer"
+                },
+                "threshold_exceeded": {
+                    "type": "boolean"
+                },
+                "threshold_reached_at": {
+                    "type": "string"
+                }
+            }
+        },
         "billing.TransactionListResponse": {
             "type": "object",
             "properties": {
@@ -23710,6 +23783,17 @@ const docTemplate = `{
                 },
                 "total_cents": {
                     "type": "integer"
+                }
+            }
+        },
+        "mkt.CheckoutRequest": {
+            "type": "object",
+            "required": [
+                "return_url"
+            ],
+            "properties": {
+                "return_url": {
+                    "type": "string"
                 }
             }
         },
