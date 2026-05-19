@@ -17,12 +17,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Platform creator/publisher UUIDs seeded by HOM-40.
-const (
-	PlatformCreatorID   = "018f1234-0000-7000-8000-000000000001"
-	PlatformPublisherID = "018f1234-0000-7000-8000-000000000002"
-)
-
 const (
 	gutendexDefaultURL  = "https://gutendex.com/books"
 	gutenbergBookURLFmt = "https://www.gutenberg.org/ebooks/%d"
@@ -53,7 +47,8 @@ type Config struct {
 	HTTPClient     *http.Client  // defaults to a 30-second client
 	PageDelay      time.Duration // inter-page courtesy delay; 0 = none (useful for tests)
 	RetryBaseDelay time.Duration // base wait between HTTP retries; 0 → 1 s; negative → no delay (tests)
-	Storage        Uploader      // R2 uploader for hosted ingesters (e.g. CK Foundation); nil = skip uploads
+	Storage          Uploader          // R2 uploader for hosted ingesters (e.g. CK Foundation); nil = skip uploads
+	ThumbnailStorage ThumbnailUploader // raw object-storage for thumbnail upload; nil = skip thumbnail fetcher
 }
 
 type gutendexAuthor struct {

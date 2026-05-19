@@ -219,9 +219,11 @@ incomplete, fix the spec first, then continue coding.
 | `make test` | Run `go test ./...` |
 | `make type-check` | Run TypeScript type checker in `frontend/` |
 | `make migrate` | Run pending database migrations (goose) |
-| `make db-reset` | Drop + recreate app DB and dev Kratos DB, recreate Kratos container, migrate |
+| `make db-reset` | Reset the DEV database (homegrown) + dev Kratos only |
 | `make seed` | Re-seed the agent database (idempotent; safe to rerun) |
+| `make seed-full` | Full-scale seed for the dev database (homegrown) — ~1000 families |
 | `make agent-db-reset` | Full agent reset: drop → recreate app DB + Kratos DB, recreate Kratos container, seed |
+| `make agent-seed-full` | Basic seed + full-scale seed for the agent database |
 | `make agent-kratos-reset` | Wipe + reinitialise the agent Kratos identity store |
 | `make openapi` | Regenerate OpenAPI spec from Go swag annotations |
 | `make generate-types` | Regenerate TypeScript types from OpenAPI spec |
@@ -263,6 +265,8 @@ explicitly: `make seed DB=homegrown`.
 | Agent login / Kratos identity is broken or stale | `make agent-kratos-reset` |
 | Full clean slate (schema + data + identities) | `make agent-db-reset` |
 | Seed the developer's own DB (rarely needed) | `make seed DB=homegrown` |
+| Full-scale seed for the dev database (homegrown) | `make seed-full` |
+| Full-scale seed for the agent database | `make agent-seed-full` |
 
 ### Seeder Behaviour
 

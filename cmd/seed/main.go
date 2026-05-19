@@ -92,7 +92,8 @@ const (
 	seedPurchaseID   = "01900000-0000-7000-8000-000000000223"
 
 	// Platform Content (deterministic; used by content ingestion CLI)
-	platformContentCreatorID   = "018f1234-0000-7000-8000-000000000001"
+	// PlatformCreatorID MUST match sources.PlatformCreatorID in cmd/seed-content.
+	platformContentCreatorID   = "01900000-0000-7000-8000-000000000206"
 	platformContentPublisherID = "018f1234-0000-7000-8000-000000000002"
 
 	// Marketplace Extended
@@ -1194,7 +1195,7 @@ func seedPlatformContent(db *gorm.DB) error {
 			VALUES (?, ?, 'active', 'Homegrown Academy',
 				'Curated free and public domain educational resources.',
 				NOW() - INTERVAL '365 days')
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT (parent_id) DO NOTHING`,
 			platformContentCreatorID, adminParentID,
 		).Error; err != nil {
 			return fmt.Errorf("insert platform content creator: %w", err)

@@ -71,8 +71,18 @@ func main() {
 		cfg.DB = db
 	}
 
-	// R2 uploader — optional; CK Foundation ingester is skipped when not configured.
-	cfg.Storage = buildUploader(ctx)
+	// R2 uploader — optional; CK Foundation and thumbnail ingesters skip when not configured.
+	pdfUploader, imgStorage := buildUploaders(ctx)
+	cfg.Storage = pdfUploader
+	cfg.ThumbnailStorage = imgStorage
+
+	// Ensure the platform publisher + creator rows exist before any ingester runs.
+	if !*dryRun {
+		if err := sources.EnsurePlatformEntities(cfg.DB); err != nil {
+			slog.Error("ensure platform entities", "err", err)
+			os.Exit(1)
+		}
+	}
 
 	// ── Gutenberg (link-out, no R2) ───────────────────────────────────────────
 	n, err := sources.RunGutenberg(ctx, cfg)
@@ -98,14 +108,25 @@ func main() {
 		slog.Info("ck_foundation complete", "inserted", ckN)
 	}
 
+	// ── Thumbnail fetcher (Wikimedia / Smithsonian → R2) ─────────────────────
+	thumbN, thumbErr := sources.RunThumbnailFetcher(ctx, cfg)
+	if thumbErr != nil {
+		slog.Error("thumbnail fetcher failed", "err", thumbErr)
+		os.Exit(1)
+	}
+	if *dryRun {
+		fmt.Printf("dry-run complete: %d listings would receive thumbnails\n", thumbN)
+	} else {
+		slog.Info("thumbnail fetcher complete", "updated", thumbN)
+	}
+
 	slog.Info("content seeding complete",
-		"gutenberg", n, "ck_foundation", ckN)
+		"gutenberg", n, "ck_foundation", ckN, "thumbnails", thumbN)
 }
 
-// buildUploader constructs an R2Uploader from OBJECT_STORAGE_* env vars.
-// Returns nil when the required env vars are absent — callers that need R2
-// (e.g. CK Foundation) will log a warning and skip gracefully.
-func buildUploader(ctx context.Context) sources.Uploader {
+// buildUploaders constructs the PDF uploader and raw image storage from OBJECT_STORAGE_* env vars.
+// Returns (nil, nil) when the required env vars are absent — callers that need R2 will log and skip.
+func buildUploaders(ctx context.Context) (sources.Uploader, sources.ThumbnailUploader) {
 	endpoint := os.Getenv("OBJECT_STORAGE_ENDPOINT")
 	bucket := os.Getenv("OBJECT_STORAGE_BUCKET")
 	accessKey := os.Getenv("OBJECT_STORAGE_ACCESS_KEY_ID")
@@ -117,7 +138,7 @@ func buildUploader(ctx context.Context) sources.Uploader {
 
 	if endpoint == "" || bucket == "" || accessKey == "" || secretKey == "" {
 		slog.Warn("OBJECT_STORAGE_* env vars not fully set — R2 uploads disabled")
-		return nil
+		return nil, nil
 	}
 
 	stor, err := mediaAdapters.NewS3StorageAdapter(ctx, mediaAdapters.S3Config{
@@ -129,11 +150,12 @@ func buildUploader(ctx context.Context) sources.Uploader {
 	})
 	if err != nil {
 		slog.Error("init R2 adapter", "err", err)
-		return nil
+		return nil, nil
 	}
 
 	slog.Info("R2 uploader initialised", "bucket", bucket, "endpoint", maskEndpoint(endpoint))
-	return newR2Uploader(stor)
+	// stor satisfies sources.ThumbnailUploader (PutObject + PresignedGet) via structural typing.
+	return newR2Uploader(stor), stor
 }
 
 // maskEndpoint returns a loggable version of the R2 endpoint with the account ID redacted.

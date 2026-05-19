@@ -13,7 +13,7 @@ GOOSE := $(GOBIN)/goose
 DATABASE_URL ?= postgres://homegrown:homegrown@localhost:5932/homegrown
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check check-full lint test type-check a11y \
-        migrate db-reset seed seed-full agent-db-reset agent-kratos-reset agent-server \
+        migrate db-reset seed seed-full agent-seed-full agent-db-reset agent-kratos-reset agent-server \
         openapi generate-types full-generate audit install-tools install-hooks \
         backup restore-drill
 
@@ -75,7 +75,7 @@ a11y:
 migrate:
 	$(GOOSE) -dir migrations postgres "$(DATABASE_URL)" up
 
-# Reset the database + dev Kratos (drop + recreate + migrate)
+# Reset the DEV database (homegrown) + dev Kratos only. For the agent DB, use agent-db-reset.
 db-reset:
 	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'homegrown' AND pid <> pg_backend_pid();"
 	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS homegrown;"
@@ -122,9 +122,17 @@ DB ?= homegrown_agent
 seed:
 	$(GO) run ./cmd/seed/ --db $(DB)
 
-# Full-scale seed: basic seed + 997 additional families with rich data across all domains.
+# Full-scale seed against the DEV database by default (homegrown).
+# Override: make seed-full FULL_DB=homegrown_agent
 # Creates ~1000 families, social interactions, learning content, marketplace, compliance, etc.
-seed-full: seed
+FULL_DB ?= homegrown
+seed-full:
+	$(MAKE) seed DB=$(FULL_DB)
+	$(GO) run ./cmd/seed-full/ --db $(FULL_DB)
+
+# Full-scale seed for the agent database: runs basic seed first, then seed-full against homegrown_agent.
+agent-seed-full:
+	$(MAKE) seed
 	$(GO) run ./cmd/seed-full/ --db $(DB)
 
 # Full agent reset: drop → recreate app DB + Kratos DB → migrate Kratos schema → seed
