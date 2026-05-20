@@ -1,6 +1,6 @@
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
-import { ArrowLeft, Download, Package } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Package } from "lucide-react";
 import {
   Card,
   Icon,
@@ -10,11 +10,12 @@ import {
   EmptyState,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
-import { usePurchases } from "@/hooks/use-marketplace";
+import { usePurchases, useDownloadPurchase } from "@/hooks/use-marketplace";
 
 export function MyLibrary() {
   const intl = useIntl();
   const { data, isPending } = usePurchases();
+  const downloadPurchase = useDownloadPurchase();
 
   const purchases = data?.data ?? [];
 
@@ -86,14 +87,31 @@ export function MyLibrary() {
                     </Badge>
                   )}
                   {!purchase.refunded && (
-                    <RouterLink
-                      to={`/marketplace/listings/${purchase.listing_id}`}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={downloadPurchase.isPending}
+                      onClick={() =>
+                        downloadPurchase.mutate(purchase.listing_id, {
+                          onSuccess: ({ download_url }) => {
+                            const a = document.createElement("a");
+                            a.href = download_url;
+                            a.target = "_blank";
+                            a.rel = "noopener noreferrer";
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                          },
+                        })
+                      }
                     >
-                      <Button variant="secondary" size="sm">
-                        <Icon icon={Download} size="sm" className="mr-1" />
-                        <FormattedMessage id="marketplace.library.download" />
-                      </Button>
-                    </RouterLink>
+                      <Icon
+                        icon={downloadPurchase.isPending ? Loader2 : Download}
+                        size="sm"
+                        className="mr-1"
+                      />
+                      <FormattedMessage id="marketplace.library.download" />
+                    </Button>
                   )}
                 </div>
               </div>

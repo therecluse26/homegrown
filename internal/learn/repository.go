@@ -517,6 +517,34 @@ func (r *PgReadingProgressRepository) CountCompleted(ctx context.Context, scope 
 	return count, nil
 }
 
+func (r *PgReadingProgressRepository) FindByStudentAndItem(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, readingItemID uuid.UUID) (*ReadingProgressModel, error) {
+	var progress ReadingProgressModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Where("student_id = ? AND reading_item_id = ?", studentID, readingItemID).First(&progress).Error
+	})
+	if txErr != nil {
+		if errors.Is(txErr, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return &progress, nil
+}
+
+func (r *PgReadingProgressRepository) FindByStudentForItems(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, itemIDs []uuid.UUID) ([]ReadingProgressModel, error) {
+	if len(itemIDs) == 0 {
+		return nil, nil
+	}
+	var records []ReadingProgressModel
+	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+		return tx.Where("student_id = ? AND reading_item_id IN ?", studentID, itemIDs).Find(&records).Error
+	})
+	if txErr != nil {
+		return nil, shared.ErrDatabase(txErr)
+	}
+	return records, nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Layer 3: Reading List Repository (FamilyScope required)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -597,15 +625,20 @@ func (r *PgReadingListRepository) Delete(ctx context.Context, scope *shared.Fami
 	return nil
 }
 
-func (r *PgReadingListRepository) AddItems(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, itemIDs []uuid.UUID) error {
+func (r *PgReadingListRepository) AddItems(ctx context.Context, _ *shared.FamilyScope, listID uuid.UUID, itemIDs []uuid.UUID) error {
 	if len(itemIDs) == 0 {
 		return nil
 	}
-	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
-		// Get current max sort order.
+	// learn_reading_list_items has no family_id column — family isolation is enforced
+	// through the FK to learn_reading_lists, whose ownership is verified by FindByID
+	// with full family scope before this method is ever called.
+	txErr := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var maxOrder int16
-		tx.Model(&ReadingListItemModel{}).Where("reading_list_id = ?", listID).
-			Select("COALESCE(MAX(sort_order), 0)").Scan(&maxOrder)
+		if err := tx.Model(&ReadingListItemModel{}).
+			Where("reading_list_id = ?", listID).
+			Select("COALESCE(MAX(sort_order), 0)").Scan(&maxOrder).Error; err != nil {
+			return err
+		}
 
 		items := make([]ReadingListItemModel, len(itemIDs))
 		for i, id := range itemIDs {
@@ -624,11 +657,12 @@ func (r *PgReadingListRepository) AddItems(ctx context.Context, scope *shared.Fa
 	return nil
 }
 
-func (r *PgReadingListRepository) RemoveItems(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, itemIDs []uuid.UUID) error {
+func (r *PgReadingListRepository) RemoveItems(ctx context.Context, _ *shared.FamilyScope, listID uuid.UUID, itemIDs []uuid.UUID) error {
 	if len(itemIDs) == 0 {
 		return nil
 	}
-	txErr := shared.ScopedTransaction(ctx, r.db, *scope, func(tx *gorm.DB) error {
+	// learn_reading_list_items has no family_id column — see AddItems comment.
+	txErr := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return tx.Where("reading_list_id = ? AND reading_item_id IN ?", listID, itemIDs).
 			Delete(&ReadingListItemModel{}).Error
 	})

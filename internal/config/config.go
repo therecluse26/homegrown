@@ -108,6 +108,12 @@ type AppConfig struct {
 	// Webhook signing secret for billing-specific Hyperswitch webhooks.
 	BillingWebhookSecret string
 
+	// ─── Application ────────────────────────────────────────────────
+	// Public base URL of the app (e.g. "https://app.homegrown.academy").
+	// Used to construct absolute URLs in emails (unsubscribe links, etc.).
+	// Required in production; defaults to "http://localhost:5173" in development.
+	AppPublicURL string
+
 	// ─── Notifications (Postmark) ──────────────────────────────────
 	// Postmark server API token. Optional — omit to use NoopEmailAdapter.
 	PostmarkServerToken string
@@ -304,6 +310,16 @@ func LoadConfig() (*AppConfig, error) {
 		objectStoragePublicURL = "https://media.localhost"
 	}
 
+	// Public base URL (used for absolute URLs in emails)
+	appPublicURL := os.Getenv("APP_PUBLIC_URL")
+	if appPublicURL == "" {
+		if env == EnvironmentProduction {
+			return nil, fmt.Errorf("required environment variable APP_PUBLIC_URL is not set") //nolint:goerr113
+		}
+		appPublicURL = "http://localhost:5173"
+		slog.Warn("APP_PUBLIC_URL not set; using localhost default — set this env var in production")
+	}
+
 	// Optional Postmark config (omit to disable email)
 	postmarkServerToken := envOrDefault("POSTMARK_SERVER_TOKEN", "")
 	postmarkFromAddress := os.Getenv("POSTMARK_FROM_ADDRESS")
@@ -362,6 +378,7 @@ func LoadConfig() (*AppConfig, error) {
 		ObjectStorageAccessKeyID:    objectStorageAccessKeyID,
 		ObjectStorageSecretAccessKey: objectStorageSecretAccessKey,
 		ObjectStoragePublicURL:      objectStoragePublicURL,
+		AppPublicURL:            appPublicURL,
 		PostmarkServerToken:     postmarkServerToken,
 		PostmarkFromAddress:     postmarkFromAddress,
 		UnsubscribeSecret:       unsubscribeSecret,

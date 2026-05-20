@@ -15,6 +15,7 @@ import { Icon, Spinner } from "@/components/ui";
 import { SkipLink } from "@/components/common";
 import { useAuthContext } from "@/features/auth/auth-provider";
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { CartBadge } from "@/components/layout/cart-badge";
 import { SearchBar } from "@/components/layout/search-bar";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { CoppaReverificationBanner } from "@/features/auth/coppa-reverification-banner";
@@ -156,6 +157,7 @@ function Header() {
         >
           <Icon icon={Search} size="md" />
         </NavLink>
+        <CartBadge />
         <NotificationBell />
         <div className="type-label-md text-on-surface-variant">
           {user?.display_name ?? ""}

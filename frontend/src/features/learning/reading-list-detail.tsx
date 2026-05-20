@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useParams, useNavigate, Link as RouterLink } from "react-router";
-import { ArrowLeft, Edit2, Trash2, BookOpen } from "lucide-react";
+import { ArrowLeft, Edit2, Trash2, BookOpen, CheckCircle2, Circle } from "lucide-react";
 import {
   Button,
   Card,
   Icon,
   Skeleton,
-  Badge,
   Input,
   Textarea,
   Modal,
@@ -18,6 +17,7 @@ import {
   useReadingListDetail,
   useUpdateReadingList,
   useDeleteReadingList,
+  useMarkBookReadStatus,
 } from "@/hooks/use-reading";
 
 export function ReadingListDetail() {
@@ -30,6 +30,7 @@ export function ReadingListDetail() {
   const { data: list, isPending } = useReadingListDetail(id ?? "");
   const updateList = useUpdateReadingList();
   const deleteList = useDeleteReadingList();
+  const markBookRead = useMarkBookReadStatus(id ?? "");
 
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -211,41 +212,64 @@ export function ReadingListDetail() {
               </p>
             ) : (
               <div className="space-y-2">
-                {list.items.map((item) => (
-                  <div
-                    key={item.reading_item.id}
-                    className="flex items-center justify-between py-2 border-b border-outline-variant/10 last:border-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon
-                        icon={BookOpen}
-                        size="sm"
-                        className="text-on-surface-variant"
-                      />
-                      <div>
-                        <p className="type-body-sm text-on-surface">
-                          {item.reading_item.title}
-                        </p>
-                        {item.reading_item.author && (
-                          <p className="type-label-sm text-on-surface-variant">
-                            {item.reading_item.author}
+                {list.items.map((item) => {
+                  const isCompleted = item.progress?.status === "completed";
+                  const canToggle = !!list.student_id;
+                  return (
+                    <div
+                      key={item.reading_item.id}
+                      className="flex items-center justify-between py-2 border-b border-outline-variant/10 last:border-0"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon
+                          icon={BookOpen}
+                          size="sm"
+                          className="text-on-surface-variant"
+                        />
+                        <div>
+                          <p className={`type-body-sm ${isCompleted ? "text-on-surface-variant line-through" : "text-on-surface"}`}>
+                            {item.reading_item.title}
                           </p>
-                        )}
+                          {item.reading_item.author && (
+                            <p className="type-label-sm text-on-surface-variant">
+                              {item.reading_item.author}
+                            </p>
+                          )}
+                        </div>
                       </div>
+                      {canToggle && (
+                        <button
+                          type="button"
+                          title={
+                            isCompleted
+                              ? intl.formatMessage({ id: "readingListDetail.markUnread" })
+                              : intl.formatMessage({ id: "readingListDetail.markRead" })
+                          }
+                          disabled={markBookRead.isPending}
+                          onClick={() =>
+                            markBookRead.mutate({
+                              bookId: item.reading_item.id,
+                              studentId: list.student_id!,
+                              completed: !isCompleted,
+                            })
+                          }
+                          className={`flex items-center gap-1.5 type-label-sm transition-colors disabled:opacity-50 ${isCompleted ? "text-primary" : "text-on-surface-variant hover:text-on-surface"}`}
+                        >
+                          <Icon
+                            icon={isCompleted ? CheckCircle2 : Circle}
+                            size="sm"
+                          />
+                          <span className="hidden sm:inline">
+                            {isCompleted
+                              ? intl.formatMessage({ id: "readingListDetail.markUnread" })
+                              : intl.formatMessage({ id: "readingListDetail.markRead" })
+                            }
+                          </span>
+                        </button>
+                      )}
                     </div>
-                    {item.progress && (
-                      <Badge
-                        variant={
-                          item.progress.status === "completed"
-                            ? "primary"
-                            : "secondary"
-                        }
-                      >
-                        {item.progress.status}
-                      </Badge>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>

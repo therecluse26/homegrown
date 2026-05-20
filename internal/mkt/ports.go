@@ -75,6 +75,7 @@ type MarketplaceService interface {
 	// Listing browse
 	BrowseListings(ctx context.Context, params BrowseListingsParams) (*shared.PaginatedResponse[ListingBrowseResponse], error)
 	GetListing(ctx context.Context, listingID uuid.UUID) (*ListingDetailResponse, error)
+	CheckOwnership(ctx context.Context, listingID uuid.UUID, scope shared.FamilyScope) (bool, error)
 	AutocompleteListings(ctx context.Context, query string, limit uint8) ([]AutocompleteResult, error)
 	GetCuratedSections(ctx context.Context, itemsPerSection uint8) ([]CuratedSectionResponse, error)
 

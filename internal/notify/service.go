@@ -27,6 +27,7 @@ type NotificationServiceImpl struct {
 	pubsub            shared.PubSub
 	jobEnqueuer       shared.JobEnqueuer
 	unsubscribeSecret string
+	appPublicURL      string
 }
 
 // NewNotificationService creates a new NotificationServiceImpl.
@@ -40,6 +41,7 @@ func NewNotificationService(
 	pubsub shared.PubSub,
 	jobEnqueuer shared.JobEnqueuer,
 	unsubscribeSecret string,
+	appPublicURL string,
 ) *NotificationServiceImpl {
 	return &NotificationServiceImpl{
 		notificationRepo:  notificationRepo,
@@ -51,6 +53,7 @@ func NewNotificationService(
 		pubsub:            pubsub,
 		jobEnqueuer:       jobEnqueuer,
 		unsubscribeSecret: unsubscribeSecret,
+		appPublicURL:      appPublicURL,
 	}
 }
 
@@ -318,7 +321,7 @@ func (s *NotificationServiceImpl) CreateNotification(ctx context.Context, cmd Cr
 				if tokenErr != nil {
 					slog.Error("generate unsubscribe token", "error", tokenErr)
 				} else {
-					templateModel["unsubscribe_url"] = fmt.Sprintf("/v1/notifications/unsubscribe?token=%s", unsubToken)
+					templateModel["unsubscribe_url"] = s.appPublicURL + "/v1/notifications/unsubscribe?token=" + unsubToken
 				}
 
 				taskPayload := SendEmailTaskPayload{
@@ -642,7 +645,7 @@ func (s *NotificationServiceImpl) buildEmailMessage(ctx context.Context, cmd Cre
 	if tokenErr != nil {
 		slog.Error("generate unsubscribe token", "error", tokenErr)
 	} else {
-		templateModel["unsubscribe_url"] = fmt.Sprintf("/v1/notifications/unsubscribe?token=%s", unsubToken)
+		templateModel["unsubscribe_url"] = s.appPublicURL + "/v1/notifications/unsubscribe?token=" + unsubToken
 	}
 
 	return &BatchEmailMessage{

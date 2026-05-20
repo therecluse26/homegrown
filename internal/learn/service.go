@@ -914,6 +914,17 @@ func (s *learningServiceImpl) GetReadingList(ctx context.Context, scope *shared.
 	for i := range items {
 		itemMap[items[i].ID] = &items[i]
 	}
+	// Load student progress when the list is assigned to a student.
+	progressMap := make(map[uuid.UUID]*ReadingProgressModel)
+	if list.StudentID != nil && len(itemIDs) > 0 {
+		progressRecords, pErr := s.readingProgressRepo.FindByStudentForItems(ctx, scope, *list.StudentID, itemIDs)
+		if pErr != nil {
+			return ReadingListDetailResponse{}, pErr
+		}
+		for i := range progressRecords {
+			progressMap[progressRecords[i].ReadingItemID] = &progressRecords[i]
+		}
+	}
 	respItems := make([]ReadingListItemWithProgress, len(listItems))
 	for i, li := range listItems {
 		item := itemMap[li.ReadingItemID]
@@ -921,9 +932,15 @@ func (s *learningServiceImpl) GetReadingList(ctx context.Context, scope *shared.
 		if item != nil {
 			summary = readingItemToSummary(item)
 		}
+		var progress *ReadingProgressResponse
+		if p, ok := progressMap[li.ReadingItemID]; ok {
+			resp := readingProgressToResponse(p, item)
+			progress = &resp
+		}
 		respItems[i] = ReadingListItemWithProgress{
 			ReadingItem: summary,
 			SortOrder:   li.SortOrder,
+			Progress:    progress,
 		}
 	}
 	return ReadingListDetailResponse{
@@ -934,6 +951,75 @@ func (s *learningServiceImpl) GetReadingList(ctx context.Context, scope *shared.
 		Items:       respItems,
 		CreatedAt:   list.CreatedAt,
 	}, nil
+}
+
+func (s *learningServiceImpl) MarkBookReadStatus(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, bookID uuid.UUID, cmd MarkBookReadCommand) (ReadingProgressResponse, error) {
+	if err := s.verifyStudentInFamily(ctx, cmd.StudentID, scope); err != nil {
+		return ReadingProgressResponse{}, err
+	}
+	// Verify the list belongs to the family.
+	if _, err := s.readingListRepo.FindByID(ctx, scope, listID); err != nil {
+		return ReadingProgressResponse{}, err
+	}
+	// Verify the reading item exists.
+	item, err := s.readingItemRepo.FindByID(ctx, bookID)
+	if err != nil {
+		return ReadingProgressResponse{}, err
+	}
+	targetStatus := domain.ReadingStatusToRead
+	if cmd.Completed {
+		targetStatus = domain.ReadingStatusCompleted
+	}
+	existing, err := s.readingProgressRepo.FindByStudentAndItem(ctx, scope, cmd.StudentID, bookID)
+	if err != nil {
+		return ReadingProgressResponse{}, err
+	}
+	if existing == nil {
+		now := time.Now()
+		progress := &ReadingProgressModel{
+			StudentID:     cmd.StudentID,
+			ReadingItemID: bookID,
+			ReadingListID: &listID,
+			Status:        targetStatus,
+			StartedAt:     &now,
+		}
+		if cmd.Completed {
+			progress.CompletedAt = &now
+		}
+		if err := s.readingProgressRepo.Create(ctx, scope, progress); err != nil {
+			return ReadingProgressResponse{}, err
+		}
+		if cmd.Completed {
+			_ = s.eventBus.Publish(ctx, BookCompleted{
+				FamilyID:         scope.FamilyID(),
+				StudentID:        cmd.StudentID,
+				ReadingItemID:    bookID,
+				ReadingItemTitle: item.Title,
+			})
+		}
+		return readingProgressToResponse(progress, item), nil
+	}
+	// Update existing record — toggle bypasses normal transition rules.
+	existing.Status = targetStatus
+	existing.UpdatedAt = time.Now()
+	if cmd.Completed {
+		now := time.Now()
+		existing.CompletedAt = &now
+	} else {
+		existing.CompletedAt = nil
+	}
+	if err := s.readingProgressRepo.Update(ctx, scope, existing); err != nil {
+		return ReadingProgressResponse{}, err
+	}
+	if cmd.Completed {
+		_ = s.eventBus.Publish(ctx, BookCompleted{
+			FamilyID:         scope.FamilyID(),
+			StudentID:        cmd.StudentID,
+			ReadingItemID:    bookID,
+			ReadingItemTitle: item.Title,
+		})
+	}
+	return readingProgressToResponse(existing, item), nil
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -207,6 +207,7 @@ func newTestService(
 		shared.NoopPubSub{},
 		shared.NoopJobEnqueuer{},
 		"test-secret",
+		"http://localhost:5173",
 	)
 }
 
@@ -228,6 +229,7 @@ func newTestServiceFull(
 		pubsub,
 		jobs,
 		"test-secret",
+		"http://localhost:5173",
 	)
 }
 
@@ -1040,7 +1042,7 @@ func TestSocialEventHandlers(t *testing.T) {
 
 		svc := NewNotificationService(
 			notifRepo, prefRepo, &mockDigestRepo{}, &mockEmailAdapter{},
-			iamSvc, new(mockCache), shared.NoopPubSub{}, jobsMock, "test-secret",
+			iamSvc, new(mockCache), shared.NoopPubSub{}, jobsMock, "test-secret", "http://localhost:5173",
 		)
 
 		err := svc.HandleEventCancelled(ctx, EventCancelledEvent{
@@ -1079,7 +1081,7 @@ func TestSocialEventHandlers(t *testing.T) {
 
 		svc := NewNotificationService(
 			notifRepo, prefRepo, &mockDigestRepo{}, &mockEmailAdapter{},
-			new(mockIamService), new(mockCache), shared.NoopPubSub{}, jobsMock, "test-secret",
+			new(mockIamService), new(mockCache), shared.NoopPubSub{}, jobsMock, "test-secret", "http://localhost:5173",
 		)
 
 		err := svc.HandleEventCancelled(ctx, EventCancelledEvent{

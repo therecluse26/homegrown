@@ -55,21 +55,42 @@ var _ notify.EmailAdapter = (*PostmarkEmailAdapter)(nil)
 
 const postmarkBaseURL = "https://api.postmarkapp.com"
 
+// postmarkHeader is a single email header name/value pair.
+type postmarkHeader struct {
+	Name  string `json:"Name"`
+	Value string `json:"Value"`
+}
+
 // postmarkTemplateRequest is the request body for the withTemplate endpoint.
 type postmarkTemplateRequest struct {
-	From          string         `json:"From"`
-	To            string         `json:"To"`
-	TemplateAlias string         `json:"TemplateAlias"`
-	TemplateModel map[string]any `json:"TemplateModel"`
-	MessageStream string         `json:"MessageStream,omitempty"`
+	From          string           `json:"From"`
+	To            string           `json:"To"`
+	TemplateAlias string           `json:"TemplateAlias"`
+	TemplateModel map[string]any   `json:"TemplateModel"`
+	MessageStream string           `json:"MessageStream,omitempty"`
+	Headers       []postmarkHeader `json:"Headers,omitempty"`
 }
 
 // postmarkBatchItem is a single item in a batch send.
 type postmarkBatchItem struct {
-	From          string         `json:"From"`
-	To            string         `json:"To"`
-	TemplateAlias string         `json:"TemplateAlias"`
-	TemplateModel map[string]any `json:"TemplateModel"`
+	From          string           `json:"From"`
+	To            string           `json:"To"`
+	TemplateAlias string           `json:"TemplateAlias"`
+	TemplateModel map[string]any   `json:"TemplateModel"`
+	Headers       []postmarkHeader `json:"Headers,omitempty"`
+}
+
+// unsubscribeHeaders builds RFC 8058 List-Unsubscribe headers from the unsubscribe_url
+// template model key when present. Gmail requires these for bulk/transactional senders.
+func unsubscribeHeaders(templateModel map[string]any) []postmarkHeader {
+	url, ok := templateModel["unsubscribe_url"].(string)
+	if !ok || url == "" {
+		return nil
+	}
+	return []postmarkHeader{
+		{Name: "List-Unsubscribe", Value: "<" + url + ">"},
+		{Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click"},
+	}
 }
 
 func (a *PostmarkEmailAdapter) do(ctx context.Context, url string, body any) error {
@@ -106,6 +127,7 @@ func (a *PostmarkEmailAdapter) SendTransactional(ctx context.Context, to, templa
 		To:            to,
 		TemplateAlias: templateAlias,
 		TemplateModel: templateModel,
+		Headers:       unsubscribeHeaders(templateModel),
 	})
 }
 
@@ -118,6 +140,7 @@ func (a *PostmarkEmailAdapter) SendBatch(ctx context.Context, messages []notify.
 			To:            m.To,
 			TemplateAlias: m.TemplateAlias,
 			TemplateModel: m.TemplateModel,
+			Headers:       unsubscribeHeaders(m.TemplateModel),
 		})
 	}
 	return a.do(ctx, postmarkBaseURL+"/email/batchWithTemplates", map[string]any{"Messages": items})
@@ -131,5 +154,6 @@ func (a *PostmarkEmailAdapter) SendBroadcast(ctx context.Context, to, templateAl
 		TemplateAlias: templateAlias,
 		TemplateModel: templateModel,
 		MessageStream: "broadcast",
+		Headers:       unsubscribeHeaders(templateModel),
 	})
 }

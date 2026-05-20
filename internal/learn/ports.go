@@ -55,6 +55,10 @@ type LearningService interface {
 	// UpdateReadingProgress updates reading progress. Completing triggers BookCompleted event.
 	UpdateReadingProgress(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, progressID uuid.UUID, cmd UpdateReadingProgressCommand) (ReadingProgressResponse, error)
 
+	// MarkBookReadStatus upserts read/unread status for a book in a reading list.
+	// Bypasses normal status transition rules to allow toggling back to unread.
+	MarkBookReadStatus(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, bookID uuid.UUID, cmd MarkBookReadCommand) (ReadingProgressResponse, error)
+
 	// CreateReadingList creates a named reading list.
 	CreateReadingList(ctx context.Context, scope *shared.FamilyScope, cmd CreateReadingListCommand) (ReadingListResponse, error)
 	// UpdateReadingList updates a reading list (metadata and items).
@@ -419,6 +423,10 @@ type ReadingProgressRepository interface {
 	Update(ctx context.Context, scope *shared.FamilyScope, progress *ReadingProgressModel) error
 	// Exists checks if a student is already tracking a reading item.
 	Exists(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, readingItemID uuid.UUID) (bool, error)
+	// FindByStudentAndItem returns the progress record for a specific student + reading item pair.
+	FindByStudentAndItem(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, readingItemID uuid.UUID) (*ReadingProgressModel, error)
+	// FindByStudentForItems returns all progress records for a student across a set of reading items.
+	FindByStudentForItems(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, itemIDs []uuid.UUID) ([]ReadingProgressModel, error)
 	// CountCompleted counts completed books for a student in a date range.
 	CountCompleted(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, dateFrom time.Time, dateTo time.Time) (int64, error)
 }

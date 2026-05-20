@@ -1007,7 +1007,7 @@ func seedMarketplace(db *gorm.DB) error {
 					 methodology_tags, subject_tags, content_type, status, published_at,
 					 thumbnail_url)
 				VALUES (?, ?, ?, ?, ?, ?,
-					'{}', ARRAY['reading','language_arts'], ?, 'published', NOW() - INTERVAL '30 days',
+					'{}', ARRAY['language-arts.reading-comprehension','language-arts'], ?, 'published', NOW() - INTERVAL '30 days',
 					?)
 				ON CONFLICT (id) DO NOTHING`,
 				l.id, seedCreatorID, seedPublisherID,
@@ -1108,7 +1108,7 @@ func seedMarketplace(db *gorm.DB) error {
 				 methodology_tags, subject_tags, content_type, status, published_at,
 				 thumbnail_url)
 			VALUES (?, ?, ?, 'Classical Trivium Workbook', 'A comprehensive grammar-stage workbook.', 1999,
-				'{}', ARRAY['language_arts','latin'], 'worksheet', 'published', NOW() - INTERVAL '20 days',
+				'{}', ARRAY['language-arts','foreign-languages.latin'], 'worksheet', 'published', NOW() - INTERVAL '20 days',
 				'https://picsum.photos/seed/classical-trivium/800/450')
 			ON CONFLICT (id) DO NOTHING`,
 			friendListingID, friendCreatorID, friendPublisherID,
@@ -1202,6 +1202,60 @@ func seedMarketplaceExtended(db *gorm.DB) error {
 			return fmt.Errorf("insert listing file: %w", err)
 		}
 
+		// Populate auto curated sections (trending + new-arrivals).
+		// These sections are normally refreshed by a scheduled job; seed them here
+		// so the marketplace home page is never blank after a fresh seed.
+		var trendingSectionID, newArrivalsSectionID string
+		if err := tx.Raw("SELECT id FROM mkt_curated_sections WHERE slug = 'trending'").
+			Scan(&trendingSectionID).Error; err != nil || trendingSectionID == "" {
+			slog.Warn("trending curated section not found, skipping auto-populate")
+			return nil
+		}
+		if err := tx.Raw("SELECT id FROM mkt_curated_sections WHERE slug = 'new-arrivals'").
+			Scan(&newArrivalsSectionID).Error; err != nil || newArrivalsSectionID == "" {
+			slog.Warn("new-arrivals curated section not found, skipping auto-populate")
+			return nil
+		}
+
+		// Trending: listings with the most purchases in the last 7 days.
+		if err := tx.Exec(`DELETE FROM mkt_curated_section_items WHERE section_id = ?`,
+			trendingSectionID,
+		).Error; err != nil {
+			return fmt.Errorf("clear trending items: %w", err)
+		}
+		if err := tx.Exec(`
+			INSERT INTO mkt_curated_section_items (section_id, listing_id, sort_order)
+			SELECT ?, p.listing_id, ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC)
+			FROM mkt_purchases p
+			JOIN mkt_listings l ON l.id = p.listing_id
+			WHERE p.created_at > NOW() - INTERVAL '7 days'
+			  AND l.status = 'published'
+			GROUP BY p.listing_id
+			ORDER BY COUNT(*) DESC
+			LIMIT 20`,
+			trendingSectionID,
+		).Error; err != nil {
+			return fmt.Errorf("populate trending items: %w", err)
+		}
+
+		// New Arrivals: most recently published listings.
+		if err := tx.Exec(`DELETE FROM mkt_curated_section_items WHERE section_id = ?`,
+			newArrivalsSectionID,
+		).Error; err != nil {
+			return fmt.Errorf("clear new-arrivals items: %w", err)
+		}
+		if err := tx.Exec(`
+			INSERT INTO mkt_curated_section_items (section_id, listing_id, sort_order)
+			SELECT ?, id, ROW_NUMBER() OVER (ORDER BY published_at DESC)
+			FROM mkt_listings
+			WHERE status = 'published'
+			ORDER BY published_at DESC
+			LIMIT 20`,
+			newArrivalsSectionID,
+		).Error; err != nil {
+			return fmt.Errorf("populate new-arrivals items: %w", err)
+		}
+
 		return nil
 	})
 }
@@ -1260,13 +1314,13 @@ func seedLearn(db *gorm.DB, platformPublisherID string) error {
 			VALUES
 				(?, ?, 'Nature Walk',
 				 'Outdoor nature observation and sketching session.',
-				 ARRAY['nature_study','science'], 60),
+				 ARRAY['science'], 60),
 				(?, ?, 'Math Games',
 				 'Hands-on math games using manipulatives and real-world objects.',
-				 ARRAY['mathematics'], 30),
+				 ARRAY['math'], 30),
 				(?, ?, 'Read Aloud',
 				 'Parent-led read-aloud session with narration.',
-				 ARRAY['reading','language_arts'], 45)
+				 ARRAY['language-arts.reading-comprehension','language-arts'], 45)
 			ON CONFLICT (id) DO NOTHING`,
 			activityDef1ID, platformPublisherID,
 			activityDef2ID, platformPublisherID,
@@ -1280,9 +1334,9 @@ func seedLearn(db *gorm.DB, platformPublisherID string) error {
 			INSERT INTO learn_reading_items
 				(id, publisher_id, title, author, subject_tags, description, page_count)
 			VALUES
-				(?, ?, 'Charlotte''s Web',    'E.B. White',    ARRAY['reading','language_arts'], 'A classic tale of friendship between a pig and a spider.', 192),
-				(?, ?, 'A Bear Called Paddington', 'Michael Bond', ARRAY['reading','language_arts'], 'The adventures of a bear from Peru.', 144),
-				(?, ?, 'The Lion, the Witch and the Wardrobe', 'C.S. Lewis', ARRAY['reading','language_arts'], 'Four siblings discover a magical world through a wardrobe.', 208)
+				(?, ?, 'Charlotte''s Web',    'E.B. White',    ARRAY['language-arts.reading-comprehension','language-arts'], 'A classic tale of friendship between a pig and a spider.', 192),
+				(?, ?, 'A Bear Called Paddington', 'Michael Bond', ARRAY['language-arts.reading-comprehension','language-arts'], 'The adventures of a bear from Peru.', 144),
+				(?, ?, 'The Lion, the Witch and the Wardrobe', 'C.S. Lewis', ARRAY['language-arts.reading-comprehension','language-arts'], 'Four siblings discover a magical world through a wardrobe.', 208)
 			ON CONFLICT (id) DO NOTHING`,
 			readingItem1ID, platformPublisherID,
 			readingItem2ID, platformPublisherID,
@@ -1303,16 +1357,16 @@ func seedLearn(db *gorm.DB, platformPublisherID string) error {
 			subjects   string
 		}
 		logs := []actLog{
-			{actLog1ID, emmaStudentID, activityDef1ID, "Nature Walk — Creek Trail", 1, 65, "ARRAY['nature_study','science']"},
-			{actLog2ID, emmaStudentID, activityDef3ID, "Read Aloud: Charlotte's Web Ch 3", 1, 45, "ARRAY['reading']"},
-			{actLog3ID, jamesStudentID, activityDef2ID, "Math Games: Counting Bears", 2, 30, "ARRAY['mathematics']"},
-			{actLog4ID, emmaStudentID, activityDef2ID, "Math: Fraction Circles", 3, 35, "ARRAY['mathematics']"},
-			{actLog5ID, jamesStudentID, activityDef3ID, "Read Aloud: Paddington Ch 1", 3, 40, "ARRAY['reading']"},
-			{actLog6ID, emmaStudentID, activityDef1ID, "Nature Walk — Backyard Birds", 5, 50, "ARRAY['nature_study']"},
-			{actLog7ID, jamesStudentID, activityDef1ID, "Nature Walk — Bug Hunt", 7, 45, "ARRAY['nature_study','science']"},
-			{actLog8ID, emmaStudentID, activityDef3ID, "Read Aloud: Narnia Ch 1", 8, 50, "ARRAY['reading']"},
-			{actLog9ID, jamesStudentID, activityDef2ID, "Math Games: Skip Counting", 10, 25, "ARRAY['mathematics']"},
-			{actLog10ID, emmaStudentID, activityDef3ID, "Read Aloud: Charlotte's Web Ch 7", 14, 45, "ARRAY['reading']"},
+			{actLog1ID, emmaStudentID, activityDef1ID, "Nature Walk — Creek Trail", 1, 65, "ARRAY['science']"},
+			{actLog2ID, emmaStudentID, activityDef3ID, "Read Aloud: Charlotte's Web Ch 3", 1, 45, "ARRAY['language-arts.reading-comprehension']"},
+			{actLog3ID, jamesStudentID, activityDef2ID, "Math Games: Counting Bears", 2, 30, "ARRAY['math']"},
+			{actLog4ID, emmaStudentID, activityDef2ID, "Math: Fraction Circles", 3, 35, "ARRAY['math']"},
+			{actLog5ID, jamesStudentID, activityDef3ID, "Read Aloud: Paddington Ch 1", 3, 40, "ARRAY['language-arts.reading-comprehension']"},
+			{actLog6ID, emmaStudentID, activityDef1ID, "Nature Walk — Backyard Birds", 5, 50, "ARRAY['science']"},
+			{actLog7ID, jamesStudentID, activityDef1ID, "Nature Walk — Bug Hunt", 7, 45, "ARRAY['science']"},
+			{actLog8ID, emmaStudentID, activityDef3ID, "Read Aloud: Narnia Ch 1", 8, 50, "ARRAY['language-arts.reading-comprehension']"},
+			{actLog9ID, jamesStudentID, activityDef2ID, "Math Games: Skip Counting", 10, 25, "ARRAY['math']"},
+			{actLog10ID, emmaStudentID, activityDef3ID, "Read Aloud: Charlotte's Web Ch 7", 14, 45, "ARRAY['language-arts.reading-comprehension']"},
 		}
 		for _, l := range logs {
 			date := now.AddDate(0, 0, -l.daysAgo).Format("2006-01-02")
@@ -1352,10 +1406,10 @@ func seedLearn(db *gorm.DB, platformPublisherID string) error {
 			VALUES
 				(?, ?, ?, 'narration', 'Charlotte''s Web Chapter 3',
 				 'Wilbur was very sad because he had no friends. Then Charlotte spoke to him from her web and said she would be his friend. I think Charlotte is kind because she noticed Wilbur was lonely.',
-				 ARRAY['reading','language_arts'], CURRENT_DATE - 1),
+				 ARRAY['language-arts.reading-comprehension','language-arts'], CURRENT_DATE - 1),
 				(?, ?, ?, 'freeform', 'Birds I Saw Today',
 				 'I saw a blue jay and two mourning doves in the backyard. The blue jay chased away the smaller birds. I drew them in my nature journal.',
-				 ARRAY['nature_study'], CURRENT_DATE - 3)
+				 ARRAY['science'], CURRENT_DATE - 3)
 			ON CONFLICT (id) DO NOTHING`,
 			journal1ID, seedFamilyID, emmaStudentID,
 			journal2ID, seedFamilyID, emmaStudentID,
@@ -1402,10 +1456,10 @@ func seedLearnExtended(db *gorm.DB, platformPublisherID string) error {
 			VALUES
 				(?, ?, 'Narration Rubric',
 				 'Assessment rubric for oral and written narration quality.',
-				 ARRAY['reading','language_arts'], 'percentage', 100),
+				 ARRAY['language-arts.reading-comprehension','language-arts'], 'percentage', 100),
 				(?, ?, 'Spelling Assessment',
 				 'Weekly spelling test with progressive difficulty levels.',
-				 ARRAY['language_arts'], 'percentage', 100)
+				 ARRAY['language-arts'], 'percentage', 100)
 			ON CONFLICT (id) DO NOTHING`,
 			assessmentDef1ID, platformPublisherID,
 			assessmentDef2ID, platformPublisherID,
@@ -1420,7 +1474,7 @@ func seedLearnExtended(db *gorm.DB, platformPublisherID string) error {
 				 duration_seconds, video_url, video_source)
 			VALUES (?, ?, 'Introduction to Nature Journaling',
 				'A guided introduction to keeping a nature journal in the Charlotte Mason tradition.',
-				ARRAY['nature_study','science'],
+				ARRAY['science'],
 				1080, 'https://cdn.example.com/videos/intro-nature-journaling.mp4',
 				'self_hosted')
 			ON CONFLICT (id) DO NOTHING`,
@@ -1458,7 +1512,7 @@ func seedLearnExtended(db *gorm.DB, platformPublisherID string) error {
 				INSERT INTO learn_questions
 					(id, publisher_id, question_type, content, answer_data,
 					 subject_tags, difficulty_level, auto_scorable, points)
-				VALUES (?, ?, ?, ?, ?::JSONB, ARRAY['reading','language_arts'], 2, true, 1)
+				VALUES (?, ?, ?, ?, ?::JSONB, ARRAY['language-arts.reading-comprehension','language-arts'], 2, true, 1)
 				ON CONFLICT (id) DO NOTHING`,
 				q.id, platformPublisherID, q.qtype, q.content, q.answerData,
 			).Error; err != nil {
@@ -1473,7 +1527,7 @@ func seedLearnExtended(db *gorm.DB, platformPublisherID string) error {
 				 passing_score_percent, question_count, show_correct_after)
 			VALUES (?, ?, 'Charlotte''s Web Comprehension Quiz',
 				'Five comprehension questions covering the key events and themes of Charlotte''s Web.',
-				ARRAY['reading','language_arts'], 70, 5, true)
+				ARRAY['language-arts.reading-comprehension','language-arts'], 70, 5, true)
 			ON CONFLICT (id) DO NOTHING`,
 			quizDef1ID, platformPublisherID,
 		).Error; err != nil {
@@ -1508,7 +1562,7 @@ func seedLearnExtended(db *gorm.DB, platformPublisherID string) error {
 				(id, publisher_id, title, description, subject_tags, is_linear)
 			VALUES (?, ?, 'Beginning Reading Sequence',
 				'A progressive three-book reading sequence for early readers.',
-				ARRAY['reading','language_arts'], true)
+				ARRAY['language-arts.reading-comprehension','language-arts'], true)
 			ON CONFLICT (id) DO NOTHING`,
 			sequenceDef1ID, platformPublisherID,
 		).Error; err != nil {

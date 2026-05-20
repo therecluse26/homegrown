@@ -60,6 +60,8 @@ export interface ListingDetailResponse {
   bundle_name?: string;
   is_bundle: boolean;
   bundle_items?: BundleItemResponse[];
+  /** True when the authenticated buyer's family already owns this listing. */
+  owned: boolean;
 }
 
 export interface CuratedSectionResponse {
@@ -337,6 +339,7 @@ export function useCheckout() {
     mutationFn: () =>
       apiClient<CheckoutSessionResponse>("/v1/marketplace/cart/checkout", {
         method: "POST",
+        body: { return_url: `${window.location.origin}/marketplace/purchases` },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marketplace", "cart"] });
@@ -362,6 +365,24 @@ export function useDownloadURL(listingId: string, fileId: string) {
         `/v1/marketplace/purchases/${listingId}/download/${fileId}`,
       ),
     enabled: false, // manual trigger
+  });
+}
+
+export function useDownloadPurchase() {
+  return useMutation({
+    mutationFn: async (listingId: string) => {
+      const listing = await apiClient<ListingDetailResponse>(
+        `/v1/marketplace/listings/${listingId}`,
+      );
+      const [firstFile] = listing.files ?? [];
+      if (!firstFile) {
+        throw new Error("No downloadable files for this listing");
+      }
+      const fileId = firstFile.id;
+      return apiClient<DownloadResponse>(
+        `/v1/marketplace/purchases/${listingId}/download/${fileId}`,
+      );
+    },
   });
 }
 
@@ -726,7 +747,7 @@ export function useRespondToReview() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ reviewId, response }: { reviewId: string; response: string }) =>
-      apiClient<void>(`/v1/marketplace/reviews/${reviewId}/respond`, {
+      apiClient<void>(`/v1/marketplace/reviews/${reviewId}/response`, {
         method: "POST",
         body: { response },
       }),

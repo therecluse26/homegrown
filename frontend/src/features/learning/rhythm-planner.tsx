@@ -201,7 +201,7 @@ export function RhythmPlanner() {
       {
         title: `Rhythm Plan: ${dayLabel}${templateName ? ` — ${templateName}` : ""}`,
         description: descParts.join("\n"),
-        subject_tags: ["rhythm", "planning"],
+        subject_tags: [],
         tool_id: "rhythm-planner",
         activity_date: weekStartDate ? `${weekStartDate}T00:00:00Z` : undefined,
       },

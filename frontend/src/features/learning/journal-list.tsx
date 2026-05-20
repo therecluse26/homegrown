@@ -168,7 +168,7 @@ export function JournalList() {
             {entries.map((entry) => (
               <li key={entry.id}>
                 <RouterLink
-                  to={`/learning/journals/${entry.id}`}
+                  to={`/learning/journals/${entry.id}?studentId=${entry.student_id}`}
                   className="block no-underline"
                 >
                   <Card interactive className="flex items-start gap-3">

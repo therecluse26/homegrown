@@ -931,12 +931,12 @@ func (s *marketplaceServiceImpl) GetFreeListing(ctx context.Context, listingID u
 	}
 
 	// Check not already purchased
-	existing, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	if existing != nil {
+	_, err = s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+	if err == nil {
 		return uuid.Nil, shared.ErrConflict(ErrAlreadyPurchased.Error())
+	}
+	if !errors.Is(err, ErrPurchaseNotFound) {
+		return uuid.Nil, err
 	}
 
 	purchase, err := s.purchases.Create(ctx, CreatePurchase{
@@ -1279,6 +1279,14 @@ func (s *marketplaceServiceImpl) GetListing(ctx context.Context, listingID uuid.
 	return &resp, nil
 }
 
+func (s *marketplaceServiceImpl) CheckOwnership(ctx context.Context, listingID uuid.UUID, scope shared.FamilyScope) (bool, error) {
+	purchase, err := s.purchases.GetByFamilyAndListing(ctx, scope.FamilyID(), listingID)
+	if err != nil {
+		return false, err
+	}
+	return purchase != nil, nil
+}
+
 func (s *marketplaceServiceImpl) AutocompleteListings(ctx context.Context, query string, limit uint8) ([]AutocompleteResult, error) {
 	if len(query) < 2 {
 		return nil, shared.ErrValidation("query must be at least 2 characters")
@@ -1315,6 +1323,20 @@ func (s *marketplaceServiceImpl) GetCuratedSections(ctx context.Context, itemsPe
 		if itemErr != nil {
 			slog.Error("failed to get curated section items", "error", itemErr, "section_id", sec.ID)
 			rows = nil
+		}
+		// Auto sections are populated by RefreshAutoSection (called by cron or admin).
+		// On first access (or after a reset), lazily seed the section so the page is
+		// never blank.
+		if len(rows) == 0 && sec.SectionType == "auto" {
+			if refreshErr := s.curatedSections.RefreshAutoSection(ctx, sec.Slug); refreshErr != nil {
+				slog.Warn("curated section lazy-refresh failed", "slug", sec.Slug, "error", refreshErr)
+			} else {
+				rows, itemErr = s.curatedSections.GetSectionItems(ctx, sec.ID, itemsPerSection)
+				if itemErr != nil {
+					slog.Error("failed to get curated section items after refresh", "error", itemErr, "section_id", sec.ID)
+					rows = nil
+				}
+			}
 		}
 
 		listings := make([]ListingBrowseResponse, len(rows))
@@ -1389,7 +1411,7 @@ func (s *marketplaceServiceImpl) GetPurchases(ctx context.Context, scope shared.
 	}
 
 	var nextCursor *string
-	if int64(len(items)) < total {
+	if int64(len(items)) < total && len(rows) > 0 {
 		last := rows[len(rows)-1]
 		c := shared.EncodeCursor(last.ID, last.CreatedAt)
 		nextCursor = &c
@@ -1487,7 +1509,7 @@ func (s *marketplaceServiceImpl) GetListingReviews(ctx context.Context, listingI
 	}
 
 	var nextCursor *string
-	if int64(len(items)) < total {
+	if int64(len(items)) < total && len(rows) > 0 {
 		last := rows[len(rows)-1]
 		c := shared.EncodeCursor(last.ID, last.CreatedAt)
 		nextCursor = &c

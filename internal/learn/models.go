@@ -918,6 +918,12 @@ type UpdateReadingProgressCommand struct {
 	Notes  *string `json:"notes,omitempty" validate:"omitempty,max=2000"`
 }
 
+// MarkBookReadCommand sets read/unread status for a book in a reading list.
+type MarkBookReadCommand struct {
+	StudentID uuid.UUID `json:"student_id" validate:"required"`
+	Completed bool      `json:"completed"`
+}
+
 // CreateReadingListCommand creates a reading list. [S§8.1.3]
 type CreateReadingListCommand struct {
 	Name           string      `json:"name" validate:"required,min=1,max=200"`

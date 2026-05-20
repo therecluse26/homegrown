@@ -2458,6 +2458,15 @@ definitions:
     required:
     - title
     type: object
+  learn.MarkBookReadCommand:
+    properties:
+      completed:
+        type: boolean
+      student_id:
+        type: string
+    required:
+    - student_id
+    type: object
   learn.ProgressSummaryResponse:
     properties:
       books_completed:
@@ -4061,6 +4070,11 @@ definitions:
         items:
           type: string
         type: array
+      owned:
+        description: |-
+          Owned is true when the authenticated buyer's family already has a purchase record for this listing.
+          Always false for unauthenticated requests.
+        type: boolean
       preview_url:
         type: string
       price_cents:
@@ -12121,6 +12135,55 @@ paths:
       summary: Update a reading list
       tags:
       - learn
+  /learning/reading-lists/{id}/books/{bookId}:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reading list UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Reading item UUID
+        in: path
+        name: bookId
+        required: true
+        type: string
+      - description: Toggle payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/learn.MarkBookReadCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/learn.ReadingProgressResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Toggle read/unread status for a book in a reading list
+      tags:
+      - learn
   /learning/sequences:
     post:
       consumes:
@@ -14536,11 +14599,17 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/mkt.ListingDetailResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/shared.AppError'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/shared.AppError'
-      summary: Get a listing
+      security:
+      - BearerAuth: []
+      summary: Get a listing with ownership status
       tags:
       - marketplace
     put:

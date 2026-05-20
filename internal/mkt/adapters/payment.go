@@ -385,8 +385,18 @@ func (n *noopPaymentAdapter) GetAccountStatus(ctx context.Context,_ string) (mkt
 	return mkt.PaymentAccountStatusPending, mkt.ErrPaymentProviderUnavailable
 }
 
-func (n *noopPaymentAdapter) CreatePayment(ctx context.Context,_ []mkt.PaymentLineItem, _ []mkt.SplitRule, _ string, _ map[string]string) (*mkt.PaymentSession, error) {
-	return nil, mkt.ErrPaymentProviderUnavailable
+func (n *noopPaymentAdapter) CreatePayment(_ context.Context, _ []mkt.PaymentLineItem, _ []mkt.SplitRule, returnURL string, metadata map[string]string) (*mkt.PaymentSession, error) {
+	slog.Warn("payment adapter not configured — CreatePayment returning mock session")
+	familyID := metadata["family_id"]
+	sessionID := "mock-session-" + familyID
+	checkoutURL := returnURL
+	if checkoutURL == "" {
+		checkoutURL = "/marketplace/purchases"
+	}
+	return &mkt.PaymentSession{
+		CheckoutURL:      checkoutURL,
+		PaymentSessionID: sessionID,
+	}, nil
 }
 
 func (n *noopPaymentAdapter) GetPaymentStatus(ctx context.Context,_ string) (mkt.PaymentStatus, error) {

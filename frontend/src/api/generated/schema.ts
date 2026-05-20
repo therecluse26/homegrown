@@ -11435,6 +11435,88 @@ export interface paths {
         };
         trace?: never;
     };
+    "/learning/reading-lists/{id}/books/{bookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Toggle read/unread status for a book in a reading list */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Reading list UUID */
+                    id: string;
+                    /** @description Reading item UUID */
+                    bookId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Toggle payload */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["learn.MarkBookReadCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["learn.ReadingProgressResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/learning/sequences": {
         parameters: {
             query?: never;
@@ -15500,7 +15582,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a listing */
+        /** Get a listing with ownership status */
         get: {
             parameters: {
                 query?: never;
@@ -15520,6 +15602,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["mkt.ListingDetailResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
                     };
                 };
                 /** @description Not Found */
@@ -21808,6 +21899,10 @@ export interface components {
             title: string;
             tool_id?: string;
         };
+        "learn.MarkBookReadCommand": {
+            completed?: boolean;
+            student_id: string;
+        };
         "learn.ProgressSummaryResponse": {
             books_completed?: number;
             date_from?: string;
@@ -22511,6 +22606,11 @@ export interface components {
             grade_min?: number;
             id?: string;
             methodology_tags?: string[];
+            /**
+             * @description Owned is true when the authenticated buyer's family already has a purchase record for this listing.
+             *     Always false for unauthenticated requests.
+             */
+            owned?: boolean;
             preview_url?: string;
             price_cents?: number;
             published_at?: string;

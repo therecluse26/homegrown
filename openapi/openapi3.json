@@ -12254,6 +12254,102 @@
                 }
             }
         },
+        "/learning/reading-lists/{id}/books/{bookId}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "learn"
+                ],
+                "summary": "Toggle read/unread status for a book in a reading list",
+                "parameters": [
+                    {
+                        "description": "Reading list UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Reading item UUID",
+                        "name": "bookId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/learn.MarkBookReadCommand"
+                            }
+                        }
+                    },
+                    "description": "Toggle payload",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/learn.ReadingProgressResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/learning/sequences": {
             "post": {
                 "security": [
@@ -17060,10 +17156,15 @@
         },
         "/marketplace/listings/{listing_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "marketplace"
                 ],
-                "summary": "Get a listing",
+                "summary": "Get a listing with ownership status",
                 "parameters": [
                     {
                         "description": "Listing ID",
@@ -17082,6 +17183,16 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/mkt.ListingDetailResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
                                 }
                             }
                         }
@@ -26141,6 +26252,20 @@
                     }
                 }
             },
+            "learn.MarkBookReadCommand": {
+                "type": "object",
+                "required": [
+                    "student_id"
+                ],
+                "properties": {
+                    "completed": {
+                        "type": "boolean"
+                    },
+                    "student_id": {
+                        "type": "string"
+                    }
+                }
+            },
             "learn.ProgressSummaryResponse": {
                 "type": "object",
                 "properties": {
@@ -28521,6 +28646,10 @@
                         "items": {
                             "type": "string"
                         }
+                    },
+                    "owned": {
+                        "description": "Owned is true when the authenticated buyer's family already has a purchase record for this listing.\nAlways false for unauthenticated requests.",
+                        "type": "boolean"
                     },
                     "preview_url": {
                         "type": "string"

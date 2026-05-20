@@ -813,6 +813,7 @@ func main() {
 		emailAdapter, iamForNotify,
 		cache, pubsub, jobs,
 		cfg.UnsubscribeSecret,
+		cfg.AppPublicURL,
 	)
 
 	// Register notify:: event subscriptions (Phase 1 — 14 handlers)

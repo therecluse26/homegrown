@@ -8,6 +8,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -140,6 +141,9 @@ func (m *mockMarketplaceService) GetPublisherMembers(_ context.Context, _, _ uui
 func (m *mockMarketplaceService) VerifyPublisherMembership(_ context.Context, _, _ uuid.UUID) (bool, error) {
 	return true, nil
 }
+func (m *mockMarketplaceService) CheckOwnership(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (bool, error) {
+	return false, nil
+}
 func (m *mockMarketplaceService) AutocompleteListings(_ context.Context, _ string, _ uint8) ([]AutocompleteResult, error) {
 	return []AutocompleteResult{}, nil
 }
@@ -268,6 +272,54 @@ func TestHandler_GetCart_MissingAuth_Errors(t *testing.T) {
 	// no auth
 
 	if err := h.getCart(c); err == nil {
+		t.Fatal("expected error for missing auth")
+	}
+}
+
+func TestHandler_CreateCheckout_201(t *testing.T) {
+	svc := &mockMarketplaceService{}
+	e, h := setupMktHandlerTest(svc)
+	body := strings.NewReader(`{"return_url":"https://example.com/marketplace/purchases"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/marketplace/cart/checkout", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setMktTestAuth(c)
+
+	if err := h.createCheckout(c); err != nil {
+		e.HTTPErrorHandler(err, c)
+	}
+	if rec.Code != http.StatusCreated {
+		t.Errorf("want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandler_CreateCheckout_MissingReturnURL_422(t *testing.T) {
+	svc := &mockMarketplaceService{}
+	e, h := setupMktHandlerTest(svc)
+	body := strings.NewReader(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/marketplace/cart/checkout", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setMktTestAuth(c)
+
+	err := h.createCheckout(c)
+	if err == nil {
+		t.Fatal("expected validation error for missing return_url")
+	}
+}
+
+func TestHandler_CreateCheckout_MissingAuth_Errors(t *testing.T) {
+	e, h := setupMktHandlerTest(&mockMarketplaceService{})
+	body := strings.NewReader(`{"return_url":"https://example.com/marketplace/purchases"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/marketplace/cart/checkout", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	// no auth
+
+	if err := h.createCheckout(c); err == nil {
 		t.Fatal("expected error for missing auth")
 	}
 }

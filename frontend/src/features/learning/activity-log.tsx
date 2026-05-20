@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigate } from "react-router";
 import { Plus, Clock, Calendar, ClipboardList } from "lucide-react";
 import {
   Button,
@@ -48,7 +48,7 @@ function AddActivityForm({
         duration_minutes: durationMinutes
           ? Number(durationMinutes)
           : undefined,
-        activity_date: activityDate || undefined,
+        activity_date: activityDate ? `${activityDate}T00:00:00Z` : undefined,
       },
       {
         onSuccess: () => {
@@ -172,12 +172,13 @@ function AddActivityForm({
 
 export function ActivityLog() {
   const intl = useIntl();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: students, isPending: studentsLoading } = useStudents();
   const { toolLabel } = useMethodologyContext();
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showForm, setShowForm] = useState(searchParams.get("new") === "1");
-  const [subjectFilter, setSubjectFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -192,7 +193,7 @@ export function ActivityLog() {
     hasNextPage,
     isFetchingNextPage,
   } = useActivityLog(effectiveStudent, {
-    subject: subjectFilter || undefined,
+    subject: subjectFilter[0] || undefined,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
   });
@@ -251,20 +252,15 @@ export function ActivityLog() {
             )}
           </div>
 
-          <div className="min-w-[140px]">
-            <label
-              htmlFor="filter-subject"
-              className="block type-label-md text-on-surface-variant mb-1.5"
-            >
+          <div className="min-w-[200px] flex-1">
+            <label className="block type-label-md text-on-surface-variant mb-1.5">
               <FormattedMessage id="activityLog.filter.subject" />
             </label>
-            <Input
-              id="filter-subject"
+            <SubjectPicker
               value={subjectFilter}
-              onChange={(e) => setSubjectFilter(e.target.value)}
-              placeholder={intl.formatMessage({
-                id: "activityLog.filter.subject.placeholder",
-              })}
+              onChange={setSubjectFilter}
+              allowCustom={false}
+              max={1}
             />
           </div>
 
@@ -345,7 +341,15 @@ export function ActivityLog() {
           <ul className="space-y-2" role="list">
             {activities.map((activity) => (
               <li key={activity.id}>
-                <Card interactive className="flex items-start gap-3">
+                <Card
+                  interactive
+                  className="flex items-start gap-3"
+                  onClick={() =>
+                    void navigate(
+                      `/learning/activities/${activity.id}?studentId=${effectiveStudent}`,
+                    )
+                  }
+                >
                   <div className="shrink-0 mt-0.5 text-primary">
                     <Icon icon={ClipboardList} size="md" aria-hidden />
                   </div>

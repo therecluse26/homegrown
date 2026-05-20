@@ -9876,6 +9876,82 @@
                 }
             }
         },
+        "/learning/reading-lists/{id}/books/{bookId}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "learn"
+                ],
+                "summary": "Toggle read/unread status for a book in a reading list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reading list UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reading item UUID",
+                        "name": "bookId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Toggle payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/learn.MarkBookReadCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/learn.ReadingProgressResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/learning/sequences": {
             "post": {
                 "security": [
@@ -13678,13 +13754,18 @@
         },
         "/marketplace/listings/{listing_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "marketplace"
                 ],
-                "summary": "Get a listing",
+                "summary": "Get a listing with ownership status",
                 "parameters": [
                     {
                         "type": "string",
@@ -13699,6 +13780,12 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/mkt.ListingDetailResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
                         }
                     },
                     "404": {
@@ -21711,6 +21798,20 @@
                 }
             }
         },
+        "learn.MarkBookReadCommand": {
+            "type": "object",
+            "required": [
+                "student_id"
+            ],
+            "properties": {
+                "completed": {
+                    "type": "boolean"
+                },
+                "student_id": {
+                    "type": "string"
+                }
+            }
+        },
         "learn.ProgressSummaryResponse": {
             "type": "object",
             "properties": {
@@ -24091,6 +24192,10 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "owned": {
+                    "description": "Owned is true when the authenticated buyer's family already has a purchase record for this listing.\nAlways false for unauthenticated requests.",
+                    "type": "boolean"
                 },
                 "preview_url": {
                     "type": "string"

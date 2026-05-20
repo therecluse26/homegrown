@@ -64,6 +64,7 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	learn.GET("/reading-lists/:id", h.getReadingList)
 	learn.PATCH("/reading-lists/:id", h.updateReadingList)
 	learn.DELETE("/reading-lists/:id", h.deleteReadingList)
+	learn.PATCH("/reading-lists/:id/books/:bookId", h.markBookReadStatus)
 
 	// Subject Taxonomy
 	learn.GET("/taxonomy", h.getSubjectTaxonomy)
@@ -1152,6 +1153,49 @@ func (h *Handler) deleteReadingList(c echo.Context) error {
 		return mapLearningError(err)
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// markBookReadStatus godoc
+//
+//	@Summary      Toggle read/unread status for a book in a reading list
+//	@Tags         learn
+//	@Accept       json
+//	@Produce      json
+//	@Security     BearerAuth
+//	@Param        id      path      string                true  "Reading list UUID"
+//	@Param        bookId  path      string                true  "Reading item UUID"
+//	@Param        body    body      MarkBookReadCommand   true  "Toggle payload"
+//	@Success      200     {object}  ReadingProgressResponse
+//	@Failure      400     {object}  shared.AppError
+//	@Failure      401     {object}  shared.AppError
+//	@Failure      404     {object}  shared.AppError
+//	@Failure      500     {object}  shared.AppError
+//	@Router       /learning/reading-lists/{id}/books/{bookId} [patch]
+func (h *Handler) markBookReadStatus(c echo.Context) error {
+	listID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid list id")
+	}
+	bookID, err := uuid.Parse(c.Param("bookId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid book id")
+	}
+	scope, err := shared.GetFamilyScope(c)
+	if err != nil {
+		return err
+	}
+	var cmd MarkBookReadCommand
+	if err := c.Bind(&cmd); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := c.Validate(&cmd); err != nil {
+		return shared.ValidationError(err)
+	}
+	resp, err := h.svc.MarkBookReadStatus(c.Request().Context(), &scope, listID, bookID, cmd)
+	if err != nil {
+		return mapLearningError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // ─── Subject Taxonomy Handlers ──────────────────────────────────────────────

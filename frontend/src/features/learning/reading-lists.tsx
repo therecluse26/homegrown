@@ -68,6 +68,7 @@ export function ReadingLists() {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState("");
+  const [newListStudentId, setNewListStudentId] = useState("");
 
   const navigate = useNavigate();
 
@@ -89,11 +90,12 @@ export function ReadingLists() {
     createList.mutate(
       {
         name: newListName.trim(),
-        student_id: effectiveStudent || undefined,
+        student_id: newListStudentId || undefined,
       },
       {
         onSuccess: () => {
           setNewListName("");
+          setNewListStudentId("");
           setShowNewList(false);
         },
       },
@@ -109,7 +111,7 @@ export function ReadingLists() {
         <Button
           variant="primary"
           size="sm"
-          onClick={() => setShowNewList(true)}
+          onClick={() => { setShowNewList(true); setNewListStudentId(effectiveStudent); }}
         >
           <Icon icon={Plus} size="sm" aria-hidden />
           <span className="ml-1.5">
@@ -156,36 +158,64 @@ export function ReadingLists() {
           <h3 className="type-title-sm text-on-surface font-semibold mb-3">
             <FormattedMessage id="reading.newList.title" />
           </h3>
-          <form onSubmit={handleCreateList} className="flex gap-2">
+          <form onSubmit={handleCreateList} className="space-y-3">
             <Input
               value={newListName}
               onChange={(e) => setNewListName(e.target.value)}
               placeholder={intl.formatMessage({
                 id: "reading.newList.placeholder",
               })}
-              className="flex-1"
               required
             />
-            <Button
-              variant="primary"
-              size="sm"
-              type="submit"
-              loading={createList.isPending}
-              disabled={!newListName.trim()}
-            >
-              <FormattedMessage id="reading.newList.create" />
-            </Button>
-            <Button
-              variant="tertiary"
-              size="sm"
-              type="button"
-              onClick={() => {
-                setShowNewList(false);
-                setNewListName("");
-              }}
-            >
-              <FormattedMessage id="common.cancel" />
-            </Button>
+            <div>
+              <label
+                htmlFor="new-list-student"
+                className="block type-label-md text-on-surface-variant mb-1.5"
+              >
+                <FormattedMessage id="reading.newList.student" />
+              </label>
+              {studentsLoading ? (
+                <Skeleton height="h-11" />
+              ) : (
+                <Select
+                  id="new-list-student"
+                  value={newListStudentId}
+                  onChange={(e) => setNewListStudentId(e.target.value)}
+                >
+                  <option value="">
+                    {intl.formatMessage({ id: "activityLog.selectStudent" })}
+                  </option>
+                  {students?.map((s) => (
+                    <option key={s.id} value={s.id ?? ""}>
+                      {s.display_name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                type="submit"
+                loading={createList.isPending}
+                disabled={!newListName.trim()}
+              >
+                <FormattedMessage id="reading.newList.create" />
+              </Button>
+              <Button
+                variant="tertiary"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  setShowNewList(false);
+                  setNewListName("");
+                  setNewListStudentId("");
+                }}
+              >
+                <FormattedMessage id="common.cancel" />
+              </Button>
+            </div>
           </form>
         </Card>
       )}

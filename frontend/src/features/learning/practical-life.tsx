@@ -157,7 +157,7 @@ export function PracticalLife() {
       {
         title: `Practical Life: ${activityName}`,
         description: descParts.join("\n"),
-        subject_tags: ["practical_life", "life_skills"],
+        subject_tags: ["life-skills"],
         tool_id: "practical-life",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,
         activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
