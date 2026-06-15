@@ -335,7 +335,9 @@ export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, stand
       }
       setQuestionIndex(nextIdx);
     } else {
-      handleSubmit();
+      // Pass selectedIds directly: setInterests() is async and hasn't propagated
+      // yet when handleSubmit() runs in the same tick.
+      handleSubmit(isScoredQuestion ? undefined : selectedIds);
     }
   }
 
@@ -365,7 +367,7 @@ export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, stand
     }
   }
 
-  function handleSubmit() {
+  function handleSubmit(pendingInterests?: string[]) {
     const answers: QuizAnswer[] = scoredAnswers
       .map((optId, i) => ({
         question_id: i + 1,
@@ -374,9 +376,12 @@ export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, stand
       .filter((a) => a.value !== undefined) as QuizAnswer[];
 
     const respondent = isChildMode ? "child" : "parent";
+    // pendingInterests overrides the interests state when setInterests() hasn't
+    // propagated yet (e.g. called in the same tick as the state update).
+    const finalInterests = pendingInterests ?? interests;
 
     submitQuiz.mutate(
-      { answers, respondent, interests: interests.length ? interests : undefined },
+      { answers, respondent, interests: finalInterests.length ? finalInterests : undefined },
       {
         onSuccess: () => {
           setPhase("summary");

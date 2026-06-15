@@ -47,6 +47,13 @@ func (s *learnerProfileServiceImpl) SubmitProfile(
 	// Compute dimension vector from answers.
 	vec := ComputeVector(cmd.Answers)
 
+	// Normalise interests: GORM bypasses driver.Valuer for nil slices and sends
+	// SQL NULL, violating the NOT NULL constraint. Ensure non-nil before upsert.
+	interests := cmd.Interests
+	if interests == nil {
+		interests = []string{}
+	}
+
 	profile := &LearnerProfile{
 		FamilyID:           scope.FamilyID(),
 		StudentID:          studentID,
@@ -56,7 +63,7 @@ func (s *learnerProfileServiceImpl) SubmitProfile(
 		SoloCollaborative:  vec.SoloCollaborative,
 		Structure:          vec.Structure,
 		OutdoorKinesthetic: vec.OutdoorKinesthetic,
-		Interests:          StringSlice(cmd.Interests),
+		Interests:          StringSlice(interests),
 		AnsweredCount:      vec.AnsweredCount,
 		Confidence:         vec.Confidence,
 		Source:             "declared",

@@ -340,6 +340,8 @@ func recToResponse(r Recommendation) RecommendationResponse {
 		Score:              r.Score,
 		IsSuggestion:       true, // always true [S§10.4]
 		StudentID:          r.StudentID,
+		FitScore:           r.FitScore,
+		FitWhy:             r.FitWhy,
 		CreatedAt:          r.CreatedAt,
 		ExpiresAt:          r.ExpiresAt,
 	}

@@ -2501,11 +2501,11 @@ func seedLearnerProfile(db *gorm.DB) error {
 				 target_entity_label, source_signal, source_label, score,
 				 fit_score, fit_why, status, expires_at)
 			VALUES (?, ?, 'marketplace_content', ?,
-				'Nature Journal Starter Pack',
+				'Living Books Read-Aloud Video Series',
 				'learner_profile_fit', 'Matches Emma''s hands-on outdoor learner profile',
-				0.88, 0.700, 'Great hands-on outdoor match', 'active', ?)
+				0.88, 0.700, 'Great hands-on outdoor match for Emma', 'active', ?)
 			ON CONFLICT DO NOTHING`,
-			rec4ID, seedFamilyID, listing2ID, expiresAt,
+			rec4ID, seedFamilyID, listing3ID, expiresAt,
 		).Error; err != nil {
 			return fmt.Errorf("insert fit-badge recommendation: %w", err)
 		}
