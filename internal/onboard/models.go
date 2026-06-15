@@ -17,10 +17,11 @@ import (
 type WizardStep string
 
 const (
-	StepFamilyProfile WizardStep = "family_profile"
-	StepChildren      WizardStep = "children"
-	StepMethodology   WizardStep = "methodology"
-	StepRoadmapReview WizardStep = "roadmap_review"
+	StepFamilyProfile  WizardStep = "family_profile"
+	StepChildren       WizardStep = "children"
+	StepMethodology    WizardStep = "methodology"
+	StepRoadmapReview  WizardStep = "roadmap_review"
+	StepLearnerProfile WizardStep = "learner_profile" // optional 5th step [18-learner-profile §8]
 )
 
 // wizardStepOrder defines the sequential order of wizard steps.
@@ -29,6 +30,7 @@ var wizardStepOrder = []WizardStep{
 	StepChildren,
 	StepMethodology,
 	StepRoadmapReview,
+	StepLearnerProfile, // optional; not in requiredSteps
 }
 
 // requiredSteps are steps that MUST be completed before the wizard can finish.

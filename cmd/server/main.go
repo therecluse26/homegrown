@@ -41,6 +41,7 @@ import (
 	notifyadapters "github.com/homegrown-academy/homegrown-academy/internal/notify/adapters"
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/comply"
+	learner_profile "github.com/homegrown-academy/homegrown-academy/internal/learner_profile"
 	"github.com/homegrown-academy/homegrown-academy/internal/lifecycle"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/plan"
@@ -1433,6 +1434,22 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(social.EventCancelled{}), plan.NewEventCancelledHandler(planSvc))
 	eventBus.Subscribe(reflect.TypeOf(learn.ActivityLogged{}), plan.NewActivityLoggedHandler(planSvc))
 
+	// ── Learner Profile domain wiring [18-learner-profile §12] ───────────────────
+	lpRepo := learner_profile.NewPgProfileRepository(db)
+	iamForLearnerProfile := learner_profile.NewIamAdapter(
+		func(ctx context.Context, studentID, familyID uuid.UUID) (bool, error) {
+			scope := shared.NewFamilyScopeFromID(familyID)
+			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
+			if err != nil || student == nil {
+				return false, err
+			}
+			return true, nil
+		},
+		iamSvc.GetStudentName,
+	)
+	lpSvc := learner_profile.NewLearnerProfileService(lpRepo, iamForLearnerProfile)
+	learner_profile.RegisterEventHandlers(eventBus, lpSvc)
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -1458,9 +1475,10 @@ func main() {
 		Recs:        recsSvc,
 		Comply:    complySvc,
 		Lifecycle: lifecycleSvc,
-		Admin:     adminSvc,
-		Plan:      planSvc,
-		PubSub:    pubsub,
+		Admin:          adminSvc,
+		Plan:           planSvc,
+		LearnerProfile: lpSvc,
+		PubSub:         pubsub,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────

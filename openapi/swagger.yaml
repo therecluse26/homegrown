@@ -3413,6 +3413,78 @@ definitions:
       watched_seconds:
         type: integer
     type: object
+  learner_profile.LearnerProfileResponse:
+    properties:
+      activity_format:
+        type: number
+      answered_count:
+        type: integer
+      confidence:
+        type: number
+      created_at:
+        type: string
+      id:
+        type: string
+      interests:
+        items:
+          type: string
+        type: array
+      motivation:
+        type: number
+      outdoor_kinesthetic:
+        type: number
+      respondent:
+        type: string
+      session_length:
+        type: number
+      solo_collaborative:
+        type: number
+      source:
+        type: string
+      structure:
+        type: number
+      student_id:
+        type: string
+      summary_text:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  learner_profile.QuizAnswer:
+    properties:
+      question_id:
+        maximum: 12
+        minimum: 1
+        type: integer
+      value:
+        maximum: 1
+        minimum: 0
+        type: number
+    required:
+    - question_id
+    type: object
+  learner_profile.SubmitProfileCommand:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/learner_profile.QuizAnswer'
+        maxItems: 12
+        minItems: 1
+        type: array
+      interests:
+        items:
+          type: string
+        maxItems: 20
+        type: array
+      respondent:
+        enum:
+        - parent
+        - child
+        type: string
+    required:
+    - answers
+    - respondent
+    type: object
   lifecycle.DeletionStatus:
     enum:
     - pending
@@ -4644,12 +4716,22 @@ definitions:
     - children
     - methodology
     - roadmap_review
+    - learner_profile
     type: string
+    x-enum-comments:
+      StepLearnerProfile: optional 5th step [18-learner-profile §8]
+    x-enum-descriptions:
+    - ""
+    - ""
+    - ""
+    - ""
+    - optional 5th step [18-learner-profile §8]
     x-enum-varnames:
     - StepFamilyProfile
     - StepChildren
     - StepMethodology
     - StepRoadmapReview
+    - StepLearnerProfile
   plan.ActivitySummary:
     properties:
       date:
@@ -5100,6 +5182,12 @@ definitions:
       created_at:
         type: string
       expires_at:
+        type: string
+      fit_score:
+        description: learner fit score; nil when no profile [18-learner-profile §2.3]
+        type: number
+      fit_why:
+        description: why-text for the fit score badge
         type: string
       id:
         type: string
@@ -17364,4 +17452,76 @@ paths:
       summary: Get student session identity
       tags:
       - student-session
+  /students/{student_id}/learner-profile:
+    get:
+      description: Returns the current learner profile for a student. 404 if no quiz
+        has been submitted.
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/learner_profile.LearnerProfileResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Get learner profile
+      tags:
+      - learner-profile
+  /students/{student_id}/learner-profile/submissions:
+    post:
+      consumes:
+      - application/json
+      description: Processes a quiz submission and upserts the learner profile for
+        a student.
+      parameters:
+      - description: Student UUID
+        in: path
+        name: student_id
+        required: true
+        type: string
+      - description: Quiz answers
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/learner_profile.SubmitProfileCommand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/learner_profile.LearnerProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/shared.AppError'
+      security:
+      - BearerAuth: []
+      summary: Submit learner profile quiz
+      tags:
+      - learner-profile
 swagger: "2.0"

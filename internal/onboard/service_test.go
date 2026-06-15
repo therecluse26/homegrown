@@ -169,11 +169,12 @@ func TestAdvanceStep_AllCompleted(t *testing.T) {
 	for _, step := range wizardStepOrder {
 		advanceStep(p, step)
 	}
-	if p.CurrentStep != StepRoadmapReview {
-		t.Errorf("expected current_step=roadmap_review (last step), got %s", p.CurrentStep)
+	// StepLearnerProfile is the new optional 5th step [18-learner-profile §8]
+	if p.CurrentStep != StepLearnerProfile {
+		t.Errorf("expected current_step=learner_profile (last step), got %s", p.CurrentStep)
 	}
-	if len(p.CompletedSteps) != 4 {
-		t.Errorf("expected 4 completed steps, got %d", len(p.CompletedSteps))
+	if len(p.CompletedSteps) != 5 {
+		t.Errorf("expected 5 completed steps, got %d", len(p.CompletedSteps))
 	}
 }
 

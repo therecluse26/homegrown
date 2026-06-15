@@ -22555,6 +22555,141 @@
                     }
                 }
             }
+        },
+        "/students/{student_id}/learner-profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current learner profile for a student. 404 if no quiz has been submitted.",
+                "tags": [
+                    "learner-profile"
+                ],
+                "summary": "Get learner profile",
+                "parameters": [
+                    {
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/learner_profile.LearnerProfileResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/students/{student_id}/learner-profile/submissions": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Processes a quiz submission and upserts the learner profile for a student.",
+                "tags": [
+                    "learner-profile"
+                ],
+                "summary": "Submit learner profile quiz",
+                "parameters": [
+                    {
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/learner_profile.SubmitProfileCommand"
+                            }
+                        }
+                    },
+                    "description": "Quiz answers",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/learner_profile.LearnerProfileResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "servers": [
@@ -27693,6 +27828,111 @@
                     }
                 }
             },
+            "learner_profile.LearnerProfileResponse": {
+                "type": "object",
+                "properties": {
+                    "activity_format": {
+                        "type": "number"
+                    },
+                    "answered_count": {
+                        "type": "integer"
+                    },
+                    "confidence": {
+                        "type": "number"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "interests": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "motivation": {
+                        "type": "number"
+                    },
+                    "outdoor_kinesthetic": {
+                        "type": "number"
+                    },
+                    "respondent": {
+                        "type": "string"
+                    },
+                    "session_length": {
+                        "type": "number"
+                    },
+                    "solo_collaborative": {
+                        "type": "number"
+                    },
+                    "source": {
+                        "type": "string"
+                    },
+                    "structure": {
+                        "type": "number"
+                    },
+                    "student_id": {
+                        "type": "string"
+                    },
+                    "summary_text": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    }
+                }
+            },
+            "learner_profile.QuizAnswer": {
+                "type": "object",
+                "required": [
+                    "question_id"
+                ],
+                "properties": {
+                    "question_id": {
+                        "type": "integer",
+                        "maximum": 12,
+                        "minimum": 1
+                    },
+                    "value": {
+                        "type": "number",
+                        "maximum": 1,
+                        "minimum": 0
+                    }
+                }
+            },
+            "learner_profile.SubmitProfileCommand": {
+                "type": "object",
+                "required": [
+                    "answers",
+                    "respondent"
+                ],
+                "properties": {
+                    "answers": {
+                        "type": "array",
+                        "maxItems": 12,
+                        "minItems": 1,
+                        "items": {
+                            "$ref": "#/components/schemas/learner_profile.QuizAnswer"
+                        }
+                    },
+                    "interests": {
+                        "type": "array",
+                        "maxItems": 20,
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "respondent": {
+                        "type": "string",
+                        "enum": [
+                            "parent",
+                            "child"
+                        ]
+                    }
+                }
+            },
             "lifecycle.DeletionStatus": {
                 "type": "string",
                 "enum": [
@@ -29502,13 +29742,25 @@
                     "family_profile",
                     "children",
                     "methodology",
-                    "roadmap_review"
+                    "roadmap_review",
+                    "learner_profile"
+                ],
+                "x-enum-comments": {
+                    "StepLearnerProfile": "optional 5th step [18-learner-profile §8]"
+                },
+                "x-enum-descriptions": [
+                    "",
+                    "",
+                    "",
+                    "",
+                    "optional 5th step [18-learner-profile §8]"
                 ],
                 "x-enum-varnames": [
                     "StepFamilyProfile",
                     "StepChildren",
                     "StepMethodology",
-                    "StepRoadmapReview"
+                    "StepRoadmapReview",
+                    "StepLearnerProfile"
                 ]
             },
             "plan.ActivitySummary": {
@@ -30178,6 +30430,14 @@
                         "type": "string"
                     },
                     "expires_at": {
+                        "type": "string"
+                    },
+                    "fit_score": {
+                        "description": "learner fit score; nil when no profile [18-learner-profile §2.3]",
+                        "type": "number"
+                    },
+                    "fit_why": {
+                        "description": "why-text for the fit score badge",
                         "type": "string"
                     },
                     "id": {

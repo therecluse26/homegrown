@@ -20762,6 +20762,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/students/{student_id}/learner-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get learner profile
+         * @description Returns the current learner profile for a student. 404 if no quiz has been submitted.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["learner_profile.LearnerProfileResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/students/{student_id}/learner-profile/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit learner profile quiz
+         * @description Processes a quiz submission and upserts the learner profile for a student.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Student UUID */
+                    student_id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Quiz answers */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["learner_profile.SubmitProfileCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["learner_profile.LearnerProfileResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -22343,6 +22477,34 @@ export interface components {
             video_def_id?: string;
             watched_seconds?: number;
         };
+        "learner_profile.LearnerProfileResponse": {
+            activity_format?: number;
+            answered_count?: number;
+            confidence?: number;
+            created_at?: string;
+            id?: string;
+            interests?: string[];
+            motivation?: number;
+            outdoor_kinesthetic?: number;
+            respondent?: string;
+            session_length?: number;
+            solo_collaborative?: number;
+            source?: string;
+            structure?: number;
+            student_id?: string;
+            summary_text?: string;
+            updated_at?: string;
+        };
+        "learner_profile.QuizAnswer": {
+            question_id: number;
+            value?: number;
+        };
+        "learner_profile.SubmitProfileCommand": {
+            answers: components["schemas"]["learner_profile.QuizAnswer"][];
+            interests?: string[];
+            /** @enum {string} */
+            respondent: "parent" | "child";
+        };
         /** @enum {string} */
         "lifecycle.DeletionStatus": "pending" | "grace_period" | "processing" | "completed" | "cancelled";
         "lifecycle.DeletionStatusResponse": {
@@ -22866,7 +23028,7 @@ export interface components {
         /** @enum {string} */
         "onboard.WizardStatus": "in_progress" | "completed" | "skipped";
         /** @enum {string} */
-        "onboard.WizardStep": "family_profile" | "children" | "methodology" | "roadmap_review";
+        "onboard.WizardStep": "family_profile" | "children" | "methodology" | "roadmap_review" | "learner_profile";
         "plan.ActivitySummary": {
             date?: string;
             id?: string;
@@ -23067,6 +23229,10 @@ export interface components {
         "recs.RecommendationResponse": {
             created_at?: string;
             expires_at?: string;
+            /** @description learner fit score; nil when no profile [18-learner-profile §2.3] */
+            fit_score?: number;
+            /** @description why-text for the fit score badge */
+            fit_why?: string;
             id?: string;
             /** @description always true [S§10.4] */
             is_suggestion?: boolean;

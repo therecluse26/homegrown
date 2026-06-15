@@ -22,6 +22,7 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/mkt"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/homegrown-academy/homegrown-academy/internal/notify"
+	learner_profile "github.com/homegrown-academy/homegrown-academy/internal/learner_profile"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/plan"
 	"github.com/homegrown-academy/homegrown-academy/internal/recs"
@@ -64,9 +65,10 @@ type AppState struct {
 	Recs        recs.RecsService
 	Comply      comply.ComplianceService
 	Lifecycle   lifecycle.LifecycleService
-	Admin       admin.AdminService
-	Plan        plan.PlanningService
-	PubSub      shared.PubSub // needed by social handler for WebSocket
+	Admin          admin.AdminService
+	Plan           plan.PlanningService
+	LearnerProfile learner_profile.LearnerProfileService
+	PubSub         shared.PubSub // needed by social handler for WebSocket
 }
 
 // ─── authDeps and rateLimitDeps interface satisfaction ──────────────────────
@@ -181,6 +183,7 @@ func NewApp(state *AppState) *echo.Echo {
 	lifecycle.NewHandler(state.Lifecycle).Register(auth, pub)
 	admin.NewHandler(state.Admin).Register(auth, adminGroup)
 	plan.NewHandler(state.Plan).Register(auth)
+	learner_profile.NewHandler(state.LearnerProfile).Register(auth)
 
 	return e
 }
