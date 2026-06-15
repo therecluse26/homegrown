@@ -26,6 +26,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
   children: "onboarding.step.children",
   methodology: "onboarding.step.methodology",
   roadmap_review: "onboarding.step.roadmap",
+  learner_profile: "onboarding.step.learnerProfile", // optional 5th step [18-learner-profile §8]
 };
 
 /**
