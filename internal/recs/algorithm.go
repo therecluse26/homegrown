@@ -192,6 +192,112 @@ func computeHMAC(familyID uuid.UUID, key []byte) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+// ─── Learner Fit Scoring [18-learner-profile §6] ─────────────────────────────
+
+// studentProfileForFit holds the fields needed from learner_profiles for fit scoring.
+// Loaded via raw SQL in handleComputeRecommendationsTask to avoid importing learner_profile::.
+type studentProfileForFit struct {
+	ActivityFormat     *float64
+	SessionLength      *float64
+	Motivation         *float64
+	SoloCollaborative  *float64
+	Structure          *float64
+	OutdoorKinesthetic *float64
+	Interests          []string
+	Confidence         float64
+}
+
+// computeFitScore computes a learner-profile fit score for one content item.
+// preferenceTags: content's preference_tags JSONB decoded to map[string]float64.
+// Returns (score, whyText, ok). ok=false means badge gate not met.
+// Formula: mean(1 - |P_d - C_d|) over shared dimensions, +0.10 interest boost.
+// Both fit_score ≥ 0.60 AND profile.confidence ≥ 0.60 required. [18-learner-profile §6.2]
+func computeFitScore(profile studentProfileForFit, preferenceTags map[string]float64, contentSubjectTags []string) (float32, string, bool) {
+	if len(preferenceTags) == 0 || profile.Confidence < 0.60 {
+		return 0, "", false
+	}
+
+	dimValues := map[string]*float64{
+		"activity_format":     profile.ActivityFormat,
+		"session_length":      profile.SessionLength,
+		"motivation":          profile.Motivation,
+		"solo_collaborative":  profile.SoloCollaborative,
+		"structure":           profile.Structure,
+		"outdoor_kinesthetic": profile.OutdoorKinesthetic,
+	}
+
+	type scoredDim struct{ dim string; score float64 }
+	var scored []scoredDim
+	var total float64
+
+	for dim, pVal := range dimValues {
+		if pVal == nil {
+			continue
+		}
+		cVal, hasTag := preferenceTags[dim]
+		if !hasTag {
+			continue
+		}
+		d := *pVal - cVal
+		if d < 0 {
+			d = -d
+		}
+		s := 1.0 - d
+		scored = append(scored, scoredDim{dim, s})
+		total += s
+	}
+
+	if len(scored) == 0 {
+		return 0, "", false
+	}
+
+	fitScore := total / float64(len(scored))
+
+	// Interest boost: +0.10 if any content subject_tag matches a declared interest.
+	contentTagSet := make(map[string]struct{}, len(contentSubjectTags))
+	for _, t := range contentSubjectTags {
+		contentTagSet[t] = struct{}{}
+	}
+	for _, interest := range profile.Interests {
+		if _, found := contentTagSet[interest]; found {
+			fitScore += 0.10
+			break
+		}
+	}
+	if fitScore > 1.0 {
+		fitScore = 1.0
+	}
+
+	if fitScore < 0.60 {
+		return float32(fitScore), "", false
+	}
+
+	// Why-text from highest-contributing dimension.
+	bestDim := ""
+	var bestScore float64
+	for _, sd := range scored {
+		if sd.score > bestScore {
+			bestScore = sd.score
+			bestDim = sd.dim
+		}
+	}
+
+	whyTemplates := map[string]string{
+		"activity_format":     "This activity is hands-on — matches how they like to learn.",
+		"session_length":      "This content suits their preference for deep, focused sessions.",
+		"motivation":          "This resource rewards discovery — their favourite way to learn.",
+		"solo_collaborative":  "This works well with others — just how they learn best.",
+		"structure":           "This follows a clear structure they thrive with.",
+		"outdoor_kinesthetic": "This gets them moving — they think better that way.",
+	}
+	why := whyTemplates[bestDim]
+	if why == "" {
+		why = "This content is a strong match for their learning style."
+	}
+
+	return float32(fitScore), why, true
+}
+
 // ─── Jaccard Similarity [13-recs §10.9] ─────────────────────────────────────
 
 // computeJaccardSimilarity computes the Jaccard similarity coefficient between two
