@@ -94,6 +94,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
       {children}
       {createPortal(
         <div
+          role="log"
           className="fixed right-4 top-4 z-notification flex flex-col gap-2 w-full max-w-sm"
           aria-live="polite"
           aria-label="Notifications"

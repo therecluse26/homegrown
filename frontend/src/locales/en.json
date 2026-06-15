@@ -1,6 +1,7 @@
 {
   "app.name": "Homegrown Academy",
 
+  "nav.landmark.main": "Main navigation",
   "nav.home": "Home",
   "nav.learning": "Learning",
   "nav.social": "Social",

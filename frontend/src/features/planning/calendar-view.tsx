@@ -632,8 +632,14 @@ export function CalendarView() {
           >
             <Icon icon={Download} size="sm" />
           </Button>
-          <RouterLink to="/planning/print">
-            <Button variant="tertiary" size="sm">
+          <RouterLink
+            to="/planning/print"
+            aria-label={intl.formatMessage({
+              id: "planning.print.aria",
+              defaultMessage: "Print calendar",
+            })}
+          >
+            <Button variant="tertiary" size="sm" aria-hidden="true" tabIndex={-1}>
               <Icon icon={Printer} size="sm" />
             </Button>
           </RouterLink>

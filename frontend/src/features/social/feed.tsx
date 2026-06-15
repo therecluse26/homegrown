@@ -305,9 +305,17 @@ function PostCard({ post }: { post: PostResponse }) {
         <RouterLink
           to={`/post/${post.id}`}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+          aria-label={intl.formatMessage(
+            {
+              id: "feed.post.comments.aria",
+              defaultMessage:
+                "{count, plural, =0 {Comments} one {# comment} other {# comments}}",
+            },
+            { count: post.comments_count },
+          )}
         >
           <Icon icon={MessageCircle} size="sm" />
-          <span className="type-label-md">
+          <span className="type-label-md" aria-hidden="true">
             {post.comments_count > 0 ? post.comments_count : ""}
           </span>
         </RouterLink>

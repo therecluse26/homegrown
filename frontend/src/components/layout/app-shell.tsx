@@ -60,7 +60,7 @@ function SidebarNav() {
 
   return (
     <nav
-      aria-label={intl.formatMessage({ id: "nav.home", defaultMessage: "Main navigation" })}
+      aria-label={intl.formatMessage({ id: "nav.landmark.main", defaultMessage: "Main navigation" })}
       className="hidden lg:flex flex-col fixed top-0 left-0 h-full bg-surface-container-low/80 backdrop-blur-[20px] z-[var(--z-sticky)]"
       style={{ width: "var(--width-sidebar)" }}
     >

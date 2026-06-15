@@ -96,6 +96,34 @@ test.describe("Accessibility — Navigation Structure", () => {
   });
 
   test("Navigation has proper ARIA landmarks", async ({ page }) => {
+    // In CI the backend is not running so protected routes redirect to login.
+    // Mock the two API calls that gate the AppShell so the nav renders.
+    await page.route("**/v1/**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+    );
+    await page.route("**/v1/onboarding/progress", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "completed" }),
+      }),
+    );
+    await page.route("**/v1/auth/me", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          parent_id: "01900000-0000-7000-8000-000000000001",
+          family_id: "01900000-0000-7000-8000-000000000002",
+          display_name: "Test",
+          email: "test@example.com",
+          subscription_tier: "free",
+          coppa_consent_status: "not_required",
+          is_primary_parent: true,
+        }),
+      }),
+    );
+
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 

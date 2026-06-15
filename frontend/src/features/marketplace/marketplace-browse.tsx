@@ -126,6 +126,11 @@ export function MarketplaceBrowse() {
           type="button"
           variant="secondary"
           onClick={() => setShowFilters(!showFilters)}
+          aria-label={intl.formatMessage({
+            id: "marketplace.filters.toggle",
+            defaultMessage: "Toggle filters",
+          })}
+          aria-expanded={showFilters}
         >
           <Icon icon={Filter} size="sm" />
         </Button>
