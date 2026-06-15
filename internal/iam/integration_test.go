@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 // closes the connection and terminates the container.
 func startTestDB(ctx context.Context) (*gorm.DB, func(), error) {
 	req := testcontainers.ContainerRequest{
-		Image: "postgis/postgis:16-3.4",
+		Image: "postgis/postgis:18-3.6",
 		Env: map[string]string{
 			// Use the default superuser so that SET LOCAL row_security = off
 			// and CREATE EXTENSION succeed without additional GRANT statements.
