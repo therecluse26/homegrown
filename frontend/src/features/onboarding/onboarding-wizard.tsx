@@ -281,7 +281,7 @@ export function OnboardingWizard() {
         {resolvedStep === "learner_profile" && (
           <LearnerProfileOnboardingStep
             students={students ?? []}
-            onSkip={() => void navigate("/", { replace: true })}
+            onSkip={() => void handleSkipAll()}
             onComplete={() => void navigate("/", { replace: true })}
           />
         )}

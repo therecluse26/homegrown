@@ -246,7 +246,7 @@ export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, stand
   }
 
   // If profile already exists, jump straight to summary
-  if (phase === "summary" || profileQuery.data) {
+  if (phase === "summary" || (profileQuery.data && phase !== "quiz")) {
     const profile = submitQuiz.data ?? profileQuery.data;
     return (
       <ProfileSummary

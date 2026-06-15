@@ -178,6 +178,10 @@ const (
 	rec3ID    = "01900000-0000-7000-8000-000000000703"
 	recPrefID = "01900000-0000-7000-8000-000000000711"
 
+	// Learner Profile (domain 18)
+	learnerProfile1ID = "01900000-0000-7000-8000-000000000720"
+	rec4ID            = "01900000-0000-7000-8000-000000000721"
+
 	// Recommendations Extended
 	recsSignal1ID   = "01900000-0000-7000-8000-000000000520"
 	recsSignal2ID   = "01900000-0000-7000-8000-000000000521"
@@ -542,6 +546,7 @@ func seedAll(db *gorm.DB, seedKratosID, adminKratosID string) error {
 		{"Comply", seedComply},
 		{"Recommendations", seedRecs},
 		{"RecsExtended", seedRecsExtended},
+		{"LearnerProfile", seedLearnerProfile},
 		{"Planning", seedPlan},
 		{"Lifecycle", seedLifecycle},
 	}
@@ -2460,6 +2465,49 @@ func seedRecsExtended(db *gorm.DB) error {
 			recsFeedback2ID, seedFamilyID, rec2ID,
 		).Error; err != nil {
 			return fmt.Errorf("insert recs feedback: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ─── Learner Profile seed ─────────────────────────────────────────────────────
+
+func seedLearnerProfile(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		// Emma's learner profile — hands-on, outdoor, long sessions
+		if err := tx.Exec(`
+			INSERT INTO learner_profiles
+				(id, family_id, student_id,
+				 activity_format, session_length, motivation,
+				 solo_collaborative, structure, outdoor_kinesthetic,
+				 interests, answered_count, confidence, source, respondent)
+			VALUES (?, ?, ?,
+				0.85, 0.55, 0.70,
+				0.30, 0.40, 0.90,
+				ARRAY['science','building','outdoors'],
+				12, 0.850, 'declared', 'parent')
+			ON CONFLICT (student_id) DO NOTHING`,
+			learnerProfile1ID, seedFamilyID, emmaStudentID,
+		).Error; err != nil {
+			return fmt.Errorf("insert learner profile: %w", err)
+		}
+
+		// A recommendation with fit_score so QA can verify the FitBadge component.
+		expiresAt := time.Now().AddDate(0, 0, 14).Format(time.RFC3339)
+		if err := tx.Exec(`
+			INSERT INTO recs_recommendations
+				(id, family_id, recommendation_type, target_entity_id,
+				 target_entity_label, source_signal, source_label, score,
+				 fit_score, fit_why, status, expires_at)
+			VALUES (?, ?, 'marketplace_content', ?,
+				'Nature Journal Starter Pack',
+				'learner_profile_fit', 'Matches Emma''s hands-on outdoor learner profile',
+				0.88, 0.700, 'Great hands-on outdoor match', 'active', ?)
+			ON CONFLICT DO NOTHING`,
+			rec4ID, seedFamilyID, listing2ID, expiresAt,
+		).Error; err != nil {
+			return fmt.Errorf("insert fit-badge recommendation: %w", err)
 		}
 
 		return nil
