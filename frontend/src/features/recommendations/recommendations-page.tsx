@@ -15,6 +15,7 @@ import {
   Card,
   Checkbox,
   EmptyState,
+  FitBadge,
   Icon,
   Radio,
   Skeleton,
@@ -31,6 +32,7 @@ import {
   useUpdatePreferences,
   type Recommendation,
 } from "@/hooks/use-recommendations";
+import { useStudents } from "@/hooks/use-family";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -83,10 +85,14 @@ const DEFAULT_CONFIG = {
 
 // ─── Recommendation card ────────────────────────────────────────────────────
 
+const FIT_BADGE_GATE = 0.60;
+
 function RecommendationCard({
   recommendation,
+  studentName,
 }: {
   recommendation: Recommendation;
+  studentName?: string;
 }) {
   const intl = useIntl();
   const [dismissed, setDismissed] = useState(false);
@@ -153,6 +159,15 @@ function RecommendationCard({
             {recommendation.source_label}
           </p>
         )}
+        {recommendation.fit_score !== undefined &&
+          recommendation.fit_score >= FIT_BADGE_GATE && (
+            <div className="mt-1">
+              <FitBadge
+                studentName={studentName}
+                whyText={recommendation.fit_why}
+              />
+            </div>
+          )}
       </div>
 
       <div className="flex items-center gap-2 pt-1">
@@ -197,6 +212,8 @@ function RecommendationList({
   recommendations: Recommendation[];
 }) {
   const intl = useIntl();
+  const { data: students } = useStudents();
+  const studentsById = new Map(students?.map((s) => [s.id ?? "", s]) ?? []);
 
   if (recommendations.length === 0) {
     return (
@@ -217,7 +234,10 @@ function RecommendationList({
     >
       {recommendations.map((rec) => (
         <li key={rec.id}>
-          <RecommendationCard recommendation={rec} />
+          <RecommendationCard
+            recommendation={rec}
+            studentName={studentsById.get(rec.student_id ?? "")?.display_name}
+          />
         </li>
       ))}
     </ul>

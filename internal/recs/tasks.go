@@ -69,10 +69,11 @@ func RegisterTaskHandlers(
 	anonRepo AnonymizedInteractionRepository,
 	anonymizationSecret string,
 	eventBus *shared.EventBus,
+	learnerProfilePort LearnerProfilePort,
 ) {
 	worker.Handle(TaskTypePurgeStaleSignals, handlePurgeStaleSignalsTask(signalRepo))
 	worker.Handle(TaskTypeAnonymizeInteractions, handleAnonymizeInteractionsTask(db, signalRepo, anonRepo, anonymizationSecret))
-	worker.Handle(TaskTypeComputeRecommendations, handleComputeRecommendationsTask(db, signalRepo, recRepo, feedbackRepo, popularityRepo, prefRepo, eventBus))
+	worker.Handle(TaskTypeComputeRecommendations, handleComputeRecommendationsTask(db, signalRepo, recRepo, feedbackRepo, popularityRepo, prefRepo, eventBus, learnerProfilePort))
 	worker.Handle(TaskTypeAggregatePopularity, handleAggregatePopularityTask(db, popularityRepo))
 }
 
@@ -324,6 +325,7 @@ func handleComputeRecommendationsTask(
 	popularityRepo PopularityRepository,
 	prefRepo PreferenceRepository,
 	eventBus *shared.EventBus,
+	learnerProfilePort LearnerProfilePort,
 ) shared.JobHandler {
 	return func(ctx context.Context, payload []byte) error {
 		var task ComputeRecommendationsPayload
@@ -446,12 +448,23 @@ func handleComputeRecommendationsTask(
 			}
 
 			// Cold-start prior: seed recentSubjectTags from declared interests when behavioral
-			// signals are sparse (< 3 in 90 days). Each interest added twice to give it
-			// meaningful Jaccard weight without dominating observed behavior. [18-learner-profile §7.2]
-			if len(signals) < 3 {
-				for _, profile := range profileMap {
-					recentSubjectTags = append(recentSubjectTags, profile.Interests...)
-					recentSubjectTags = append(recentSubjectTags, profile.Interests...)
+			// signals are sparse (< 3 in 90 days). Interests are mapped to subject_tags for
+			// Jaccard similarity against listing subject_tags. Double-weight gives declared
+			// interests meaningful signal without drowning observed behavior. [18-learner-profile §3.1]
+			if len(signals) < 3 && learnerProfilePort != nil {
+				studentInterests, err := learnerProfilePort.GetStudentInterestsByFamily(ctx, familyID)
+				if err != nil {
+					slog.Warn("recs: compute cold-start interests", "family_id", family.ID, "error", err)
+				} else {
+					for _, interests := range studentInterests {
+						for _, interest := range interests {
+							subjectTag, ok := recsInterestToSubjectTag[interest]
+							if !ok {
+								subjectTag = interest // fall back to direct match
+							}
+							recentSubjectTags = append(recentSubjectTags, subjectTag, subjectTag)
+						}
+					}
 				}
 			}
 

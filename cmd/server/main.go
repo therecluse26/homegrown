@@ -1498,11 +1498,13 @@ func main() {
 	safetyNcmecPendingRepo := safety.NewPgNcmecPendingReportRepository(db)
 	manualReviewThornAdapter := safety.NewManualReviewThornAdapter(safetyManualReviewRepo, safetyNcmecPendingRepo)
 	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, manualReviewThornAdapter, jobs, safetySvc)
+	recLearnerProfilePort := recs.NewLearnerProfileAdapter(lpSvc.GetStudentInterestsByFamily)
 	recs.RegisterTaskHandlers(worker, db,
 		recSignalRepo, recRecRepo, recFeedbackRepo,
 		recPopularityRepo, recPrefRepo, recAnonRepo,
 		cfg.RecsAnonymizationSecret,
 		eventBus,
+		recLearnerProfilePort,
 	)
 	comply.RegisterTaskHandlers(worker, db,
 		complyStateConfigRepo, complyFamilyConfigRepo, complyAttendanceRepo,

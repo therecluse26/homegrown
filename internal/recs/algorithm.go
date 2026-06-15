@@ -194,6 +194,26 @@ func computeHMAC(familyID uuid.UUID, key []byte) string {
 
 // ─── Learner Fit Scoring [18-learner-profile §6] ─────────────────────────────
 
+// recsInterestToSubjectTag maps declared interest chip IDs to their primary subject_tag.
+// Must stay in sync with learner_profile.InterestChips (quiz.go). [18-learner-profile §5]
+var recsInterestToSubjectTag = map[string]string{
+	"animals":  "nature_study",
+	"art":      "art",
+	"building": "crafts",
+	"coding":   "indoor_science",
+	"cooking":  "cooking",
+	"drama":    "art",
+	"history":  "history",
+	"language": "writing",
+	"math":     "mathematics",
+	"music":    "music",
+	"nature":   "ecology",
+	"reading":  "reading",
+	"science":  "indoor_science",
+	"space":    "astronomy",
+	"sport":    "physical_education",
+}
+
 // studentProfileForFit holds the fields needed from learner_profiles for fit scoring.
 // Loaded via raw SQL in handleComputeRecommendationsTask to avoid importing learner_profile::.
 type studentProfileForFit struct {
@@ -254,12 +274,18 @@ func computeFitScore(profile studentProfileForFit, preferenceTags map[string]flo
 	fitScore := total / float64(len(scored))
 
 	// Interest boost: +0.10 if any content subject_tag matches a declared interest.
+	// Interests are chip IDs (e.g. "math") mapped to subject_tags (e.g. "mathematics")
+	// via recsInterestToSubjectTag before comparison. [18-learner-profile §6.3]
 	contentTagSet := make(map[string]struct{}, len(contentSubjectTags))
 	for _, t := range contentSubjectTags {
 		contentTagSet[t] = struct{}{}
 	}
 	for _, interest := range profile.Interests {
-		if _, found := contentTagSet[interest]; found {
+		subjectTag, ok := recsInterestToSubjectTag[interest]
+		if !ok {
+			subjectTag = interest // fall back to direct match
+		}
+		if _, found := contentTagSet[subjectTag]; found {
 			fitScore += 0.10
 			break
 		}

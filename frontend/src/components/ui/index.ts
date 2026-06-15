@@ -12,6 +12,7 @@ export { DatePicker } from "./date-picker";
 export { DropdownMenu, DropdownMenuItem } from "./dropdown-menu";
 export { EmptyState } from "./empty-state";
 export { FacetedFilter } from "./faceted-filter";
+export { FitBadge } from "./fit-badge";
 export { FileUpload } from "./file-upload";
 export { FormField } from "./form-field";
 export { Icon } from "./icon";

@@ -1,24 +1,81 @@
 import { useState, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { useIntl, FormattedMessage } from "react-intl";
 import { Spinner, Button } from "@/components/ui";
 import { Icon } from "@/components/ui";
-import { Check } from "lucide-react";
+import { Check, Lock } from "lucide-react";
 import { PageTitle } from "@/components/common";
 import { useOnboardingProgress, useSkipOnboarding } from "@/hooks/use-onboarding";
+import { useStudents } from "@/hooks/use-family";
 import { FamilyProfileStep } from "./steps/family-profile-step";
 import { ChildrenStep } from "./steps/children-step";
 import { MethodologyStep } from "./steps/methodology-step";
 import { RoadmapReviewStep } from "./steps/roadmap-review-step";
+import { LearnerProfileQuiz } from "@/features/learner-profile/learner-profile-quiz";
 import type { components } from "@/api/generated/schema";
 
 type WizardStep = components["schemas"]["onboard.WizardStep"];
+type StudentResponse = components["schemas"]["iam.StudentResponse"];
+
+// ─── Learner profile onboarding step ─────────────────────────────────────────
+
+function LearnerProfileOnboardingStep({
+  students,
+  onSkip,
+  onComplete,
+}: {
+  students: StudentResponse[];
+  onSkip: () => void;
+  onComplete: () => void;
+}) {
+  const [studentIndex, setStudentIndex] = useState(0);
+  const currentStudent = students[studentIndex];
+
+  function handleStudentComplete() {
+    if (studentIndex < students.length - 1) {
+      setStudentIndex((i) => i + 1);
+    } else {
+      onComplete();
+    }
+  }
+
+  return (
+    <div>
+      {/* Privacy note */}
+      <div className="mb-6 flex items-start gap-3 rounded-lg bg-surface-container-low px-4 py-3 shadow-ghost-border">
+        <Icon icon={Lock} size="sm" className="mt-0.5 shrink-0 text-on-surface-variant" aria-hidden />
+        <p className="type-body-sm text-on-surface-variant">
+          Only your family can see this. Learner Profiles are never shared or used for ads.{" "}
+          <Link to="/legal/privacy" className="underline hover:text-on-surface transition-colors">
+            Learn more
+          </Link>
+        </p>
+      </div>
+
+      {/* Per-student quiz */}
+      {currentStudent?.id && (
+        <LearnerProfileQuiz
+          studentId={currentStudent.id}
+          onComplete={handleStudentComplete}
+        />
+      )}
+
+      {/* Skip for now */}
+      <div className="mt-6 flex justify-center">
+        <Button type="button" variant="tertiary" size="sm" onClick={onSkip}>
+          Skip for now
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 const STEPS: WizardStep[] = [
   "family_profile",
   "children",
   "methodology",
   "roadmap_review",
+  "learner_profile", // optional 5th step — skippable [18-learner-profile §8]
 ];
 
 const STEP_LABELS: Record<WizardStep, string> = {
@@ -40,6 +97,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
  */
 function deriveDisplayStep(completedSteps: WizardStep[] | undefined): WizardStep {
   const done = new Set(completedSteps ?? []);
+  if (done.has("roadmap_review")) return "learner_profile";
   if (done.has("methodology")) return "roadmap_review";
   if (done.has("family_profile")) return "children";
   return "family_profile";
@@ -61,6 +119,7 @@ export function OnboardingWizard() {
   const navigate = useNavigate();
   const { data: progress, isLoading } = useOnboardingProgress();
   const skipOnboarding = useSkipOnboarding();
+  const { data: students } = useStudents();
 
   const [activeStep, setActiveStep] = useState<WizardStep | null>(null);
 
@@ -218,6 +277,13 @@ export function OnboardingWizard() {
         )}
         {resolvedStep === "roadmap_review" && (
           <RoadmapReviewStep onBack={handleBack} />
+        )}
+        {resolvedStep === "learner_profile" && (
+          <LearnerProfileOnboardingStep
+            students={students ?? []}
+            onSkip={() => void navigate("/", { replace: true })}
+            onComplete={() => void navigate("/", { replace: true })}
+          />
         )}
       </div>
     </div>
