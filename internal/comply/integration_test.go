@@ -160,8 +160,8 @@ func TestComplyIntegration_FamilyConfigUpsertAndFind(t *testing.T) {
 	familyID := uuid.Must(uuid.NewV7())
 	err := shared.BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
 		return tx.Exec(
-			`INSERT INTO families (id, name, coppa_consent_status, time_zone)
-			 VALUES (?, 'Comply Family', 'registered', 'UTC')`,
+			`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+			 VALUES (?, 'Comply Family', 'charlotte-mason')`,
 			familyID,
 		).Error
 	})
@@ -213,8 +213,8 @@ func TestComplyIntegration_ScheduleCRUD(t *testing.T) {
 	familyID := uuid.Must(uuid.NewV7())
 	err := shared.BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
 		return tx.Exec(
-			`INSERT INTO families (id, name, coppa_consent_status, time_zone)
-			 VALUES (?, 'Schedule Family', 'registered', 'UTC')`,
+			`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+			 VALUES (?, 'Schedule Family', 'charlotte-mason')`,
 			familyID,
 		).Error
 	})

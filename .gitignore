@@ -49,10 +49,14 @@ server
 !seed/
 /seed-full
 
+*.png
 /*.png
+**/*.png
 
 *.log
 
 .playwright-mcp
 
 /research/screenshots
+
+test-results/

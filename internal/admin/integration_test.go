@@ -119,13 +119,41 @@ func skipIfNoTestDB(t *testing.T) {
 	}
 }
 
+// seedIntTestAdmin inserts a minimal iam_families + iam_parents row (bypassing RLS)
+// and returns the parent UUID. admin_feature_flags and admin_audit_logs FK to iam_parents.
+func seedIntTestAdmin(t *testing.T) uuid.UUID {
+	t.Helper()
+	familyID := uuid.Must(uuid.NewV7())
+	parentID := uuid.Must(uuid.NewV7())
+	kratosID := uuid.Must(uuid.NewV7())
+	if err := testDB.Exec(
+		`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+		 VALUES (?, 'Admin Test Family', 'charlotte-mason')`,
+		familyID,
+	).Error; err != nil {
+		t.Fatalf("seed iam_families: %v", err)
+	}
+	if err := testDB.Exec(
+		`INSERT INTO iam_parents (id, family_id, kratos_identity_id, display_name, email, is_primary)
+		 VALUES (?, ?, ?, 'Admin User', 'admin-inttest@example.com', true)`,
+		parentID, familyID, kratosID,
+	).Error; err != nil {
+		t.Fatalf("seed iam_parents: %v", err)
+	}
+	t.Cleanup(func() {
+		testDB.Exec(`DELETE FROM iam_parents WHERE id = ?`, parentID)
+		testDB.Exec(`DELETE FROM iam_families WHERE id = ?`, familyID)
+	})
+	return parentID
+}
+
 // TestAdminIntegration_FeatureFlagCreateAndFind verifies feature flag CRUD. [16-admin §10]
 func TestAdminIntegration_FeatureFlagCreateAndFind(t *testing.T) {
 	skipIfNoTestDB(t)
 	ctx := context.Background()
 
 	repo := NewPgFeatureFlagRepository(testDB)
-	adminID := uuid.Must(uuid.NewV7())
+	adminID := seedIntTestAdmin(t)
 
 	flag, err := repo.Create(ctx, &CreateFlagInput{
 		Key:         fmt.Sprintf("test-flag-%s", uuid.Must(uuid.NewV7())),
@@ -160,7 +188,7 @@ func TestAdminIntegration_FeatureFlagListAll(t *testing.T) {
 	ctx := context.Background()
 
 	repo := NewPgFeatureFlagRepository(testDB)
-	adminID := uuid.Must(uuid.NewV7())
+	adminID := seedIntTestAdmin(t)
 
 	_, err := repo.Create(ctx, &CreateFlagInput{
 		Key:         fmt.Sprintf("list-flag-%s", uuid.Must(uuid.NewV7())),
@@ -186,7 +214,7 @@ func TestAdminIntegration_AuditLogCreate(t *testing.T) {
 	ctx := context.Background()
 
 	repo := NewPgAuditLogRepository(testDB)
-	adminID := uuid.Must(uuid.NewV7())
+	adminID := seedIntTestAdmin(t)
 
 	entry, err := repo.Create(ctx, &CreateAuditLogEntry{
 		AdminID:    adminID,

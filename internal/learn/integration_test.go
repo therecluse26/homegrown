@@ -126,8 +126,8 @@ func insertTestFamily(ctx context.Context, t *testing.T, name string) uuid.UUID 
 	familyID := uuid.Must(uuid.NewV7())
 	err := shared.BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
 		return tx.Exec(
-			`INSERT INTO families (id, name, coppa_consent_status, time_zone)
-			 VALUES (?, ?, 'registered', 'UTC')`,
+			`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+			 VALUES (?, ?, 'charlotte-mason')`,
 			familyID, name,
 		).Error
 	})
@@ -137,13 +137,29 @@ func insertTestFamily(ctx context.Context, t *testing.T, name string) uuid.UUID 
 	return familyID
 }
 
+// seedTestPublisher inserts a minimal mkt_publishers row and returns its UUID.
+// learn_*_defs tables FK to mkt_publishers(id). [06-learn §3.2]
+func seedTestPublisher(t *testing.T) uuid.UUID {
+	t.Helper()
+	id := uuid.Must(uuid.NewV7())
+	slug := fmt.Sprintf("learn-test-pub-%s", id)
+	if err := testDB.Exec(
+		`INSERT INTO mkt_publishers (id, name, slug) VALUES (?, 'Learn Test Publisher', ?)`,
+		id, slug,
+	).Error; err != nil {
+		t.Fatalf("seed mkt_publishers: %v", err)
+	}
+	t.Cleanup(func() { testDB.Exec(`DELETE FROM mkt_publishers WHERE id = ?`, id) })
+	return id
+}
+
 // insertTestStudent creates a minimal student row bypassing RLS.
 func insertTestStudent(ctx context.Context, t *testing.T, familyID uuid.UUID) uuid.UUID {
 	t.Helper()
 	studentID := uuid.Must(uuid.NewV7())
 	err := shared.BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
 		return tx.Exec(
-			`INSERT INTO students (id, family_id, display_name)
+			`INSERT INTO iam_students (id, family_id, display_name)
 			 VALUES (?, ?, 'Test Student')`,
 			studentID, familyID,
 		).Error
@@ -161,7 +177,7 @@ func TestLearnIntegration_ActivityDefCRUD(t *testing.T) {
 	ctx := context.Background()
 
 	repo := NewPgActivityDefRepository(testDB)
-	publisherID := uuid.Must(uuid.NewV7())
+	publisherID := seedTestPublisher(t)
 
 	def := &ActivityDefModel{
 		PublisherID:  publisherID,

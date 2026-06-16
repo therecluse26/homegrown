@@ -171,20 +171,20 @@ func newIntegrationSetup(t *testing.T) *integrationSetup {
 // It records SetFamilyMethodology calls so tests can verify persistence was attempted.
 type stubIntegrationIamSvc struct {
 	mu                   sync.Mutex
-	primaryID            uuid.UUID
-	secondaryIDs         []uuid.UUID
+	primaryID            MethodologyID
+	secondaryIDs         []MethodologyID
 	student              *StudentInfo
 	setCalledCount       int
-	capturedPrimaryID    uuid.UUID
-	capturedSecondaryIDs []uuid.UUID
+	capturedPrimaryID    MethodologyID
+	capturedSecondaryIDs []MethodologyID
 }
 
-func (s *stubIntegrationIamSvc) GetFamilyMethodologyIDs(_ context.Context, _ *shared.FamilyScope) (uuid.UUID, []uuid.UUID, error) {
+func (s *stubIntegrationIamSvc) GetFamilyMethodologyIDs(_ context.Context, _ *shared.FamilyScope) (MethodologyID, []MethodologyID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sec := s.secondaryIDs
 	if sec == nil {
-		sec = []uuid.UUID{}
+		sec = []MethodologyID{}
 	}
 	return s.primaryID, sec, nil
 }
@@ -198,12 +198,16 @@ func (s *stubIntegrationIamSvc) GetStudent(_ context.Context, _ *shared.FamilySc
 	return nil, &shared.AppError{Code: "student_not_found", Message: "Student not found", StatusCode: 404}
 }
 
-func (s *stubIntegrationIamSvc) SetFamilyMethodology(_ context.Context, _ *shared.FamilyScope, primaryID uuid.UUID, secondaryIDs []uuid.UUID) error {
+func (s *stubIntegrationIamSvc) SetStudentMethodologyOverride(_ context.Context, _ *shared.FamilyScope, _ uuid.UUID, _ *MethodologyID) error {
+	return nil
+}
+
+func (s *stubIntegrationIamSvc) SetFamilyMethodology(_ context.Context, _ *shared.FamilyScope, primarySlug MethodologyID, secondarySlugs []MethodologyID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.setCalledCount++
-	s.capturedPrimaryID = primaryID
-	s.capturedSecondaryIDs = secondaryIDs
+	s.capturedPrimaryID = primarySlug
+	s.capturedSecondaryIDs = secondarySlugs
 	return nil
 }
 
@@ -380,8 +384,8 @@ func TestUpdateFamilyMethodology_ValidIDs_PublishesEvent(t *testing.T) {
 
 	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	resp, err := s.svc.UpdateFamilyMethodology(ctx, &scope, UpdateMethodologyCommand{
-		PrimaryMethodologyID:    cmDef.ID,
-		SecondaryMethodologyIDs: []uuid.UUID{},
+		PrimaryMethodologySlug:    cmDef.Slug,
+		SecondaryMethodologySlugs: []MethodologyID{},
 	})
 	if err != nil {
 		t.Fatalf("UpdateFamilyMethodology: %v", err)
@@ -400,9 +404,9 @@ func TestUpdateFamilyMethodology_ValidIDs_PublishesEvent(t *testing.T) {
 	if s.iamStub.setCalledCount != 1 {
 		t.Errorf("want SetFamilyMethodology called 1 time, got %d", s.iamStub.setCalledCount)
 	}
-	if s.iamStub.capturedPrimaryID != cmDef.ID {
-		t.Errorf("SetFamilyMethodology captured wrong primaryID: got %v, want %v",
-			s.iamStub.capturedPrimaryID, cmDef.ID)
+	if s.iamStub.capturedPrimaryID != cmDef.Slug {
+		t.Errorf("SetFamilyMethodology captured wrong primarySlug: got %v, want %v",
+			s.iamStub.capturedPrimaryID, cmDef.Slug)
 	}
 
 	// Event must have been published.
@@ -413,8 +417,8 @@ func TestUpdateFamilyMethodology_ValidIDs_PublishesEvent(t *testing.T) {
 	if !ok {
 		t.Fatalf("want FamilyMethodologyChanged event, got %T", capture.first())
 	}
-	if evt.PrimaryMethodologyID != cmDef.ID {
-		t.Errorf("event PrimaryMethodologyID = %v, want %v", evt.PrimaryMethodologyID, cmDef.ID)
+	if evt.PrimaryMethodologySlug != cmDef.Slug {
+		t.Errorf("event PrimaryMethodologySlug = %v, want %v", evt.PrimaryMethodologySlug, cmDef.Slug)
 	}
 }
 
@@ -426,8 +430,8 @@ func TestUpdateFamilyMethodology_InvalidID_ReturnsError(t *testing.T) {
 
 	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
 	_, err := s.svc.UpdateFamilyMethodology(ctx, &scope, UpdateMethodologyCommand{
-		PrimaryMethodologyID:    uuid.Must(uuid.NewV7()), // random UUID — not in DB
-		SecondaryMethodologyIDs: []uuid.UUID{},
+		PrimaryMethodologySlug:    "nonexistent-methodology-xyz", // not in DB
+		SecondaryMethodologySlugs: []MethodologyID{},
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid methodology ID, got nil")
@@ -454,14 +458,15 @@ func TestStudentTools_WithOverride(t *testing.T) {
 		t.Fatalf("ListActive: %v", err)
 	}
 	// Use two different methodologies: CM as family primary, Traditional as override.
-	cmDef := defs[0]     // charlotte-mason
-	tradDef := defs[1]   // traditional
+	cmDef := defs[0]   // charlotte-mason
+	tradDef := defs[1] // traditional
 
 	studentID := uuid.Must(uuid.NewV7())
-	s.iamStub.primaryID = cmDef.ID
+	s.iamStub.primaryID = cmDef.Slug
+	tradSlug := tradDef.Slug
 	s.iamStub.student = &StudentInfo{
-		ID:                    studentID,
-		MethodologyOverrideID: &tradDef.ID,
+		ID:                      studentID,
+		MethodologyOverrideSlug: &tradSlug,
 	}
 
 	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})
@@ -500,10 +505,10 @@ func TestStudentTools_NoOverrideFallsBackToFamily(t *testing.T) {
 	cmDef := defs[0] // charlotte-mason
 
 	studentID := uuid.Must(uuid.NewV7())
-	s.iamStub.primaryID = cmDef.ID
+	s.iamStub.primaryID = cmDef.Slug
 	s.iamStub.student = &StudentInfo{
-		ID:                    studentID,
-		MethodologyOverrideID: nil, // no override — falls back to family
+		ID:                      studentID,
+		MethodologyOverrideSlug: nil, // no override — falls back to family
 	}
 
 	scope := shared.NewFamilyScopeFromAuth(&shared.AuthContext{FamilyID: uuid.Must(uuid.NewV7())})

@@ -119,14 +119,35 @@ func skipIfNoTestDB(t *testing.T) {
 	}
 }
 
+// seedIntTestFamily inserts a minimal iam_families row (bypassing RLS) for FK satisfaction.
+func seedIntTestFamily(t *testing.T) shared.FamilyID {
+	t.Helper()
+	familyID := shared.NewFamilyID(uuid.Must(uuid.NewV7()))
+	err := shared.BypassRLSTransaction(context.Background(), testDB, func(tx *gorm.DB) error {
+		return tx.Exec(
+			`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+			 VALUES (?, 'Recs Test Family', 'charlotte-mason')`,
+			familyID.UUID,
+		).Error
+	})
+	if err != nil {
+		t.Fatalf("seed iam_families: %v", err)
+	}
+	t.Cleanup(func() {
+		testDB.Exec(`DELETE FROM recs_signals WHERE family_id = ?`, familyID.UUID)
+		testDB.Exec(`DELETE FROM iam_families WHERE id = ?`, familyID.UUID)
+	})
+	return familyID
+}
+
 // TestRecsIntegration_SignalCreateAndFind verifies signals are family-scoped. [13-recs §4.1]
 func TestRecsIntegration_SignalCreateAndFind(t *testing.T) {
 	skipIfNoTestDB(t)
 	ctx := context.Background()
 
-	familyID := shared.FamilyID(uuid.Must(uuid.NewV7()))
+	familyID := seedIntTestFamily(t)
 	repo := NewPgSignalRepository(testDB)
-	scope := shared.NewFamilyScopeFromID(uuid.UUID(familyID))
+	scope := shared.NewFamilyScopeFromID(familyID.UUID)
 	now := time.Now().UTC()
 
 	err := repo.Create(ctx, NewSignal{
@@ -157,9 +178,9 @@ func TestRecsIntegration_SignalDeleteByFamily(t *testing.T) {
 	skipIfNoTestDB(t)
 	ctx := context.Background()
 
-	familyID := shared.FamilyID(uuid.Must(uuid.NewV7()))
+	familyID := seedIntTestFamily(t)
 	repo := NewPgSignalRepository(testDB)
-	scope := shared.NewFamilyScopeFromID(uuid.UUID(familyID))
+	scope := shared.NewFamilyScopeFromID(familyID.UUID)
 	now := time.Now().UTC()
 
 	if err := repo.Create(ctx, NewSignal{

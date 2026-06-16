@@ -154,7 +154,7 @@ func newIntegrationSetup(t *testing.T) *integrationSetup {
 		return slug, nil
 	})
 
-	svc := NewDiscoveryService(quizDefRepo, quizResRepo, stateRepo, methodAdapter)
+	svc := NewDiscoveryService(quizDefRepo, quizResRepo, stateRepo, NewPgContentPageRepository(testDB), methodAdapter)
 
 	return &integrationSetup{
 		quizDefRepo: quizDefRepo,

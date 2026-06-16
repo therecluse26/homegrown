@@ -322,11 +322,10 @@ func NewPgScheduleRepository(db *gorm.DB) *PgScheduleRepository {
 
 func (r *PgScheduleRepository) Create(ctx context.Context, scope shared.FamilyScope, input CreateScheduleRow) (*ComplyCustomSchedule, error) {
 	id := uuid.New()
-	schoolDaysJSON, _ := json.Marshal(input.SchoolDays)
 	err := r.db.WithContext(ctx).Exec(`
 		INSERT INTO comply_custom_schedules (id, family_id, name, school_days, exclusion_periods)
 		VALUES (?, ?, ?, ?::boolean[], ?)`,
-		id, scope.FamilyID(), input.Name, string(schoolDaysJSON), input.ExclusionPeriods,
+		id, scope.FamilyID(), input.Name, boolSliceToPostgresArray(input.SchoolDays), input.ExclusionPeriods,
 	).Error
 	if err != nil {
 		return nil, fmt.Errorf("comply schedule create: %w", err)
@@ -413,9 +412,8 @@ func (r *PgScheduleRepository) Update(ctx context.Context, scheduleID uuid.UUID,
 		args = append(args, *updates.Name)
 	}
 	if updates.SchoolDays != nil {
-		daysJSON, _ := json.Marshal(*updates.SchoolDays)
 		sets += ", school_days = ?::boolean[]"
-		args = append(args, string(daysJSON))
+		args = append(args, boolSliceToPostgresArray(*updates.SchoolDays))
 	}
 	if updates.ExclusionPeriods != nil {
 		sets += ", exclusion_periods = ?"
@@ -2016,6 +2014,19 @@ func parsePostgresTextArray(s string) []string {
 		out = append(out, part)
 	}
 	return out
+}
+
+// boolSliceToPostgresArray converts []bool to a PostgreSQL array literal: {true,false,...}
+func boolSliceToPostgresArray(bools []bool) string {
+	parts := make([]string, len(bools))
+	for i, b := range bools {
+		if b {
+			parts[i] = "true"
+		} else {
+			parts[i] = "false"
+		}
+	}
+	return "{" + strings.Join(parts, ",") + "}"
 }
 
 // parsePostgresBoolArray parses a PostgreSQL boolean[] literal like {t,f,t} into a []bool.
