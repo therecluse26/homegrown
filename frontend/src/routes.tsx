@@ -145,6 +145,9 @@ const ComingSoonStub = lazy(() => import("@/components/common/coming-soon-stub")
 const ProfileRedirect = lazy(() => import("@/features/social/profile-redirect").then(m => ({ default: m.ProfileRedirect })));
 const LogoutRoute = lazy(() => import("@/features/auth/logout-route").then(m => ({ default: m.LogoutRoute })));
 
+// Help
+const HelpPage = lazy(() => import("@/features/help/help-page").then(m => ({ default: m.HelpPage })));
+
 // Billing
 const PricingPage = lazy(() => import("@/features/billing/pricing-page").then(m => ({ default: m.PricingPage })));
 const PaymentMethods = lazy(() => import("@/features/billing/payment-methods").then(m => ({ default: m.PaymentMethods })));
@@ -327,6 +330,9 @@ const routes: RouteObject[] = [
 
               // Search
               { path: "search", element: <SearchResults />, errorElement: <RouteErrorBoundary /> },
+
+              // Help & Support
+              { path: "help", element: <HelpPage />, errorElement: <RouteErrorBoundary /> },
 
               // Family profile
               { path: "family/:familyId", element: <FamilyProfile /> },

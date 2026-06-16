@@ -1,5 +1,5 @@
 import { type ReactNode, Suspense, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router";
+import { NavLink, Outlet, useLocation, Link } from "react-router";
 import {
   Home,
   BookOpen,
@@ -9,6 +9,7 @@ import {
   Settings,
   Search,
   LogOut,
+  HelpCircle,
 } from "lucide-react";
 import { useIntl } from "react-intl";
 import { Icon, Spinner } from "@/components/ui";
@@ -89,7 +90,20 @@ function SidebarNav() {
           </li>
         ))}
       </ul>
-      <div className="px-3 pb-4">
+      <div className="px-3 pb-4 flex flex-col gap-1">
+        <NavLink
+          to="/help"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-radius-button type-label-lg text-on-surface-variant transition-colors duration-[var(--duration-normal)] ${
+              isActive
+                ? "bg-primary/10 text-primary font-semibold"
+                : "hover:bg-surface-container-high"
+            }`
+          }
+        >
+          <Icon icon={HelpCircle} size="md" />
+          <span>{intl.formatMessage({ id: "footer.help", defaultMessage: "Help & Support" })}</span>
+        </NavLink>
         <button
           onClick={handleLogout}
           disabled={isLoggingOut}
@@ -108,7 +122,7 @@ function BottomNav() {
 
   return (
     <nav
-      aria-label="Main navigation"
+      aria-label={intl.formatMessage({ id: "nav.landmark.mobile", defaultMessage: "Mobile navigation" })}
       className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface-container-low/80 backdrop-blur-[20px] z-[var(--z-sticky)] safe-area-pb"
     >
       <ul className="flex justify-around items-center h-16">
@@ -175,6 +189,52 @@ function Header() {
   );
 }
 
+function AppFooter() {
+  const intl = useIntl();
+  return (
+    <footer
+      aria-label={intl.formatMessage({ id: "footer.landmark", defaultMessage: "Site footer" })}
+      className="no-print mt-8 py-5 border-t border-outline-variant/20"
+    >
+      <nav
+        aria-label={intl.formatMessage({ id: "footer.nav", defaultMessage: "Legal and help links" })}
+        className="flex flex-wrap justify-center gap-x-6 gap-y-2"
+      >
+        <Link
+          to="/legal/privacy"
+          className="type-label-sm text-on-surface-variant hover:text-primary transition-colors duration-[var(--duration-normal)] underline-offset-4 hover:underline"
+        >
+          {intl.formatMessage({ id: "legal.privacy.title", defaultMessage: "Privacy Policy" })}
+        </Link>
+        <Link
+          to="/legal/terms"
+          className="type-label-sm text-on-surface-variant hover:text-primary transition-colors duration-[var(--duration-normal)] underline-offset-4 hover:underline"
+        >
+          {intl.formatMessage({ id: "legal.terms.title", defaultMessage: "Terms of Service" })}
+        </Link>
+        <Link
+          to="/legal/guidelines"
+          className="type-label-sm text-on-surface-variant hover:text-primary transition-colors duration-[var(--duration-normal)] underline-offset-4 hover:underline"
+        >
+          {intl.formatMessage({ id: "legal.guidelines.title", defaultMessage: "Community Guidelines" })}
+        </Link>
+        <Link
+          to="/help"
+          className="type-label-sm text-on-surface-variant hover:text-primary transition-colors duration-[var(--duration-normal)] underline-offset-4 hover:underline"
+        >
+          {intl.formatMessage({ id: "footer.help", defaultMessage: "Help & Support" })}
+        </Link>
+      </nav>
+      <p className="mt-3 text-center type-label-sm text-on-surface-variant/60">
+        {intl.formatMessage(
+          { id: "footer.copyright", defaultMessage: "© {year} Homegrown Academy" },
+          { year: new Date().getFullYear() },
+        )}
+      </p>
+    </footer>
+  );
+}
+
 export function AppShell({ children }: { children?: ReactNode }) {
   const location = useLocation();
 
@@ -208,7 +268,9 @@ export function AppShell({ children }: { children?: ReactNode }) {
               {children ?? <Outlet />}
             </Suspense>
           </main>
-          <div className="h-16 lg:h-8 safe-area-pb" />
+          <AppFooter />
+          {/* Bottom clearance for mobile BottomNav */}
+          <div className="h-16 lg:h-0 safe-area-pb" />
         </div>
       </div>
     </>
