@@ -252,6 +252,7 @@ type SplitRule struct {
 type PaymentSession struct {
 	CheckoutURL      string `json:"checkout_url"`
 	PaymentSessionID string `json:"payment_session_id"`
+	ClientSecret     string
 }
 
 type PaymentStatus int

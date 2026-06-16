@@ -1222,7 +1222,7 @@ func seedMarketplaceExtended(db *gorm.DB) error {
 			return nil
 		}
 
-		// Trending: listings with the most purchases in the last 7 days.
+		// Trending: rank by recent purchases, fall back to rating when sparse.
 		if err := tx.Exec(`DELETE FROM mkt_curated_section_items WHERE section_id = ?`,
 			trendingSectionID,
 		).Error; err != nil {
@@ -1230,13 +1230,24 @@ func seedMarketplaceExtended(db *gorm.DB) error {
 		}
 		if err := tx.Exec(`
 			INSERT INTO mkt_curated_section_items (section_id, listing_id, sort_order)
-			SELECT ?, p.listing_id, ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC)
-			FROM mkt_purchases p
-			JOIN mkt_listings l ON l.id = p.listing_id
-			WHERE p.created_at > NOW() - INTERVAL '7 days'
-			  AND l.status = 'published'
-			GROUP BY p.listing_id
-			ORDER BY COUNT(*) DESC
+			SELECT ?, l.id, ROW_NUMBER() OVER (
+				ORDER BY COALESCE(recent.purchase_count, 0) DESC,
+				         l.rating_count DESC,
+				         l.rating_avg DESC,
+				         l.published_at DESC NULLS LAST
+			)
+			FROM mkt_listings l
+			LEFT JOIN (
+				SELECT listing_id, COUNT(*) AS purchase_count
+				FROM mkt_purchases
+				WHERE created_at > NOW() - INTERVAL '30 days'
+				GROUP BY listing_id
+			) recent ON recent.listing_id = l.id
+			WHERE l.status = 'published'
+			ORDER BY COALESCE(recent.purchase_count, 0) DESC,
+			         l.rating_count DESC,
+			         l.rating_avg DESC,
+			         l.published_at DESC NULLS LAST
 			LIMIT 20`,
 			trendingSectionID,
 		).Error; err != nil {

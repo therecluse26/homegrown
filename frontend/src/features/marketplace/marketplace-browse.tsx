@@ -2,6 +2,26 @@ import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
 import { Search, ShoppingCart, Star, Filter } from "lucide-react";
+
+/** Strip Gutenberg `" — Author"` suffix from listing titles for card display. */
+function stripGutenbergAuthor(title: string): string {
+  const sep = title.lastIndexOf(" — ");
+  return sep === -1 ? title : title.slice(0, sep).trim();
+}
+
+/**
+ * Clean a description_preview that contains raw Gutenberg metadata.
+ * The preview format is multi-line: "Author(s): Name\nSubjects: ...\n..."
+ * Returns the original string when it does not look like Gutenberg metadata.
+ */
+function cleanDescriptionPreview(preview: string): string {
+  if (!preview.startsWith("Author(s):")) return preview;
+  // Author is always on the first line before the first \n.
+  const firstLine = preview.split("\n")[0] ?? "";
+  const authorMatch = firstLine.match(/Author\(s\):\s*(.+)/);
+  const author = authorMatch?.[1]?.trim();
+  return author ? `by ${author}` : "Public domain text";
+}
 import {
   Button,
   Card,
@@ -55,10 +75,10 @@ function ListingCard({ listing }: { listing: ListingBrowseResponse }) {
           </div>
         )}
         <p className="type-title-sm text-on-surface line-clamp-2">
-          {listing.title}
+          {stripGutenbergAuthor(listing.title)}
         </p>
         <p className="type-body-sm text-on-surface-variant line-clamp-2 mt-1">
-          {listing.description_preview}
+          {cleanDescriptionPreview(listing.description_preview)}
         </p>
         <div className="flex items-center justify-between mt-3">
           <span className="type-title-sm text-primary">{price}</span>
@@ -237,8 +257,9 @@ export function MarketplaceBrowse() {
         </div>
       )}
 
-      {/* Loading */}
-      {isPending && (
+      {/* Search/filter results — only shown when a filter or query is active.
+          When unfiltered, curated sections above already present the catalogue. */}
+      {isFiltered && isPending && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
             <Skeleton key={n} className="h-56 rounded-radius-md" />
@@ -246,8 +267,7 @@ export function MarketplaceBrowse() {
         </div>
       )}
 
-      {/* Results */}
-      {listings && listings.length === 0 && (
+      {isFiltered && listings && listings.length === 0 && (
         <EmptyState
           illustration={<Icon icon={Search} size="xl" />}
           message={intl.formatMessage({ id: "marketplace.empty.title" })}
@@ -257,16 +277,14 @@ export function MarketplaceBrowse() {
         />
       )}
 
-      {listings && listings.length > 0 && (
+      {isFiltered && listings && listings.length > 0 && (
         <>
-          {isFiltered && (
-            <div className="flex items-center gap-2 mb-4">
-              <Badge variant="secondary">
-                {listings.length}{" "}
-                <FormattedMessage id="marketplace.results" />
-              </Badge>
-            </div>
-          )}
+          <div className="flex items-center gap-2 mb-4">
+            <Badge variant="secondary">
+              {listings.length}{" "}
+              <FormattedMessage id="marketplace.results" />
+            </Badge>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {listings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />

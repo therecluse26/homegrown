@@ -621,7 +621,7 @@ func main() {
 	mktSvc := mkt.NewMarketplaceService(
 		mktCreatorRepo, mktPublisherRepo, mktListingRepo, mktListingFileRepo,
 		mktCartRepo, mktPurchaseRepo, mktReviewRepo, mktCuratedSectionRepo,
-		paymentAdapter, mediaAdapter,
+		paymentAdapter, cfg.HyperswitchAPIKey, mediaAdapter,
 		eventBus, db,
 	)
 

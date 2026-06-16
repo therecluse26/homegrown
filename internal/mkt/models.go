@@ -534,6 +534,10 @@ type CheckoutRequest struct {
 type CheckoutSessionResponse struct {
 	CheckoutURL      string `json:"checkout_url"`
 	PaymentSessionID string `json:"payment_session_id"`
+	// ClientSecret is the Hyperswitch client secret for SDK-based embedded checkout.
+	// Empty when the payment provider is not configured.
+	ClientSecret   string `json:"client_secret,omitempty"`
+	PublishableKey string `json:"publishable_key,omitempty"`
 }
 
 type OnboardingLinkResponse struct {

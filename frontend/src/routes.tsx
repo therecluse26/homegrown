@@ -123,6 +123,7 @@ const GroupManagement = lazy(() => import("@/features/social/group-management").
 const MarketplaceBrowse = lazy(() => import("@/features/marketplace/marketplace-browse").then(m => ({ default: m.MarketplaceBrowse })));
 const ListingDetail = lazy(() => import("@/features/marketplace/listing-detail").then(m => ({ default: m.ListingDetail })));
 const Cart = lazy(() => import("@/features/marketplace/cart").then(m => ({ default: m.Cart })));
+const CheckoutPage = lazy(() => import("@/features/marketplace/checkout-page").then(m => ({ default: m.CheckoutPage })));
 const PurchaseHistory = lazy(() => import("@/features/marketplace/purchase-history").then(m => ({ default: m.PurchaseHistory })));
 const RefundRequest = lazy(() => import("@/features/marketplace/refund-request").then(m => ({ default: m.RefundRequest })));
 const CreatorDashboard = lazy(() => import("@/features/marketplace/creator/creator-dashboard").then(m => ({ default: m.CreatorDashboard })));
@@ -275,6 +276,7 @@ const routes: RouteObject[] = [
               { path: "marketplace", element: <MarketplaceBrowse />, errorElement: <RouteErrorBoundary /> },
               { path: "marketplace/listings/:id", element: <ListingDetail /> },
               { path: "marketplace/cart", element: <Cart /> },
+              { path: "marketplace/checkout", element: <CheckoutPage /> },
               { path: "marketplace/purchases", element: <PurchaseHistory /> },
               { path: "marketplace/purchases/:id/refund", element: <RefundRequest /> },
 

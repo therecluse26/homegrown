@@ -29,13 +29,18 @@ type marketplaceServiceImpl struct {
 	reviews         ReviewRepository
 	curatedSections CuratedSectionRepository
 	payment         PaymentAdapter
-	media           MediaAdapter
-	events          *shared.EventBus
-	db              *gorm.DB
+	// paymentPublishableKey is the client-side key passed to the Hyperswitch SDK.
+	// For test-mode Hyperswitch the API key doubles as the publishable key.
+	paymentPublishableKey string
+	media                 MediaAdapter
+	events                *shared.EventBus
+	db                    *gorm.DB
 }
 
 // NewMarketplaceService creates a new MarketplaceService.
 // Constructor returns the interface type per [CODING §2.1].
+// paymentPublishableKey is passed to clients for SDK-based embedded checkout
+// (for Hyperswitch test mode this is the same as the server-side API key).
 func NewMarketplaceService(
 	creators CreatorRepository,
 	publishers PublisherRepository,
@@ -46,23 +51,25 @@ func NewMarketplaceService(
 	reviews ReviewRepository,
 	curatedSections CuratedSectionRepository,
 	payment PaymentAdapter,
+	paymentPublishableKey string,
 	media MediaAdapter,
 	events *shared.EventBus,
 	db *gorm.DB,
 ) MarketplaceService {
 	return &marketplaceServiceImpl{
-		creators:        creators,
-		publishers:      publishers,
-		listings:        listings,
-		listingFiles:    listingFiles,
-		cart:            cart,
-		purchases:       purchases,
-		reviews:         reviews,
-		curatedSections: curatedSections,
-		payment:         payment,
-		media:           media,
-		events:          events,
-		db:              db,
+		creators:              creators,
+		publishers:            publishers,
+		listings:              listings,
+		listingFiles:          listingFiles,
+		cart:                  cart,
+		purchases:             purchases,
+		reviews:               reviews,
+		curatedSections:       curatedSections,
+		payment:               payment,
+		paymentPublishableKey: paymentPublishableKey,
+		media:                 media,
+		events:                events,
+		db:                    db,
 	}
 }
 
@@ -659,6 +666,8 @@ func (s *marketplaceServiceImpl) CreateCheckout(ctx context.Context, scope share
 	return &CheckoutSessionResponse{
 		CheckoutURL:      session.CheckoutURL,
 		PaymentSessionID: session.PaymentSessionID,
+		ClientSecret:     session.ClientSecret,
+		PublishableKey:   s.paymentPublishableKey,
 	}, nil
 }
 

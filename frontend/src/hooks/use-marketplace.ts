@@ -95,6 +95,8 @@ export interface CartResponse {
 export interface CheckoutSessionResponse {
   checkout_url: string;
   payment_session_id: string;
+  client_secret?: string;
+  publishable_key?: string;
 }
 
 // Purchases
