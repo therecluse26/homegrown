@@ -119,6 +119,52 @@ func skipIfNoTestDB(t *testing.T) {
 	}
 }
 
+// seedIntTestFamily inserts a minimal iam_families row (bypassing RLS) and returns its UUID.
+func seedIntTestFamily(t *testing.T) uuid.UUID {
+	t.Helper()
+	familyID := uuid.Must(uuid.NewV7())
+	if err := testDB.Exec(
+		`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+		 VALUES (?, 'Mkt Test Family', 'charlotte-mason')`,
+		familyID,
+	).Error; err != nil {
+		t.Fatalf("seed iam_families: %v", err)
+	}
+	t.Cleanup(func() {
+		testDB.Exec(`DELETE FROM iam_families WHERE id = ?`, familyID)
+	})
+	return familyID
+}
+
+// seedIntTestParent inserts iam_families + iam_parents rows and returns the parent UUID.
+// mkt_creators.parent_id and mkt_cart_items.added_by_parent_id FK to iam_parents.
+func seedIntTestParent(t *testing.T) uuid.UUID {
+	t.Helper()
+	familyID := uuid.Must(uuid.NewV7())
+	parentID := uuid.Must(uuid.NewV7())
+	kratosID := uuid.Must(uuid.NewV7())
+	if err := testDB.Exec(
+		`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+		 VALUES (?, 'Mkt Creator Family', 'charlotte-mason')`,
+		familyID,
+	).Error; err != nil {
+		t.Fatalf("seed iam_families: %v", err)
+	}
+	if err := testDB.Exec(
+		`INSERT INTO iam_parents (id, family_id, kratos_identity_id, display_name, email, is_primary)
+		 VALUES (?, ?, ?, 'Mkt Parent', 'mkt-parent@example.com', true)`,
+		parentID, familyID, kratosID,
+	).Error; err != nil {
+		t.Fatalf("seed iam_parents: %v", err)
+	}
+	t.Cleanup(func() {
+		testDB.Exec(`DELETE FROM mkt_creators WHERE parent_id = ?`, parentID)
+		testDB.Exec(`DELETE FROM iam_parents WHERE id = ?`, parentID)
+		testDB.Exec(`DELETE FROM iam_families WHERE id = ?`, familyID)
+	})
+	return parentID
+}
+
 // seedPublisher creates a minimal publisher row for FK satisfaction.
 func seedPublisher(t *testing.T, ctx context.Context, slug string) uuid.UUID {
 	t.Helper()
@@ -138,7 +184,7 @@ func TestMktIntegration_CreatorCreateAndFind(t *testing.T) {
 	skipIfNoTestDB(t)
 	ctx := context.Background()
 
-	parentID := uuid.Must(uuid.NewV7())
+	parentID := seedIntTestParent(t)
 	repo := NewPgCreatorRepository(testDB)
 
 	creator, err := repo.Create(ctx, CreateCreator{
@@ -169,7 +215,7 @@ func TestMktIntegration_ListingCreateAndFind(t *testing.T) {
 	skipIfNoTestDB(t)
 	ctx := context.Background()
 
-	parentID := uuid.Must(uuid.NewV7())
+	parentID := seedIntTestParent(t)
 	creatorRepo := NewPgCreatorRepository(testDB)
 	creator, err := creatorRepo.Create(ctx, CreateCreator{
 		ParentID:  parentID,
@@ -214,11 +260,10 @@ func TestMktIntegration_CartAddAndRetrieve(t *testing.T) {
 	skipIfNoTestDB(t)
 	ctx := context.Background()
 
-	// Cart is family-scoped; use a fresh family UUID (no FK to families in cart table required).
-	familyID := uuid.Must(uuid.NewV7())
+	familyID := seedIntTestFamily(t)
 	scope := shared.NewFamilyScopeFromID(familyID)
 
-	parentID := uuid.Must(uuid.NewV7())
+	parentID := seedIntTestParent(t)
 	creatorRepo := NewPgCreatorRepository(testDB)
 	creator, err := creatorRepo.Create(ctx, CreateCreator{
 		ParentID:  parentID,
@@ -243,7 +288,7 @@ func TestMktIntegration_CartAddAndRetrieve(t *testing.T) {
 	}
 
 	cartRepo := NewPgCartRepository(testDB)
-	if err := cartRepo.AddItem(ctx, listing.ID, scope); err != nil {
+	if err := cartRepo.AddItem(ctx, listing.ID, parentID, scope); err != nil {
 		t.Fatalf("AddItem: %v", err)
 	}
 

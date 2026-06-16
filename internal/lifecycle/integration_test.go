@@ -125,8 +125,8 @@ func insertTestFamily(ctx context.Context, t *testing.T, name string) uuid.UUID 
 	familyID := uuid.Must(uuid.NewV7())
 	err := shared.BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
 		return tx.Exec(
-			`INSERT INTO families (id, name, coppa_consent_status, time_zone)
-			 VALUES (?, ?, 'registered', 'UTC')`,
+			`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+			 VALUES (?, ?, 'charlotte-mason')`,
 			familyID, name,
 		).Error
 	})

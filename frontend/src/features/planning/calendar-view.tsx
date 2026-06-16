@@ -638,10 +638,9 @@ export function CalendarView() {
               id: "planning.print.aria",
               defaultMessage: "Print calendar",
             })}
+            className="relative inline-flex items-center justify-center gap-2 rounded-button font-body transition-all touch-target select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring bg-transparent text-primary hover:bg-surface-container-low active:bg-surface-container px-3 py-1.5 type-label-md"
           >
-            <Button variant="tertiary" size="sm" aria-hidden="true" tabIndex={-1}>
-              <Icon icon={Printer} size="sm" />
-            </Button>
+            <Icon icon={Printer} size="sm" />
           </RouterLink>
         </div>
       </div>

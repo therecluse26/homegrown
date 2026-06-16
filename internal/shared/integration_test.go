@@ -127,8 +127,8 @@ func TestSharedIntegration_BypassRLSTransaction(t *testing.T) {
 	familyID := uuid.Must(uuid.NewV7())
 	err := BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
 		return tx.Exec(
-			`INSERT INTO families (id, name, coppa_consent_status, time_zone)
-			 VALUES (?, 'Shared Test Family', 'registered', 'UTC')`,
+			`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+			 VALUES (?, 'Shared Test Family', 'charlotte-mason')`,
 			familyID,
 		).Error
 	})
@@ -139,7 +139,7 @@ func TestSharedIntegration_BypassRLSTransaction(t *testing.T) {
 	// Verify row is visible via a bypass read.
 	var count int64
 	err = BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
-		return tx.Raw("SELECT COUNT(*) FROM families WHERE id = ?", familyID).Scan(&count).Error
+		return tx.Raw("SELECT COUNT(*) FROM iam_families WHERE id = ?", familyID).Scan(&count).Error
 	})
 	if err != nil {
 		t.Fatalf("BypassRLSTransaction read: %v", err)
@@ -159,8 +159,8 @@ func TestSharedIntegration_ScopedTransactionCommits(t *testing.T) {
 	// Seed the family so we can reference it in scoped work.
 	err := BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
 		return tx.Exec(
-			`INSERT INTO families (id, name, coppa_consent_status, time_zone)
-			 VALUES (?, 'Scoped Tx Family', 'registered', 'UTC')`,
+			`INSERT INTO iam_families (id, display_name, primary_methodology_slug)
+			 VALUES (?, 'Scoped Tx Family', 'charlotte-mason')`,
 			familyID,
 		).Error
 	})

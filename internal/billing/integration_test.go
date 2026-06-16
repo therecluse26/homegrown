@@ -420,6 +420,7 @@ func buildWebhookService(t *testing.T, bus *shared.EventBus) *BillingServiceImpl
 		NewPgTransactionRepository(testDB),
 		NewPgCustomerRepository(testDB),
 		NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		&webhookTestAdapter{},
 		nil,
 		bus,
@@ -469,6 +470,7 @@ func TestBillingIntegration_Create_PersistsIncompleteRow(t *testing.T) {
 		NewPgTransactionRepository(testDB),
 		NewPgCustomerRepository(testDB),
 		NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		adapter,
 		&intIAMStub{"p@test.com", "Test"},
 		shared.NewEventBus(),
@@ -502,6 +504,7 @@ func TestBillingIntegration_Create_RejectsDouble(t *testing.T) {
 		NewPgTransactionRepository(testDB),
 		NewPgCustomerRepository(testDB),
 		NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		new(mockAdapter),
 		&intIAMStub{"p@test.com", "Test"},
 		shared.NewEventBus(),
@@ -534,6 +537,7 @@ func TestBillingIntegration_Upgrade_PersistsNewInterval(t *testing.T) {
 		NewPgTransactionRepository(testDB),
 		NewPgCustomerRepository(testDB),
 		NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		adapter,
 		nil, shared.NewEventBus(), intTestConfig(),
 	)
@@ -566,6 +570,7 @@ func TestBillingIntegration_Cancel_SetsCancelAtPeriodEnd(t *testing.T) {
 		NewPgTransactionRepository(testDB),
 		NewPgCustomerRepository(testDB),
 		NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		adapter, nil, shared.NewEventBus(), intTestConfig(),
 	)
 	scope := shared.NewFamilyScopeFromID(familyID)
@@ -601,6 +606,7 @@ func TestBillingIntegration_Reactivate_ClearsCancelFlag(t *testing.T) {
 	svc := NewBillingService(
 		subRepo, NewPgTransactionRepository(testDB),
 		NewPgCustomerRepository(testDB), NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		adapter, nil, shared.NewEventBus(), intTestConfig(),
 	)
 	scope := shared.NewFamilyScopeFromID(familyID)
@@ -635,6 +641,7 @@ func TestBillingIntegration_Coppa_PersistsBothTransactions(t *testing.T) {
 	svc := NewBillingService(
 		NewPgSubscriptionRepository(testDB), txnRepo,
 		NewPgCustomerRepository(testDB), NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		adapter, &intIAMStub{"coppa@test.com", "COPPA Fam"},
 		shared.NewEventBus(), intTestConfig(),
 	)
@@ -676,6 +683,7 @@ func TestBillingIntegration_Coppa_SingleTransaction_WhenRefundFails(t *testing.T
 	svc := NewBillingService(
 		NewPgSubscriptionRepository(testDB), txnRepo,
 		NewPgCustomerRepository(testDB), NewPgPayoutRepository(testDB),
+		NewPgCreatorTaxSummaryRepository(testDB),
 		adapter, &intIAMStub{"coppa2@test.com", "COPPA2"},
 		shared.NewEventBus(), intTestConfig(),
 	)
