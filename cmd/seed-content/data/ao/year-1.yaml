@@ -1,0 +1,148 @@
+# Ambleside Online Year 1 — Charlotte Mason curriculum
+# https://www.amblesideonline.org/SchYr1.shtml
+# Content Type: book_list (17 titles) + lesson_plan (3 terms) = 20 entries
+
+year: 1
+grade_min: 1
+grade_max: 2
+
+entries:
+  - title: "Aesop's Fables"
+    description: "Classic animal fables teaching moral lessons through short, memorable stories. A cornerstone of Year 1 Charlotte Mason language arts — ideal for narration practice."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/11339"
+    worldview_tags: [secular]
+
+  - title: "Understood Betsy"
+    description: "Dorothy Canfield Fisher's warm story of a timid city child who blossoms on a Vermont farm. Beautifully illustrates Charlotte Mason's philosophy of living books and self-reliance."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/6920"
+    worldview_tags: [secular]
+
+  - title: "Old Greek Folk Stories"
+    description: "Myths and legends from ancient Greece told for young readers, including stories of the gods, heroes, and heroines. An engaging introduction to classical antiquity through living literature."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.ancient]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr1-old-greek-folk-stories"
+    worldview_tags: [secular]
+
+  - title: "The Burgess Bird Book for Children"
+    description: "Thornton Burgess's Peter Rabbit and friends learn about birds from Old Mother Nature. An engaging living-book introduction to ornithology and nature study for early learners."
+    content_type: book_list
+    subject_tags: [science, science.biology]
+    preview_url: "https://www.gutenberg.org/ebooks/15765"
+    worldview_tags: [secular]
+
+  - title: "A Child's Garden of Verses"
+    description: "Robert Louis Stevenson's beloved collection of poems celebrating childhood imagination, seasons, and the wonder of the natural world. Essential for Charlotte Mason poetry memorization."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, language-arts.writing]
+    preview_url: "https://www.gutenberg.org/ebooks/25609"
+    worldview_tags: [secular]
+
+  - title: "50 Famous Stories Retold"
+    description: "James Baldwin's lively retellings of history's most memorable stories — Alfred and the Cakes, Bruce and the Spider, William Tell, and more. Perfect for narration and history appreciation."
+    content_type: book_list
+    subject_tags: [history, history.world]
+    preview_url: "https://www.gutenberg.org/ebooks/4368"
+    worldview_tags: [secular]
+
+  - title: "Beautiful Stories from Shakespeare"
+    description: "E. Nesbit's masterful prose retellings of Shakespeare's plays, making the Bard accessible and delightful for young readers years before studying the originals."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/1526"
+    worldview_tags: [secular]
+
+  - title: "Parables from Nature"
+    description: "Margaret Gatty's gentle nature stories conveying moral and spiritual truths through the lives of insects, plants, and animals. A favorite Charlotte Mason living-books selection."
+    content_type: book_list
+    subject_tags: [science, science.biology, language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/22600"
+    worldview_tags: [christian]
+
+  - title: "The Wind in the Willows"
+    description: "Kenneth Grahame's timeless tale of Mole, Rat, Badger, and the irrepressible Mr. Toad — a beloved Year 1 read-aloud that introduces rich vocabulary and enduring friendship themes."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/289"
+    worldview_tags: [secular]
+
+  - title: "Just So Stories"
+    description: "Rudyard Kipling's whimsical origin stories — how the elephant got his trunk, how the camel got his hump, and more beloved tales featuring Kipling's playful, musical prose."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/2781"
+    worldview_tags: [secular]
+
+  - title: "The Pilgrim's Progress"
+    description: "John Bunyan's allegorical classic — Christian's journey from the City of Destruction to the Celestial City. A Charlotte Mason cornerstone for character formation and rich allegory."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, religion]
+    preview_url: "https://www.gutenberg.org/ebooks/131"
+    worldview_tags: [christian]
+
+  - title: "An Island Story"
+    description: "H.E. Marshall's narrative history of Britain — from the Roman conquest through the Stuart era — told as compelling stories for children. The foundation of AO's British history spine."
+    content_type: book_list
+    subject_tags: [history, history.world]
+    preview_url: "https://www.gutenberg.org/ebooks/31101"
+    worldview_tags: [secular]
+
+  - title: "The Story of the Treasure Seekers"
+    description: "E. Nesbit's spirited tale of the Bastable children seeking their family's fortune through a series of imaginative schemes. Delightful narrative for Year 1 read-aloud or independent reading."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/770"
+    worldview_tags: [secular]
+
+  - title: "Handbook of Nature Study"
+    description: "Anna Botsford Comstock's comprehensive field guide to nature study — the definitive companion to Charlotte Mason outdoor education, covering plants, animals, insects, and weather."
+    content_type: book_list
+    subject_tags: [science, science.biology, science.earth]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr1-handbook-of-nature-study"
+    worldview_tags: [secular]
+
+  - title: "Hurlbut's Story of the Bible"
+    description: "Jesse Lyman Hurlbut's narrative retelling of the entire Bible from Creation to Revelation, presented as 168 interconnected stories. A beloved Charlotte Mason Bible literature selection."
+    content_type: book_list
+    subject_tags: [religion, religion.bible]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr1-hurlbut-bible"
+    worldview_tags: [christian]
+
+  - title: "Stories of Great Americans for Little Americans"
+    description: "James Baldwin's short, vivid portraits of American heroes — Washington, Lincoln, Franklin, and others — for early elementary readers. Excellent for narration and patriotic history."
+    content_type: book_list
+    subject_tags: [history, history.american]
+    preview_url: "https://www.gutenberg.org/ebooks/6739"
+    worldview_tags: [secular]
+
+  - title: "Tales from Shakespeare"
+    description: "Charles and Mary Lamb's prose retellings of twenty Shakespeare plays — an accessible introduction to the world's greatest dramatist for young children entering the Charlotte Mason years."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/573"
+    worldview_tags: [secular]
+
+  - title: "AO Year 1 Term 1 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 1, Term 1. Includes book rotation, narration prompts, copywork passages, nature study assignments, and art appreciation selections for 12 weeks of Charlotte Mason education."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr1.shtml#term1"
+    worldview_tags: [christian]
+
+  - title: "AO Year 1 Term 2 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 1, Term 2. Continues the Year 1 reading list with narration, copywork, seasonal nature study, and handicraft activities for 12 weeks of Charlotte Mason education."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr1.shtml#term2"
+    worldview_tags: [christian]
+
+  - title: "AO Year 1 Term 3 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 1, Term 3. Concludes the Year 1 curriculum with narration, copywork, nature journal completion, and composer/artist study for 12 weeks of Charlotte Mason education."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr1.shtml#term3"
+    worldview_tags: [christian]

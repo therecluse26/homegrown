@@ -146,6 +146,8 @@ type RecommendationResponse struct {
 	Score              float32    `json:"score"`
 	IsSuggestion       bool       `json:"is_suggestion"` // always true [S§10.4]
 	StudentID          *uuid.UUID `json:"student_id,omitempty"`
+	FitScore           *float32   `json:"fit_score,omitempty"` // learner fit score; nil when no profile [18-learner-profile §2.3]
+	FitWhy             *string    `json:"fit_why,omitempty"`   // why-text for the fit score badge
 	CreatedAt          time.Time  `json:"created_at"`
 	ExpiresAt          time.Time  `json:"expires_at"`
 }
@@ -214,6 +216,8 @@ type NewRecommendation struct {
 	SourceSignal       SourceSignalType
 	SourceLabel        string
 	Score              float32
+	FitScore           *float32 // learner fit score; nil when no profile [18-learner-profile §2.3]
+	FitWhy             *string  // why-text for fit score badge
 	ExpiresAt          time.Time
 }
 
@@ -228,6 +232,8 @@ type Recommendation struct {
 	SourceSignal       SourceSignalType
 	SourceLabel        string
 	Score              float32
+	FitScore           *float32 // nil when no learner profile exists [18-learner-profile §2.3]
+	FitWhy             *string
 	Status             string
 	ExpiresAt          time.Time
 	CreatedAt          time.Time

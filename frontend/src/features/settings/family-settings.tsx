@@ -1150,7 +1150,7 @@ export function FamilySettings() {
   ];
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl overflow-x-hidden">
       <h1 className="type-headline-md text-on-surface font-semibold mb-6">
         <FormattedMessage id="settings.title" />
       </h1>

@@ -106,7 +106,7 @@ export function NatureJournal() {
       {
         title: `Nature Journal: ${obsTypeLabel}${species ? ` — ${species}` : ""}`,
         description: descriptionParts.join("\n"),
-        subject_tags: subjectTags.length > 0 ? subjectTags : ["nature_study"],
+        subject_tags: subjectTags.length > 0 ? subjectTags : ["science"],
         tool_id: "nature-journal",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,
         activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,

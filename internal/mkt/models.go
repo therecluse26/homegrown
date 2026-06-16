@@ -434,6 +434,9 @@ type ListingDetailResponse struct {
 	PublishedAt     *time.Time            `json:"published_at,omitempty"`
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
+	// Owned is true when the authenticated buyer's family already has a purchase record for this listing.
+	// Always false for unauthenticated requests.
+	Owned           bool                  `json:"owned"`
 }
 
 type ListingFileResponse struct {
@@ -522,6 +525,10 @@ type ListingVersionResponse struct {
 	PriceCents    int32     `json:"price_cents"`
 	ChangeSummary *string   `json:"change_summary,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+type CheckoutRequest struct {
+	ReturnURL string `json:"return_url" validate:"required,url"`
 }
 
 type CheckoutSessionResponse struct {

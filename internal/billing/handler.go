@@ -2,8 +2,10 @@ package billing
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/homegrown-academy/homegrown-academy/internal/middleware"
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
@@ -52,6 +54,9 @@ func (h *Handler) Register(authGroup *echo.Group, hooksGroup *echo.Group) {
 	// Phase 2 — Invoices & Payouts
 	b.GET("/invoices", h.listInvoices)
 	b.GET("/payouts", h.listPayouts)
+
+	// 1099-K tax summary for creator earnings dashboard [HOM-62]
+	b.GET("/tax-summary", h.getTaxSummary)
 
 	// Webhook endpoint (unauthenticated — signature verified by adapter)
 	hooksGroup.POST("/hyperswitch/billing", h.hyperswitchWebhook)
@@ -503,6 +508,39 @@ func (h *Handler) listPayouts(c echo.Context) error {
 	}
 
 	resp, err := h.svc.ListPayouts(c.Request().Context(), params, creator.CreatorID)
+	if err != nil {
+		return mapBillingError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// getTaxSummary godoc
+//
+// @Summary     Get 1099-K tax summary for the current year
+// @Description Returns cumulative creator earnings for the current calendar year and whether
+// @Description the IRS 1099-K reporting threshold ($600) has been exceeded. Data is updated
+// @Description monthly by the payout aggregation task.
+// @Tags        billing
+// @Produce     json
+// @Security    BearerAuth
+// @Param       year query int false "Tax year (defaults to current year)"
+// @Success     200 {object} TaxSummaryResponse
+// @Failure     401 {object} shared.AppError
+// @Router      /billing/tax-summary [get]
+func (h *Handler) getTaxSummary(c echo.Context) error {
+	creator, err := middleware.RequireCreator(c, h.db)
+	if err != nil {
+		return err
+	}
+
+	year := time.Now().Year()
+	if yearParam := c.QueryParam("year"); yearParam != "" {
+		if _, scanErr := fmt.Sscanf(yearParam, "%d", &year); scanErr != nil {
+			return shared.ErrBadRequest("invalid year parameter")
+		}
+	}
+
+	resp, err := h.svc.GetCreatorTaxSummary(c.Request().Context(), creator.CreatorID, year)
 	if err != nil {
 		return mapBillingError(err)
 	}

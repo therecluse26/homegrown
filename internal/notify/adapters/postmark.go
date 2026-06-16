@@ -36,13 +36,16 @@ var _ notify.EmailAdapter = NoopEmailAdapter{}
 // PostmarkEmailAdapter sends email via the Postmark API. [08-notify §7]
 type PostmarkEmailAdapter struct {
 	serverToken string
+	fromAddress string
 	httpClient  *http.Client
 }
 
-// NewPostmarkEmailAdapter creates a PostmarkEmailAdapter with the given server token.
-func NewPostmarkEmailAdapter(serverToken string) *PostmarkEmailAdapter {
+// NewPostmarkEmailAdapter creates a PostmarkEmailAdapter with the given server token and
+// From address (e.g. "Homegrown Academy <hello@example.com>").
+func NewPostmarkEmailAdapter(serverToken, fromAddress string) *PostmarkEmailAdapter {
 	return &PostmarkEmailAdapter{
 		serverToken: serverToken,
+		fromAddress: fromAddress,
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -52,21 +55,42 @@ var _ notify.EmailAdapter = (*PostmarkEmailAdapter)(nil)
 
 const postmarkBaseURL = "https://api.postmarkapp.com"
 
+// postmarkHeader is a single email header name/value pair.
+type postmarkHeader struct {
+	Name  string `json:"Name"`
+	Value string `json:"Value"`
+}
+
 // postmarkTemplateRequest is the request body for the withTemplate endpoint.
 type postmarkTemplateRequest struct {
-	From          string         `json:"From"`
-	To            string         `json:"To"`
-	TemplateAlias string         `json:"TemplateAlias"`
-	TemplateModel map[string]any `json:"TemplateModel"`
-	MessageStream string         `json:"MessageStream,omitempty"`
+	From          string           `json:"From"`
+	To            string           `json:"To"`
+	TemplateAlias string           `json:"TemplateAlias"`
+	TemplateModel map[string]any   `json:"TemplateModel"`
+	MessageStream string           `json:"MessageStream,omitempty"`
+	Headers       []postmarkHeader `json:"Headers,omitempty"`
 }
 
 // postmarkBatchItem is a single item in a batch send.
 type postmarkBatchItem struct {
-	From          string         `json:"From"`
-	To            string         `json:"To"`
-	TemplateAlias string         `json:"TemplateAlias"`
-	TemplateModel map[string]any `json:"TemplateModel"`
+	From          string           `json:"From"`
+	To            string           `json:"To"`
+	TemplateAlias string           `json:"TemplateAlias"`
+	TemplateModel map[string]any   `json:"TemplateModel"`
+	Headers       []postmarkHeader `json:"Headers,omitempty"`
+}
+
+// unsubscribeHeaders builds RFC 8058 List-Unsubscribe headers from the unsubscribe_url
+// template model key when present. Gmail requires these for bulk/transactional senders.
+func unsubscribeHeaders(templateModel map[string]any) []postmarkHeader {
+	url, ok := templateModel["unsubscribe_url"].(string)
+	if !ok || url == "" {
+		return nil
+	}
+	return []postmarkHeader{
+		{Name: "List-Unsubscribe", Value: "<" + url + ">"},
+		{Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click"},
+	}
 }
 
 func (a *PostmarkEmailAdapter) do(ctx context.Context, url string, body any) error {
@@ -99,9 +123,11 @@ func (a *PostmarkEmailAdapter) do(ctx context.Context, url string, body any) err
 // SendTransactional sends a single transactional email via Postmark withTemplate. [08-notify §7.1]
 func (a *PostmarkEmailAdapter) SendTransactional(ctx context.Context, to, templateAlias string, templateModel map[string]any) error {
 	return a.do(ctx, postmarkBaseURL+"/email/withTemplate", postmarkTemplateRequest{
+		From:          a.fromAddress,
 		To:            to,
 		TemplateAlias: templateAlias,
 		TemplateModel: templateModel,
+		Headers:       unsubscribeHeaders(templateModel),
 	})
 }
 
@@ -110,9 +136,11 @@ func (a *PostmarkEmailAdapter) SendBatch(ctx context.Context, messages []notify.
 	items := make([]postmarkBatchItem, 0, len(messages))
 	for _, m := range messages {
 		items = append(items, postmarkBatchItem{
+			From:          a.fromAddress,
 			To:            m.To,
 			TemplateAlias: m.TemplateAlias,
 			TemplateModel: m.TemplateModel,
+			Headers:       unsubscribeHeaders(m.TemplateModel),
 		})
 	}
 	return a.do(ctx, postmarkBaseURL+"/email/batchWithTemplates", map[string]any{"Messages": items})
@@ -121,9 +149,11 @@ func (a *PostmarkEmailAdapter) SendBatch(ctx context.Context, messages []notify.
 // SendBroadcast sends a broadcast email via Postmark using the broadcast message stream. [08-notify §7.3]
 func (a *PostmarkEmailAdapter) SendBroadcast(ctx context.Context, to, templateAlias string, templateModel map[string]any) error {
 	return a.do(ctx, postmarkBaseURL+"/email/withTemplate", postmarkTemplateRequest{
+		From:          a.fromAddress,
 		To:            to,
 		TemplateAlias: templateAlias,
 		TemplateModel: templateModel,
 		MessageStream: "broadcast",
+		Headers:       unsubscribeHeaders(templateModel),
 	})
 }

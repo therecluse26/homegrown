@@ -291,3 +291,30 @@ export function useDeleteReadingList() {
     },
   });
 }
+
+export function useMarkBookReadStatus(listId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookId,
+      studentId,
+      completed,
+    }: {
+      bookId: string;
+      studentId: string;
+      completed: boolean;
+    }) =>
+      apiClient<ReadingProgressResponse>(
+        `/v1/learning/reading-lists/${listId}/books/${bookId}`,
+        { method: "PATCH", body: { student_id: studentId, completed } },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: ["learning", "reading-lists", listId],
+      });
+      void qc.invalidateQueries({
+        queryKey: ["learning", "reading-lists"],
+      });
+    },
+  });
+}

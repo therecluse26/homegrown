@@ -20,6 +20,13 @@ type IamServiceForRecs interface {
 	GetFamilyMethodologySlug(ctx context.Context, familyID shared.FamilyID) (string, error)
 }
 
+// LearnerProfilePort is a consumer-defined interface that gives recs:: read access to
+// declared learner profile data without importing internal/learner_profile (avoids circular
+// import). Wired in main.go via a function adapter. [18-learner-profile §7.1]
+type LearnerProfilePort interface {
+	GetStudentInterestsByFamily(ctx context.Context, familyID shared.FamilyID) (map[uuid.UUID][]string, error)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Service Interface [13-recs §5]
 // ═══════════════════════════════════════════════════════════════════════════════

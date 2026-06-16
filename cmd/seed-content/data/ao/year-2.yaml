@@ -1,0 +1,148 @@
+# Ambleside Online Year 2 — Charlotte Mason curriculum
+# https://www.amblesideonline.org/SchYr2.shtml
+# Content Type: book_list (17 titles) + lesson_plan (3 terms) = 20 entries
+
+year: 2
+grade_min: 2
+grade_max: 3
+
+entries:
+  - title: "Heidi"
+    description: "Johanna Spyri's beloved story of a Swiss mountain girl whose joy and faith transform everyone she meets. A quintessential Charlotte Mason living book for Year 2 read-aloud."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/1448"
+    worldview_tags: [christian]
+
+  - title: "The Story of the Greeks"
+    description: "H.A. Guerber's narrative history of ancient Greece — from early mythology through the age of Alexander — told in the compelling story format that defines Charlotte Mason history education."
+    content_type: book_list
+    subject_tags: [history, history.ancient]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr2-story-of-greeks"
+    worldview_tags: [secular]
+
+  - title: "The Story of Rome"
+    description: "Mary Macgregor's narrative history of ancient Rome — from the founding of the city through the fall of the Republic — continuing the classical history spine begun in Year 1."
+    content_type: book_list
+    subject_tags: [history, history.ancient]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr2-story-of-rome"
+    worldview_tags: [secular]
+
+  - title: "The Burgess Animal Book for Children"
+    description: "Thornton Burgess's nature stories following the animals of the forest and meadow, teaching natural science through narrative. The Year 2 companion to the Burgess Bird Book."
+    content_type: book_list
+    subject_tags: [science, science.biology]
+    preview_url: "https://www.gutenberg.org/ebooks/22947"
+    worldview_tags: [secular]
+
+  - title: "The Merry Adventures of Robin Hood"
+    description: "Howard Pyle's richly illustrated retelling of the legendary outlaw and his band of merry men — a rollicking adventure that introduces medieval England and the concept of justice."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.medieval]
+    preview_url: "https://www.gutenberg.org/ebooks/9180"
+    worldview_tags: [secular]
+
+  - title: "Adventures of Tom Sawyer"
+    description: "Mark Twain's classic coming-of-age story set along the Mississippi River — full of adventure, mischief, and the authentic voice of American boyhood. A beloved Year 2 read-aloud."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.american]
+    preview_url: "https://www.gutenberg.org/ebooks/74"
+    worldview_tags: [secular]
+
+  - title: "Swiss Family Robinson"
+    description: "Johann David Wyss's family adventure on a tropical island — resourceful problem-solving, natural science, and family cooperation make this a perfect Charlotte Mason living book."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, science, science.biology]
+    preview_url: "https://www.gutenberg.org/ebooks/11848"
+    worldview_tags: [christian]
+
+  - title: "Eight Cousins"
+    description: "Louisa May Alcott's lively story of Rose Campbell and her many cousins, exploring self-reliance, education, and the bonds of family. A warm Charlotte Mason selection for Year 2."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/22566"
+    worldview_tags: [secular]
+
+  - title: "Hans Brinker, or the Silver Skates"
+    description: "Mary Mapes Dodge's classic story of a Dutch boy's perseverance, family loyalty, and the famous race on the frozen canals of Holland. Rich in geography and character."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, social-studies, social-studies.geography]
+    preview_url: "https://www.gutenberg.org/ebooks/764"
+    worldview_tags: [secular]
+
+  - title: "The Jungle Book"
+    description: "Rudyard Kipling's unforgettable tales of Mowgli raised by wolves in the Indian jungle — rich in moral lessons about law, community, and self-mastery. A Year 2 narrative treasure."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, science, science.biology]
+    preview_url: "https://www.gutenberg.org/ebooks/236"
+    worldview_tags: [secular]
+
+  - title: "Tanglewood Tales"
+    description: "Nathaniel Hawthorne's masterful retellings of Greek myths for children — Perseus and Medusa, Theseus and the Minotaur, and other heroic tales retold with Hawthorne's distinctive literary voice."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.ancient]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr2-tanglewood-tales"
+    worldview_tags: [secular]
+
+  - title: "Little Men"
+    description: "Louisa May Alcott's warm sequel to Little Women — the students of Plumfield School under Jo and Professor Bhaer's care. Ideal for narration and discussion of character virtues."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature]
+    preview_url: "https://www.gutenberg.org/ebooks/3795"
+    worldview_tags: [secular]
+
+  - title: "Parables from Nature (Second Series)"
+    description: "Margaret Gatty's second collection of nature-based parables, continuing the Year 1 readings with fresh moral lessons drawn from the plant and animal kingdoms."
+    content_type: book_list
+    subject_tags: [science, science.biology, language-arts, language-arts.literature]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr2-parables-nature-2"
+    worldview_tags: [christian]
+
+  - title: "A Child's History of the World"
+    description: "Virgil Hillyer's engaging narrative world history for children — from cave dwellers to medieval kingdoms — providing the broad chronological framework for Charlotte Mason history studies."
+    content_type: book_list
+    subject_tags: [history, history.world, history.ancient, history.medieval]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr2-childs-history-world"
+    worldview_tags: [secular]
+
+  - title: "Paddle-to-the-Sea"
+    description: "Holling C. Holling's classic story of a carved canoe's journey from the Great Lakes to the Atlantic Ocean — a living geography book about North American waterways and ecosystems."
+    content_type: book_list
+    subject_tags: [social-studies, social-studies.geography, science, science.earth]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr2-paddle-to-sea"
+    worldview_tags: [secular]
+
+  - title: "Ourselves"
+    description: "Charlotte Mason's character-formation guide exploring body, soul, and spirit through the habits of will, reason, and conscience. An AO Year 2 companion for character education."
+    content_type: book_list
+    subject_tags: [life-skills, religion, religion.character]
+    preview_url: "https://www.amblesideonline.org/CM/vol4complete.pdf#yr2"
+    worldview_tags: [christian]
+
+  - title: "The Children's Homer"
+    description: "Padraic Colum's beautiful prose retelling of the Iliad and the Odyssey for children — introducing Homer's epic heroes, the Trojan War, and Odysseus's long journey home."
+    content_type: book_list
+    subject_tags: [language-arts, language-arts.literature, history, history.ancient]
+    preview_url: "https://www.amblesideonline.org/BookList.shtml#yr2-childrens-homer"
+    worldview_tags: [secular]
+
+  - title: "AO Year 2 Term 1 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 2, Term 1. Includes book rotation, narration prompts, copywork passages, nature study, and artist/composer selections for 12 weeks of Charlotte Mason education."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr2.shtml#term1"
+    worldview_tags: [christian]
+
+  - title: "AO Year 2 Term 2 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 2, Term 2. Continues the Year 2 reading rotation with narration, picture study, poetry memorization, and handicraft activities."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr2.shtml#term2"
+    worldview_tags: [christian]
+
+  - title: "AO Year 2 Term 3 Lesson Schedule"
+    description: "Complete daily and weekly lesson schedule for Ambleside Online Year 2, Term 3. Concludes the Year 2 curriculum with nature journal, composer study, and completion of the history and literature spines."
+    content_type: lesson_plan
+    subject_tags: [language-arts, history, science, arts, math]
+    preview_url: "https://www.amblesideonline.org/SchYr2.shtml#term3"
+    worldview_tags: [christian]

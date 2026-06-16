@@ -129,12 +129,12 @@ func (r *PgRecommendationRepository) CreateBatch(ctx context.Context, recs []New
 		tx := r.db.WithContext(ctx).Exec(`
 			INSERT INTO recs_recommendations
 				(family_id, student_id, recommendation_type, target_entity_id, target_entity_label,
-				 source_signal, source_label, score, status, expires_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+				 source_signal, source_label, score, fit_score, fit_why, status, expires_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
 			ON CONFLICT DO NOTHING`,
 			rec.FamilyID.UUID, rec.StudentID, string(rec.RecommendationType),
 			rec.TargetEntityID, rec.TargetEntityLabel, string(rec.SourceSignal),
-			rec.SourceLabel, rec.Score, rec.ExpiresAt,
+			rec.SourceLabel, rec.Score, rec.FitScore, rec.FitWhy, rec.ExpiresAt,
 		)
 		if tx.Error != nil {
 			return count, fmt.Errorf("recs recommendation create batch: %w", tx.Error)
@@ -148,7 +148,7 @@ func (r *PgRecommendationRepository) FindByID(ctx context.Context, scope *shared
 	var row recommendationRow
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT id, family_id, student_id, recommendation_type, target_entity_id, target_entity_label,
-		       source_signal, source_label, score, status, expires_at, created_at, updated_at
+		       source_signal, source_label, score, fit_score, fit_why, status, expires_at, created_at, updated_at
 		FROM recs_recommendations
 		WHERE id = ? AND family_id = ?`,
 		id, scope.FamilyID(),
@@ -186,7 +186,7 @@ func (r *PgRecommendationRepository) FindActiveByFamily(ctx context.Context, sco
 	var rows []recommendationRow
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		SELECT id, family_id, student_id, recommendation_type, target_entity_id, target_entity_label,
-		       source_signal, source_label, score, status, expires_at, created_at, updated_at
+		       source_signal, source_label, score, fit_score, fit_why, status, expires_at, created_at, updated_at
 		FROM recs_recommendations
 		WHERE family_id = ? AND status = 'active'%s
 		ORDER BY score DESC
@@ -227,7 +227,7 @@ func (r *PgRecommendationRepository) FindActiveByStudent(ctx context.Context, sc
 	var rows []recommendationRow
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		SELECT id, family_id, student_id, recommendation_type, target_entity_id, target_entity_label,
-		       source_signal, source_label, score, status, expires_at, created_at, updated_at
+		       source_signal, source_label, score, fit_score, fit_why, status, expires_at, created_at, updated_at
 		FROM recs_recommendations
 		WHERE family_id = ? AND student_id = ? AND status = 'active'%s
 		ORDER BY score DESC
@@ -563,6 +563,8 @@ type recommendationRow struct {
 	SourceSignal       string     `gorm:"column:source_signal"`
 	SourceLabel        string     `gorm:"column:source_label"`
 	Score              float32    `gorm:"column:score"`
+	FitScore           *float32   `gorm:"column:fit_score"` // [18-learner-profile §2.3]
+	FitWhy             *string    `gorm:"column:fit_why"`
 	Status             string     `gorm:"column:status"`
 	ExpiresAt          time.Time  `gorm:"column:expires_at"`
 	CreatedAt          time.Time  `gorm:"column:created_at"`
@@ -582,6 +584,8 @@ func rowsToRecommendations(rows []recommendationRow) []Recommendation {
 			SourceSignal:       SourceSignalType(row.SourceSignal),
 			SourceLabel:        row.SourceLabel,
 			Score:              row.Score,
+			FitScore:           row.FitScore,
+			FitWhy:             row.FitWhy,
 			Status:             row.Status,
 			ExpiresAt:          row.ExpiresAt,
 			CreatedAt:          row.CreatedAt,

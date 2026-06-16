@@ -111,6 +111,31 @@ func (m *BillPayout) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
+// BillCreatorTaxSummary tracks cumulative creator earnings per calendar year
+// for IRS 1099-K reporting. Updated by AggregatePayoutsTask. [10-billing §3.2, HOM-62]
+type BillCreatorTaxSummary struct {
+	ID                 uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	CreatorID          uuid.UUID  `gorm:"type:uuid;not null"`
+	TaxYear            int        `gorm:"not null"`
+	EarningsCents      int64      `gorm:"not null;default:0"`
+	ThresholdReachedAt *time.Time
+	CreatedAt          time.Time `gorm:"not null;autoCreateTime"`
+	UpdatedAt          time.Time `gorm:"not null;autoUpdateTime"`
+}
+
+func (BillCreatorTaxSummary) TableName() string { return "bill_creator_tax_summaries" }
+
+func (m *BillCreatorTaxSummary) BeforeCreate(_ *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		m.ID = id
+	}
+	return nil
+}
+
 // ─── Subscription Status Constants ──────────────────────────────────────────
 
 const (
@@ -148,6 +173,11 @@ const (
 	PayoutStatusCompleted  = "completed"
 	PayoutStatusFailed     = "failed"
 )
+
+// ─── Tax Constants ───────────────────────────────────────────────────────────
+
+// TaxThreshold1099KCents is the IRS 1099-K reporting threshold: $600.00/year.
+const TaxThreshold1099KCents int64 = 60_000
 
 // ─── Tier Constants ─────────────────────────────────────────────────────────
 
@@ -303,6 +333,15 @@ type PayoutResponse struct {
 type PayoutListResponse struct {
 	Payouts    []PayoutResponse `json:"payouts"`
 	NextCursor *string          `json:"next_cursor,omitempty"`
+}
+
+// TaxSummaryResponse is the 1099-K eligibility summary for a creator for a given tax year. [10-billing §8.2, HOM-62]
+type TaxSummaryResponse struct {
+	TaxYear            int        `json:"tax_year"`
+	EarningsCents      int64      `json:"earnings_cents"`
+	ThresholdCents     int64      `json:"threshold_cents"`
+	ThresholdExceeded  bool       `json:"threshold_exceeded"`
+	ThresholdReachedAt *time.Time `json:"threshold_reached_at,omitempty"`
 }
 
 // ─── Config ─────────────────────────────────────────────────────────────────

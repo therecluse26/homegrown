@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, useNavigate } from "react-router";
 import {
   BookOpen,
   ClipboardList,
@@ -35,6 +35,8 @@ import { useStudents } from "@/hooks/use-family";
 import { useStudentProgress, useStreak } from "@/hooks/use-progress";
 import { useAuth } from "@/hooks/use-auth";
 import { useMethodologyContext } from "@/features/auth/methodology-provider";
+import { useProfile } from "@/features/learner-profile/use-learner-profile";
+import { ProfileNudge } from "@/features/learner-profile/profile-nudge";
 
 // ─── Streak milestone thresholds ─────────────────────────────────────────────
 
@@ -187,6 +189,53 @@ const TOOL_REGISTRY: Record<string, { icon: LucideIcon; to: string }> = {
   "practical-life":    { icon: Home,          to: "/learning/practical-life" },
 };
 
+// ─── Per-student profile nudge (calls useProfile per student) ────────────────
+
+const NUDGE_SESSION_KEY = "learner-profile-nudge-dismissed";
+
+function getNudgeDismissed(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(NUDGE_SESSION_KEY);
+    return raw ? new Set<string>(JSON.parse(raw) as string[]) : new Set<string>();
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function setNudgeDismissedId(studentId: string): Set<string> {
+  const next = getNudgeDismissed();
+  next.add(studentId);
+  try {
+    sessionStorage.setItem(NUDGE_SESSION_KEY, JSON.stringify([...next]));
+  } catch {
+    // sessionStorage unavailable — degrade silently
+  }
+  return next;
+}
+
+function StudentNudge({
+  studentId,
+  studentName,
+  dismissed,
+  onDismiss,
+}: {
+  studentId: string;
+  studentName: string;
+  dismissed: boolean;
+  onDismiss: () => void;
+}) {
+  const navigate = useNavigate();
+  const { data: profile, isLoading } = useProfile(studentId);
+  if (isLoading || profile || dismissed) return null;
+  return (
+    <ProfileNudge
+      studentName={studentName}
+      onStart={() => void navigate(`/students/${studentId}/learner-profile/quiz`)}
+      onDismiss={onDismiss}
+    />
+  );
+}
+
 // ─── Main dashboard ─────────────────────────────────────────────────────────
 
 export function LearningDashboard() {
@@ -194,6 +243,7 @@ export function LearningDashboard() {
   const { tier } = useAuth();
   const { data: students, isPending: studentsLoading } = useStudents();
   const { tools, toolLabel, isLoading: methodologyLoading } = useMethodologyContext();
+  const [dismissedStudentIds, setDismissedStudentIds] = useState<Set<string>>(getNudgeDismissed);
 
   // Derive the navigable tool list from backend-provided active tools
   const navigableTools = useMemo(
@@ -253,6 +303,23 @@ export function LearningDashboard() {
         toolName={intl.formatMessage({ id: "learning.title" })}
         guidance={intl.formatMessage({ id: "learning.guidance" })}
       />
+
+      {/* Learner profile nudge — shown per student when profile is missing [18-learner-profile §7] */}
+      {students && students.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {students.map((student) => (
+            <StudentNudge
+              key={student.id}
+              studentId={student.id ?? ""}
+              studentName={student.display_name ?? ""}
+              dismissed={dismissedStudentIds.has(student.id ?? "")}
+              onDismiss={() =>
+                setDismissedStudentIds(setNudgeDismissedId(student.id ?? ""))
+              }
+            />
+          ))}
+        </div>
+      )}
 
       {/* Per-student progress overview */}
       <section>

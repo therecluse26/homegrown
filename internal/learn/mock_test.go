@@ -46,11 +46,12 @@ type mockLearningService struct {
 	getJournalEntryFn    func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID, entryID uuid.UUID) (JournalEntryResponse, error)
 
 	// Reading lists
-	createReadingListFn func(ctx context.Context, scope *shared.FamilyScope, cmd CreateReadingListCommand) (ReadingListResponse, error)
-	updateReadingListFn func(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, cmd UpdateReadingListCommand) (ReadingListResponse, error)
-	deleteReadingListFn func(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID) error
-	listReadingListsFn  func(ctx context.Context, scope *shared.FamilyScope) ([]ReadingListSummaryResponse, error)
-	getReadingListFn    func(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID) (ReadingListDetailResponse, error)
+	createReadingListFn    func(ctx context.Context, scope *shared.FamilyScope, cmd CreateReadingListCommand) (ReadingListResponse, error)
+	updateReadingListFn    func(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, cmd UpdateReadingListCommand) (ReadingListResponse, error)
+	deleteReadingListFn    func(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID) error
+	listReadingListsFn     func(ctx context.Context, scope *shared.FamilyScope) ([]ReadingListSummaryResponse, error)
+	getReadingListFn       func(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID) (ReadingListDetailResponse, error)
+	markBookReadStatusFn   func(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, bookID uuid.UUID, cmd MarkBookReadCommand) (ReadingProgressResponse, error)
 
 	// Taxonomy
 	getSubjectTaxonomyFn  func(ctx context.Context, scope *shared.FamilyScope, query TaxonomyQuery) ([]SubjectTaxonomyResponse, error)
@@ -497,6 +498,12 @@ func (m *mockLearningService) GetReadingList(ctx context.Context, scope *shared.
 		return m.getReadingListFn(ctx, scope, listID)
 	}
 	panic("GetReadingList not mocked")
+}
+func (m *mockLearningService) MarkBookReadStatus(ctx context.Context, scope *shared.FamilyScope, listID uuid.UUID, bookID uuid.UUID, cmd MarkBookReadCommand) (ReadingProgressResponse, error) {
+	if m.markBookReadStatusFn != nil {
+		return m.markBookReadStatusFn(ctx, scope, listID, bookID, cmd)
+	}
+	panic("MarkBookReadStatus not mocked")
 }
 func (m *mockLearningService) GetSubjectTaxonomy(ctx context.Context, scope *shared.FamilyScope, query TaxonomyQuery) ([]SubjectTaxonomyResponse, error) {
 	if m.getSubjectTaxonomyFn != nil {

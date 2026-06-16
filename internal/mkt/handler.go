@@ -3,6 +3,7 @@ package mkt
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -33,12 +34,14 @@ func (h *Handler) Register(authGroup, hooksGroup, pubGroup *echo.Group) {
 	browse := pubGroup.Group("/marketplace")
 	browse.GET("/listings", h.browseListings)
 	browse.GET("/listings/autocomplete", h.autocompleteListings)
-	browse.GET("/listings/:listing_id", h.getListing)
 	browse.GET("/listings/:listing_id/reviews", h.getListingReviews)
 	browse.GET("/curated-sections", h.getCuratedSections)
 
 	// ─── Authenticated routes ────────────────────────────────────────
 	mkt := authGroup.Group("/marketplace")
+
+	// Listing detail — auth required so ownership (Owned field) can be populated.
+	mkt.GET("/listings/:listing_id", h.getListing)
 
 	// Creator registration (auth required, but no creator account yet)
 	mkt.POST("/creators/register", h.registerCreator)
@@ -796,11 +799,13 @@ func (h *Handler) autocompleteListings(c echo.Context) error {
 
 // getListing godoc
 //
-// @Summary     Get a listing
+// @Summary     Get a listing with ownership status
 // @Tags        marketplace
 // @Produce     json
+// @Security    BearerAuth
 // @Param       listing_id path string true "Listing ID"
 // @Success     200 {object} ListingDetailResponse
+// @Failure     401 {object} shared.AppError
 // @Failure     404 {object} shared.AppError
 // @Router      /marketplace/listings/{listing_id} [get]
 func (h *Handler) getListing(c echo.Context) error {
@@ -813,6 +818,14 @@ func (h *Handler) getListing(c echo.Context) error {
 	if err != nil {
 		return mapMktError(err)
 	}
+
+	if scope, scopeErr := shared.GetFamilyScope(c); scopeErr == nil {
+		owned, ownedErr := h.svc.CheckOwnership(c.Request().Context(), listingID, scope)
+		if ownedErr == nil {
+			resp.Owned = owned
+		}
+	}
+
 	return c.JSON(http.StatusOK, resp)
 }
 
@@ -921,8 +934,10 @@ func (h *Handler) getCart(c echo.Context) error {
 //
 // @Summary     Create a checkout session
 // @Tags        marketplace
+// @Accept      json
 // @Produce     json
 // @Security    BearerAuth
+// @Param       body body CheckoutRequest true "Checkout request"
 // @Success     201 {object} CheckoutSessionResponse
 // @Failure     400 {object} shared.AppError
 // @Failure     401 {object} shared.AppError
@@ -934,7 +949,15 @@ func (h *Handler) createCheckout(c echo.Context) error {
 		return err
 	}
 
-	resp, err := h.svc.CreateCheckout(c.Request().Context(), scope)
+	var req CheckoutRequest
+	if err := c.Bind(&req); err != nil {
+		return shared.ErrBadRequest("invalid request body")
+	}
+	if err := c.Validate(&req); err != nil {
+		return shared.ValidationError(err)
+	}
+
+	resp, err := h.svc.CreateCheckout(c.Request().Context(), scope, req.ReturnURL)
 	if err != nil {
 		return mapMktError(err)
 	}
@@ -1388,15 +1411,17 @@ func mapMktError(err error) error {
 
 	// ─── Payment errors ───────────────────────────────────────────────
 	case errors.Is(err, ErrPaymentProviderUnavailable):
-		return &shared.AppError{Code: "payment_provider_unavailable", Message: err.Error(), StatusCode: http.StatusBadGateway}
+		slog.Error("payment provider unavailable", "error", err)
+		return &shared.AppError{Code: "payment_provider_unavailable", Message: "Payment service is temporarily unavailable", StatusCode: http.StatusBadGateway}
 	case errors.Is(err, ErrPaymentCreationFailed):
-		return &shared.AppError{Code: "payment_creation_failed", Message: err.Error(), StatusCode: http.StatusBadGateway}
+		slog.Error("payment creation failed", "error", err)
+		return &shared.AppError{Code: "payment_creation_failed", Message: "Payment could not be processed", StatusCode: http.StatusBadGateway}
 	case errors.Is(err, ErrInvalidWebhookSignature):
 		return &shared.AppError{Code: "invalid_webhook_signature", Message: "Authentication required", StatusCode: http.StatusUnauthorized}
 	case errors.Is(err, ErrMalformedWebhookPayload):
-		return &shared.AppError{Code: "malformed_webhook_payload", Message: err.Error(), StatusCode: http.StatusBadRequest}
+		return &shared.AppError{Code: "malformed_webhook_payload", Message: "Malformed webhook payload", StatusCode: http.StatusBadRequest}
 	case errors.Is(err, ErrPayoutThresholdNotMet):
-		return &shared.AppError{Code: "payout_threshold_not_met", Message: err.Error(), StatusCode: http.StatusBadRequest}
+		return &shared.AppError{Code: "payout_threshold_not_met", Message: "Payout threshold not met", StatusCode: http.StatusBadRequest}
 
 	default:
 		return shared.ErrInternal(err)

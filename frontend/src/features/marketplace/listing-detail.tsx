@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { useParams, Link as RouterLink } from "react-router";
-import { ArrowLeft, ShoppingCart, Star, Download, FileText, Package } from "lucide-react";
+import { useParams, Link as RouterLink, useNavigate } from "react-router";
+import { ArrowLeft, ShoppingCart, Star, Download, FileText, Package, Check, BookOpen } from "lucide-react";
 import {
   Button,
   Card,
@@ -64,6 +64,7 @@ function ReviewCard({ review }: { review: ReviewResponse }) {
 
 export function ListingDetail() {
   const intl = useIntl();
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { data: listing, isPending, error } = useListingDetail(id);
   const { data: reviewsResp } = useListingReviews(id);
@@ -71,10 +72,14 @@ export function ListingDetail() {
   const addToCart = useAddToCart();
   const purchaseBundle = usePurchaseBundle();
   const { toast } = useToast();
+  const [addedToCart, setAddedToCart] = useState(false);
 
   const handleAddToCart = useCallback(() => {
     addToCart.mutate(listing?.id ?? "", {
-      onSuccess: () => toast(intl.formatMessage({ id: "marketplace.addedToCart" }), "success"),
+      onSuccess: () => {
+        setAddedToCart(true);
+        toast(intl.formatMessage({ id: "marketplace.addedToCart" }), "success");
+      },
       onError: () => toast(intl.formatMessage({ id: "marketplace.alreadyInCart" }), "error"),
     });
   }, [addToCart, listing?.id, toast, intl]);
@@ -129,6 +134,7 @@ export function ListingDetail() {
           setReviewText("");
           setReviewRating(5);
         },
+        onError: () => toast(intl.formatMessage({ id: "error.generic" }), "error"),
       },
     );
   };
@@ -147,9 +153,9 @@ export function ListingDetail() {
 
       {/* Main listing card */}
       <Card className="p-card-padding mb-6">
-        <div className="flex items-start gap-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
           {listing.thumbnail_url ? (
-            <div className="w-48 h-48 rounded-radius-md overflow-hidden shrink-0 bg-surface-container-low">
+            <div className="w-full h-48 rounded-radius-md overflow-hidden bg-surface-container-low sm:w-48 sm:shrink-0">
               <img
                 src={listing.thumbnail_url}
                 alt={listing.title}
@@ -157,7 +163,7 @@ export function ListingDetail() {
               />
             </div>
           ) : (
-            <div className="w-48 h-48 rounded-radius-md shrink-0 bg-surface-container-low flex items-center justify-center">
+            <div className="w-full h-48 rounded-radius-md bg-surface-container-low flex items-center justify-center sm:w-48 sm:shrink-0">
               <Icon
                 icon={FileText}
                 size="xl"
@@ -212,7 +218,15 @@ export function ListingDetail() {
             <p className="type-headline-md text-primary mb-4">{price}</p>
 
             <div className="flex gap-2 flex-wrap">
-              {listing.is_bundle && listing.bundle_id ? (
+              {listing.owned ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate("/my-library")}
+                >
+                  <Icon icon={BookOpen} size="sm" className="mr-1" />
+                  <FormattedMessage id="marketplace.viewInLibrary" />
+                </Button>
+              ) : listing.is_bundle && listing.bundle_id ? (
                 <Button
                   variant="primary"
                   onClick={() => purchaseBundle.mutate(listing.bundle_id!)}
@@ -228,10 +242,17 @@ export function ListingDetail() {
                 <Button
                   variant="primary"
                   onClick={handleAddToCart}
-                  disabled={addToCart.isPending}
+                  loading={addToCart.isPending}
+                  disabled={addedToCart}
                 >
-                  <Icon icon={ShoppingCart} size="sm" className="mr-1" />
-                  <FormattedMessage id="marketplace.addToCart" />
+                  <Icon
+                    icon={addedToCart ? Check : ShoppingCart}
+                    size="sm"
+                    className="mr-1"
+                  />
+                  <FormattedMessage
+                    id={addedToCart ? "marketplace.inCart" : "marketplace.addToCart"}
+                  />
                 </Button>
               ) : (
                 <Button variant="primary">

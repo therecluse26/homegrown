@@ -69,10 +69,11 @@ func RegisterTaskHandlers(
 	anonRepo AnonymizedInteractionRepository,
 	anonymizationSecret string,
 	eventBus *shared.EventBus,
+	learnerProfilePort LearnerProfilePort,
 ) {
 	worker.Handle(TaskTypePurgeStaleSignals, handlePurgeStaleSignalsTask(signalRepo))
 	worker.Handle(TaskTypeAnonymizeInteractions, handleAnonymizeInteractionsTask(db, signalRepo, anonRepo, anonymizationSecret))
-	worker.Handle(TaskTypeComputeRecommendations, handleComputeRecommendationsTask(db, signalRepo, recRepo, feedbackRepo, popularityRepo, prefRepo, eventBus))
+	worker.Handle(TaskTypeComputeRecommendations, handleComputeRecommendationsTask(db, signalRepo, recRepo, feedbackRepo, popularityRepo, prefRepo, eventBus, learnerProfilePort))
 	worker.Handle(TaskTypeAggregatePopularity, handleAggregatePopularityTask(db, popularityRepo))
 }
 
@@ -324,6 +325,7 @@ func handleComputeRecommendationsTask(
 	popularityRepo PopularityRepository,
 	prefRepo PreferenceRepository,
 	eventBus *shared.EventBus,
+	learnerProfilePort LearnerProfilePort,
 ) shared.JobHandler {
 	return func(ctx context.Context, payload []byte) error {
 		var task ComputeRecommendationsPayload
@@ -406,6 +408,66 @@ func handleComputeRecommendationsTask(
 				}
 			}
 
+			// Load learner profiles for this family. Used for cold-start prior and fit scoring.
+			// Direct raw query — tasks.go intentionally bypasses domain boundaries for cross-family
+			// batch reads, same pattern as iam_students.birth_year lookup above. [18-learner-profile §7.2]
+			type lpRow struct {
+				StudentID          uuid.UUID `gorm:"column:student_id"`
+				ActivityFormat     *float64  `gorm:"column:activity_format"`
+				SessionLength      *float64  `gorm:"column:session_length"`
+				Motivation         *float64  `gorm:"column:motivation"`
+				SoloCollaborative  *float64  `gorm:"column:solo_collaborative"`
+				Structure          *float64  `gorm:"column:structure"`
+				OutdoorKinesthetic *float64  `gorm:"column:outdoor_kinesthetic"`
+				Interests          string    `gorm:"column:interests"` // PostgreSQL text[] as string
+				Confidence         float64   `gorm:"column:confidence"`
+			}
+			var lpRows []lpRow
+			if err := db.WithContext(ctx).Raw(`
+				SELECT student_id, activity_format, session_length, motivation, solo_collaborative,
+				       structure, outdoor_kinesthetic, interests::text, confidence
+				FROM learner_profiles
+				WHERE family_id = ?`, family.ID,
+			).Scan(&lpRows).Error; err != nil {
+				slog.Error("recs: compute load learner profiles", "family_id", family.ID, "error", err)
+				// Non-fatal: cold-start and fit scoring are best-effort.
+				lpRows = nil
+			}
+			profileMap := make(map[uuid.UUID]studentProfileForFit, len(lpRows))
+			for _, row := range lpRows {
+				profileMap[row.StudentID] = studentProfileForFit{
+					ActivityFormat:     row.ActivityFormat,
+					SessionLength:      row.SessionLength,
+					Motivation:         row.Motivation,
+					SoloCollaborative:  row.SoloCollaborative,
+					Structure:          row.Structure,
+					OutdoorKinesthetic: row.OutdoorKinesthetic,
+					Interests:          parsePostgresArray(row.Interests),
+					Confidence:         row.Confidence,
+				}
+			}
+
+			// Cold-start prior: seed recentSubjectTags from declared interests when behavioral
+			// signals are sparse (< 3 in 90 days). Interests are mapped to subject_tags for
+			// Jaccard similarity against listing subject_tags. Double-weight gives declared
+			// interests meaningful signal without drowning observed behavior. [18-learner-profile §3.1]
+			if len(signals) < 3 && learnerProfilePort != nil {
+				studentInterests, err := learnerProfilePort.GetStudentInterestsByFamily(ctx, familyID)
+				if err != nil {
+					slog.Warn("recs: compute cold-start interests", "family_id", family.ID, "error", err)
+				} else {
+					for _, interests := range studentInterests {
+						for _, interest := range interests {
+							subjectTag, ok := recsInterestToSubjectTag[interest]
+							if !ok {
+								subjectTag = interest // fall back to direct match
+							}
+							recentSubjectTags = append(recentSubjectTags, subjectTag, subjectTag)
+						}
+					}
+				}
+			}
+
 			// Determine active methodology slugs.
 			primarySlug := family.PrimaryMethodologySlug
 			var secondarySlugs []string
@@ -469,6 +531,63 @@ func handleComputeRecommendationsTask(
 					if regularCount < regularSlots {
 						selected = append(selected, newRecommendationFromCandidate(c, familyID, now))
 						regularCount++
+					}
+				}
+			}
+
+			// Fit-score computation: for student-scoped marketplace candidates with a learner profile.
+			// Exploration candidates are intentionally excluded. [18-learner-profile §6.4, §3.1]
+			if len(profileMap) > 0 {
+				// Batch-load preference_tags for all candidate listing IDs.
+				listingIDs := make([]uuid.UUID, 0, len(selected))
+				for _, r := range selected {
+					if r.StudentID != nil && r.RecommendationType == RecommendationMarketplaceContent && r.SourceSignal != SourceExploration {
+						listingIDs = append(listingIDs, r.TargetEntityID)
+					}
+				}
+				if len(listingIDs) > 0 {
+					type prefTagRow struct {
+						ID             uuid.UUID       `gorm:"column:id"`
+						PreferenceTags json.RawMessage `gorm:"column:preference_tags"`
+						SubjectTags    string          `gorm:"column:subject_tags"`
+					}
+					var prefTagRows []prefTagRow
+					if err := db.WithContext(ctx).Raw(`
+						SELECT id, preference_tags, subject_tags::text
+						FROM mkt_listings
+						WHERE id IN ? AND preference_tags IS NOT NULL`, listingIDs,
+					).Scan(&prefTagRows).Error; err != nil {
+						slog.Error("recs: compute fit scores load preference_tags", "family_id", family.ID, "error", err)
+					} else {
+						prefTagMap := make(map[uuid.UUID]map[string]float64, len(prefTagRows))
+						subjectTagMap := make(map[uuid.UUID][]string, len(prefTagRows))
+						for _, ptr := range prefTagRows {
+							var tags map[string]float64
+							if err := json.Unmarshal(ptr.PreferenceTags, &tags); err == nil {
+								prefTagMap[ptr.ID] = tags
+							}
+							subjectTagMap[ptr.ID] = parsePostgresArray(ptr.SubjectTags)
+						}
+
+						for i, r := range selected {
+							if r.StudentID == nil || r.RecommendationType != RecommendationMarketplaceContent || r.SourceSignal == SourceExploration {
+								continue
+							}
+							profile, hasProfile := profileMap[*r.StudentID]
+							if !hasProfile {
+								continue
+							}
+							prefTags, hasTags := prefTagMap[r.TargetEntityID]
+							if !hasTags {
+								continue
+							}
+							fitScore, whyText, ok := computeFitScore(profile, prefTags, subjectTagMap[r.TargetEntityID])
+							if ok {
+								fs := fitScore
+								selected[i].FitScore = &fs
+								selected[i].FitWhy = &whyText
+							}
+						}
 					}
 				}
 			}

@@ -3548,6 +3548,45 @@ const docTemplate = `{
                 }
             }
         },
+        "/billing/tax-summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns cumulative creator earnings for the current calendar year and whether\nthe IRS 1099-K reporting threshold ($600) has been exceeded. Data is updated\nmonthly by the payout aggregation task.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "billing"
+                ],
+                "summary": "Get 1099-K tax summary for the current year",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tax year (defaults to current year)",
+                        "name": "year",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/billing.TaxSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/billing/transactions": {
             "get": {
                 "security": [
@@ -9843,6 +9882,82 @@ const docTemplate = `{
                 }
             }
         },
+        "/learning/reading-lists/{id}/books/{bookId}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "learn"
+                ],
+                "summary": "Toggle read/unread status for a book in a reading list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reading list UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reading item UUID",
+                        "name": "bookId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Toggle payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/learn.MarkBookReadCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/learn.ReadingProgressResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
         "/learning/sequences": {
             "post": {
                 "security": [
@@ -13050,6 +13165,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -13057,6 +13175,17 @@ const docTemplate = `{
                     "marketplace"
                 ],
                 "summary": "Create a checkout session",
+                "parameters": [
+                    {
+                        "description": "Checkout request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/mkt.CheckoutRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -13631,13 +13760,18 @@ const docTemplate = `{
         },
         "/marketplace/listings/{listing_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "marketplace"
                 ],
-                "summary": "Get a listing",
+                "summary": "Get a listing with ownership status",
                 "parameters": [
                     {
                         "type": "string",
@@ -13652,6 +13786,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/mkt.ListingDetailResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
                         }
                     },
                     "404": {
@@ -17973,6 +18113,116 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/students/{student_id}/learner-profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current learner profile for a student. 404 if no quiz has been submitted.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "learner-profile"
+                ],
+                "summary": "Get learner profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/learner_profile.LearnerProfileResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/students/{student_id}/learner-profile/submissions": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Processes a quiz submission and upserts the learner profile for a student.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "learner-profile"
+                ],
+                "summary": "Submit learner profile quiz",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Student UUID",
+                        "name": "student_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Quiz answers",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/learner_profile.SubmitProfileCommand"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/learner_profile.LearnerProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -18914,6 +19164,26 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tier": {
+                    "type": "string"
+                }
+            }
+        },
+        "billing.TaxSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "earnings_cents": {
+                    "type": "integer"
+                },
+                "tax_year": {
+                    "type": "integer"
+                },
+                "threshold_cents": {
+                    "type": "integer"
+                },
+                "threshold_exceeded": {
+                    "type": "boolean"
+                },
+                "threshold_reached_at": {
                     "type": "string"
                 }
             }
@@ -21644,6 +21914,20 @@ const docTemplate = `{
                 }
             }
         },
+        "learn.MarkBookReadCommand": {
+            "type": "object",
+            "required": [
+                "student_id"
+            ],
+            "properties": {
+                "completed": {
+                    "type": "boolean"
+                },
+                "student_id": {
+                    "type": "string"
+                }
+            }
+        },
         "learn.ProgressSummaryResponse": {
             "type": "object",
             "properties": {
@@ -23071,6 +23355,111 @@ const docTemplate = `{
                 }
             }
         },
+        "learner_profile.LearnerProfileResponse": {
+            "type": "object",
+            "properties": {
+                "activity_format": {
+                    "type": "number"
+                },
+                "answered_count": {
+                    "type": "integer"
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "interests": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "motivation": {
+                    "type": "number"
+                },
+                "outdoor_kinesthetic": {
+                    "type": "number"
+                },
+                "respondent": {
+                    "type": "string"
+                },
+                "session_length": {
+                    "type": "number"
+                },
+                "solo_collaborative": {
+                    "type": "number"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "structure": {
+                    "type": "number"
+                },
+                "student_id": {
+                    "type": "string"
+                },
+                "summary_text": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "learner_profile.QuizAnswer": {
+            "type": "object",
+            "required": [
+                "question_id"
+            ],
+            "properties": {
+                "question_id": {
+                    "type": "integer",
+                    "maximum": 12,
+                    "minimum": 1
+                },
+                "value": {
+                    "type": "number",
+                    "maximum": 1,
+                    "minimum": 0
+                }
+            }
+        },
+        "learner_profile.SubmitProfileCommand": {
+            "type": "object",
+            "required": [
+                "answers",
+                "respondent"
+            ],
+            "properties": {
+                "answers": {
+                    "type": "array",
+                    "maxItems": 12,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/learner_profile.QuizAnswer"
+                    }
+                },
+                "interests": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "respondent": {
+                    "type": "string",
+                    "enum": [
+                        "parent",
+                        "child"
+                    ]
+                }
+            }
+        },
         "lifecycle.DeletionStatus": {
             "type": "string",
             "enum": [
@@ -23713,6 +24102,17 @@ const docTemplate = `{
                 }
             }
         },
+        "mkt.CheckoutRequest": {
+            "type": "object",
+            "required": [
+                "return_url"
+            ],
+            "properties": {
+                "return_url": {
+                    "type": "string"
+                }
+            }
+        },
         "mkt.CheckoutSessionResponse": {
             "type": "object",
             "properties": {
@@ -24013,6 +24413,10 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "owned": {
+                    "description": "Owned is true when the authenticated buyer's family already has a purchase record for this listing.\nAlways false for unauthenticated requests.",
+                    "type": "boolean"
                 },
                 "preview_url": {
                     "type": "string"
@@ -24865,13 +25269,25 @@ const docTemplate = `{
                 "family_profile",
                 "children",
                 "methodology",
-                "roadmap_review"
+                "roadmap_review",
+                "learner_profile"
+            ],
+            "x-enum-comments": {
+                "StepLearnerProfile": "optional 5th step [18-learner-profile §8]"
+            },
+            "x-enum-descriptions": [
+                "",
+                "",
+                "",
+                "",
+                "optional 5th step [18-learner-profile §8]"
             ],
             "x-enum-varnames": [
                 "StepFamilyProfile",
                 "StepChildren",
                 "StepMethodology",
-                "StepRoadmapReview"
+                "StepRoadmapReview",
+                "StepLearnerProfile"
             ]
         },
         "plan.ActivitySummary": {
@@ -25541,6 +25957,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "expires_at": {
+                    "type": "string"
+                },
+                "fit_score": {
+                    "description": "learner fit score; nil when no profile [18-learner-profile §2.3]",
+                    "type": "number"
+                },
+                "fit_why": {
+                    "description": "why-text for the fit score badge",
                     "type": "string"
                 },
                 "id": {

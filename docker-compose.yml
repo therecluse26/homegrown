@@ -132,7 +132,7 @@ services:
     depends_on:
       - prometheus
     ports:
-      - "3000:3000"
+      - "3377:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: homegrown
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -141,8 +141,54 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
 
+  hs-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hyperswitch
+      POSTGRES_PASSWORD: hyperswitch
+      POSTGRES_DB: hyperswitch_db
+    volumes:
+      - hs_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hyperswitch"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  hs-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  hyperswitch-server:
+    image: juspaydotin/hyperswitch-router:v1.109.0
+    command: /local/bin/router -f /local/config/hyperswitch.toml
+    depends_on:
+      hs-postgres:
+        condition: service_healthy
+      hs-redis:
+        condition: service_healthy
+    ports:
+      - "8280:8080"
+    volumes:
+      - ./config/hyperswitch:/local/config:ro
+    environment:
+      ROUTER__RUN_DB_MIGRATIONS: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health | grep -q good || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
 volumes:
   pg_data:
+  hs_pg_data:
   prometheus_data:
   grafana_data:
 

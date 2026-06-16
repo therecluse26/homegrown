@@ -168,7 +168,7 @@ export function HabitTracking() {
       {
         title: `Habit Check-in (${successCount}/${habitEntries.length} habits)`,
         description: `Habit check-in:\n${checkInLines}${parentNotes ? `\n\nNotes: ${parentNotes}` : ""}`,
-        subject_tags: ["character_education"],
+        subject_tags: ["religion.character"],
         tool_id: "habit-tracking",
         activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
       },

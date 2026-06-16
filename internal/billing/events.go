@@ -62,3 +62,13 @@ type PayoutCompleted struct {
 }
 
 func (PayoutCompleted) EventName() string { return "billing.PayoutCompleted" }
+
+// CreatorThresholdReached is published the first time a creator's cumulative yearly earnings
+// exceed the IRS 1099-K reporting threshold ($600/year). Consumed by notify::. [10-billing §16.3, HOM-62]
+type CreatorThresholdReached struct {
+	CreatorID     uuid.UUID `json:"creator_id"`
+	TaxYear       int       `json:"tax_year"`
+	EarningsCents int64     `json:"earnings_cents"`
+}
+
+func (CreatorThresholdReached) EventName() string { return "billing.CreatorThresholdReached" }

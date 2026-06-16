@@ -123,7 +123,7 @@ export function HandworkProjects() {
       {
         title: `Handwork: ${projectName} (${craftLabel})`,
         description: descParts.join("\n"),
-        subject_tags: ["arts", "handwork"],
+        subject_tags: ["arts"],
         tool_id: "handwork-projects",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,
         activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,

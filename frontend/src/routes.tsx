@@ -156,6 +156,13 @@ const PayoutHistory = lazy(() => import("@/features/billing/payout-history").the
 // Recommendations
 const RecommendationsPage = lazy(() => import("@/features/recommendations/recommendations-page").then(m => ({ default: m.RecommendationsPage })));
 
+// UX Prototype — learner profile (HOM-91)
+const LearnerProfilePrototype = lazy(() => import("@/features/learner-profile/learner-profile-prototype").then(m => ({ default: m.LearnerProfilePrototype })));
+
+// Learner profile — production pages [HOM-96]
+const LearnerProfilePage = lazy(() => import("@/features/learner-profile/learner-profile-page").then(m => ({ default: m.LearnerProfilePage })));
+const LearnerProfileQuizPage = lazy(() => import("@/features/learner-profile/learner-profile-quiz").then(m => ({ default: m.LearnerProfileQuiz })));
+
 // Search
 const SearchResults = lazy(() => import("@/features/search/search-results").then(m => ({ default: m.SearchResults })));
 
@@ -217,6 +224,9 @@ const routes: RouteObject[] = [
             children: [
               // Home / Feed
               { index: true, element: <Feed />, errorElement: <RouteErrorBoundary /> },
+
+              // UX prototypes (design review only)
+              { path: "ux/learner-profile", element: <LearnerProfilePrototype /> },
 
               // Social
               { path: "friends", element: <FriendsList />, errorElement: <RouteErrorBoundary /> },
@@ -309,6 +319,10 @@ const routes: RouteObject[] = [
               // Recommendations
               { path: "recommendations", element: <RecommendationsPage />, errorElement: <RouteErrorBoundary /> },
 
+              // Learner profile [HOM-96]
+              { path: "students/:studentId/learner-profile", element: <LearnerProfilePage />, errorElement: <RouteErrorBoundary /> },
+              { path: "students/:studentId/learner-profile/quiz", element: <LearnerProfileQuizPage standalone />, errorElement: <RouteErrorBoundary /> },
+
               // Search
               { path: "search", element: <SearchResults />, errorElement: <RouteErrorBoundary /> },
 
@@ -377,6 +391,7 @@ const routes: RouteObject[] = [
               { path: "settings/methodology", element: <Navigate to="/settings" replace /> },
               { path: "settings/blocked", element: <Navigate to="/settings/blocks" replace /> },
               // Calendar/Planning redirects
+              { path: "planning", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/week", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/month", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/new", element: <Navigate to="/schedule/new" replace /> },

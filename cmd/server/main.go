@@ -41,6 +41,7 @@ import (
 	notifyadapters "github.com/homegrown-academy/homegrown-academy/internal/notify/adapters"
 	mktadapters "github.com/homegrown-academy/homegrown-academy/internal/mkt/adapters"
 	"github.com/homegrown-academy/homegrown-academy/internal/comply"
+	learner_profile "github.com/homegrown-academy/homegrown-academy/internal/learner_profile"
 	"github.com/homegrown-academy/homegrown-academy/internal/lifecycle"
 	"github.com/homegrown-academy/homegrown-academy/internal/onboard"
 	"github.com/homegrown-academy/homegrown-academy/internal/plan"
@@ -613,6 +614,7 @@ func main() {
 
 	paymentAdapter := mktadapters.NewHyperswitchPaymentAdapter(
 		cfg.HyperswitchBaseURL, cfg.HyperswitchAPIKey, cfg.HyperswitchWebhookKey,
+		cfg.HyperswitchMktProfileID,
 	)
 	mediaAdapter := mktadapters.NewNoopMediaAdapter()
 
@@ -760,7 +762,7 @@ func main() {
 	// Email adapter: use Postmark when token is set, noop otherwise (dev/test). [08-notify §7]
 	var emailAdapter notify.EmailAdapter = notifyadapters.NoopEmailAdapter{}
 	if cfg.PostmarkServerToken != "" {
-		emailAdapter = notifyadapters.NewPostmarkEmailAdapter(cfg.PostmarkServerToken)
+		emailAdapter = notifyadapters.NewPostmarkEmailAdapter(cfg.PostmarkServerToken, cfg.PostmarkFromAddress)
 	}
 
 	// IAM adapter for notify: bridges iam.IamService → notify.IamServiceForNotify.
@@ -812,6 +814,7 @@ func main() {
 		emailAdapter, iamForNotify,
 		cache, pubsub, jobs,
 		cfg.UnsubscribeSecret,
+		cfg.AppPublicURL,
 	)
 
 	// Register notify:: event subscriptions (Phase 1 — 14 handlers)
@@ -846,6 +849,7 @@ func main() {
 	billTxRepo := billing.NewPgTransactionRepository(db)
 	billCustRepo := billing.NewPgCustomerRepository(db)
 	billPayoutRepo := billing.NewPgPayoutRepository(db)
+	billTaxSummaryRepo := billing.NewPgCreatorTaxSummaryRepository(db)
 
 	// Hyperswitch billing adapter: uses billing-specific profile, separate from mkt.
 	billAdapter := billingadapters.NewHyperswitchSubscriptionAdapter(
@@ -887,7 +891,7 @@ func main() {
 	}
 
 	billingSvc := billing.NewBillingService(
-		billSubRepo, billTxRepo, billCustRepo, billPayoutRepo,
+		billSubRepo, billTxRepo, billCustRepo, billPayoutRepo, billTaxSummaryRepo,
 		billAdapter, iamForBilling,
 		eventBus, billCfg,
 	)
@@ -1430,6 +1434,22 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(social.EventCancelled{}), plan.NewEventCancelledHandler(planSvc))
 	eventBus.Subscribe(reflect.TypeOf(learn.ActivityLogged{}), plan.NewActivityLoggedHandler(planSvc))
 
+	// ── Learner Profile domain wiring [18-learner-profile §12] ───────────────────
+	lpRepo := learner_profile.NewPgProfileRepository(db)
+	iamForLearnerProfile := learner_profile.NewIamAdapter(
+		func(ctx context.Context, studentID, familyID uuid.UUID) (bool, error) {
+			scope := shared.NewFamilyScopeFromID(familyID)
+			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
+			if err != nil || student == nil {
+				return false, err
+			}
+			return true, nil
+		},
+		iamSvc.GetStudentName,
+	)
+	lpSvc := learner_profile.NewLearnerProfileService(lpRepo, iamForLearnerProfile)
+	learner_profile.RegisterEventHandlers(eventBus, lpSvc)
+
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
 		DB:       db,
@@ -1455,9 +1475,10 @@ func main() {
 		Recs:        recsSvc,
 		Comply:    complySvc,
 		Lifecycle: lifecycleSvc,
-		Admin:     adminSvc,
-		Plan:      planSvc,
-		PubSub:    pubsub,
+		Admin:          adminSvc,
+		Plan:           planSvc,
+		LearnerProfile: lpSvc,
+		PubSub:         pubsub,
 	}
 
 	// ── Step 8: Build Echo router ─────────────────────────────────────────────────
@@ -1477,11 +1498,13 @@ func main() {
 	safetyNcmecPendingRepo := safety.NewPgNcmecPendingReportRepository(db)
 	manualReviewThornAdapter := safety.NewManualReviewThornAdapter(safetyManualReviewRepo, safetyNcmecPendingRepo)
 	safety.RegisterSafetyWorkers(worker, safetyNcmecRepo, manualReviewThornAdapter, jobs, safetySvc)
+	recLearnerProfilePort := recs.NewLearnerProfileAdapter(lpSvc.GetStudentInterestsByFamily)
 	recs.RegisterTaskHandlers(worker, db,
 		recSignalRepo, recRecRepo, recFeedbackRepo,
 		recPopularityRepo, recPrefRepo, recAnonRepo,
 		cfg.RecsAnonymizationSecret,
 		eventBus,
+		recLearnerProfilePort,
 	)
 	comply.RegisterTaskHandlers(worker, db,
 		complyStateConfigRepo, complyFamilyConfigRepo, complyAttendanceRepo,
@@ -1505,7 +1528,7 @@ func main() {
 		}
 		return out, nil
 	})
-	billing.RegisterTaskHandlers(worker, billPayoutRepo, billAdapter, billingMktAdapter)
+	billing.RegisterTaskHandlers(worker, billPayoutRepo, billTaxSummaryRepo, billAdapter, billingMktAdapter, eventBus)
 	go func() {
 		if startErr := worker.Start(); startErr != nil {
 			slog.Error("job worker error", "error", startErr)

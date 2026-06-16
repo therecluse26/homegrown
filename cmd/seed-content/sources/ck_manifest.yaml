@@ -1,0 +1,753 @@
+# Core Knowledge Foundation — CC BY 4.0 content manifest.
+# Source: Core Knowledge Foundation (coreknowledge.org)
+# License: CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+#
+# Each entry represents a scope-and-sequence document or curriculum guide.
+# Listings are ingested as hosted PDFs (R2-backed) by cmd/seed-content/sources/ck_foundation.go.
+# Download URLs may 404 for specific editions; the ingester skips and logs those gracefully.
+
+listings:
+
+  # ── Overview ─────────────────────────────────────────────────────────────────
+
+  - id: ck-k8-sequence
+    title: "Core Knowledge Sequence K–8: Complete Scope and Sequence"
+    description: "The complete Core Knowledge Sequence provides a detailed, grade-by-grade outline of the knowledge and skills to be taught in grades K–8 across language arts, mathematics, history and geography, science, and fine arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CKScopeandSequence.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 8
+    subjects: [language-arts, math, history, science, music, art]
+
+  # ── Kindergarten ──────────────────────────────────────────────────────────────
+
+  - id: ck-k-language-arts
+    title: "Core Knowledge Kindergarten: Language Arts Scope and Sequence"
+    description: "Kindergarten language arts scope and sequence covering phonological awareness, print concepts, phonics, reading readiness, and listening comprehension. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_GrK_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 0
+    grade_max: 0
+    subjects: [language-arts]
+
+  - id: ck-k-history-geography
+    title: "Core Knowledge Kindergarten: History and Geography Scope and Sequence"
+    description: "Kindergarten history and geography scope and sequence covering world geography, American symbols, and introductory civics concepts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_GrK_History.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 0
+    subjects: [history]
+
+  - id: ck-k-science
+    title: "Core Knowledge Kindergarten: Science Scope and Sequence"
+    description: "Kindergarten science scope and sequence covering plants, animals, weather, seasons, and the human body — grounded in the Core Knowledge framework. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_GrK_Science.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 0
+    subjects: [science]
+
+  - id: ck-k-math
+    title: "Core Knowledge Kindergarten: Mathematics Scope and Sequence"
+    description: "Kindergarten mathematics scope and sequence covering number sense, counting, basic operations, patterns, shapes, and measurement. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_GrK_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 0
+    grade_max: 0
+    subjects: [math]
+
+  - id: ck-k-music
+    title: "Core Knowledge Kindergarten: Music Scope and Sequence"
+    description: "Kindergarten music scope and sequence covering folk songs, patriotic songs, basic rhythm and melody, and introduction to instruments. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_GrK_Music.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 0
+    subjects: [music]
+
+  - id: ck-k-visual-arts
+    title: "Core Knowledge Kindergarten: Visual Arts Scope and Sequence"
+    description: "Kindergarten visual arts scope and sequence covering color, shape, line, and texture with introduction to famous artworks and artists. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_GrK_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 0
+    subjects: [art]
+
+  - id: ck-k-poetry
+    title: "Core Knowledge Kindergarten: Poetry and Rhymes"
+    description: "Kindergarten poetry anthology featuring nursery rhymes, children's verses, and classic poems aligned to the Core Knowledge Sequence. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_GrK_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 0
+    grade_max: 0
+    subjects: [language-arts]
+
+  # ── Grade 1 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-1-language-arts
+    title: "Core Knowledge Grade 1: Language Arts Scope and Sequence"
+    description: "Grade 1 language arts scope and sequence covering phonics, decoding, spelling patterns, grammar, writing, and listening comprehension with rich literature. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr1_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 1
+    grade_max: 1
+    subjects: [language-arts]
+
+  - id: ck-1-history-geography
+    title: "Core Knowledge Grade 1: History and Geography Scope and Sequence"
+    description: "Grade 1 history and geography scope and sequence covering world geography, ancient civilizations, American history, and introductory map skills. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr1_History.pdf"
+    content_type: unit_study
+    grade_min: 1
+    grade_max: 1
+    subjects: [history]
+
+  - id: ck-1-science
+    title: "Core Knowledge Grade 1: Science Scope and Sequence"
+    description: "Grade 1 science scope and sequence covering living things and their environments, the human body, astronomy, and simple machines. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr1_Science.pdf"
+    content_type: unit_study
+    grade_min: 1
+    grade_max: 1
+    subjects: [science]
+
+  - id: ck-1-math
+    title: "Core Knowledge Grade 1: Mathematics Scope and Sequence"
+    description: "Grade 1 mathematics scope and sequence covering place value, addition and subtraction, measurement, data, and geometry. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr1_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 1
+    grade_max: 1
+    subjects: [math]
+
+  - id: ck-1-music
+    title: "Core Knowledge Grade 1: Music Scope and Sequence"
+    description: "Grade 1 music scope and sequence covering folk and patriotic songs, rhythm, melody, musical notation concepts, and introduction to orchestral instruments. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr1_Music.pdf"
+    content_type: unit_study
+    grade_min: 1
+    grade_max: 1
+    subjects: [music]
+
+  - id: ck-1-visual-arts
+    title: "Core Knowledge Grade 1: Visual Arts Scope and Sequence"
+    description: "Grade 1 visual arts scope and sequence covering elements of art, study of famous artworks, and introduction to art history. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr1_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 1
+    grade_max: 1
+    subjects: [art]
+
+  - id: ck-1-poetry
+    title: "Core Knowledge Grade 1: Poetry Anthology"
+    description: "Grade 1 poetry anthology with classic children's poems aligned to the Core Knowledge Sequence, supporting oral language and literary appreciation. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr1_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 1
+    grade_max: 1
+    subjects: [language-arts]
+
+  # ── Grade 2 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-2-language-arts
+    title: "Core Knowledge Grade 2: Language Arts Scope and Sequence"
+    description: "Grade 2 language arts covering advanced phonics, fluency, reading comprehension strategies, grammar, and foundational writing skills. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr2_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 2
+    grade_max: 2
+    subjects: [language-arts]
+
+  - id: ck-2-history-geography
+    title: "Core Knowledge Grade 2: History and Geography Scope and Sequence"
+    description: "Grade 2 history and geography covering ancient world history, American history through the Civil War era, and world geography. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr2_History.pdf"
+    content_type: unit_study
+    grade_min: 2
+    grade_max: 2
+    subjects: [history]
+
+  - id: ck-2-science
+    title: "Core Knowledge Grade 2: Science Scope and Sequence"
+    description: "Grade 2 science covering the water cycle, ecosystems, matter and its properties, and the solar system. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr2_Science.pdf"
+    content_type: unit_study
+    grade_min: 2
+    grade_max: 2
+    subjects: [science]
+
+  - id: ck-2-math
+    title: "Core Knowledge Grade 2: Mathematics Scope and Sequence"
+    description: "Grade 2 mathematics covering place value to 1000, addition and subtraction with regrouping, multiplication concepts, and measurement. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr2_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 2
+    grade_max: 2
+    subjects: [math]
+
+  - id: ck-2-music
+    title: "Core Knowledge Grade 2: Music Scope and Sequence"
+    description: "Grade 2 music covering rhythm, melody, harmony concepts, music reading readiness, and study of select composers. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr2_Music.pdf"
+    content_type: unit_study
+    grade_min: 2
+    grade_max: 2
+    subjects: [music]
+
+  - id: ck-2-visual-arts
+    title: "Core Knowledge Grade 2: Visual Arts Scope and Sequence"
+    description: "Grade 2 visual arts covering principles of design, art history surveys, and studio art techniques. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr2_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 2
+    grade_max: 2
+    subjects: [art]
+
+  - id: ck-2-poetry
+    title: "Core Knowledge Grade 2: Poetry Anthology"
+    description: "Grade 2 poetry anthology featuring classic and contemporary poems aligned to the Core Knowledge Sequence. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr2_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 2
+    grade_max: 2
+    subjects: [language-arts]
+
+  # ── Grade 3 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-3-language-arts
+    title: "Core Knowledge Grade 3: Language Arts Scope and Sequence"
+    description: "Grade 3 language arts covering reading comprehension, literary analysis, grammar, paragraph writing, and vocabulary development. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr3_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 3
+    grade_max: 3
+    subjects: [language-arts]
+
+  - id: ck-3-history-geography
+    title: "Core Knowledge Grade 3: History and Geography Scope and Sequence"
+    description: "Grade 3 history and geography covering ancient civilizations, world geography, and American history through Reconstruction. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr3_History.pdf"
+    content_type: unit_study
+    grade_min: 3
+    grade_max: 3
+    subjects: [history]
+
+  - id: ck-3-science
+    title: "Core Knowledge Grade 3: Science Scope and Sequence"
+    description: "Grade 3 science covering the human body, astronomy, energy and forces, and life cycles. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr3_Science.pdf"
+    content_type: unit_study
+    grade_min: 3
+    grade_max: 3
+    subjects: [science]
+
+  - id: ck-3-math
+    title: "Core Knowledge Grade 3: Mathematics Scope and Sequence"
+    description: "Grade 3 mathematics covering multiplication and division, fractions, area and perimeter, and data analysis. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr3_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 3
+    grade_max: 3
+    subjects: [math]
+
+  - id: ck-3-music
+    title: "Core Knowledge Grade 3: Music Scope and Sequence"
+    description: "Grade 3 music covering music notation, major and minor modes, orchestral families, and study of select composers and their works. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr3_Music.pdf"
+    content_type: unit_study
+    grade_min: 3
+    grade_max: 3
+    subjects: [music]
+
+  - id: ck-3-visual-arts
+    title: "Core Knowledge Grade 3: Visual Arts Scope and Sequence"
+    description: "Grade 3 visual arts covering art movements, famous works, and studio techniques including perspective and composition. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr3_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 3
+    grade_max: 3
+    subjects: [art]
+
+  - id: ck-3-poetry
+    title: "Core Knowledge Grade 3: Poetry Anthology"
+    description: "Grade 3 poetry anthology with classic American and British poems, ballads, and narrative verse aligned to the Core Knowledge Sequence. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr3_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 3
+    grade_max: 3
+    subjects: [language-arts]
+
+  # ── Grade 4 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-4-language-arts
+    title: "Core Knowledge Grade 4: Language Arts Scope and Sequence"
+    description: "Grade 4 language arts covering literary genres, research writing, grammar and usage, and vocabulary with Latin and Greek roots. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr4_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 4
+    grade_max: 4
+    subjects: [language-arts]
+
+  - id: ck-4-history-geography
+    title: "Core Knowledge Grade 4: History and Geography Scope and Sequence"
+    description: "Grade 4 history and geography covering American history from the Civil War through industrialization, and world geography study. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr4_History.pdf"
+    content_type: unit_study
+    grade_min: 4
+    grade_max: 4
+    subjects: [history]
+
+  - id: ck-4-science
+    title: "Core Knowledge Grade 4: Science Scope and Sequence"
+    description: "Grade 4 science covering electricity and magnetism, the earth's structure, ecosystems, and chemistry fundamentals. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr4_Science.pdf"
+    content_type: unit_study
+    grade_min: 4
+    grade_max: 4
+    subjects: [science]
+
+  - id: ck-4-math
+    title: "Core Knowledge Grade 4: Mathematics Scope and Sequence"
+    description: "Grade 4 mathematics covering multi-digit multiplication and division, fractions and decimals, measurement, and geometry. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr4_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 4
+    grade_max: 4
+    subjects: [math]
+
+  - id: ck-4-music
+    title: "Core Knowledge Grade 4: Music Scope and Sequence"
+    description: "Grade 4 music covering music theory fundamentals, American music traditions, and comparative study of world music. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr4_Music.pdf"
+    content_type: unit_study
+    grade_min: 4
+    grade_max: 4
+    subjects: [music]
+
+  - id: ck-4-visual-arts
+    title: "Core Knowledge Grade 4: Visual Arts Scope and Sequence"
+    description: "Grade 4 visual arts covering the Renaissance through Impressionism, studio techniques, and connections to history and culture. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr4_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 4
+    grade_max: 4
+    subjects: [art]
+
+  - id: ck-4-poetry
+    title: "Core Knowledge Grade 4: Poetry Anthology"
+    description: "Grade 4 poetry anthology featuring lyric poetry, sonnets, and narrative poems from American and British literary traditions. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr4_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 4
+    grade_max: 4
+    subjects: [language-arts]
+
+  # ── Grade 5 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-5-language-arts
+    title: "Core Knowledge Grade 5: Language Arts Scope and Sequence"
+    description: "Grade 5 language arts covering literary analysis, expository writing, grammar mastery, and vocabulary with etymological study. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr5_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 5
+    grade_max: 5
+    subjects: [language-arts]
+
+  - id: ck-5-history-geography
+    title: "Core Knowledge Grade 5: History and Geography Scope and Sequence"
+    description: "Grade 5 history and geography covering American history from the Progressive Era through World War II, and world geography. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr5_History.pdf"
+    content_type: unit_study
+    grade_min: 5
+    grade_max: 5
+    subjects: [history]
+
+  - id: ck-5-science
+    title: "Core Knowledge Grade 5: Science Scope and Sequence"
+    description: "Grade 5 science covering genetics, Earth's history, chemistry of matter, and the physics of motion. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr5_Science.pdf"
+    content_type: unit_study
+    grade_min: 5
+    grade_max: 5
+    subjects: [science]
+
+  - id: ck-5-math
+    title: "Core Knowledge Grade 5: Mathematics Scope and Sequence"
+    description: "Grade 5 mathematics covering fractions, decimals, and percentages; ratios; introductory algebra concepts; and coordinate geometry. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr5_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 5
+    grade_max: 5
+    subjects: [math]
+
+  - id: ck-5-music
+    title: "Core Knowledge Grade 5: Music Scope and Sequence"
+    description: "Grade 5 music covering Western classical music history, opera, and comparative world music traditions. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr5_Music.pdf"
+    content_type: unit_study
+    grade_min: 5
+    grade_max: 5
+    subjects: [music]
+
+  - id: ck-5-visual-arts
+    title: "Core Knowledge Grade 5: Visual Arts Scope and Sequence"
+    description: "Grade 5 visual arts covering 20th-century art movements, American art history, and advanced studio techniques. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr5_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 5
+    grade_max: 5
+    subjects: [art]
+
+  - id: ck-5-poetry
+    title: "Core Knowledge Grade 5: Poetry Anthology"
+    description: "Grade 5 poetry anthology with Romantic and Victorian poems, American Transcendentalist verse, and thematic poetry study. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr5_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 5
+    grade_max: 5
+    subjects: [language-arts]
+
+  # ── Grade 6 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-6-language-arts
+    title: "Core Knowledge Grade 6: Language Arts Scope and Sequence"
+    description: "Grade 6 language arts covering rhetoric, argumentation, literary criticism, and advanced grammar and composition. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr6_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 6
+    grade_max: 6
+    subjects: [language-arts]
+
+  - id: ck-6-history-geography
+    title: "Core Knowledge Grade 6: History and Geography Scope and Sequence"
+    description: "Grade 6 history and geography covering the ancient world — Mesopotamia, Egypt, Greece, and Rome — and foundational geographic concepts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr6_History.pdf"
+    content_type: unit_study
+    grade_min: 6
+    grade_max: 6
+    subjects: [history]
+
+  - id: ck-6-science
+    title: "Core Knowledge Grade 6: Science Scope and Sequence"
+    description: "Grade 6 science covering cell biology, plate tectonics, thermodynamics, and ecology. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr6_Science.pdf"
+    content_type: unit_study
+    grade_min: 6
+    grade_max: 6
+    subjects: [science]
+
+  - id: ck-6-math
+    title: "Core Knowledge Grade 6: Mathematics Scope and Sequence"
+    description: "Grade 6 mathematics covering ratios and proportional reasoning, expressions and equations, statistics, and geometry. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr6_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 6
+    grade_max: 6
+    subjects: [math]
+
+  - id: ck-6-music
+    title: "Core Knowledge Grade 6: Music Scope and Sequence"
+    description: "Grade 6 music covering music theory, jazz history, and the development of Western musical forms from medieval to baroque. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr6_Music.pdf"
+    content_type: unit_study
+    grade_min: 6
+    grade_max: 6
+    subjects: [music]
+
+  - id: ck-6-visual-arts
+    title: "Core Knowledge Grade 6: Visual Arts Scope and Sequence"
+    description: "Grade 6 visual arts covering ancient and medieval art history, architectural study, and advanced studio arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr6_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 6
+    grade_max: 6
+    subjects: [art]
+
+  - id: ck-6-poetry
+    title: "Core Knowledge Grade 6: Poetry Anthology"
+    description: "Grade 6 poetry anthology with classical epic excerpts, medieval verse, and Renaissance poetry for advanced literary study. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr6_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 6
+    grade_max: 6
+    subjects: [language-arts]
+
+  # ── Grade 7 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-7-language-arts
+    title: "Core Knowledge Grade 7: Language Arts Scope and Sequence"
+    description: "Grade 7 language arts covering advanced literary analysis, research writing, logic and argumentation, and grammar for style. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 7
+    grade_max: 7
+    subjects: [language-arts]
+
+  - id: ck-7-history-geography
+    title: "Core Knowledge Grade 7: History and Geography Scope and Sequence"
+    description: "Grade 7 history and geography covering the medieval world, Islamic civilization, the Renaissance, and the Reformation. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_History.pdf"
+    content_type: unit_study
+    grade_min: 7
+    grade_max: 7
+    subjects: [history]
+
+  - id: ck-7-science
+    title: "Core Knowledge Grade 7: Science Scope and Sequence"
+    description: "Grade 7 science covering chemistry, physics of waves and sound, geology, and introductory biology. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_Science.pdf"
+    content_type: unit_study
+    grade_min: 7
+    grade_max: 7
+    subjects: [science]
+
+  - id: ck-7-math
+    title: "Core Knowledge Grade 7: Mathematics Scope and Sequence"
+    description: "Grade 7 mathematics covering proportionality, linear equations, statistics and probability, and foundational algebra. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 7
+    grade_max: 7
+    subjects: [math]
+
+  - id: ck-7-music
+    title: "Core Knowledge Grade 7: Music Scope and Sequence"
+    description: "Grade 7 music covering the Classical and Romantic periods, music composition, and world music traditions. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_Music.pdf"
+    content_type: unit_study
+    grade_min: 7
+    grade_max: 7
+    subjects: [music]
+
+  - id: ck-7-visual-arts
+    title: "Core Knowledge Grade 7: Visual Arts Scope and Sequence"
+    description: "Grade 7 visual arts covering the Renaissance through Baroque periods, portraiture, and advanced studio technique study. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 7
+    grade_max: 7
+    subjects: [art]
+
+  - id: ck-7-poetry
+    title: "Core Knowledge Grade 7: Poetry Anthology"
+    description: "Grade 7 poetry anthology with Renaissance and Enlightenment verse, metaphysical poets, and 18th-century satirical poetry. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 7
+    grade_max: 7
+    subjects: [language-arts]
+
+  # ── Grade 8 ──────────────────────────────────────────────────────────────────
+
+  - id: ck-8-language-arts
+    title: "Core Knowledge Grade 8: Language Arts Scope and Sequence"
+    description: "Grade 8 language arts covering advanced rhetoric, persuasive essay, literary criticism of major works, and college-preparatory writing. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_ELA.pdf"
+    content_type: lesson_plan
+    grade_min: 8
+    grade_max: 8
+    subjects: [language-arts]
+
+  - id: ck-8-history-geography
+    title: "Core Knowledge Grade 8: History and Geography Scope and Sequence"
+    description: "Grade 8 history and geography covering the Age of Revolution, industrialization, 19th-century nationalism, and the roots of the modern world. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_History.pdf"
+    content_type: unit_study
+    grade_min: 8
+    grade_max: 8
+    subjects: [history]
+
+  - id: ck-8-science
+    title: "Core Knowledge Grade 8: Science Scope and Sequence"
+    description: "Grade 8 science covering modern physics, atomic theory, evolution, and Earth systems science. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_Science.pdf"
+    content_type: unit_study
+    grade_min: 8
+    grade_max: 8
+    subjects: [science]
+
+  - id: ck-8-math
+    title: "Core Knowledge Grade 8: Mathematics Scope and Sequence"
+    description: "Grade 8 mathematics covering functions, systems of equations, the Pythagorean theorem, and introductory statistics. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_Math.pdf"
+    content_type: lesson_plan
+    grade_min: 8
+    grade_max: 8
+    subjects: [math]
+
+  - id: ck-8-music
+    title: "Core Knowledge Grade 8: Music Scope and Sequence"
+    description: "Grade 8 music covering 20th-century music, American musical theater, and comparative music history synthesis. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_Music.pdf"
+    content_type: unit_study
+    grade_min: 8
+    grade_max: 8
+    subjects: [music]
+
+  - id: ck-8-visual-arts
+    title: "Core Knowledge Grade 8: Visual Arts Scope and Sequence"
+    description: "Grade 8 visual arts covering Impressionism through contemporary art, art criticism methodology, and advanced studio practice. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_VisualArts.pdf"
+    content_type: unit_study
+    grade_min: 8
+    grade_max: 8
+    subjects: [art]
+
+  - id: ck-8-poetry
+    title: "Core Knowledge Grade 8: Poetry Anthology"
+    description: "Grade 8 poetry anthology with Romantic, Victorian, and Modernist verse for advanced literary study and close reading. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_Poetry.pdf"
+    content_type: lesson_plan
+    grade_min: 8
+    grade_max: 8
+    subjects: [language-arts]
+
+  # ── Reading Lists (Grades 1–8) ────────────────────────────────────────────────
+
+  - id: ck-1-reading-list
+    title: "Core Knowledge Grade 1: Recommended Reading List"
+    description: "Curated Grade 1 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr1.pdf"
+    content_type: lesson_plan
+    grade_min: 1
+    grade_max: 1
+    subjects: [language-arts]
+
+  - id: ck-2-reading-list
+    title: "Core Knowledge Grade 2: Recommended Reading List"
+    description: "Curated Grade 2 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr2.pdf"
+    content_type: lesson_plan
+    grade_min: 2
+    grade_max: 2
+    subjects: [language-arts]
+
+  - id: ck-3-reading-list
+    title: "Core Knowledge Grade 3: Recommended Reading List"
+    description: "Curated Grade 3 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr3.pdf"
+    content_type: lesson_plan
+    grade_min: 3
+    grade_max: 3
+    subjects: [language-arts]
+
+  - id: ck-4-reading-list
+    title: "Core Knowledge Grade 4: Recommended Reading List"
+    description: "Curated Grade 4 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr4.pdf"
+    content_type: lesson_plan
+    grade_min: 4
+    grade_max: 4
+    subjects: [language-arts]
+
+  - id: ck-5-reading-list
+    title: "Core Knowledge Grade 5: Recommended Reading List"
+    description: "Curated Grade 5 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr5.pdf"
+    content_type: lesson_plan
+    grade_min: 5
+    grade_max: 5
+    subjects: [language-arts]
+
+  - id: ck-6-reading-list
+    title: "Core Knowledge Grade 6: Recommended Reading List"
+    description: "Curated Grade 6 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr6.pdf"
+    content_type: lesson_plan
+    grade_min: 6
+    grade_max: 6
+    subjects: [language-arts]
+
+  - id: ck-7-reading-list
+    title: "Core Knowledge Grade 7: Recommended Reading List"
+    description: "Curated Grade 7 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr7.pdf"
+    content_type: lesson_plan
+    grade_min: 7
+    grade_max: 7
+    subjects: [language-arts]
+
+  - id: ck-8-reading-list
+    title: "Core Knowledge Grade 8: Recommended Reading List"
+    description: "Curated Grade 8 reading list with titles that reinforce Core Knowledge content in history, science, and language arts. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_ReadingList_Gr8.pdf"
+    content_type: lesson_plan
+    grade_min: 8
+    grade_max: 8
+    subjects: [language-arts]
+
+  # ── Cross-Grade and Supplemental ─────────────────────────────────────────────
+
+  - id: ck-primary-history-guide
+    title: "Core Knowledge Primary Grades: History and Geography Teacher Guide"
+    description: "Comprehensive teacher guide for history and geography instruction in grades K–3, with background knowledge, discussion questions, and activity ideas. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_TeacherGuide_PrimaryHistory.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 3
+    subjects: [history]
+
+  - id: ck-primary-science-guide
+    title: "Core Knowledge Primary Grades: Science Teacher Guide"
+    description: "Comprehensive teacher guide for science instruction in grades K–3, with content background, hands-on activities, and inquiry questions. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_TeacherGuide_PrimaryScience.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 3
+    subjects: [science]
+
+  - id: ck-upper-history-guide
+    title: "Core Knowledge Upper Grades: History and Geography Teacher Guide"
+    description: "Comprehensive teacher guide for history and geography instruction in grades 4–8, with primary source integration, discussion frameworks, and assessment ideas. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_TeacherGuide_UpperHistory.pdf"
+    content_type: unit_study
+    grade_min: 4
+    grade_max: 8
+    subjects: [history]
+
+  - id: ck-upper-science-guide
+    title: "Core Knowledge Upper Grades: Science Teacher Guide"
+    description: "Comprehensive teacher guide for science instruction in grades 4–8, integrating lab activities, Socratic questioning, and content-rich background text. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_TeacherGuide_UpperScience.pdf"
+    content_type: unit_study
+    grade_min: 4
+    grade_max: 8
+    subjects: [science]
+
+  - id: ck-fine-arts-guide
+    title: "Core Knowledge K–8: Fine Arts Integration Guide"
+    description: "Guide for integrating music and visual arts across all Core Knowledge grade levels and subject areas, with cross-curricular project ideas. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_FineArts_Integration_Guide.pdf"
+    content_type: unit_study
+    grade_min: 0
+    grade_max: 8
+    subjects: [art, music]
+
+  - id: ck-7-language-arts
+    title: "Core Knowledge Grade 7: Language Arts Scope and Sequence"
+    description: "Detailed scope and sequence for Grade 7 English Language Arts — rhetoric, composition, classic literature, and grammar. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr7_ELA.pdf"
+    content_type: lesson_sequence
+    grade_min: 7
+    grade_max: 7
+    subjects: [language-arts]
+
+  - id: ck-8-language-arts
+    title: "Core Knowledge Grade 8: Language Arts Scope and Sequence"
+    description: "Detailed scope and sequence for Grade 8 English Language Arts — argumentation, advanced literature, and college-preparatory writing. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_ELA.pdf"
+    content_type: lesson_sequence
+    grade_min: 8
+    grade_max: 8
+    subjects: [language-arts]
+
+  - id: ck-8-math
+    title: "Core Knowledge Grade 8: Mathematics Scope and Sequence"
+    description: "Detailed scope and sequence for Grade 8 Mathematics — pre-algebra, linear equations, functions, and foundational geometry. Source: Core Knowledge Foundation (coreknowledge.org) — CC BY 4.0"
+    url: "https://www.coreknowledge.org/wp-content/uploads/2016/05/CK_Sequence_Gr8_Math.pdf"
+    content_type: lesson_sequence
+    grade_min: 8
+    grade_max: 8
+    subjects: [math]

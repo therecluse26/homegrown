@@ -63,7 +63,7 @@ func TestMain(m *testing.M) {
 // connection after migrations have been applied.
 func startTestDB(ctx context.Context) (*gorm.DB, func(), error) {
 	req := testcontainers.ContainerRequest{
-		Image: "postgis/postgis:16-3.4",
+		Image: "postgis/postgis:18-3.6",
 		Env: map[string]string{
 			"POSTGRES_PASSWORD": "testpass",
 			"POSTGRES_DB":       "testdb",
