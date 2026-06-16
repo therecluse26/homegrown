@@ -203,9 +203,9 @@ function isChildRespondent(birthYear: number | undefined): boolean {
   return currentYear() - birthYear >= 8;
 }
 
-// ─── Total questions: 12 scored + 2 interest = 14 ─────────────────────────
+// ─── Total questions: 12 scored + 1 interest = 13 ─────────────────────────
 
-const TOTAL_QUESTIONS = SCORED_PAIRS.length + 2; // 14
+const TOTAL_QUESTIONS = SCORED_PAIRS.length + 1; // 13
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -282,17 +282,11 @@ export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, stand
         text: interpolateName(raw.text, studentName),
       };
     }
-    // Q13 (index 12) = parent interest q or student interest q
-    if (questionIndex === SCORED_PAIRS.length) {
-      const raw = isChildMode ? INTEREST_Q14_STUDENT : INTEREST_Q13;
-      return { ...raw, text: interpolateName(raw.text, studentName) };
-    }
-    // Q14 (index 13) = second interest pass — parent gets a different set?
-    // Spec has 2 interest questions. For simplicity, Q14 is not shown if Q13
-    // was already completed as multi-select. We surface only 1 interest screen.
-    return isChildMode
-      ? { ...INTEREST_Q14_STUDENT, text: interpolateName(INTEREST_Q14_STUDENT.text, studentName) }
-      : { ...INTEREST_Q13, text: interpolateName(INTEREST_Q13.text, studentName) };
+    // Final question (index 12) = a single interest multi-select. INTEREST_Q13
+    // and INTEREST_Q14_STUDENT are two phrasings of the SAME question; exactly
+    // one is shown, chosen by respondent (parent vs. child). [board: HOM-88]
+    const raw = isChildMode ? INTEREST_Q14_STUDENT : INTEREST_Q13;
+    return { ...raw, text: interpolateName(raw.text, studentName) };
   }
 
   const currentQuestion = buildQuestion();
