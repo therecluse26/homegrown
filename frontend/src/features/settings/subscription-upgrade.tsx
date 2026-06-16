@@ -1,6 +1,7 @@
 import { FormattedMessage, useIntl } from "react-intl";
 import { Badge, Button, Card, Icon } from "@/components/ui";
-import { Check } from "lucide-react";
+import { Check, CreditCard, Receipt, XCircle } from "lucide-react";
+import { Link } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { PageTitle } from "@/components/common/page-title";
 
@@ -10,6 +11,8 @@ type Tier = {
   priceId: string;
   features: string[];
 };
+
+const TIER_ORDER: Record<string, number> = { free: 0, plus: 1, premium: 2 };
 
 const TIERS: Tier[] = [
   {
@@ -50,9 +53,31 @@ const TIERS: Tier[] = [
   },
 ];
 
+const BILLING_LINKS = [
+  {
+    to: "/settings/subscription/manage",
+    icon: XCircle,
+    labelId: "subscription.manager.title",
+    descId: "subscription.manager.description",
+  },
+  {
+    to: "/billing/payment-methods",
+    icon: CreditCard,
+    labelId: "billing.paymentMethods.title",
+    descId: "billing.paymentMethods.description",
+  },
+  {
+    to: "/billing/invoices",
+    icon: Receipt,
+    labelId: "billing.invoice.title",
+    descId: "billing.invoice.description",
+  },
+] as const;
+
 export function SubscriptionUpgrade() {
   const intl = useIntl();
   const { tier } = useAuth();
+  const currentOrder = TIER_ORDER[tier ?? "free"] ?? 0;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -62,9 +87,11 @@ export function SubscriptionUpgrade() {
         className="mb-8"
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {TIERS.map((t) => {
           const isCurrent = t.id === tier;
+          const targetOrder = TIER_ORDER[t.id] ?? 0;
+          const isDowngrade = !isCurrent && targetOrder < currentOrder;
           return (
             <Card
               key={t.id}
@@ -100,12 +127,14 @@ export function SubscriptionUpgrade() {
                 ))}
               </ul>
               <Button
-                variant={isCurrent ? "tertiary" : "primary"}
+                variant={isCurrent ? "tertiary" : isDowngrade ? "secondary" : "primary"}
                 disabled
                 className="w-full"
               >
                 {isCurrent ? (
                   <FormattedMessage id="settings.subscription.currentPlan" />
+                ) : isDowngrade ? (
+                  <FormattedMessage id="settings.subscription.downgrade" />
                 ) : (
                   <FormattedMessage id="settings.subscription.upgrade" />
                 )}
@@ -113,6 +142,33 @@ export function SubscriptionUpgrade() {
             </Card>
           );
         })}
+      </div>
+
+      {/* Billing management links */}
+      <h2 className="type-title-md text-on-surface font-semibold mb-3">
+        <FormattedMessage id="settings.subscription.manageBilling" />
+      </h2>
+      <div className="flex flex-col gap-2">
+        {BILLING_LINKS.map((link) => (
+          <Link key={link.to} to={link.to} className="block no-underline">
+            <Card interactive className="flex items-center gap-3">
+              <Icon
+                icon={link.icon}
+                size="sm"
+                aria-hidden
+                className="text-on-surface-variant shrink-0"
+              />
+              <div>
+                <p className="type-title-sm text-on-surface font-medium">
+                  {intl.formatMessage({ id: link.labelId })}
+                </p>
+                <p className="type-body-sm text-on-surface-variant">
+                  {intl.formatMessage({ id: link.descId })}
+                </p>
+              </div>
+            </Card>
+          </Link>
+        ))}
       </div>
     </div>
   );

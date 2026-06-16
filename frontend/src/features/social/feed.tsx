@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
+import { formatTimeAgo } from "@/lib/date-utils";
 import {
   Heart,
   MessageCircle,
@@ -46,6 +47,15 @@ const POST_TYPE_ICONS: Record<PostType, typeof Heart> = {
   event_share: Calendar,
   marketplace_review: Star,
   resource_share: Share2,
+};
+
+const POST_TYPE_LABELS: Record<PostType, string> = {
+  text: "Text",
+  photo: "Photo",
+  milestone: "Milestone",
+  event_share: "Event",
+  marketplace_review: "Review",
+  resource_share: "Resource",
 };
 
 // ─── Post composer ──────────────────────────────────────────────────────────
@@ -118,10 +128,7 @@ function PostComposer() {
                       ? "bg-primary-container text-on-primary-container"
                       : "text-on-surface-variant hover:bg-surface-container-low"
                   }`}
-                  aria-label={intl.formatMessage(
-                    { id: "social.feed.composer.type" },
-                    { type },
-                  )}
+                  aria-label={POST_TYPE_LABELS[type]}
                   aria-pressed={postType === type}
                 >
                   <Icon icon={TypeIcon} size="sm" />
@@ -179,7 +186,7 @@ function PostCard({ post }: { post: PostResponse }) {
   }, [editContent, updatePost]);
 
   const TypeIcon = POST_TYPE_ICONS[post.post_type] ?? MessageCircle;
-  const timeAgo = formatTimeAgo(post.created_at, intl);
+  const timeAgo = formatTimeAgo(post.created_at);
 
   return (
     <Card className="p-card-padding">
@@ -427,35 +434,3 @@ export function Feed() {
   );
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function formatTimeAgo(
-  dateStr: string,
-  intl: ReturnType<typeof useIntl>,
-): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1)
-    return intl.formatMessage({ id: "common.time.justNow" });
-  if (diffMins < 60)
-    return intl.formatMessage(
-      { id: "common.time.minutesAgo" },
-      { count: diffMins },
-    );
-  if (diffHours < 24)
-    return intl.formatMessage(
-      { id: "common.time.hoursAgo" },
-      { count: diffHours },
-    );
-  if (diffDays < 7)
-    return intl.formatMessage(
-      { id: "common.time.daysAgo" },
-      { count: diffDays },
-    );
-  return date.toLocaleDateString();
-}

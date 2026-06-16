@@ -84,6 +84,7 @@ export function DropdownMenu({ trigger, children, className = "" }: DropdownMenu
         <div
           ref={menuRef}
           role="menu"
+          onClick={() => setOpen(false)}
           className="absolute right-0 top-full z-popover mt-1 min-w-48 rounded-lg bg-surface-container-lowest py-1 shadow-ambient-md"
         >
           {children}

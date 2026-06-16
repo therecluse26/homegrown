@@ -2,6 +2,7 @@ package iam
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -29,6 +30,38 @@ func (s CoppaConsentStatus) CanCreateStudents() bool {
 }
 
 // ─── Custom DB Types ──────────────────────────────────────────────────────────
+
+// JSONStringMap is a custom type for PostgreSQL JSONB columns holding string key-value pairs.
+// Implements database/sql.Scanner and driver.Valuer without external dependencies.
+type JSONStringMap map[string]string
+
+func (m JSONStringMap) Value() (driver.Value, error) {
+	if m == nil {
+		return "{}", nil
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (m *JSONStringMap) Scan(src interface{}) error {
+	if src == nil {
+		*m = JSONStringMap{}
+		return nil
+	}
+	var b []byte
+	switch v := src.(type) {
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return fmt.Errorf("JSONStringMap.Scan: unsupported type %T", src)
+	}
+	return json.Unmarshal(b, m)
+}
 
 // SlugArray is a custom type for PostgreSQL TEXT[] columns holding methodology slugs.
 // Implements database/sql.Scanner and driver.Valuer without requiring lib/pq. [Plan §2]
@@ -170,14 +203,15 @@ func (m *ParentModel) toDomain() *Parent {
 
 // StudentModel is the GORM model for the iam_students table.
 type StudentModel struct {
-	ID                      uuid.UUID `gorm:"type:uuid;primaryKey"`
-	FamilyID                uuid.UUID `gorm:"type:uuid;not null"`
-	DisplayName             string    `gorm:"not null"`
+	ID                      uuid.UUID     `gorm:"type:uuid;primaryKey"`
+	FamilyID                uuid.UUID     `gorm:"type:uuid;not null"`
+	DisplayName             string        `gorm:"not null"`
 	BirthYear               *int16
 	GradeLevel              *string
 	MethodologyOverrideSlug *string
-	CreatedAt               time.Time `gorm:"not null"`
-	UpdatedAt               time.Time `gorm:"not null"`
+	CustomAttributes        JSONStringMap `gorm:"type:jsonb;not null;default:'{}'"`
+	CreatedAt               time.Time     `gorm:"not null"`
+	UpdatedAt               time.Time     `gorm:"not null"`
 }
 
 func (StudentModel) TableName() string { return "iam_students" }
@@ -201,6 +235,7 @@ func (m *StudentModel) toDomain() *Student {
 		BirthYear:               m.BirthYear,
 		GradeLevel:              m.GradeLevel,
 		MethodologyOverrideSlug: m.MethodologyOverrideSlug,
+		CustomAttributes:        map[string]string(m.CustomAttributes),
 		CreatedAt:               m.CreatedAt,
 		UpdatedAt:               m.UpdatedAt,
 	}
@@ -273,6 +308,7 @@ type Student struct {
 	BirthYear               *int16
 	GradeLevel              *string
 	MethodologyOverrideSlug *string
+	CustomAttributes        map[string]string
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
 }
@@ -323,6 +359,7 @@ type CreateStudent struct {
 	BirthYear               *int16
 	GradeLevel              *string
 	MethodologyOverrideSlug *string
+	CustomAttributes        map[string]string
 }
 
 // UpdateFamily is the command type for FamilyRepository.Update.
@@ -343,25 +380,28 @@ type UpdateStudent struct {
 	DisplayName             *string
 	BirthYear               *int16
 	GradeLevel              *string
-	MethodologyOverrideSlug **string // nil = don't change; non-nil pointing to nil = clear
+	MethodologyOverrideSlug **string           // nil = don't change; non-nil pointing to nil = clear
+	CustomAttributes        *map[string]string // nil = don't change; non-nil (even empty) = replace
 }
 
 // ─── API Request Types ────────────────────────────────────────────────────────
 
 // CreateStudentCommand is the request body for POST /v1/families/students. [§4.3]
 type CreateStudentCommand struct {
-	DisplayName             string  `json:"display_name"                    validate:"required,min=1,max=100"`
-	BirthYear               *int16  `json:"birth_year,omitempty"            validate:"omitempty,min=2000,max=2030"`
-	GradeLevel              *string `json:"grade_level,omitempty"           validate:"omitempty,max=20"`
-	MethodologyOverrideSlug *string `json:"methodology_override_slug,omitempty"`
+	DisplayName             string            `json:"display_name"                    validate:"required,min=1,max=100"`
+	BirthYear               *int16            `json:"birth_year,omitempty"            validate:"omitempty,min=2000,max=2030"`
+	GradeLevel              *string           `json:"grade_level,omitempty"           validate:"omitempty,max=20"`
+	MethodologyOverrideSlug *string           `json:"methodology_override_slug,omitempty"`
+	CustomAttributes        map[string]string `json:"custom_attributes,omitempty"`
 }
 
 // UpdateStudentCommand is the request body for PATCH /v1/families/students/:id. [§4.3]
 type UpdateStudentCommand struct {
-	DisplayName             *string  `json:"display_name,omitempty"              validate:"omitempty,min=1,max=100"`
-	BirthYear               *int16   `json:"birth_year,omitempty"               validate:"omitempty,min=2000,max=2030"`
-	GradeLevel              *string  `json:"grade_level,omitempty"              validate:"omitempty,max=20"`
-	MethodologyOverrideSlug **string `json:"methodology_override_slug,omitempty"`
+	DisplayName             *string            `json:"display_name,omitempty"              validate:"omitempty,min=1,max=100"`
+	BirthYear               *int16             `json:"birth_year,omitempty"               validate:"omitempty,min=2000,max=2030"`
+	GradeLevel              *string            `json:"grade_level,omitempty"              validate:"omitempty,max=20"`
+	MethodologyOverrideSlug **string           `json:"methodology_override_slug,omitempty"`
+	CustomAttributes        *map[string]string `json:"custom_attributes,omitempty"`
 }
 
 // UpdateFamilyCommand is the request body for PATCH /v1/families/profile. [§4.3]
@@ -431,13 +471,14 @@ type ParentSummary struct {
 
 // StudentResponse is returned by student CRUD endpoints. [§4.3]
 type StudentResponse struct {
-	ID                      uuid.UUID `json:"id"`
-	DisplayName             string    `json:"display_name"`
-	BirthYear               *int16    `json:"birth_year,omitempty"`
-	GradeLevel              *string   `json:"grade_level,omitempty"`
-	MethodologyOverrideSlug *string   `json:"methodology_override_slug,omitempty"`
-	CreatedAt               time.Time `json:"created_at"`
-	UpdatedAt               time.Time `json:"updated_at"`
+	ID                      uuid.UUID         `json:"id"`
+	DisplayName             string            `json:"display_name"`
+	BirthYear               *int16            `json:"birth_year,omitempty"`
+	GradeLevel              *string           `json:"grade_level,omitempty"`
+	MethodologyOverrideSlug *string           `json:"methodology_override_slug,omitempty"`
+	CustomAttributes        map[string]string `json:"custom_attributes"`
+	CreatedAt               time.Time         `json:"created_at"`
+	UpdatedAt               time.Time         `json:"updated_at"`
 }
 
 // ConsentStatusResponse is returned by GET/POST /v1/families/consent. [§4.3]

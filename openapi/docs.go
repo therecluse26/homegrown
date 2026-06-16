@@ -20731,6 +20731,12 @@ const docTemplate = `{
                     "maximum": 2030,
                     "minimum": 2000
                 },
+                "custom_attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "display_name": {
                     "type": "string",
                     "maxLength": 100,
@@ -20876,6 +20882,12 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "custom_attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "display_name": {
                     "type": "string"
                 },
@@ -21001,6 +21013,12 @@ const docTemplate = `{
                     "type": "integer",
                     "maximum": 2030,
                     "minimum": 2000
+                },
+                "custom_attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
                 "display_name": {
                     "type": "string",

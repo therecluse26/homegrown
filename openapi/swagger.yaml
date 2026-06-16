@@ -1656,6 +1656,10 @@ definitions:
         maximum: 2030
         minimum: 2000
         type: integer
+      custom_attributes:
+        additionalProperties:
+          type: string
+        type: object
       display_name:
         maxLength: 100
         minLength: 1
@@ -1755,6 +1759,10 @@ definitions:
         type: integer
       created_at:
         type: string
+      custom_attributes:
+        additionalProperties:
+          type: string
+        type: object
       display_name:
         type: string
       grade_level:
@@ -1839,6 +1847,10 @@ definitions:
         maximum: 2030
         minimum: 2000
         type: integer
+      custom_attributes:
+        additionalProperties:
+          type: string
+        type: object
       display_name:
         maxLength: 100
         minLength: 1

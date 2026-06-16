@@ -160,7 +160,7 @@ function Header() {
         <CartBadge />
         <NotificationBell />
         <div className="type-label-md text-on-surface-variant">
-          {user?.display_name ?? ""}
+          {user?.family_display_name ?? user?.display_name ?? ""}
         </div>
         <button
           onClick={handleLogout}
@@ -208,7 +208,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
               {children ?? <Outlet />}
             </Suspense>
           </main>
-          <div className="h-20 lg:h-8" />
+          <div className="h-16 lg:h-8 safe-area-pb" />
         </div>
       </div>
     </>

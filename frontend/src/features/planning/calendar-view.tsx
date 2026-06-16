@@ -67,12 +67,13 @@ function formatTime(raw: string): string {
 
 const SOURCE_STYLES: Record<
   CalendarSource,
-  { bg: string; text: string; border: string; icon: typeof BookOpen; labelId: string }
+  { bg: string; text: string; border: string; dot: string; icon: typeof BookOpen; labelId: string }
 > = {
   activities: {
     bg: "bg-tertiary-container",
     text: "text-on-tertiary-container",
     border: "border-tertiary",
+    dot: "bg-tertiary",
     icon: BookOpen,
     labelId: "planning.calendar.source.activities",
   },
@@ -80,6 +81,7 @@ const SOURCE_STYLES: Record<
     bg: "bg-primary-container",
     text: "text-on-primary-container",
     border: "border-primary",
+    dot: "bg-primary",
     icon: CalendarDays,
     labelId: "planning.calendar.source.events",
   },
@@ -87,6 +89,7 @@ const SOURCE_STYLES: Record<
     bg: "bg-secondary-container",
     text: "text-on-secondary-container",
     border: "border-secondary",
+    dot: "bg-secondary",
     icon: CheckCircle2,
     labelId: "planning.calendar.source.attendance",
   },
@@ -94,10 +97,26 @@ const SOURCE_STYLES: Record<
     bg: "bg-surface-container-high",
     text: "text-on-surface",
     border: "border-outline-variant",
+    dot: "bg-outline",
     icon: Calendar,
     labelId: "planning.calendar.source.schedule",
   },
 };
+
+// ─── Item navigation helper ──────────────────────────────────────────────────
+
+function getItemPath(item: CalendarItem): string | null {
+  switch (item.source) {
+    case "events":
+      return `/events/${item.id}`;
+    case "activities":
+      return `/learning/activities/${item.id}`;
+    case "schedule":
+      return `/schedule/${item.id}/edit`;
+    case "attendance":
+      return null; // no per-record detail page
+  }
+}
 
 // ─── Calendar item component ────────────────────────────────────────────────
 
@@ -109,12 +128,11 @@ function CalendarItemCard({
   compact?: boolean;
 }) {
   const style = SOURCE_STYLES[item.source];
+  const to = getItemPath(item);
+  const baseClass = `flex items-center gap-1.5 px-1.5 py-1 rounded-radius-sm ${style.bg} ${style.text} type-label-sm`;
 
-  return (
-    <div
-      title={item.title}
-      className={`flex items-center gap-1.5 px-1.5 py-1 rounded-radius-sm ${style.bg} ${style.text} type-label-sm`}
-    >
+  const inner = (
+    <>
       <Icon icon={style.icon} size="xs" className="shrink-0" />
       <span className="truncate flex-1 min-w-0">{item.title}</span>
       {!compact && item.start_time && (
@@ -123,6 +141,24 @@ function CalendarItemCard({
       {item.is_completed && (
         <Icon icon={CheckCircle2} size="xs" className="shrink-0 opacity-60" />
       )}
+    </>
+  );
+
+  if (to) {
+    return (
+      <RouterLink
+        to={to}
+        title={item.title}
+        className={`${baseClass} hover:opacity-90 transition-opacity`}
+      >
+        {inner}
+      </RouterLink>
+    );
+  }
+
+  return (
+    <div title={item.title} className={baseClass}>
+      {inner}
     </div>
   );
 }
@@ -235,11 +271,9 @@ function DayDetailView({
                 <Badge variant="secondary">{sourceItems.length}</Badge>
               </h3>
               <div className="space-y-2">
-                {sourceItems.map((item) => (
-                  <Card
-                    key={`${item.source}-${item.id}`}
-                    className={`p-card-padding border-l-4 ${style.border}`}
-                  >
+                {sourceItems.map((item) => {
+                  const to = getItemPath(item);
+                  const cardContent = (
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <p className="type-title-sm text-on-surface">
@@ -272,8 +306,24 @@ function DayDetailView({
                         )}
                       </div>
                     </div>
-                  </Card>
-                ))}
+                  );
+
+                  if (to) {
+                    return (
+                      <RouterLink key={`${item.source}-${item.id}`} to={to} className="block">
+                        <Card className={`p-card-padding border-l-4 ${style.border} hover:bg-surface-container-low transition-colors`}>
+                          {cardContent}
+                        </Card>
+                      </RouterLink>
+                    );
+                  }
+
+                  return (
+                    <Card key={`${item.source}-${item.id}`} className={`p-card-padding border-l-4 ${style.border}`}>
+                      {cardContent}
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           );
@@ -292,7 +342,7 @@ function ColorLegend() {
         ([source, style]) => (
           <div key={source} className="flex items-center gap-1.5">
             <span
-              className={`w-3 h-3 rounded-full ${style.bg}`}
+              className={`w-3 h-3 rounded-full ${style.dot}`}
               aria-hidden
             />
             <span className="type-label-sm text-on-surface-variant">

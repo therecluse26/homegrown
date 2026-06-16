@@ -276,6 +276,7 @@ func (r *PgStudentRepository) Create(ctx context.Context, scope *shared.FamilySc
 		BirthYear:               cmd.BirthYear,
 		GradeLevel:              cmd.GradeLevel,
 		MethodologyOverrideSlug: cmd.MethodologyOverrideSlug,
+		CustomAttributes:        JSONStringMap(cmd.CustomAttributes),
 	}
 	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -323,6 +324,9 @@ func (r *PgStudentRepository) Update(ctx context.Context, scope *shared.FamilySc
 	if cmd.MethodologyOverrideSlug != nil {
 		// **string: outer nil = don't change; non-nil pointing to nil = clear
 		updates["methodology_override_slug"] = *cmd.MethodologyOverrideSlug
+	}
+	if cmd.CustomAttributes != nil {
+		updates["custom_attributes"] = JSONStringMap(*cmd.CustomAttributes)
 	}
 	if len(updates) == 0 {
 		return r.FindByID(ctx, scope, studentID)

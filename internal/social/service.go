@@ -553,7 +553,7 @@ func (s *socialServiceImpl) CreatePost(ctx context.Context, auth *shared.AuthCon
 		GroupID:     post.GroupID,
 	})
 
-	authorName, _ := s.iam.GetParentDisplayName(ctx, auth.ParentID)
+	authorName, _ := s.iam.GetFamilyDisplayName(ctx, auth.FamilyID)
 	return &PostResponse{
 		ID:            post.ID,
 		FamilyID:      post.FamilyID,
@@ -604,7 +604,7 @@ func (s *socialServiceImpl) UpdatePost(ctx context.Context, auth *shared.AuthCon
 		return nil, err
 	}
 
-	authorName, _ := s.iam.GetParentDisplayName(ctx, auth.ParentID)
+	authorName, _ := s.iam.GetFamilyDisplayName(ctx, auth.FamilyID)
 	return &PostResponse{
 		ID:            updated.ID,
 		FamilyID:      updated.FamilyID,
@@ -699,7 +699,7 @@ func (s *socialServiceImpl) GetPost(ctx context.Context, auth *shared.AuthContex
 		return nil, &SocialError{Err: domain.ErrContentNotVisible}
 	}
 
-	authorName, _ := s.iam.GetParentDisplayName(ctx, post.AuthorParentID)
+	authorName, _ := s.iam.GetFamilyDisplayName(ctx, post.FamilyID)
 	liked, _ := s.likeRepo.Exists(ctx, postID, auth.FamilyID)
 
 	// Embed comments in the detail response. [05-social §8.2]
@@ -711,7 +711,7 @@ func (s *socialServiceImpl) GetPost(ctx context.Context, auth *shared.AuthContex
 	commentByID := make(map[uuid.UUID]*CommentResponse, len(comments))
 	allResponses := make([]CommentResponse, 0, len(comments))
 	for _, c := range comments {
-		cAuthor, _ := s.iam.GetParentDisplayName(ctx, c.AuthorParentID)
+		cAuthor, _ := s.iam.GetFamilyDisplayName(ctx, c.FamilyID)
 		cr := CommentResponse{
 			ID:              c.ID,
 			PostID:          c.PostID,
@@ -817,7 +817,7 @@ func (s *socialServiceImpl) GetFeed(ctx context.Context, auth *shared.AuthContex
 	// Build response.
 	respPosts := make([]PostResponse, len(filtered))
 	for i, p := range filtered {
-		authorName, _ := s.iam.GetParentDisplayName(ctx, p.AuthorParentID)
+		authorName, _ := s.iam.GetFamilyDisplayName(ctx, p.FamilyID)
 		respPosts[i] = PostResponse{
 			ID:            p.ID,
 			FamilyID:      p.FamilyID,
@@ -877,7 +877,7 @@ func (s *socialServiceImpl) CreateComment(ctx context.Context, auth *shared.Auth
 		return nil, err
 	}
 
-	authorName, _ := s.iam.GetParentDisplayName(ctx, auth.ParentID)
+	authorName, _ := s.iam.GetFamilyDisplayName(ctx, auth.FamilyID)
 	return &CommentResponse{
 		ID:              comment.ID,
 		PostID:          comment.PostID,
@@ -912,7 +912,7 @@ func (s *socialServiceImpl) UpdateComment(ctx context.Context, auth *shared.Auth
 		return nil, err
 	}
 
-	authorName, _ := s.iam.GetParentDisplayName(ctx, auth.ParentID)
+	authorName, _ := s.iam.GetFamilyDisplayName(ctx, auth.FamilyID)
 	return &CommentResponse{
 		ID:              comment.ID,
 		PostID:          comment.PostID,
@@ -957,7 +957,7 @@ func (s *socialServiceImpl) ListComments(ctx context.Context, auth *shared.AuthC
 	}
 	results := make([]CommentResponse, len(comments))
 	for i, c := range comments {
-		authorName, _ := s.iam.GetParentDisplayName(ctx, c.AuthorParentID)
+		authorName, _ := s.iam.GetFamilyDisplayName(ctx, c.FamilyID)
 		results[i] = CommentResponse{
 			ID:              c.ID,
 			PostID:          c.PostID,
@@ -1632,7 +1632,7 @@ func (s *socialServiceImpl) ListGroupPosts(ctx context.Context, auth *shared.Aut
 	}
 	results := make([]PostResponse, len(posts))
 	for i, p := range posts {
-		authorName, _ := s.iam.GetParentDisplayName(ctx, p.AuthorParentID)
+		authorName, _ := s.iam.GetFamilyDisplayName(ctx, p.FamilyID)
 		liked, _ := s.likeRepo.Exists(ctx, p.ID, auth.FamilyID)
 		results[i] = PostResponse{
 			ID:            p.ID,

@@ -17,6 +17,8 @@ export function LearnerProfilePage() {
 
   const hasProfile = !!profileQuery.data;
 
+  const customAttrs = Object.entries(student?.custom_attributes ?? {});
+
   if (hasProfile && !retaking) {
     return (
       <div className="max-w-2xl mx-auto py-6 px-4">
@@ -32,6 +34,23 @@ export function LearnerProfilePage() {
             onEditInterests={() => setRetaking(true)}
           />
         </Card>
+        {customAttrs.length > 0 && (
+          <Card className="mt-4">
+            <h2 className="type-title-sm text-on-surface font-semibold mb-3">
+              Custom Attributes
+            </h2>
+            <dl className="flex flex-col gap-2">
+              {customAttrs.map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <dt className="type-label-sm text-on-surface-variant min-w-28 shrink-0">
+                    {k}
+                  </dt>
+                  <dd className="type-body-sm text-on-surface">{String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+        )}
       </div>
     );
   }

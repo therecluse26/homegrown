@@ -22,6 +22,7 @@ import {
   Download,
   Lock,
   Mail,
+  Minus,
   Monitor,
   Pencil,
   Plus,
@@ -231,7 +232,7 @@ function ProfileTab() {
               <FormattedMessage id="settings.profile.tier" />
             </p>
             <Badge variant="secondary">
-              {data?.subscription_tier ?? "free"}
+              {(data?.subscription_tier ?? "free").replace(/^\w/, (c) => c.toUpperCase())}
             </Badge>
           </div>
         </div>
@@ -375,6 +376,7 @@ function StudentsTab() {
     gradeLevel: "",
     methodologyOverride: "",
   });
+  const [editCustomAttrs, setEditCustomAttrs] = useState<{ key: string; value: string }[]>([]);
 
   const students = studentsQuery.data ?? [];
 
@@ -413,11 +415,21 @@ function StudentsTab() {
       gradeLevel: student.grade_level ?? "",
       methodologyOverride: student.methodology_override_slug ?? "",
     });
+    const attrs = student.custom_attributes ?? {};
+    setEditCustomAttrs(
+      Object.entries(attrs).map(([key, value]) => ({ key, value: String(value) })),
+    );
   }
 
   async function handleUpdateStudent(e: React.FormEvent) {
     e.preventDefault();
     if (!editingId) return;
+
+    const customAttrs: Record<string, string> = {};
+    for (const { key, value } of editCustomAttrs) {
+      const k = key.trim();
+      if (k) customAttrs[k] = value;
+    }
 
     await updateStudent.mutateAsync({
       id: editingId,
@@ -427,6 +439,7 @@ function StudentsTab() {
         : undefined,
       grade_level: editForm.gradeLevel || undefined,
       methodology_override_slug: editForm.methodologyOverride || undefined,
+      custom_attributes: customAttrs,
     });
     setEditingId(null);
   }
@@ -627,6 +640,84 @@ function StudentsTab() {
                 )}
               </FormField>
 
+              {/* Custom Attributes */}
+              <div>
+                <p className="type-label-sm text-on-surface-variant mb-2">
+                  <FormattedMessage id="settings.students.customAttributes" />
+                </p>
+                <div className="flex flex-col gap-2">
+                  {editCustomAttrs.map((attr, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <Input
+                        value={attr.key}
+                        onChange={(e) =>
+                          setEditCustomAttrs((prev) =>
+                            prev.map((a, i) =>
+                              i === idx ? { ...a, key: e.target.value } : a,
+                            ),
+                          )
+                        }
+                        placeholder={intl.formatMessage({
+                          id: "settings.students.customAttributes.key",
+                        })}
+                        aria-label={intl.formatMessage(
+                          { id: "settings.students.customAttributes.key.label" },
+                          { n: idx + 1 },
+                        )}
+                        className="flex-1"
+                      />
+                      <Input
+                        value={attr.value}
+                        onChange={(e) =>
+                          setEditCustomAttrs((prev) =>
+                            prev.map((a, i) =>
+                              i === idx ? { ...a, value: e.target.value } : a,
+                            ),
+                          )
+                        }
+                        placeholder={intl.formatMessage({
+                          id: "settings.students.customAttributes.value",
+                        })}
+                        aria-label={intl.formatMessage(
+                          { id: "settings.students.customAttributes.value.label" },
+                          { n: idx + 1 },
+                        )}
+                        className="flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditCustomAttrs((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          )
+                        }
+                        className="shrink-0 p-2 rounded-button text-on-surface-variant hover:text-error hover:bg-error-container transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+                        aria-label={intl.formatMessage({
+                          id: "settings.students.customAttributes.remove",
+                        })}
+                      >
+                        <Icon icon={Minus} size="xs" aria-hidden />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="tertiary"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() =>
+                    setEditCustomAttrs((prev) => [
+                      ...prev,
+                      { key: "", value: "" },
+                    ])
+                  }
+                >
+                  <Icon icon={Plus} size="xs" aria-hidden className="mr-1.5" />
+                  <FormattedMessage id="settings.students.customAttributes.add" />
+                </Button>
+              </div>
+
               {updateStudent.error && (
                 <div
                   role="alert"
@@ -659,7 +750,7 @@ function StudentsTab() {
           </Card>
         ) : (
           <Card key={student.id} className="flex items-center justify-between">
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="type-title-sm text-on-surface font-medium">
                 {student.display_name}
               </p>
@@ -677,6 +768,22 @@ function StudentsTab() {
                   .filter(Boolean)
                   .join(" · ")}
               </p>
+              {Object.keys(student.custom_attributes ?? {}).length > 0 && (
+                <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {Object.entries(student.custom_attributes ?? {}).map(
+                    ([k, v]) => (
+                      <div key={k} className="flex gap-1 items-baseline">
+                        <dt className="type-label-xs text-on-surface-variant">
+                          {k}:
+                        </dt>
+                        <dd className="type-body-sm text-on-surface">
+                          {String(v)}
+                        </dd>
+                      </div>
+                    ),
+                  )}
+                </dl>
+              )}
             </div>
             <div className="flex gap-1">
               <button

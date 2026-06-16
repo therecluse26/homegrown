@@ -21694,6 +21694,9 @@ export interface components {
         };
         "iam.CreateStudentCommand": {
             birth_year?: number;
+            custom_attributes?: {
+                [key: string]: string;
+            };
             display_name: string;
             grade_level?: string;
             methodology_override_slug?: string;
@@ -21737,6 +21740,9 @@ export interface components {
         "iam.StudentResponse": {
             birth_year?: number;
             created_at?: string;
+            custom_attributes?: {
+                [key: string]: string;
+            };
             display_name?: string;
             grade_level?: string;
             id?: string;
@@ -21776,6 +21782,9 @@ export interface components {
         };
         "iam.UpdateStudentCommand": {
             birth_year?: number;
+            custom_attributes?: {
+                [key: string]: string;
+            };
             display_name?: string;
             grade_level?: string;
             methodology_override_slug?: string;

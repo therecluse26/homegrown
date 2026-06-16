@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
 import { useParams, Link as RouterLink, useNavigate } from "react-router";
 import { FormattedMessage, useIntl } from "react-intl";
+import { formatTimeAgo } from "@/lib/date-utils";
+import { useAuthContext } from "@/features/auth/auth-provider";
 import {
   Heart,
   MessageCircle,
@@ -39,10 +41,12 @@ function Comment({
   comment,
   postId,
   depth = 0,
+  myFamilyId,
 }: {
   comment: CommentResponse;
   postId: string;
   depth?: number;
+  myFamilyId?: string;
 }) {
   const intl = useIntl();
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -141,7 +145,7 @@ function Comment({
           </div>
           <div className="flex items-center gap-3 mt-1 type-label-sm text-on-surface-variant">
             <span>
-              {new Date(comment.created_at).toLocaleDateString()}
+              {formatTimeAgo(comment.created_at)}
             </span>
             {depth === 0 && (
               <button
@@ -172,7 +176,9 @@ function Comment({
             >
               <Icon icon={Trash2} size="xs" />
             </button>
-            <ReportButton targetType="comment" targetId={comment.id} />
+            {comment.family_id !== myFamilyId && (
+              <ReportButton targetType="comment" targetId={comment.id} />
+            )}
           </div>
 
           {/* Reply form */}
@@ -213,6 +219,7 @@ function Comment({
               comment={reply}
               postId={postId}
               depth={depth + 1}
+              myFamilyId={myFamilyId}
             />
           ))}
         </div>
@@ -244,6 +251,7 @@ export function PostDetail() {
   const navigate = useNavigate();
   const { postId } = useParams<{ postId: string }>();
   const { data, isPending, error } = usePostDetail(postId);
+  const { user } = useAuthContext();
   const likePost = useLikePost();
   const unlikePost = useUnlikePost();
   const deletePost = useDeletePost();
@@ -266,6 +274,7 @@ export function PostDetail() {
   if (isPending) {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
+        <PageTitle title={intl.formatMessage({ id: "social.post.loading.title", defaultMessage: "Post" })} />
         <Skeleton className="h-8 w-24" />
         <Skeleton className="h-48 w-full rounded-radius-md" />
       </div>
@@ -320,13 +329,7 @@ export function PostDetail() {
               {post.author_name}
             </p>
             <p className="type-label-sm text-on-surface-variant">
-              {new Date(post.created_at).toLocaleDateString(undefined, {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatTimeAgo(post.created_at)}
               {post.is_edited && (
                 <span className="ml-1">
                   (<FormattedMessage id="social.post.edited" />)
@@ -334,7 +337,9 @@ export function PostDetail() {
               )}
             </p>
           </div>
-          <ReportButton targetType="post" targetId={post.id} />
+          {!post.is_mine && (
+            <ReportButton targetType="post" targetId={post.id} />
+          )}
         </div>
 
         {post.content && (
@@ -411,6 +416,7 @@ export function PostDetail() {
               key={comment.id}
               comment={comment}
               postId={post.id}
+              myFamilyId={user?.family_id}
             />
           ))}
       </div>

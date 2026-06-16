@@ -25204,6 +25204,12 @@
                         "maximum": 2030,
                         "minimum": 2000
                     },
+                    "custom_attributes": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
                     "display_name": {
                         "type": "string",
                         "maxLength": 100,
@@ -25349,6 +25355,12 @@
                     "created_at": {
                         "type": "string"
                     },
+                    "custom_attributes": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
                     "display_name": {
                         "type": "string"
                     },
@@ -25474,6 +25486,12 @@
                         "type": "integer",
                         "maximum": 2030,
                         "minimum": 2000
+                    },
+                    "custom_attributes": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
                     },
                     "display_name": {
                         "type": "string",
