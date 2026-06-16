@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, NavLink } from "react-router";
 import {
   UserPlus,
   MessageCircle,
   UserMinus,
   Search,
+  Users,
 } from "lucide-react";
 import {
   Button,
@@ -240,6 +241,28 @@ function DiscoverSection() {
 
 // ─── Friends list page ──────────────────────────────────────────────────────
 
+function SocialSubNav() {
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    `flex items-center gap-2 px-4 py-2 rounded-radius-button type-label-md transition-colors duration-[var(--duration-normal)] ${
+      isActive
+        ? "bg-primary text-on-primary"
+        : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+    }`;
+
+  return (
+    <nav aria-label="Social section" className="flex gap-2 mb-6">
+      <NavLink to="/friends" end className={linkClass}>
+        <Users size={16} />
+        <FormattedMessage id="social.nav.friends" defaultMessage="Friends" />
+      </NavLink>
+      <NavLink to="/groups" className={linkClass}>
+        <Users size={16} />
+        <FormattedMessage id="social.nav.groups" defaultMessage="Groups" />
+      </NavLink>
+    </nav>
+  );
+}
+
 export function FriendsList() {
   const intl = useIntl();
   const [searchQuery, setSearchQuery] = useState("");
@@ -253,6 +276,7 @@ export function FriendsList() {
 
   return (
     <div className="max-w-content-narrow mx-auto">
+      <SocialSubNav />
       <PageTitle title={intl.formatMessage({ id: "social.friends.title" })} />
 
       <Tabs
@@ -326,7 +350,7 @@ export function FriendsList() {
           },
           {
             id: "outgoing",
-            label: intl.formatMessage({ id: "social.friends.tabs.outgoing" }),
+            label: `${intl.formatMessage({ id: "social.friends.tabs.outgoing" })} (${outgoing?.length ?? 0})`,
             content: (
               <div className="space-y-3 mt-6">
                 {outgoing && outgoing.length === 0 && (

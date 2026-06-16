@@ -1,5 +1,5 @@
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink, useNavigate } from "react-router";
+import { Link as RouterLink, NavLink, useNavigate } from "react-router";
 import { Users, Globe, Lock, UserPlus, Plus } from "lucide-react";
 import {
   Button,
@@ -104,6 +104,30 @@ function GroupCard({
   );
 }
 
+// ─── Social sub-nav ─────────────────────────────────────────────────────────
+
+function SocialSubNav() {
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    `flex items-center gap-2 px-4 py-2 rounded-radius-button type-label-md transition-colors duration-[var(--duration-normal)] ${
+      isActive
+        ? "bg-primary text-on-primary"
+        : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+    }`;
+
+  return (
+    <nav aria-label="Social section" className="flex gap-2 mb-6">
+      <NavLink to="/friends" end className={linkClass}>
+        <Users size={16} />
+        <FormattedMessage id="social.nav.friends" defaultMessage="Friends" />
+      </NavLink>
+      <NavLink to="/groups" className={linkClass}>
+        <Users size={16} />
+        <FormattedMessage id="social.nav.groups" defaultMessage="Groups" />
+      </NavLink>
+    </nav>
+  );
+}
+
 // ─── Groups list page ───────────────────────────────────────────────────────
 
 export function GroupsList() {
@@ -115,6 +139,7 @@ export function GroupsList() {
 
   return (
     <div className="max-w-content-narrow mx-auto">
+      <SocialSubNav />
       <div className="flex items-center justify-between mb-1">
         <PageTitle title={intl.formatMessage({ id: "social.groups.title" })} />
         <Button variant="primary" size="sm" onClick={() => void navigate("/groups/new")}>
