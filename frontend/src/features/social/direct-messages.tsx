@@ -112,9 +112,13 @@ export function DirectMessages() {
 
       {conversations && conversations.length > 0 && (
         <Card>
-          {conversations.map((conv) => (
-            <ConversationItem key={conv.id} conversation={conv} />
-          ))}
+          <ul role="list">
+            {conversations.map((conv) => (
+              <li key={conv.id}>
+                <ConversationItem conversation={conv} />
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
     </div>

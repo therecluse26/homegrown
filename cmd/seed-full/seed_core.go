@@ -607,6 +607,7 @@ func messageContent(rng *rand.Rand) string {
 func (s *seeder) seedEvents() error {
 	return bypassRLS(s.db, func(tx *gorm.DB) error {
 		s.eventIDs = make([]string, 0, numEvents)
+		s.eventTitles = make([]string, 0, numEvents)
 		s.eventDates = make([]time.Time, 0, numEvents)
 
 		var eventRows [][]any
@@ -617,6 +618,7 @@ func (s *seeder) seedEvents() error {
 			et := eventTemplates[i%len(eventTemplates)]
 			eID := uid(dEvent, i+1)
 			s.eventIDs = append(s.eventIDs, eID)
+			s.eventTitles = append(s.eventTitles, et.Title)
 
 			creatorIdx := s.rng.Intn(len(s.families)-3) + 3
 			cf := s.families[creatorIdx]

@@ -204,6 +204,7 @@ type seeder struct {
 	listingPrices    []int    // parallel to listingIDs: price in cents
 	groupIDs         []string
 	eventIDs         []string
+	eventTitles      []string    // parallel to eventIDs: title of each event
 	eventDates       []time.Time // parallel to eventIDs
 
 	// Purchase tracking: purchaseID → {listingID, familyID}.

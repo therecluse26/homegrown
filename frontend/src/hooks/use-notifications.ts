@@ -7,32 +7,39 @@ import { apiClient } from "@/api/client";
 // once the backend notification endpoints are wired into swag annotations.
 
 export type NotificationType =
-  | "friend_request_received"
+  | "friend_request_sent"
   | "friend_request_accepted"
   | "message_received"
-  | "content_flagged"
   | "event_cancelled"
+  | "methodology_changed"
+  | "onboarding_completed"
+  | "activity_streak"
+  | "milestone_achieved"
+  | "book_completed"
+  | "data_export_ready"
   | "purchase_completed"
-  | "review_received"
+  | "purchase_refunded"
+  | "creator_onboarded"
+  | "content_flagged"
+  | "co_parent_added"
+  | "family_deletion_scheduled"
   | "subscription_created"
+  | "subscription_changed"
   | "subscription_cancelled"
-  | "subscription_renewed"
-  | "streak_milestone"
-  | "learning_milestone"
-  | "attendance_threshold_warning"
+  | "subscription_renewal_upcoming"
   | "payout_completed"
+  | "recommendations_ready"
   | "system";
 
 export interface Notification {
   id: string;
-  type: NotificationType;
+  notification_type: NotificationType;
+  category: string;
   title: string;
   body: string;
-  deep_link?: string;
-  read: boolean;
+  action_url?: string;
+  is_read: boolean;
   created_at: string;
-  /** Optional reference for actionable notifications (e.g. friend request ID) */
-  reference_id?: string;
 }
 
 interface NotificationListResponse {
@@ -94,7 +101,7 @@ export function useMarkRead() {
         (old) => {
           if (!old?.notifications) return old;
           const wasUnread = old.notifications.some(
-            (n) => n.id === id && !n.read,
+            (n) => n.id === id && !n.is_read,
           );
           return {
             ...old,
@@ -102,7 +109,7 @@ export function useMarkRead() {
               ? Math.max(0, old.unread_count - 1)
               : old.unread_count,
             notifications: old.notifications.map((n) =>
-              n.id === id ? { ...n, read: true } : n,
+              n.id === id ? { ...n, is_read: true } : n,
             ),
           };
         },
@@ -146,7 +153,7 @@ export function useMarkAllRead() {
             unread_count: 0,
             notifications: old.notifications.map((n) => ({
               ...n,
-              read: true,
+              is_read: true,
             })),
           };
         },

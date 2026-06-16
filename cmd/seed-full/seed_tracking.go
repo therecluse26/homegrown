@@ -519,6 +519,33 @@ func (s *seeder) seedScheduleItems() error {
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 
+// enrichNotif injects subject-specific context into notification title/body
+// for types that have entity names available (student, event, book).
+func (s *seeder) enrichNotif(nt notifTemplate, f family) (title, body string) {
+	title, body = nt.Title, nt.Body
+	switch nt.Type {
+	case "milestone_achieved":
+		if len(f.Students) > 0 {
+			st := f.Students[s.rng.Intn(len(f.Students))]
+			title = st.Name + " reached a new milestone!"
+			body = st.Name + " has reached a new learning milestone. Check their progress dashboard."
+		}
+	case "book_completed":
+		if len(f.Students) > 0 {
+			st := f.Students[s.rng.Intn(len(f.Students))]
+			title = st.Name + " finished a book!"
+			body = "Congratulations to " + st.Name + " for finishing a new book! View their reading log."
+		}
+	case "event_cancelled":
+		if len(s.eventTitles) > 0 {
+			et := s.eventTitles[s.rng.Intn(len(s.eventTitles))]
+			title = "'" + et + "' Cancelled"
+			body = "'" + et + "' has been cancelled. Check your events calendar for updates."
+		}
+	}
+	return title, body
+}
+
 func (s *seeder) seedNotifications() error {
 	return bypassRLS(s.db, func(tx *gorm.DB) error {
 		var rows [][]any
@@ -532,24 +559,27 @@ func (s *seeder) seedNotifications() error {
 			for j := 0; j < numNotifs; j++ {
 				seq++
 				nt := notifTemplates[s.rng.Intn(len(notifTemplates))]
+				title, body := s.enrichNotif(nt, f)
 				created := randomDate(s.rng, f.CreatedAt, s.now)
 				isRead := s.rng.Float64() < 0.6
 
 				rows = append(rows, []any{
 					uid(dNotif, seq), f.ID, nt.Type, nt.Category,
-					nt.Title, nt.Body, "", "{}", isRead, created,
+					title, body, "", "{}", isRead, created,
 				})
 			}
 		}
 
 		// Extra notifications for seed family (rich inbox).
+		seedFam := family{Students: []student{{Name: "Emma"}, {Name: "Oliver"}}}
 		for j := 0; j < 15; j++ {
 			seq++
 			nt := notifTemplates[s.rng.Intn(len(notifTemplates))]
+			title, body := s.enrichNotif(nt, seedFam)
 			created := randomDate(s.rng, s.now.AddDate(0, -1, 0), s.now)
 			rows = append(rows, []any{
 				uid(dNotif, seq), existSeedFamilyID, nt.Type, nt.Category,
-				nt.Title, nt.Body, "", "{}", j > 5, created,
+				title, body, "", "{}", j > 5, created,
 			})
 		}
 

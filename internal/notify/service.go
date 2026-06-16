@@ -506,7 +506,7 @@ func (s *NotificationServiceImpl) HandleEventCancelled(ctx context.Context, even
 			FamilyID:         familyID,
 			NotificationType: TypeEventCancelled,
 			Title:            fmt.Sprintf("'%s' has been cancelled", event.Title),
-			Body:             "An event you were attending has been cancelled",
+			Body:             fmt.Sprintf("'%s' has been cancelled. Check your events calendar for updates.", event.Title),
 			ActionURL:        strPtr("/events"),
 			Metadata: map[string]any{
 				"source_event_id": event.EventID.String(),
@@ -765,7 +765,7 @@ func (s *NotificationServiceImpl) HandleMilestoneAchieved(ctx context.Context, e
 		FamilyID:         event.FamilyID,
 		NotificationType: TypeMilestoneAchieved,
 		Title:            fmt.Sprintf("%s achieved: %s", event.StudentName, event.Description),
-		Body:             event.Description,
+		Body:             fmt.Sprintf("%s reached a new milestone: %s", event.StudentName, event.Description),
 		ActionURL:        strPtr("/dashboard"),
 		Metadata: map[string]any{
 			"source_event_id": fmt.Sprintf("milestone:%s:%s", event.StudentID, event.Description),

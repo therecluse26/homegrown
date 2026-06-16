@@ -202,6 +202,9 @@ export function useUpdateReadingProgress(studentId: string) {
       void qc.invalidateQueries({
         queryKey: ["learning", "progress", studentId],
       });
+      void qc.invalidateQueries({
+        queryKey: ["learning", "reading-lists"],
+      });
     },
   });
 }
