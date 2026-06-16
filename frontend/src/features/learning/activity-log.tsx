@@ -16,6 +16,7 @@ import { SubjectPicker } from "@/components/common/subject-picker";
 import { useStudents } from "@/hooks/use-family";
 import { useActivityLog, useLogActivity } from "@/hooks/use-activities";
 import { useMethodologyContext } from "@/features/auth/methodology-provider";
+import { useSubjectNameResolver } from "@/hooks/use-subjects";
 import { parseLocalDate } from "@/lib/date-utils";
 
 // ─── Add activity form ──────────────────────────────────────────────────────
@@ -176,6 +177,7 @@ export function ActivityLog() {
   const [searchParams] = useSearchParams();
   const { data: students, isPending: studentsLoading } = useStudents();
   const { toolLabel } = useMethodologyContext();
+  const slugToName = useSubjectNameResolver();
   const pageTitle = toolLabel("activities", intl.formatMessage({ id: "activityLog.title" }));
 
   useEffect(() => {
@@ -401,7 +403,7 @@ export function ActivityLog() {
                           key={tag}
                           className="px-2 py-0.5 bg-primary-container text-on-primary-container type-label-sm rounded-full"
                         >
-                          {tag}
+                          {slugToName(tag)}
                         </span>
                       ))}
                     </div>

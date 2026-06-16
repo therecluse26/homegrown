@@ -21164,6 +21164,9 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "metadata": {
+                    "type": "object"
+                },
                 "methodology_id": {
                     "type": "string"
                 },
@@ -21912,6 +21915,9 @@ const docTemplate = `{
                 },
                 "duration_minutes": {
                     "type": "integer"
+                },
+                "metadata": {
+                    "type": "object"
                 },
                 "methodology_id": {
                     "type": "string"
@@ -22928,6 +22934,9 @@ const docTemplate = `{
                 },
                 "duration_minutes": {
                     "type": "integer"
+                },
+                "metadata": {
+                    "type": "object"
                 },
                 "subject_tags": {
                     "type": "array",
@@ -24137,7 +24146,14 @@ const docTemplate = `{
                 "checkout_url": {
                     "type": "string"
                 },
+                "client_secret": {
+                    "description": "ClientSecret is the Hyperswitch client secret for SDK-based embedded checkout.\nEmpty when the payment provider is not configured.",
+                    "type": "string"
+                },
                 "payment_session_id": {
+                    "type": "string"
+                },
+                "publishable_key": {
                     "type": "string"
                 }
             }

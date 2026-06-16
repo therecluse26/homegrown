@@ -2114,6 +2114,7 @@
   "activityNew.save": "Save Activity",
 
   "activityDetail.backToActivities": "Back to activities",
+  "activityDetail.student": "Student",
   "activityDetail.date": "Date",
   "activityDetail.duration": "Duration",
   "activityDetail.minutes": "min",

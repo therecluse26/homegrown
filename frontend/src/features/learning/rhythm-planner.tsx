@@ -189,18 +189,14 @@ export function RhythmPlanner() {
       return `${b.startTime}–${b.endTime}: ${b.activityName || catLabel} (${catLabel})`;
     });
 
-    const descParts: string[] = [
-      templateName ? `Template: ${templateName}` : "",
-      `Week of: ${weekStartDate}`,
-      `Day: ${dayLabel}`,
-      "",
-      ...blockLines,
-    ].filter(part => part !== undefined);
+    const metadata: Record<string, string> = { Day: dayLabel, "Week of": weekStartDate };
+    if (templateName) metadata.Template = templateName;
 
     logActivity.mutate(
       {
         title: `Rhythm Plan: ${dayLabel}${templateName ? ` — ${templateName}` : ""}`,
-        description: descParts.join("\n"),
+        description: blockLines.length > 0 ? blockLines.join("\n") : undefined,
+        metadata,
         subject_tags: [],
         tool_id: "rhythm-planner",
         activity_date: weekStartDate ? `${weekStartDate}T00:00:00Z` : undefined,

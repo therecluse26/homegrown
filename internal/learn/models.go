@@ -316,6 +316,7 @@ type ActivityLogModel struct {
 	StudentID       uuid.UUID       `gorm:"type:uuid;not null"`
 	Title           string          `gorm:"not null"`
 	Description     *string         `gorm:""`
+	Metadata        json.RawMessage `gorm:"type:jsonb;not null;default:'{}'"`
 	SubjectTags     StringArray     `gorm:"type:text[];not null;default:'{}'"`
 	ContentID       *uuid.UUID      `gorm:"type:uuid"`
 	MethodologyID   *uuid.UUID      `gorm:"type:uuid"`
@@ -866,6 +867,7 @@ type CreateArtifactLinkCommand struct {
 type LogActivityCommand struct {
 	Title           string            `json:"title" validate:"required,min=1,max=500"`
 	Description     *string           `json:"description,omitempty" validate:"omitempty,max=5000"`
+	Metadata        json.RawMessage   `json:"metadata,omitempty" swaggertype:"object"`
 	SubjectTags     []string          `json:"subject_tags"`
 	ContentID       *uuid.UUID        `json:"content_id,omitempty"`
 	MethodologyID   *uuid.UUID        `json:"methodology_id,omitempty"`
@@ -879,6 +881,7 @@ type LogActivityCommand struct {
 type UpdateActivityLogCommand struct {
 	Title           *string            `json:"title,omitempty" validate:"omitempty,min=1,max=500"`
 	Description     *string            `json:"description,omitempty" validate:"omitempty,max=5000"`
+	Metadata        json.RawMessage    `json:"metadata,omitempty" swaggertype:"object"`
 	SubjectTags     *[]string          `json:"subject_tags,omitempty"`
 	DurationMinutes *int16             `json:"duration_minutes,omitempty"`
 	Attachments     *[]AttachmentInput `json:"attachments,omitempty"`
@@ -1535,6 +1538,7 @@ type ActivityLogResponse struct {
 	StudentID       uuid.UUID         `json:"student_id"`
 	Title           string            `json:"title"`
 	Description     *string           `json:"description,omitempty"`
+	Metadata        json.RawMessage   `json:"metadata" swaggertype:"object"`
 	SubjectTags     []string          `json:"subject_tags"`
 	ContentID       *uuid.UUID        `json:"content_id,omitempty"`
 	ContentTitle    *string           `json:"content_title,omitempty"`

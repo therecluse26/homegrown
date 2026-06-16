@@ -44,6 +44,7 @@ export interface ActivityLogResponse {
   student_id: string;
   title: string;
   description?: string;
+  metadata: Record<string, string>;
   subject_tags: string[];
   content_id?: string;
   content_title?: string;
@@ -172,6 +173,7 @@ export function useLogActivity(studentId: string) {
     mutationFn: (cmd: {
       title: string;
       description?: string;
+      metadata?: Record<string, string>;
       subject_tags?: string[];
       content_id?: string;
       methodology_id?: string;
@@ -205,6 +207,7 @@ export function useUpdateActivityLog(studentId: string) {
       id: string;
       title?: string;
       description?: string;
+      metadata?: Record<string, string>;
       subject_tags?: string[];
       duration_minutes?: number;
       attachments?: AttachmentInput[];

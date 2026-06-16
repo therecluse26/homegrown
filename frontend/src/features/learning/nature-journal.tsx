@@ -93,19 +93,19 @@ export function NatureJournal() {
     const obsTypeLabel = intl.formatMessage({ id: OBSERVATION_TYPES.find(t => t.value === observationType)?.labelId ?? "" });
     const weatherLabel = intl.formatMessage({ id: WEATHER_CONDITIONS.find(w => w.value === weather)?.labelId ?? "" });
 
-    const descriptionParts: string[] = [
-      `Type: ${obsTypeLabel}`,
-      `Weather: ${weatherLabel}${temperature ? ` · ${temperature}` : ""}`,
-      location ? `Location: ${location}` : "",
-      species ? `Observed: ${species}` : "",
-      observations,
-      photoFiles.length > 0 ? `Photos: ${photoFiles.map(f => f.name).join(", ")}` : "",
-    ].filter(Boolean);
+    const metadata: Record<string, string> = {
+      Type: obsTypeLabel,
+      Weather: `${weatherLabel}${temperature ? ` · ${temperature}` : ""}`,
+    };
+    if (location) metadata.Location = location;
+    if (species) metadata.Observed = species;
+    if (photoFiles.length > 0) metadata.Photos = photoFiles.map(f => f.name).join(", ");
 
     logActivity.mutate(
       {
         title: `Nature Journal: ${obsTypeLabel}${species ? ` — ${species}` : ""}`,
-        description: descriptionParts.join("\n"),
+        description: observations.trim() || undefined,
+        metadata,
         subject_tags: subjectTags.length > 0 ? subjectTags : ["science"],
         tool_id: "nature-journal",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,

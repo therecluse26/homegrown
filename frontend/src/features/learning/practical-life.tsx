@@ -147,16 +147,13 @@ export function PracticalLife() {
     const categoryLabel = intl.formatMessage({ id: LIFE_SKILL_CATEGORIES.find(c => c.value === category)?.labelId ?? "" });
     const masteryLabel = intl.formatMessage({ id: MASTERY_LEVELS.find(m => m.value === masteryLevel)?.labelId ?? "" });
 
-    const descParts: string[] = [
-      `Category: ${categoryLabel}`,
-      `Mastery level: ${masteryLabel}`,
-      observations ? `Observations: ${observations}` : "",
-    ].filter(Boolean);
+    const metadata: Record<string, string> = { Category: categoryLabel, "Mastery level": masteryLabel };
 
     logActivity.mutate(
       {
         title: `Practical Life: ${activityName}`,
-        description: descParts.join("\n"),
+        description: observations.trim() || undefined,
+        metadata,
         subject_tags: ["life-skills"],
         tool_id: "practical-life",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,

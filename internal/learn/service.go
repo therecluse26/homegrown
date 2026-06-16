@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -334,6 +335,9 @@ func (s *learningServiceImpl) LogActivity(ctx context.Context, scope *shared.Fam
 
 	actDate := defaultActivityDate(cmd.ActivityDate)
 
+	// Strip any literal quotation marks that tool forms may have added to the title. [B-09]
+	cmd.Title = strings.Trim(cmd.Title, "\"")
+
 	// Enforce domain invariants via aggregate root.
 	if _, err := domain.NewActivity(studentID, cmd.Title, cmd.SubjectTags, actDate, cmd.DurationMinutes); err != nil {
 		return ActivityLogResponse{}, &LearningError{Err: err}
@@ -356,6 +360,11 @@ func (s *learningServiceImpl) LogActivity(ctx context.Context, scope *shared.Fam
 		attachments = json.RawMessage("[]")
 	}
 
+	metadata := cmd.Metadata
+	if len(metadata) == 0 {
+		metadata = json.RawMessage("{}")
+	}
+
 	// Resolve tool_id: accept UUID strings or ignore non-UUID slugs gracefully. [H9]
 	var toolID *uuid.UUID
 	if cmd.ToolSlug != nil {
@@ -370,6 +379,7 @@ func (s *learningServiceImpl) LogActivity(ctx context.Context, scope *shared.Fam
 		StudentID:       studentID,
 		Title:           cmd.Title,
 		Description:     cmd.Description,
+		Metadata:        metadata,
 		SubjectTags:     StringArray(cmd.SubjectTags),
 		ContentID:       cmd.ContentID,
 		MethodologyID:   cmd.MethodologyID,
@@ -411,10 +421,13 @@ func (s *learningServiceImpl) UpdateActivityLog(ctx context.Context, scope *shar
 
 	// Apply updates.
 	if cmd.Title != nil {
-		log.Title = *cmd.Title
+		log.Title = strings.Trim(*cmd.Title, "\"") // B-09: strip literal quote chars
 	}
 	if cmd.Description != nil {
 		log.Description = cmd.Description
+	}
+	if len(cmd.Metadata) > 0 {
+		log.Metadata = cmd.Metadata
 	}
 	if cmd.SubjectTags != nil {
 		log.SubjectTags = StringArray(*cmd.SubjectTags)
@@ -568,11 +581,16 @@ func activityLogToResponse(log *ActivityLogModel) ActivityLogResponse {
 	if tags == nil {
 		tags = []string{}
 	}
+	metadata := log.Metadata
+	if len(metadata) == 0 {
+		metadata = json.RawMessage("{}")
+	}
 	return ActivityLogResponse{
 		ID:              log.ID,
 		StudentID:       log.StudentID,
 		Title:           log.Title,
 		Description:     log.Description,
+		Metadata:        metadata,
 		SubjectTags:     tags,
 		ContentID:       log.ContentID,
 		MethodologyID:   log.MethodologyID,
@@ -876,17 +894,33 @@ func (s *learningServiceImpl) ListReadingLists(ctx context.Context, scope *share
 	}
 	results := make([]ReadingListSummaryResponse, len(lists))
 	for i, l := range lists {
-		// Count items per list.
 		items, listErr := s.readingListRepo.ListItems(ctx, l.ID)
 		if listErr != nil {
 			return nil, listErr
 		}
+		var completedCount int64
+		if l.StudentID != nil && len(items) > 0 {
+			itemIDs := make([]uuid.UUID, len(items))
+			for j, item := range items {
+				itemIDs[j] = item.ReadingItemID
+			}
+			progressRecords, pErr := s.readingProgressRepo.FindByStudentForItems(ctx, scope, *l.StudentID, itemIDs)
+			if pErr != nil {
+				return nil, pErr
+			}
+			for _, p := range progressRecords {
+				if p.Status == domain.ReadingStatusCompleted {
+					completedCount++
+				}
+			}
+		}
 		results[i] = ReadingListSummaryResponse{
-			ID:          l.ID,
-			Name:        l.Name,
-			Description: l.Description,
-			StudentID:   l.StudentID,
-			ItemCount:   int64(len(items)),
+			ID:             l.ID,
+			Name:           l.Name,
+			Description:    l.Description,
+			StudentID:      l.StudentID,
+			ItemCount:      int64(len(items)),
+			CompletedCount: completedCount,
 		}
 	}
 	return results, nil

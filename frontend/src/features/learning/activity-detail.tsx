@@ -20,6 +20,8 @@ import {
   useUpdateActivityLog,
   useDeleteActivityLog,
 } from "@/hooks/use-activities";
+import { useStudents } from "@/hooks/use-family";
+import { useSubjectNameResolver } from "@/hooks/use-subjects";
 
 export function ActivityDetail() {
   const intl = useIntl();
@@ -43,6 +45,13 @@ export function ActivityDetail() {
   const deleteActivity = useDeleteActivityLog(
     activity?.student_id ?? studentId,
   );
+
+  const { data: students } = useStudents();
+  const slugToName = useSubjectNameResolver();
+
+  const studentName =
+    students?.find((s) => s.id === (activity?.student_id ?? studentId))
+      ?.display_name ?? null;
 
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -230,6 +239,14 @@ export function ActivityDetail() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
+            {studentName && (
+              <div>
+                <p className="type-label-sm text-on-surface-variant mb-1">
+                  <FormattedMessage id="activityDetail.student" />
+                </p>
+                <p className="type-body-sm text-on-surface">{studentName}</p>
+              </div>
+            )}
             <div>
               <p className="type-label-sm text-on-surface-variant mb-1">
                 <FormattedMessage id="activityDetail.date" />
@@ -255,10 +272,26 @@ export function ActivityDetail() {
             <div className="flex flex-wrap gap-1.5 mb-4">
               {activity.subject_tags.map((tag) => (
                 <Badge key={tag} variant="secondary">
-                  {tag}
+                  {slugToName(tag)}
                 </Badge>
               ))}
             </div>
+          )}
+
+          {/* Structured tool metadata — rendered as labelled key-value pairs [B-10] */}
+          {Object.keys(activity.metadata ?? {}).length > 0 && (
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mb-4 pt-3 border-t border-outline-variant/10">
+              {Object.entries(activity.metadata).map(([key, value]) =>
+                value ? (
+                  <div key={key}>
+                    <dt className="type-label-sm text-on-surface-variant">
+                      {key}
+                    </dt>
+                    <dd className="type-body-sm text-on-surface">{value}</dd>
+                  </div>
+                ) : null,
+              )}
+            </dl>
           )}
 
           {activity.description && (

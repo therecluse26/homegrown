@@ -21831,6 +21831,7 @@ export interface components {
             description?: string;
             duration_minutes?: number;
             id?: string;
+            metadata?: Record<string, never>;
             methodology_id?: string;
             student_id?: string;
             subject_tags?: string[];
@@ -22037,6 +22038,7 @@ export interface components {
             content_id?: string;
             description?: string;
             duration_minutes?: number;
+            metadata?: Record<string, never>;
             methodology_id?: string;
             subject_tags?: string[];
             title: string;
@@ -22355,6 +22357,7 @@ export interface components {
             attachments?: components["schemas"]["learn.AttachmentInput"][];
             description?: string;
             duration_minutes?: number;
+            metadata?: Record<string, never>;
             subject_tags?: string[];
             title?: string;
         };
@@ -22692,7 +22695,13 @@ export interface components {
         };
         "mkt.CheckoutSessionResponse": {
             checkout_url?: string;
+            /**
+             * @description ClientSecret is the Hyperswitch client secret for SDK-based embedded checkout.
+             *     Empty when the payment provider is not configured.
+             */
+            client_secret?: string;
             payment_session_id?: string;
+            publishable_key?: string;
         };
         "mkt.CreateListingCommand": {
             content_type: string;

@@ -91,17 +91,15 @@ export function ObservationLogs() {
     if (!effectiveStudent || !workChosen.trim()) return;
 
     const concentrationLabel = intl.formatMessage({ id: CONCENTRATION_LEVELS.find(c => c.value === concentration)?.labelId ?? "" });
-    const descParts: string[] = [
-      `Work chosen: ${workChosen}`,
-      materials ? `Materials: ${materials}` : "",
-      `Concentration: ${concentrationLabel}`,
-      observations ? `Observations: ${observations}` : "",
-    ].filter(Boolean);
+
+    const metadata: Record<string, string> = { "Work chosen": workChosen, Concentration: concentrationLabel };
+    if (materials) metadata.Materials = materials;
 
     logActivity.mutate(
       {
         title: `Observation: ${workChosen}`,
-        description: descParts.join("\n"),
+        description: observations.trim() || undefined,
+        metadata,
         subject_tags: subjectTags.length > 0 ? subjectTags : undefined,
         tool_id: "observation-logs",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,
