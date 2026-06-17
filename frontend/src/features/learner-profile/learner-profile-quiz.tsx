@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router";
+import { useParams, Link, useNavigate } from "react-router";
 import { Spinner } from "@/components/ui";
 import { QuizQuestionScreen, type QuizQuestion } from "./quiz-question-screen";
 import { ProfileSummary } from "./profile-summary";
@@ -221,6 +221,7 @@ type Props = {
 export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, standalone = false }: Props) {
   const params = useParams<{ studentId: string }>();
   const studentId = propStudentId ?? params.studentId;
+  const navigate = useNavigate();
   const students = useStudents();
   const student = students.data?.find((s) => s.id === studentId);
   const profileQuery = useProfile(studentId);
@@ -380,6 +381,9 @@ export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, stand
         onSuccess: () => {
           setPhase("summary");
           onComplete?.();
+          if (standalone && studentId) {
+            void navigate(`/students/${studentId}/learner-profile`);
+          }
         },
       },
     );

@@ -529,6 +529,10 @@
   "learning.noStudents.description": "Add students in family settings to start tracking their learning.",
   "learning.addStudent": "Add student",
   "learning.guidance": "Use these tools to track and document your homeschool journey. Each tool adapts to your chosen methodology.",
+  "learning.learnerProfile": "Learning Profile",
+  "learning.learnerProfile.view": "View profile",
+  "learning.learnerProfile.retake": "Retake",
+  "learning.learnerProfile.takeQuiz": "Take the quiz →",
 
   "activityLog.title": "Activity Log",
   "activityLog.add": "Log activity",

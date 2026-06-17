@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import { MethodologyCard } from "@/components/common/methodology-card";
 import {
+  BarChart2,
   Bell,
   CreditCard,
   Download,
@@ -49,6 +50,7 @@ import {
 } from "@/hooks/use-family";
 import { US_STATES, GRADE_LEVELS } from "@/lib/constants";
 import type { components } from "@/api/generated/schema";
+import { useProfile } from "@/features/learner-profile/use-learner-profile";
 
 type MethodologyID = components["schemas"]["method.MethodologyID"];
 
@@ -339,6 +341,24 @@ function MethodologySection({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Per-student learner profile link (needs own component for hook call) ───
+
+function StudentProfileLink({ studentId }: { studentId: string }) {
+  const { data: profile, isLoading } = useProfile(studentId);
+  if (isLoading) return null;
+  return (
+    <RouterLink
+      to={profile
+        ? `/students/${studentId}/learner-profile`
+        : `/students/${studentId}/learner-profile/quiz`}
+      className="inline-flex items-center gap-1.5 type-label-sm text-primary hover:text-primary-container transition-colors"
+    >
+      <Icon icon={BarChart2} size="xs" aria-hidden />
+      {profile ? "Learning Profile" : "Take learning quiz"}
+    </RouterLink>
   );
 }
 
@@ -784,6 +804,9 @@ function StudentsTab() {
                   )}
                 </dl>
               )}
+              <div className="mt-2">
+                <StudentProfileLink studentId={student.id ?? ""} />
+              </div>
             </div>
             <div className="flex gap-1">
               <button

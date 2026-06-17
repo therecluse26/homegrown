@@ -19,6 +19,7 @@ import {
   Lightbulb,
   Scissors,
   Home,
+  BarChart2,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -91,6 +92,7 @@ function StudentProgressCard({
 }) {
   const intl = useIntl();
   const { data: progress, isPending } = useStudentProgress(studentId);
+  const { data: profile, isLoading: profileLoading } = useProfile(studentId);
 
   if (isPending) {
     return (
@@ -140,6 +142,43 @@ function StudentProgressCard({
           value={String(progress?.journal_entries ?? 0)}
         />
       </div>
+      {/* Learning profile entry — persistent per-student, always visible [HOM-132] */}
+      {!profileLoading && (
+        <div className="mt-3 pt-3 border-t border-outline-variant flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-on-surface-variant">
+            <Icon icon={BarChart2} size="sm" aria-hidden />
+            <span className="type-label-md">
+              {intl.formatMessage({ id: "learning.learnerProfile" })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {profile ? (
+              <>
+                <RouterLink
+                  to={`/students/${studentId}/learner-profile`}
+                  className="type-label-sm text-primary hover:text-primary-container transition-colors"
+                >
+                  {intl.formatMessage({ id: "learning.learnerProfile.view" })}
+                </RouterLink>
+                <span className="text-outline-variant" aria-hidden>·</span>
+                <RouterLink
+                  to={`/students/${studentId}/learner-profile/quiz`}
+                  className="type-label-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  {intl.formatMessage({ id: "learning.learnerProfile.retake" })}
+                </RouterLink>
+              </>
+            ) : (
+              <RouterLink
+                to={`/students/${studentId}/learner-profile/quiz`}
+                className="type-label-sm text-primary hover:text-primary-container transition-colors"
+              >
+                {intl.formatMessage({ id: "learning.learnerProfile.takeQuiz" })}
+              </RouterLink>
+            )}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

@@ -30,6 +30,14 @@ export function LearnerProfilePage() {
             studentName={studentName}
             summaryText={profileQuery.data!.summary_text ?? ""}
             interests={profileQuery.data!.interests ?? []}
+            dimensions={{
+              activity_format: profileQuery.data!.activity_format,
+              session_length: profileQuery.data!.session_length,
+              motivation: profileQuery.data!.motivation,
+              solo_collaborative: profileQuery.data!.solo_collaborative,
+              structure: profileQuery.data!.structure,
+              outdoor_kinesthetic: profileQuery.data!.outdoor_kinesthetic,
+            }}
             onRetake={() => setRetaking(true)}
             onEditInterests={() => setRetaking(true)}
           />

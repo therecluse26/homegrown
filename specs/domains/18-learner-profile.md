@@ -248,11 +248,10 @@ The step key per child is `learner_profile_{studentId}` on the frontend side.
 
 ---
 
-## § 10. Frontend (FitBadge Token Correction)
+## § 10. Frontend (FitBadge Token)
 
-The `FitBadge` component uses `bg-primary-container`. Design doc (§8) specifies **tertiary-container**:
-- Correct: `bg-tertiary-container text-on-tertiary-container`
-- This must be fixed before implementation ships.
+The `FitBadge` component (`src/components/ui/fit-badge.tsx`) uses:
+- `bg-tertiary-container text-on-tertiary-container` ✓ (corrected; original was `primary-container`)
 
 ---
 
@@ -277,4 +276,56 @@ LearnerProfile learner_profile.LearnerProfileService
 Register routes in `cmd/server/main.go`:
 ```go
 learner_profile.RegisterHandlers(e, &app, authMiddleware)
+```
+
+---
+
+## § 13. Frontend — ProfileSummary Display Contract
+
+Route: `/students/:studentId/learner-profile`  
+Component tree: `LearnerProfilePage` → `ProfileSummary`
+
+### 13.1 Dimension Display
+
+All 6 dimension scores (`activity_format`, `session_length`, `motivation`, `solo_collaborative`, `structure`, `outdoor_kinesthetic`) are passed from `LearnerProfileResponse` to `ProfileSummary` as a `dimensions` prop. Dimensions with a `null`/`undefined` value are silently omitted (partially-completed quizzes are valid).
+
+Each dimension renders:
+- **Parent-friendly label** (see table below) — not the raw DB column name
+- **Readable description** derived from the 0.0–1.0 value using three threshold buckets (< 0.4 / 0.4–0.65 / ≥ 0.65)
+- **Visual bar** — track `bg-surface-container-high`, fill `bg-primary`, width = `value × 100%`
+- **Pole labels** at each end of the bar
+
+| Column | Label | Low pole | High pole |
+|--------|-------|----------|-----------|
+| `activity_format` | Learning Style | Listens & Reads | Hands-On |
+| `session_length` | Focus Stamina | Short Bursts | Deep Dives |
+| `motivation` | What Drives Learning | Mastery | Discovery |
+| `solo_collaborative` | Learning Together | Works Alone | With Others |
+| `structure` | Guidance Preference | Step-by-Step | Open-Ended |
+| `outdoor_kinesthetic` | Movement & Space | Desk-Based | On the Move |
+
+### 13.2 Interest Formatting
+
+Raw `interests` slugs (e.g., `nature_study`) are formatted client-side to Title Case with underscores replaced by spaces. No server-side mapping is required.
+
+### 13.3 Recommendations Explanation Panel
+
+Below the dimensions, `ProfileSummary` renders a fixed "How this shapes recommendations" panel explaining:
+1. Fit badges on matched content
+2. Ranking boost for profile-aligned recommendations
+3. Immediate effect of retaking the quiz
+
+The panel includes a link to `/recommendations`.
+
+### 13.4 Props Contract
+
+```typescript
+type ProfileSummaryProps = {
+  studentName: string;
+  summaryText: string;           // pre-composed server-side summary
+  interests: string[];            // controlled-vocab slugs
+  dimensions?: Partial<Record<string, number>>;  // 0.0–1.0 per dimension
+  onRetake: () => void;
+  onEditInterests: () => void;
+};
 ```
