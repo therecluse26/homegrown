@@ -15,6 +15,7 @@ import {
   ConfirmationDialog,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
 import {
   useGroupDetail,
   useGroupMembers,
@@ -81,6 +82,11 @@ export function GroupDetail() {
   return (
     <div className="max-w-content-narrow mx-auto">
       <PageTitle title={summary.name} />
+      <Breadcrumb items={[
+        { label: "Community", to: "/friends" },
+        { label: "Groups", to: "/groups" },
+        { label: summary.name },
+      ]} />
 
       {/* Back link */}
       <RouterLink

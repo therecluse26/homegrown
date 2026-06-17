@@ -13,6 +13,7 @@ import {
   Modal,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { ResourceNotFound } from "@/components/common/resource-not-found";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import {
@@ -110,6 +111,11 @@ export function ActivityDetail() {
   return (
     <div className="mx-auto max-w-content-narrow space-y-6">
       <PageTitle title={activity.title} />
+      <Breadcrumb items={[
+        { label: "Learning", to: "/learning" },
+        { label: "Activities", to: "/learning/activities" },
+        { label: activity.title },
+      ]} />
 
       <div className="flex items-center gap-3">
         <RouterLink

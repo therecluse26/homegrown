@@ -24,6 +24,7 @@ import {
   Modal,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { TierGate } from "@/components/common/tier-gate";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -570,6 +571,11 @@ export function PortfolioBuilder() {
           { name: portfolio.title },
         )}
       />
+      <Breadcrumb items={[
+        { label: "Compliance", to: "/compliance" },
+        { label: "Portfolios", to: "/compliance/portfolios" },
+        { label: portfolio.title },
+      ]} />
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">

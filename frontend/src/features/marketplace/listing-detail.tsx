@@ -11,6 +11,7 @@ import {
 } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { PageTitle } from "@/components/common/page-title";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
 import {
   useListingDetail,
   useListingReviews,
@@ -193,6 +194,10 @@ export function ListingDetail() {
   return (
     <div className="max-w-content-narrow mx-auto">
       <PageTitle title={listing.title} />
+      <Breadcrumb items={[
+        { label: "Marketplace", to: "/marketplace" },
+        { label: listing.title },
+      ]} />
 
       <RouterLink
         to="/marketplace"

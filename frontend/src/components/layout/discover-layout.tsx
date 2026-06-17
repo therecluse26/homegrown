@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { Outlet, Link, NavLink } from "react-router";
 import { SkipLink } from "@/components/common";
 import { Button } from "@/components/ui";
+import { useAuthContext } from "@/features/auth/auth-provider";
 
 /**
  * Public layout for discovery pages (quiz, state guides).
@@ -9,6 +10,8 @@ import { Button } from "@/components/ui";
  * and a CTA to register.
  */
 export function DiscoverLayout() {
+  const { user } = useAuthContext();
+
   return (
     <>
       <SkipLink />
@@ -57,11 +60,15 @@ export function DiscoverLayout() {
             </nav>
 
             {/* CTA */}
-            <Link to="/auth/register" tabIndex={-1}>
-              <Button variant="primary" size="sm">
-                Sign Up Free
-              </Button>
-            </Link>
+            {user ? (
+              <Link to="/" tabIndex={-1}>
+                <Button variant="secondary" size="sm">Go to App →</Button>
+              </Link>
+            ) : (
+              <Link to="/auth/register" tabIndex={-1}>
+                <Button variant="primary" size="sm">Sign Up Free</Button>
+              </Link>
+            )}
           </div>
         </header>
 
