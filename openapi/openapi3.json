@@ -9259,6 +9259,14 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    {
+                        "description": "Child UUID — returns fit_score for that child",
+                        "name": "for_student_id",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "responses": {
@@ -11636,6 +11644,14 @@
                     {
                         "description": "Cursor UUID for pagination",
                         "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Child UUID — returns fit_score for that child",
+                        "name": "for_student_id",
                         "in": "query",
                         "schema": {
                             "type": "string"
@@ -17020,6 +17036,14 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    {
+                        "description": "Child UUID — returns fit_score for that child (requires auth)",
+                        "name": "for_student_id",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "responses": {
@@ -17035,6 +17059,16 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/shared.AppError"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -24369,6 +24403,9 @@
                     "description": {
                         "type": "string"
                     },
+                    "download_url": {
+                        "type": "string"
+                    },
                     "expires_at": {
                         "type": "string"
                     },
@@ -24400,6 +24437,9 @@
                         "type": "string"
                     },
                     "student_id": {
+                        "type": "string"
+                    },
+                    "student_name": {
                         "type": "string"
                     },
                     "title": {
@@ -25589,6 +25629,13 @@
                 "properties": {
                     "est_duration_minutes": {
                         "type": "integer"
+                    },
+                    "fit_score": {
+                        "description": "FitScore is the learner-profile fit score for the requested child.\nOmitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]",
+                        "type": "number"
+                    },
+                    "fit_why": {
+                        "type": "string"
                     },
                     "id": {
                         "type": "string"
@@ -26902,6 +26949,13 @@
                         "type": "string"
                     },
                     "cover_image_url": {
+                        "type": "string"
+                    },
+                    "fit_score": {
+                        "description": "FitScore is the learner-profile fit score for the requested child.\nOmitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]",
+                        "type": "number"
+                    },
+                    "fit_why": {
                         "type": "string"
                     },
                     "id": {
@@ -28860,6 +28914,13 @@
                         "type": "string"
                     },
                     "description_preview": {
+                        "type": "string"
+                    },
+                    "fit_score": {
+                        "description": "FitScore is the learner-profile fit score for the requested child (0.0–1.0).\nOmitted when forStudentId is absent, the child has no profile, or the listing\nhas no preference_tags. [18-learner-profile §6]",
+                        "type": "number"
+                    },
+                    "fit_why": {
                         "type": "string"
                     },
                     "id": {

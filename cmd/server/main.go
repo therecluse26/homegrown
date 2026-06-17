@@ -599,6 +599,46 @@ func main() {
 		eventBus, jobs, mediaCfg, db,
 	)
 
+	// ── Step 7e.5: Wire learner_profile:: early (only needs db + iam) ─────────────
+	// Wired here (before mkt) so the learner profile port can be passed to mkt::
+	// for child-scoped fit scoring on marketplace browse. [18-learner-profile §12, §7]
+	lpRepo := learner_profile.NewPgProfileRepository(db)
+	iamForLearnerProfile := learner_profile.NewIamAdapter(
+		func(ctx context.Context, studentID, familyID uuid.UUID) (bool, error) {
+			scope := shared.NewFamilyScopeFromID(familyID)
+			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
+			if err != nil || student == nil {
+				return false, err
+			}
+			return true, nil
+		},
+		iamSvc.GetStudentName,
+	)
+	lpSvc := learner_profile.NewLearnerProfileService(lpRepo, iamForLearnerProfile)
+	learner_profile.RegisterEventHandlers(eventBus, lpSvc)
+
+	// Learner profile port adapter for mkt:: fit scoring.
+	// Family-scope enforcement is provided by FamilyScope passed at call time (RLS). [18-learner-profile §6]
+	mktLearnerProfilePort := mkt.NewLearnerProfileAdapter(
+		func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*mkt.StudentFitProfile, error) {
+			profile, err := lpRepo.FindByStudent(ctx, scope, studentID)
+			if err != nil || profile == nil {
+				return nil, err
+			}
+			return &mkt.StudentFitProfile{
+				ActivityFormat:     profile.ActivityFormat,
+				SessionLength:      profile.SessionLength,
+				Motivation:         profile.Motivation,
+				SoloCollaborative:  profile.SoloCollaborative,
+				Structure:          profile.Structure,
+				OutdoorKinesthetic: profile.OutdoorKinesthetic,
+				Interests:          []string(profile.Interests),
+				Confidence:         profile.Confidence,
+			}, nil
+		},
+		iamSvc.GetStudentName,
+	)
+
 	// ── Step 7f: Wire mkt:: domain ──────────────────────────────────────────────
 	// mkt:: is the marketplace domain — creator onboarding, publisher management,
 	// listing lifecycle, cart/checkout, reviews, and payouts. [07-mkt §7]
@@ -623,6 +663,7 @@ func main() {
 		mktCartRepo, mktPurchaseRepo, mktReviewRepo, mktCuratedSectionRepo,
 		paymentAdapter, cfg.HyperswitchAPIKey, mediaAdapter,
 		eventBus, db,
+		mktLearnerProfilePort,
 	)
 
 	// Register mkt:: event subscriptions
@@ -741,6 +782,26 @@ func main() {
 			func(ctx context.Context, callerID, publisherID uuid.UUID) (bool, error) {
 				return mktSvc.VerifyPublisherMembership(ctx, publisherID, callerID)
 			},
+		),
+		// Learner profile port for fit scoring on learn content browse. [18-learner-profile §6]
+		learn.NewLearnLearnerProfileAdapter(
+			func(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*learn.LearnStudentFitProfile, error) {
+				profile, err := lpRepo.FindByStudent(ctx, scope, studentID)
+				if err != nil || profile == nil {
+					return nil, err
+				}
+				return &learn.LearnStudentFitProfile{
+					ActivityFormat:     profile.ActivityFormat,
+					SessionLength:      profile.SessionLength,
+					Motivation:         profile.Motivation,
+					SoloCollaborative:  profile.SoloCollaborative,
+					Structure:          profile.Structure,
+					OutdoorKinesthetic: profile.OutdoorKinesthetic,
+					Interests:          []string(profile.Interests),
+					Confidence:         profile.Confidence,
+				}, nil
+			},
+			iamSvc.GetStudentName,
 		),
 		eventBus, db,
 	)
@@ -1175,7 +1236,7 @@ func main() {
 		complyAttendanceRepo, complyAssessmentRepo, complyTestRepo,
 		complyPortfolioRepo, complyPortfolioItemRepo, complyTranscriptRepo, complyCourseRepo,
 		iamForComply, learnForComply, discoverForComply, mediaForComply,
-		eventBus,
+		eventBus, jobs,
 	)
 
 	// Register comply:: event subscriptions
@@ -1435,20 +1496,9 @@ func main() {
 	eventBus.Subscribe(reflect.TypeOf(learn.ActivityLogged{}), plan.NewActivityLoggedHandler(planSvc))
 
 	// ── Learner Profile domain wiring [18-learner-profile §12] ───────────────────
-	lpRepo := learner_profile.NewPgProfileRepository(db)
-	iamForLearnerProfile := learner_profile.NewIamAdapter(
-		func(ctx context.Context, studentID, familyID uuid.UUID) (bool, error) {
-			scope := shared.NewFamilyScopeFromID(familyID)
-			student, err := iamSvc.GetStudent(ctx, &scope, studentID)
-			if err != nil || student == nil {
-				return false, err
-			}
-			return true, nil
-		},
-		iamSvc.GetStudentName,
-	)
-	lpSvc := learner_profile.NewLearnerProfileService(lpRepo, iamForLearnerProfile)
-	learner_profile.RegisterEventHandlers(eventBus, lpSvc)
+	// lpRepo, iamForLearnerProfile, lpSvc, and RegisterEventHandlers are already wired
+	// at Step 7e.5 (before mkt) so the fit-score port can be passed to mkt.NewMarketplaceService.
+	// No duplicate declarations needed here.
 
 	// ── Step 8: Wire AppState ─────────────────────────────────────────────────────
 	state := &app.AppState{
@@ -2683,7 +2733,7 @@ func (a *planSocialAdapter) GetEventsForCalendar(ctx context.Context, auth *shar
 }
 
 func (a *planSocialAdapter) GetCoopGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]plan.CoopGroupMember, error) {
-	members, err := a.socialSvc.ListGroupMembers(ctx, auth, groupID)
+	members, err := a.socialSvc.ListGroupMembers(ctx, auth, groupID, "")
 	if err != nil {
 		return nil, fmt.Errorf("plan social adapter: list group members: %w", err)
 	}

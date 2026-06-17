@@ -7524,6 +7524,12 @@ const docTemplate = `{
                         "description": "Cursor UUID for pagination",
                         "name": "cursor",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Child UUID — returns fit_score for that child",
+                        "name": "for_student_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -9401,6 +9407,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Cursor UUID for pagination",
                         "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Child UUID — returns fit_score for that child",
+                        "name": "for_student_id",
                         "in": "query"
                     }
                 ],
@@ -13649,6 +13661,12 @@ const docTemplate = `{
                         "description": "Pagination cursor",
                         "name": "cursor",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Child UUID — returns fit_score for that child (requires auth)",
+                        "name": "for_student_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -13660,6 +13678,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/shared.AppError"
                         }
@@ -19896,6 +19920,9 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "download_url": {
+                    "type": "string"
+                },
                 "expires_at": {
                     "type": "string"
                 },
@@ -19927,6 +19954,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "student_id": {
+                    "type": "string"
+                },
+                "student_name": {
                     "type": "string"
                 },
                 "title": {
@@ -21116,6 +21146,13 @@ const docTemplate = `{
             "properties": {
                 "est_duration_minutes": {
                     "type": "integer"
+                },
+                "fit_score": {
+                    "description": "FitScore is the learner-profile fit score for the requested child.\nOmitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]",
+                    "type": "number"
+                },
+                "fit_why": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -22429,6 +22466,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cover_image_url": {
+                    "type": "string"
+                },
+                "fit_score": {
+                    "description": "FitScore is the learner-profile fit score for the requested child.\nOmitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]",
+                    "type": "number"
+                },
+                "fit_why": {
                     "type": "string"
                 },
                 "id": {
@@ -24387,6 +24431,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "description_preview": {
+                    "type": "string"
+                },
+                "fit_score": {
+                    "description": "FitScore is the learner-profile fit score for the requested child (0.0–1.0).\nOmitted when forStudentId is absent, the child has no profile, or the listing\nhas no preference_tags. [18-learner-profile §6]",
+                    "type": "number"
+                },
+                "fit_why": {
                     "type": "string"
                 },
                 "id": {

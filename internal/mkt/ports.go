@@ -196,6 +196,35 @@ type CuratedSectionRepository interface {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Consumer-Defined Cross-Domain Interfaces [ARCH §4.2]
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// LearnerProfileForMkt is a consumer-defined interface for learner profile access in mkt.
+// Wired in main.go via a function adapter over learner_profile.LearnerProfileService.
+// mkt does not import learner_profile directly (consumer-defined interface pattern).
+type LearnerProfileForMkt interface {
+	// GetStudentFitProfile returns the learner profile data for fit scoring.
+	// Returns nil (no error) when the student has no profile or is not in this family.
+	// Family ownership is enforced via FamilyScope (RLS). [18-learner-profile §6]
+	GetStudentFitProfile(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*StudentFitProfile, error)
+	// GetStudentDisplayName returns the student's display name for why-text substitution.
+	GetStudentDisplayName(ctx context.Context, studentID uuid.UUID) (string, error)
+}
+
+// StudentFitProfile holds the learner profile data needed for fit score computation.
+// Defined here (consumer-defined) to avoid importing internal/learner_profile. [ARCH §4.2]
+type StudentFitProfile struct {
+	ActivityFormat     *float64
+	SessionLength      *float64
+	Motivation         *float64
+	SoloCollaborative  *float64
+	Structure          *float64
+	OutdoorKinesthetic *float64
+	Interests          []string
+	Confidence         float64
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Adapter Interfaces [CODING §8.1]
 // ═══════════════════════════════════════════════════════════════════════════════
 

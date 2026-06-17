@@ -1104,6 +1104,8 @@ definitions:
         type: string
       description:
         type: string
+      download_url:
+        type: string
       expires_at:
         type: string
       generated_at:
@@ -1125,6 +1127,8 @@ definitions:
       status:
         type: string
       student_id:
+        type: string
+      student_name:
         type: string
       title:
         type: string
@@ -1916,6 +1920,13 @@ definitions:
     properties:
       est_duration_minutes:
         type: integer
+      fit_score:
+        description: |-
+          FitScore is the learner-profile fit score for the requested child.
+          Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+        type: number
+      fit_why:
+        type: string
       id:
         type: string
       methodology_id:
@@ -2797,6 +2808,13 @@ definitions:
       author:
         type: string
       cover_image_url:
+        type: string
+      fit_score:
+        description: |-
+          FitScore is the learner-profile fit score for the requested child.
+          Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+        type: number
+      fit_why:
         type: string
       id:
         type: string
@@ -4127,6 +4145,14 @@ definitions:
       creator_store_name:
         type: string
       description_preview:
+        type: string
+      fit_score:
+        description: |-
+          FitScore is the learner-profile fit score for the requested child (0.0–1.0).
+          Omitted when forStudentId is absent, the child has no profile, or the listing
+          has no preference_tags. [18-learner-profile §6]
+        type: number
+      fit_why:
         type: string
       id:
         type: string
@@ -10748,6 +10774,10 @@ paths:
         in: query
         name: cursor
         type: string
+      - description: Child UUID — returns fit_score for that child
+        in: query
+        name: for_student_id
+        type: string
       produces:
       - application/json
       responses:
@@ -11938,6 +11968,10 @@ paths:
       - description: Cursor UUID for pagination
         in: query
         name: cursor
+        type: string
+      - description: Child UUID — returns fit_score for that child
+        in: query
+        name: for_student_id
         type: string
       produces:
       - application/json
@@ -14649,6 +14683,10 @@ paths:
         in: query
         name: cursor
         type: string
+      - description: Child UUID — returns fit_score for that child (requires auth)
+        in: query
+        name: for_student_id
+        type: string
       produces:
       - application/json
       responses:
@@ -14658,6 +14696,10 @@ paths:
             $ref: '#/definitions/mkt.BrowseListingsResult'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/shared.AppError'
       summary: Browse marketplace listings

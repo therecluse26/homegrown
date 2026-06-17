@@ -2,6 +2,7 @@ package mkt
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -35,12 +36,15 @@ type marketplaceServiceImpl struct {
 	media                 MediaAdapter
 	events                *shared.EventBus
 	db                    *gorm.DB
+	// learnerProfile is optional; when nil, forStudentId requests return nil fit scores.
+	learnerProfile LearnerProfileForMkt
 }
 
 // NewMarketplaceService creates a new MarketplaceService.
 // Constructor returns the interface type per [CODING §2.1].
 // paymentPublishableKey is passed to clients for SDK-based embedded checkout
 // (for Hyperswitch test mode this is the same as the server-side API key).
+// learnerProfile may be nil; fit scores are omitted when it is nil.
 func NewMarketplaceService(
 	creators CreatorRepository,
 	publishers PublisherRepository,
@@ -55,6 +59,7 @@ func NewMarketplaceService(
 	media MediaAdapter,
 	events *shared.EventBus,
 	db *gorm.DB,
+	learnerProfile LearnerProfileForMkt,
 ) MarketplaceService {
 	return &marketplaceServiceImpl{
 		creators:              creators,
@@ -70,6 +75,7 @@ func NewMarketplaceService(
 		media:                 media,
 		events:                events,
 		db:                    db,
+		learnerProfile:        learnerProfile,
 	}
 }
 
@@ -1248,6 +1254,62 @@ func (s *marketplaceServiceImpl) BrowseListings(ctx context.Context, params Brow
 		}
 	}
 
+	// Child-scoped fit scoring. Only runs when forStudentId is provided, auth is present,
+	// and the learner profile port is wired. Missing profile or untagged content → nil (fail-safe).
+	// Family-scope check is enforced by the port: RLS on learner_profiles prevents cross-family leaks.
+	// [18-learner-profile §6, §6.4]
+	if params.ForStudentID != nil && params.FamilyScope != nil && s.learnerProfile != nil {
+		profile, profileErr := s.learnerProfile.GetStudentFitProfile(ctx, params.FamilyScope, *params.ForStudentID)
+		if profileErr != nil {
+			slog.Warn("mkt: browse fit score: load profile", "student_id", *params.ForStudentID, "error", profileErr)
+		}
+		if profile != nil && profile.Confidence >= 0.60 {
+			studentName, nameErr := s.learnerProfile.GetStudentDisplayName(ctx, *params.ForStudentID)
+			if nameErr != nil || studentName == "" {
+				studentName = "Your child"
+			}
+
+			// Batch-load preference_tags and subject_tags for all result listing IDs.
+			listingIDs := make([]uuid.UUID, len(items))
+			for i, item := range items {
+				listingIDs[i] = item.ID
+			}
+			type prefRow struct {
+				ID             uuid.UUID `gorm:"column:id"`
+				PreferenceTags []byte    `gorm:"column:preference_tags"`
+				SubjectTags    string    `gorm:"column:subject_tags"`
+			}
+			var prefRows []prefRow
+			if dbErr := s.db.WithContext(ctx).Raw(
+				`SELECT id, preference_tags, subject_tags::text FROM mkt_listings WHERE id IN ? AND preference_tags IS NOT NULL`,
+				listingIDs,
+			).Scan(&prefRows).Error; dbErr != nil {
+				slog.Warn("mkt: browse fit score: load preference_tags", "error", dbErr)
+			} else {
+				prefTagMap := make(map[uuid.UUID]map[string]float64, len(prefRows))
+				subjectTagMap := make(map[uuid.UUID][]string, len(prefRows))
+				for _, pr := range prefRows {
+					var tags map[string]float64
+					if jsonErr := json.Unmarshal(pr.PreferenceTags, &tags); jsonErr == nil {
+						prefTagMap[pr.ID] = tags
+					}
+					subjectTagMap[pr.ID] = parseMktPostgresArray(pr.SubjectTags)
+				}
+				for i, item := range items {
+					prefTags, hasTags := prefTagMap[item.ID]
+					if !hasTags {
+						continue
+					}
+					score, why, ok := computeMktFitScore(*profile, prefTags, subjectTagMap[item.ID], studentName)
+					if ok {
+						items[i].FitScore = &score
+						items[i].FitWhy = &why
+					}
+				}
+			}
+		}
+	}
+
 	var nextCursor *string
 	browseHasMore := int64(len(items)) < total
 	if browseHasMore && len(items) > 0 {
@@ -1643,6 +1705,126 @@ func toListingDetailResponse(l *MktListing, files []MktListingFile, publisherNam
 		CreatedAt:       l.CreatedAt,
 		UpdatedAt:       l.UpdatedAt,
 	}
+}
+
+// ─── Fit Scoring Helpers [18-learner-profile §6] ─────────────────────────────
+
+// computeMktFitScore computes a learner-profile fit score for one marketplace listing.
+// Mirrors recs.computeFitScore to avoid importing recs or learner_profile packages.
+// Returns (score, whyText, ok). ok=false → badge gate not met. [18-learner-profile §6.2]
+func computeMktFitScore(profile StudentFitProfile, preferenceTags map[string]float64, contentSubjectTags []string, studentName string) (float32, string, bool) {
+	if len(preferenceTags) == 0 || profile.Confidence < 0.60 {
+		return 0, "", false
+	}
+
+	dimValues := map[string]*float64{
+		"activity_format":     profile.ActivityFormat,
+		"session_length":      profile.SessionLength,
+		"motivation":          profile.Motivation,
+		"solo_collaborative":  profile.SoloCollaborative,
+		"structure":           profile.Structure,
+		"outdoor_kinesthetic": profile.OutdoorKinesthetic,
+	}
+
+	type scoredDim struct {
+		dim   string
+		score float64
+	}
+	var scored []scoredDim
+	var total float64
+
+	for dim, pVal := range dimValues {
+		if pVal == nil {
+			continue
+		}
+		cVal, hasTag := preferenceTags[dim]
+		if !hasTag {
+			continue
+		}
+		d := *pVal - cVal
+		if d < 0 {
+			d = -d
+		}
+		s := 1.0 - d
+		scored = append(scored, scoredDim{dim, s})
+		total += s
+	}
+
+	if len(scored) == 0 {
+		return 0, "", false
+	}
+
+	fitScore := total / float64(len(scored))
+
+	// Interest boost: +0.10 if any content subject_tag matches a declared interest. [18-learner-profile §6.1]
+	interestToSubjectTag := map[string]string{
+		"animals": "nature_study", "art": "art", "building": "crafts",
+		"coding": "indoor_science", "cooking": "cooking", "drama": "art",
+		"history": "history", "language": "writing", "math": "mathematics",
+		"music": "music", "nature": "ecology", "reading": "reading",
+		"science": "indoor_science", "space": "astronomy", "sport": "physical_education",
+	}
+	contentTagSet := make(map[string]struct{}, len(contentSubjectTags))
+	for _, t := range contentSubjectTags {
+		contentTagSet[t] = struct{}{}
+	}
+	for _, interest := range profile.Interests {
+		subjectTag, ok := interestToSubjectTag[interest]
+		if !ok {
+			subjectTag = interest
+		}
+		if _, found := contentTagSet[subjectTag]; found {
+			fitScore += 0.10
+			break
+		}
+	}
+	if fitScore > 1.0 {
+		fitScore = 1.0
+	}
+
+	if fitScore < 0.60 {
+		return float32(fitScore), "", false
+	}
+
+	// Why-text from highest-contributing dimension. [18-learner-profile §6.3]
+	bestDim := ""
+	var bestScore float64
+	for _, sd := range scored {
+		if sd.score > bestScore {
+			bestScore = sd.score
+			bestDim = sd.dim
+		}
+	}
+	whyTemplates := map[string]string{
+		"activity_format":     "{name} loves hands-on, build-it learning.",
+		"session_length":      "{name} gets absorbed — long, deep-dive content is their sweet spot.",
+		"motivation":          "{name} is driven by discovery over mastery drills.",
+		"solo_collaborative":  "{name} learns well with others.",
+		"structure":           "{name} thrives with step-by-step structure.",
+		"outdoor_kinesthetic": "{name} thinks better when moving.",
+	}
+	tmpl := whyTemplates[bestDim]
+	if tmpl == "" {
+		tmpl = "{name} is a great match for this content."
+	}
+	why := strings.ReplaceAll(tmpl, "{name}", studentName)
+
+	return float32(fitScore), why, true
+}
+
+// parseMktPostgresArray parses a PostgreSQL text[] literal (e.g. "{a,b,c}") into a string slice.
+func parseMktPostgresArray(s string) []string {
+	s = strings.TrimPrefix(s, "{")
+	s = strings.TrimSuffix(s, "}")
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, len(parts))
+	for i, p := range parts {
+		result[i] = strings.TrimSpace(p)
+	}
+	return result
 }
 
 // mapDomainError converts domain errors to shared AppError types. [07-mkt §17]

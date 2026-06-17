@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -44,6 +45,8 @@ type learningServiceImpl struct {
 	iam                 IamServiceForLearn
 	method              MethodServiceForLearn
 	mkt                 MktServiceForLearn
+	// learnerProfile is optional; when nil, forStudentId requests return nil fit scores.
+	learnerProfile      LearnerProfileForLearn
 	eventBus            *shared.EventBus
 	db                  *gorm.DB
 }
@@ -76,6 +79,7 @@ func NewLearningService(
 	iam IamServiceForLearn,
 	method MethodServiceForLearn,
 	mkt MktServiceForLearn,
+	learnerProfile LearnerProfileForLearn,
 	eventBus *shared.EventBus,
 	db *gorm.DB,
 ) LearningService {
@@ -106,6 +110,7 @@ func NewLearningService(
 		iam:                   iam,
 		method:               method,
 		mkt:                  mkt,
+		learnerProfile:       learnerProfile,
 		eventBus:             eventBus,
 		db:                   db,
 	}
@@ -301,6 +306,35 @@ func (s *learningServiceImpl) ListActivityDefs(ctx context.Context, query Activi
 	items := make([]ActivityDefSummaryResponse, len(defs))
 	for i, d := range defs {
 		items[i] = activityDefToSummary(&d)
+	}
+
+	// Child-scoped fit scoring: runs when forStudentId is provided and learner profile port is wired.
+	// Family ownership enforced by FamilyScope (RLS). Untagged content → nil score (fail-safe). [18-learner-profile §6]
+	if query.ForStudentID != nil && query.FamilyScope != nil && s.learnerProfile != nil {
+		profile, profileErr := s.learnerProfile.GetStudentFitProfile(ctx, query.FamilyScope, *query.ForStudentID)
+		if profileErr != nil {
+			slog.Warn("learn: list activity defs fit score: load profile", "student_id", *query.ForStudentID, "error", profileErr)
+		}
+		if profile != nil && profile.Confidence >= 0.60 {
+			studentName, nameErr := s.learnerProfile.GetStudentDisplayName(ctx, *query.ForStudentID)
+			if nameErr != nil || studentName == "" {
+				studentName = "Your child"
+			}
+			for i, d := range defs {
+				if len(d.PreferenceTags) == 0 {
+					continue
+				}
+				var prefTags map[string]float64
+				if jsonErr := json.Unmarshal(d.PreferenceTags, &prefTags); jsonErr != nil {
+					continue
+				}
+				score, why, ok := computeLearnFitScore(*profile, prefTags, []string(d.SubjectTags), studentName)
+				if ok {
+					items[i].FitScore = &score
+					items[i].FitWhy = &why
+				}
+			}
+		}
 	}
 
 	var nextCursor *uuid.UUID
@@ -676,6 +710,36 @@ func (s *learningServiceImpl) ListReadingItems(ctx context.Context, query Readin
 	for i, item := range items {
 		results[i] = readingItemToSummary(&item)
 	}
+
+	// Child-scoped fit scoring: runs when forStudentId is provided and learner profile port is wired.
+	// Family ownership enforced by FamilyScope (RLS). Untagged content → nil score (fail-safe). [18-learner-profile §6]
+	if query.ForStudentID != nil && query.FamilyScope != nil && s.learnerProfile != nil {
+		profile, profileErr := s.learnerProfile.GetStudentFitProfile(ctx, query.FamilyScope, *query.ForStudentID)
+		if profileErr != nil {
+			slog.Warn("learn: list reading items fit score: load profile", "student_id", *query.ForStudentID, "error", profileErr)
+		}
+		if profile != nil && profile.Confidence >= 0.60 {
+			studentName, nameErr := s.learnerProfile.GetStudentDisplayName(ctx, *query.ForStudentID)
+			if nameErr != nil || studentName == "" {
+				studentName = "Your child"
+			}
+			for i, item := range items {
+				if len(item.PreferenceTags) == 0 {
+					continue
+				}
+				var prefTags map[string]float64
+				if jsonErr := json.Unmarshal(item.PreferenceTags, &prefTags); jsonErr != nil {
+					continue
+				}
+				score, why, ok := computeLearnFitScore(*profile, prefTags, []string(item.SubjectTags), studentName)
+				if ok {
+					results[i].FitScore = &score
+					results[i].FitWhy = &why
+				}
+			}
+		}
+	}
+
 	var nextCursor *uuid.UUID
 	if hasMore && len(results) > 0 {
 		id := items[len(items)-1].ID
@@ -3490,4 +3554,107 @@ func toGradingScaleResponse(m *GradingScaleModel) GradingScaleResponse {
 		IsDefault: m.IsDefault,
 		CreatedAt: m.CreatedAt,
 	}
+}
+
+// ─── Fit Scoring Helpers [18-learner-profile §6] ─────────────────────────────
+
+// computeLearnFitScore computes a learner-profile fit score for one learn content item.
+// Mirrors recs.computeFitScore and mkt.computeMktFitScore — no new scoring logic. [18-learner-profile §6.1]
+func computeLearnFitScore(profile LearnStudentFitProfile, preferenceTags map[string]float64, contentSubjectTags []string, studentName string) (float32, string, bool) {
+	if len(preferenceTags) == 0 || profile.Confidence < 0.60 {
+		return 0, "", false
+	}
+
+	dimValues := map[string]*float64{
+		"activity_format":     profile.ActivityFormat,
+		"session_length":      profile.SessionLength,
+		"motivation":          profile.Motivation,
+		"solo_collaborative":  profile.SoloCollaborative,
+		"structure":           profile.Structure,
+		"outdoor_kinesthetic": profile.OutdoorKinesthetic,
+	}
+
+	type scoredDim struct {
+		dim   string
+		score float64
+	}
+	var scored []scoredDim
+	var total float64
+
+	for dim, pVal := range dimValues {
+		if pVal == nil {
+			continue
+		}
+		cVal, hasTag := preferenceTags[dim]
+		if !hasTag {
+			continue
+		}
+		d := *pVal - cVal
+		if d < 0 {
+			d = -d
+		}
+		s := 1.0 - d
+		scored = append(scored, scoredDim{dim, s})
+		total += s
+	}
+
+	if len(scored) == 0 {
+		return 0, "", false
+	}
+
+	fitScore := total / float64(len(scored))
+
+	// Interest boost: +0.10 if any content subject_tag matches a declared interest. [18-learner-profile §6.1]
+	interestToSubjectTag := map[string]string{
+		"animals": "nature_study", "art": "art", "building": "crafts",
+		"coding": "indoor_science", "cooking": "cooking", "drama": "art",
+		"history": "history", "language": "writing", "math": "mathematics",
+		"music": "music", "nature": "ecology", "reading": "reading",
+		"science": "indoor_science", "space": "astronomy", "sport": "physical_education",
+	}
+	contentTagSet := make(map[string]struct{}, len(contentSubjectTags))
+	for _, t := range contentSubjectTags {
+		contentTagSet[t] = struct{}{}
+	}
+	for _, interest := range profile.Interests {
+		subjectTag, ok := interestToSubjectTag[interest]
+		if !ok {
+			subjectTag = interest
+		}
+		if _, found := contentTagSet[subjectTag]; found {
+			fitScore += 0.10
+			break
+		}
+	}
+	if fitScore > 1.0 {
+		fitScore = 1.0
+	}
+
+	if fitScore < 0.60 {
+		return float32(fitScore), "", false
+	}
+
+	// Why-text from highest-contributing dimension. [18-learner-profile §6.3]
+	bestDim := ""
+	var bestScore float64
+	for _, sd := range scored {
+		if sd.score > bestScore {
+			bestScore = sd.score
+			bestDim = sd.dim
+		}
+	}
+	whyTemplates := map[string]string{
+		"activity_format":     "{name} loves hands-on, build-it learning.",
+		"session_length":      "{name} gets absorbed — long, deep-dive content is their sweet spot.",
+		"motivation":          "{name} is driven by discovery over mastery drills.",
+		"solo_collaborative":  "{name} learns well with others.",
+		"structure":           "{name} thrives with step-by-step structure.",
+		"outdoor_kinesthetic": "{name} thinks better when moving.",
+	}
+	tmpl := whyTemplates[bestDim]
+	if tmpl == "" {
+		tmpl = "{name} is a great match for this content."
+	}
+	why := strings.ReplaceAll(tmpl, "{name}", studentName)
+	return float32(fitScore), why, true
 }

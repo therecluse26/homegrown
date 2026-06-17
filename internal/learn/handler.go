@@ -216,6 +216,7 @@ func (h *Handler) createActivityDef(c echo.Context) error {
 //	@Param        publisher_id   query     string  false  "Filter by publisher UUID"
 //	@Param        search         query     string  false  "Full-text search"
 //	@Param        cursor         query     string  false  "Cursor UUID for pagination"
+//	@Param        for_student_id query     string  false  "Child UUID — returns fit_score for that child"
 //	@Success      200  {array}   ActivityDefSummaryResponse
 //	@Failure      400  {object}  shared.AppError
 //	@Failure      401  {object}  shared.AppError
@@ -244,6 +245,14 @@ func (h *Handler) listActivityDefs(c echo.Context) error {
 	if cur := c.QueryParam("cursor"); cur != "" {
 		if id, err := uuid.Parse(cur); err == nil {
 			query.Cursor = &id
+		}
+	}
+	if fsID := c.QueryParam("for_student_id"); fsID != "" {
+		if id, err := uuid.Parse(fsID); err == nil {
+			query.ForStudentID = &id
+			if scope, scopeErr := shared.GetFamilyScope(c); scopeErr == nil {
+				query.FamilyScope = &scope
+			}
 		}
 	}
 	resp, err := h.svc.ListActivityDefs(c.Request().Context(), query)
@@ -579,11 +588,12 @@ func (h *Handler) createReadingItem(c echo.Context) error {
 //	@Tags         learn
 //	@Produce      json
 //	@Security     BearerAuth
-//	@Param        limit    query     int     false  "Page size (default 20, max 50)"
-//	@Param        subject  query     string  false  "Filter by subject"
-//	@Param        search   query     string  false  "Full-text search"
-//	@Param        isbn     query     string  false  "Filter by ISBN"
-//	@Param        cursor   query     string  false  "Cursor UUID for pagination"
+//	@Param        limit          query     int     false  "Page size (default 20, max 50)"
+//	@Param        subject        query     string  false  "Filter by subject"
+//	@Param        search         query     string  false  "Full-text search"
+//	@Param        isbn           query     string  false  "Filter by ISBN"
+//	@Param        cursor         query     string  false  "Cursor UUID for pagination"
+//	@Param        for_student_id query     string  false  "Child UUID — returns fit_score for that child"
 //	@Success      200  {array}   ReadingItemSummaryResponse
 //	@Failure      400  {object}  shared.AppError
 //	@Failure      401  {object}  shared.AppError
@@ -605,6 +615,14 @@ func (h *Handler) listReadingItems(c echo.Context) error {
 	if cur := c.QueryParam("cursor"); cur != "" {
 		if id, err := uuid.Parse(cur); err == nil {
 			query.Cursor = &id
+		}
+	}
+	if fsID := c.QueryParam("for_student_id"); fsID != "" {
+		if id, err := uuid.Parse(fsID); err == nil {
+			query.ForStudentID = &id
+			if scope, scopeErr := shared.GetFamilyScope(c); scopeErr == nil {
+				query.FamilyScope = &scope
+			}
 		}
 	}
 	resp, err := h.svc.ListReadingItems(c.Request().Context(), query)

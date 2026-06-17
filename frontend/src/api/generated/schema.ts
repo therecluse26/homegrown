@@ -8847,6 +8847,8 @@ export interface paths {
                     search?: string;
                     /** @description Cursor UUID for pagination */
                     cursor?: string;
+                    /** @description Child UUID — returns fit_score for that child */
+                    for_student_id?: string;
                 };
                 header?: never;
                 path?: never;
@@ -10889,6 +10891,8 @@ export interface paths {
                     isbn?: string;
                     /** @description Cursor UUID for pagination */
                     cursor?: string;
+                    /** @description Child UUID — returns fit_score for that child */
+                    for_student_id?: string;
                 };
                 header?: never;
                 path?: never;
@@ -15440,6 +15444,8 @@ export interface paths {
                     limit?: number;
                     /** @description Pagination cursor */
                     cursor?: string;
+                    /** @description Child UUID — returns fit_score for that child (requires auth) */
+                    for_student_id?: string;
                 };
                 header?: never;
                 path?: never;
@@ -15458,6 +15464,15 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["shared.AppError"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -21426,6 +21441,7 @@ export interface components {
             date_range_end?: string;
             date_range_start?: string;
             description?: string;
+            download_url?: string;
             expires_at?: string;
             generated_at?: string;
             id?: string;
@@ -21436,6 +21452,7 @@ export interface components {
             organization?: string;
             status?: string;
             student_id?: string;
+            student_name?: string;
             title?: string;
         };
         "comply.PortfolioSummaryResponse": {
@@ -21817,6 +21834,12 @@ export interface components {
         };
         "learn.ActivityDefSummaryResponse": {
             est_duration_minutes?: number;
+            /**
+             * @description FitScore is the learner-profile fit score for the requested child.
+             *     Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+             */
+            fit_score?: number;
+            fit_why?: string;
             id?: string;
             methodology_id?: string;
             subject_tags?: string[];
@@ -22200,6 +22223,12 @@ export interface components {
         "learn.ReadingItemSummaryResponse": {
             author?: string;
             cover_image_url?: string;
+            /**
+             * @description FitScore is the learner-profile fit score for the requested child.
+             *     Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+             */
+            fit_score?: number;
+            fit_why?: string;
             id?: string;
             subject_tags?: string[];
             title?: string;
@@ -22768,6 +22797,13 @@ export interface components {
             content_type?: string;
             creator_store_name?: string;
             description_preview?: string;
+            /**
+             * @description FitScore is the learner-profile fit score for the requested child (0.0–1.0).
+             *     Omitted when forStudentId is absent, the child has no profile, or the listing
+             *     has no preference_tags. [18-learner-profile §6]
+             */
+            fit_score?: number;
+            fit_why?: string;
             id?: string;
             price_cents?: number;
             publisher_name?: string;

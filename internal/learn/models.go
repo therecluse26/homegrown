@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 	"gorm.io/gorm"
 )
 
@@ -27,9 +28,11 @@ type ActivityDefModel struct {
 	ToolID             *uuid.UUID      `gorm:"type:uuid"`
 	EstDurationMinutes *int16          `gorm:""`
 	Attachments        json.RawMessage `gorm:"type:jsonb;not null;default:'[]'"`
-	IsActive           bool            `gorm:"not null;default:true"`
-	CreatedAt          time.Time       `gorm:"not null;default:now()"`
-	UpdatedAt          time.Time       `gorm:"not null;default:now()"`
+	// PreferenceTags is a nullable JSONB map (dimension → 0.0–1.0) for fit scoring. [18-learner-profile §2.2]
+	PreferenceTags json.RawMessage `gorm:"type:jsonb;column:preference_tags"`
+	IsActive       bool            `gorm:"not null;default:true"`
+	CreatedAt      time.Time       `gorm:"not null;default:now()"`
+	UpdatedAt      time.Time       `gorm:"not null;default:now()"`
 }
 
 func (ActivityDefModel) TableName() string { return "learn_activity_defs" }
@@ -47,18 +50,20 @@ func (m *ActivityDefModel) BeforeCreate(_ *gorm.DB) error {
 
 // ReadingItemModel is the GORM model for learn_reading_items. [S§8.1.3]
 type ReadingItemModel struct {
-	ID            uuid.UUID   `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	PublisherID   uuid.UUID   `gorm:"type:uuid;not null"`
-	Title         string      `gorm:"not null"`
-	Author        *string     `gorm:""`
-	ISBN          *string     `gorm:""`
-	SubjectTags   StringArray `gorm:"type:text[];not null;default:'{}'"`
-	Description   *string     `gorm:""`
-	CoverImageURL *string     `gorm:""`
-	PageCount     *int16      `gorm:""`
-	IsActive      bool        `gorm:"not null;default:true"`
-	CreatedAt     time.Time   `gorm:"not null;default:now()"`
-	UpdatedAt     time.Time   `gorm:"not null;default:now()"`
+	ID            uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	PublisherID   uuid.UUID       `gorm:"type:uuid;not null"`
+	Title         string          `gorm:"not null"`
+	Author        *string         `gorm:""`
+	ISBN          *string         `gorm:""`
+	SubjectTags   StringArray     `gorm:"type:text[];not null;default:'{}'"`
+	Description   *string         `gorm:""`
+	CoverImageURL *string         `gorm:""`
+	PageCount     *int16          `gorm:""`
+	// PreferenceTags is a nullable JSONB map (dimension → 0.0–1.0) for fit scoring. [18-learner-profile §2.2]
+	PreferenceTags json.RawMessage `gorm:"type:jsonb;column:preference_tags"`
+	IsActive      bool             `gorm:"not null;default:true"`
+	CreatedAt     time.Time        `gorm:"not null;default:now()"`
+	UpdatedAt     time.Time        `gorm:"not null;default:now()"`
 }
 
 func (ReadingItemModel) TableName() string { return "learn_reading_items" }
@@ -1277,6 +1282,10 @@ type ActivityDefSummaryResponse struct {
 	SubjectTags        []string   `json:"subject_tags"`
 	MethodologyID      *uuid.UUID `json:"methodology_id,omitempty"`
 	EstDurationMinutes *int16     `json:"est_duration_minutes,omitempty"`
+	// FitScore is the learner-profile fit score for the requested child.
+	// Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+	FitScore *float32 `json:"fit_score,omitempty"`
+	FitWhy   *string  `json:"fit_why,omitempty"`
 }
 
 // ReadingItemResponse is the reading item response. [S§8.1.3]
@@ -1300,6 +1309,10 @@ type ReadingItemSummaryResponse struct {
 	Author        *string   `json:"author,omitempty"`
 	SubjectTags   []string  `json:"subject_tags"`
 	CoverImageURL *string   `json:"cover_image_url,omitempty"`
+	// FitScore is the learner-profile fit score for the requested child.
+	// Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+	FitScore *float32 `json:"fit_score,omitempty"`
+	FitWhy   *string  `json:"fit_why,omitempty"`
 }
 
 // ReadingItemDetailResponse is the reading item detail with linked artifacts.
@@ -1775,6 +1788,10 @@ type ActivityDefQuery struct {
 	Search        *string
 	Cursor        *uuid.UUID
 	Limit         int64
+	// ForStudentID and FamilyScope enable child-scoped fit scoring. Handler populates
+	// FamilyScope from the request context when ForStudentID is provided. [18-learner-profile §6]
+	ForStudentID *uuid.UUID
+	FamilyScope  *shared.FamilyScope
 }
 
 // ReadingItemQuery contains query parameters for reading items.
@@ -1784,6 +1801,10 @@ type ReadingItemQuery struct {
 	ISBN    *string
 	Cursor  *uuid.UUID
 	Limit   int64
+	// ForStudentID and FamilyScope enable child-scoped fit scoring. Handler populates
+	// FamilyScope from the request context when ForStudentID is provided. [18-learner-profile §6]
+	ForStudentID *uuid.UUID
+	FamilyScope  *shared.FamilyScope
 }
 
 // ActivityLogQuery contains query parameters for activity logs.

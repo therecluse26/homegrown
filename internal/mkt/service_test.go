@@ -221,6 +221,7 @@ func newMktService(deps mktServiceDeps) MarketplaceService {
 		nil, // media
 		bus,
 		nil, // db
+		nil, // learnerProfile — fit scoring disabled in unit tests
 	)
 }
 
