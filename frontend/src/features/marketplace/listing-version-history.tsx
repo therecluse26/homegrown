@@ -23,7 +23,7 @@ export function ListingVersionHistory() {
         <Skeleton className="h-4 w-80 mb-6" />
         <div className="flex flex-col gap-3">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-16 rounded-radius-sm" />
+            <Skeleton key={n} className="h-16 rounded-sm" />
           ))}
         </div>
       </div>
@@ -37,7 +37,7 @@ export function ListingVersionHistory() {
           title={intl.formatMessage({ id: "marketplace.versions.title" })}
           className="mb-6"
         />
-        <Card className="rounded-radius-md bg-error-container p-card-padding">
+        <Card className="rounded-md bg-error-container p-card-padding">
           <p className="type-body-sm text-on-error-container">
             <FormattedMessage id="error.generic" />
           </p>
@@ -60,7 +60,7 @@ export function ListingVersionHistory() {
       />
 
       {versions.length === 0 ? (
-        <div className="rounded-radius-md bg-surface-container-low px-4 py-8 text-center">
+        <div className="rounded-md bg-surface-container-low px-4 py-8 text-center">
           <p className="type-body-sm text-on-surface-variant">
             <FormattedMessage id="marketplace.versions.empty" />
           </p>
@@ -75,7 +75,7 @@ export function ListingVersionHistory() {
             <li key={version.id}>
               <Card className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-radius-sm bg-surface-container flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-sm bg-surface-container flex items-center justify-center shrink-0">
                     <Icon
                       icon={FileText}
                       size="sm"

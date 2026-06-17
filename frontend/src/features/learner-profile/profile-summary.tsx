@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Button } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 import { Lock, RefreshCw, Pencil, Sparkles, BookOpen } from "lucide-react";
 import { Icon } from "@/components/ui";
 import { Link } from "react-router";
@@ -111,12 +111,10 @@ function DimensionRow({ cfg, value }: DimensionRowProps): ReactNode {
   const pct = Math.round(value * 100);
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="type-label-md text-on-surface font-medium">{cfg.label}</span>
-        <span className="type-body-sm text-on-surface-variant shrink-0">
-          {cfg.describe(value)}
-        </span>
-      </div>
+      {/* Label */}
+      <span className="type-label-md text-on-surface font-medium">{cfg.label}</span>
+      {/* Describe text stacked below label, full width (4.1) */}
+      <p className="type-body-sm text-on-surface-variant mb-1">{cfg.describe(value)}</p>
       {/* Track + fill */}
       <div className="relative h-2 w-full overflow-hidden rounded-full bg-surface-container-high" role="presentation">
         <div
@@ -124,10 +122,10 @@ function DimensionRow({ cfg, value }: DimensionRowProps): ReactNode {
           style={{ width: `${pct}%` }}
         />
       </div>
-      {/* Pole labels */}
+      {/* Pole labels — bumped to type-label-md (4.2) */}
       <div className="flex justify-between gap-2">
-        <span className="type-label-sm text-on-surface-variant">{cfg.lowLabel}</span>
-        <span className="type-label-sm text-on-surface-variant">{cfg.highLabel}</span>
+        <span className="type-label-md text-on-surface-variant">{cfg.lowLabel}</span>
+        <span className="type-label-md text-on-surface-variant">{cfg.highLabel}</span>
       </div>
     </div>
   );
@@ -162,15 +160,10 @@ export function ProfileSummary({
 
   return (
     <div data-context="parent">
-      {/* Heading */}
-      <div className="mb-6">
-        <h2 className="type-headline-sm text-on-surface font-semibold mb-1">
-          {studentName}'s Learning Profile
-        </h2>
-        <p className="type-body-sm text-on-surface-variant">
-          Based on {studentName}'s quiz answers
-        </p>
-      </div>
+      {/* Subordinate caption — the page h1 already provides the heading (3.1) */}
+      <p className="type-body-sm text-on-surface-variant mb-6">
+        Based on {studentName}'s quiz answers
+      </p>
 
       {/* Summary text */}
       {summaryText && (
@@ -225,10 +218,11 @@ export function ProfileSummary({
         </section>
       )}
 
-      {/* How this shapes recommendations */}
-      <section
+      {/* How this shapes recommendations — Card for consistent tonal layering (4.3) */}
+      <Card
         aria-labelledby="recs-heading"
-        className="mb-6 rounded-lg bg-surface-container px-4 py-4 shadow-ghost-border"
+        role="region"
+        className="mb-6 bg-surface-container-low"
       >
         <div className="flex items-center gap-2 mb-2">
           <Icon icon={Sparkles} size="sm" className="text-primary" aria-hidden />
@@ -266,7 +260,7 @@ export function ProfileSummary({
             View recommendations →
           </Link>
         </div>
-      </section>
+      </Card>
 
       {/* Privacy note */}
       <div className="mb-8 flex items-start gap-3 rounded-lg bg-surface-container-low px-4 py-3 shadow-ghost-border">
@@ -281,22 +275,22 @@ export function ProfileSummary({
         </p>
       </div>
 
-      {/* Actions */}
+      {/* Actions — use leadingIcon prop for consistent icon+gap handling (4.4) */}
       <div className="flex flex-wrap gap-3">
         <Button
           type="button"
           variant="secondary"
+          leadingIcon={<Icon icon={RefreshCw} size="sm" aria-hidden />}
           onClick={onRetake}
         >
-          <Icon icon={RefreshCw} size="sm" aria-hidden className="mr-1.5" />
           Retake quiz
         </Button>
         <Button
           type="button"
           variant="tertiary"
+          leadingIcon={<Icon icon={Pencil} size="sm" aria-hidden />}
           onClick={onEditInterests}
         >
-          <Icon icon={Pencil} size="sm" aria-hidden className="mr-1.5" />
           Edit interests
         </Button>
       </div>

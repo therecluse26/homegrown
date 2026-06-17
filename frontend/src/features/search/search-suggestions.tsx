@@ -94,7 +94,7 @@ export function SearchSuggestions({
 
   return (
     <div
-      className="absolute left-0 right-0 top-full z-popover mt-1 overflow-hidden rounded-radius-md bg-surface-container-lowest shadow-ambient-md"
+      className="absolute left-0 right-0 top-full z-popover mt-1 overflow-hidden rounded-md bg-surface-container-lowest shadow-ambient-md"
       role="listbox"
       aria-label={intl.formatMessage({
         id: "search.suggestions.label",

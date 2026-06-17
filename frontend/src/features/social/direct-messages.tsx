@@ -24,7 +24,7 @@ function ConversationItem({
   return (
     <RouterLink
       to={`/messages/${conversation.id}`}
-      className="flex items-center gap-3 p-card-padding rounded-radius-md hover:bg-surface-container-low transition-colors"
+      className="flex items-center gap-3 p-card-padding rounded-md hover:bg-surface-container-low transition-colors"
     >
       <div className="relative shrink-0">
         <Avatar size="lg" name={conversation.other_parent_name} />

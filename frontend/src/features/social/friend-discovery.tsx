@@ -106,7 +106,7 @@ function GroupSuggestionCard({ group }: { group: GroupSummaryResponse }) {
   return (
     <RouterLink to={`/groups/${group.id}`}>
       <Card className="p-card-padding flex items-center gap-4 hover:bg-surface-container-low transition-colors">
-        <div className="w-12 h-12 rounded-radius-md bg-secondary-container flex items-center justify-center shrink-0">
+        <div className="w-12 h-12 rounded-md bg-secondary-container flex items-center justify-center shrink-0">
           <Icon icon={Users} size="md" className="text-on-secondary-container" />
         </div>
         <div className="flex-1 min-w-0">
@@ -141,7 +141,7 @@ function NearbyEventCard({ event }: { event: EventSummaryResponse }) {
   return (
     <RouterLink to={`/events/${event.id}`}>
       <Card className="p-card-padding flex items-center gap-4 hover:bg-surface-container-low transition-colors">
-        <div className="w-12 h-12 rounded-radius-md bg-primary-container text-on-primary-container flex flex-col items-center justify-center shrink-0">
+        <div className="w-12 h-12 rounded-md bg-primary-container text-on-primary-container flex flex-col items-center justify-center shrink-0">
           <span className="type-label-sm uppercase">
             {eventDate.toLocaleDateString(undefined, { month: "short" })}
           </span>
@@ -232,13 +232,13 @@ export function FriendDiscovery() {
             placeholder={intl.formatMessage({
               id: "social.discover.searchPlaceholder",
             })}
-            className="w-full pl-10 pr-4 py-2.5 bg-surface-container-highest rounded-radius-md text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+            className="w-full pl-10 pr-4 py-2.5 bg-surface-container-highest rounded-md text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
           />
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setMethodologyFilter(undefined)}
-            className={`px-3 py-2 rounded-radius-sm type-label-md transition-colors ${
+            className={`px-3 py-2 rounded-sm type-label-md transition-colors ${
               !methodologyFilter
                 ? "bg-primary text-on-primary"
                 : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
@@ -249,7 +249,7 @@ export function FriendDiscovery() {
           {activeSlug && (
             <button
               onClick={() => setMethodologyFilter(activeSlug)}
-              className={`px-3 py-2 rounded-radius-sm type-label-md transition-colors ${
+              className={`px-3 py-2 rounded-sm type-label-md transition-colors ${
                 methodologyFilter === activeSlug
                   ? "bg-primary text-on-primary"
                   : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
@@ -270,7 +270,7 @@ export function FriendDiscovery() {
         {familiesLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map((n) => (
-              <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+              <Skeleton key={n} className="h-20 w-full rounded-md" />
             ))}
           </div>
         )}
@@ -359,7 +359,7 @@ export function FriendDiscovery() {
         {groupsLoading && (
           <div className="space-y-3">
             {[1, 2].map((n) => (
-              <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+              <Skeleton key={n} className="h-20 w-full rounded-md" />
             ))}
           </div>
         )}

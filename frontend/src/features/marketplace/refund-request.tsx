@@ -78,7 +78,7 @@ export function RefundRequest() {
           <FormattedMessage id="marketplace.refund.title" />
         </h2>
 
-        <div className="bg-warning-container/30 rounded-radius-md p-3 mb-4 flex items-start gap-2">
+        <div className="bg-warning-container/30 rounded-md p-3 mb-4 flex items-start gap-2">
           <Icon icon={AlertTriangle} size="sm" className="text-warning shrink-0 mt-0.5" />
           <p className="type-body-sm text-on-surface-variant">
             <FormattedMessage id="marketplace.refund.eligibility" />
@@ -93,7 +93,7 @@ export function RefundRequest() {
             <select
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               required
             >
               <option value="">
@@ -118,7 +118,7 @@ export function RefundRequest() {
             <textarea
               value={details}
               onChange={(e) => setDetails(e.target.value)}
-              className="w-full min-h-[100px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full min-h-[100px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               placeholder={intl.formatMessage({
                 id: "marketplace.refund.detailsPlaceholder",
               })}

@@ -156,7 +156,7 @@ export function EventCreation() {
                 value={form.description ?? ""}
                 onChange={(e) => updateField("description", e.target.value)}
                 rows={3}
-                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             )}
           </FormField>
@@ -220,7 +220,7 @@ export function EventCreation() {
                           frequency: e.target.value as RecurrencePattern["frequency"],
                         }))
                       }
-                      className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                      className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                     >
                       <option value="weekly">
                         {intl.formatMessage({ id: "social.events.recurrence.frequency.weekly" })}
@@ -251,7 +251,7 @@ export function EventCreation() {
                             key={value}
                             type="button"
                             onClick={() => toggleDayOfWeek(value)}
-                            className={`px-3 py-1.5 rounded-radius-sm type-label-md transition-colors ${
+                            className={`px-3 py-1.5 rounded-sm type-label-md transition-colors ${
                               checked
                                 ? "bg-primary text-on-primary"
                                 : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
@@ -303,7 +303,7 @@ export function EventCreation() {
                   key={value}
                   type="button"
                   onClick={() => handleLocationTypeChange(value)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-radius-sm type-label-md transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-sm type-label-md transition-colors ${
                     locationType === value
                       ? "bg-primary text-on-primary"
                       : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
@@ -404,7 +404,7 @@ export function EventCreation() {
                 id={id}
                 value={form.visibility ?? "friends"}
                 onChange={(e) => updateField("visibility", e.target.value)}
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               >
                 <option value="friends">
                   {intl.formatMessage({
@@ -438,7 +438,7 @@ export function EventCreation() {
               <select
                 value={form.group_id ?? ""}
                 onChange={(e) => updateField("group_id", e.target.value || undefined)}
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                 aria-label={intl.formatMessage({
                   id: "social.events.form.selectGroup",
                 })}

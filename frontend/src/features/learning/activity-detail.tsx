@@ -99,7 +99,7 @@ export function ActivityDetail() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
       </div>
     );
   }

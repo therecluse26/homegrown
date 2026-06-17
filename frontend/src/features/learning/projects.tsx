@@ -233,7 +233,7 @@ export function Projects() {
                   type="date"
                   value={formDueDate}
                   onChange={(e) => setFormDueDate(e.target.value)}
-                  className="type-body-md text-on-surface bg-surface-container-highest px-3 py-2 rounded-radius-sm w-full"
+                  className="type-body-md text-on-surface bg-surface-container-highest px-3 py-2 rounded-sm w-full"
                 />
               )}
             </FormField>

@@ -106,7 +106,7 @@ function QuestionEditor({
           <button
             onClick={onMoveUp}
             disabled={index === 0}
-            className="p-1 rounded-radius-sm hover:bg-surface-container-low disabled:opacity-30"
+            className="p-1 rounded-sm hover:bg-surface-container-low disabled:opacity-30"
             aria-label={`Move question ${index + 1} up`}
           >
             <Icon icon={ArrowUp} size="xs" />
@@ -114,14 +114,14 @@ function QuestionEditor({
           <button
             onClick={onMoveDown}
             disabled={index === total - 1}
-            className="p-1 rounded-radius-sm hover:bg-surface-container-low disabled:opacity-30"
+            className="p-1 rounded-sm hover:bg-surface-container-low disabled:opacity-30"
             aria-label={`Move question ${index + 1} down`}
           >
             <Icon icon={ArrowDown} size="xs" />
           </button>
           <button
             onClick={onRemove}
-            className="p-1 rounded-radius-sm text-error hover:bg-error-container/30"
+            className="p-1 rounded-sm text-error hover:bg-error-container/30"
             aria-label="Remove question"
           >
             <Icon icon={Trash2} size="xs" />
@@ -162,7 +162,7 @@ function QuestionEditor({
                     type: e.target.value as QuestionType,
                   })
                 }
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               >
                 {QUESTION_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -239,7 +239,7 @@ function QuestionEditor({
                 onChange={(e) =>
                   onChange({ ...question, correct_answer: e.target.value })
                 }
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               >
                 <option value="true">True</option>
                 <option value="false">False</option>
@@ -345,8 +345,8 @@ export function QuizBuilder() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32 w-full rounded-radius-md" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
+        <Skeleton className="h-32 w-full rounded-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
       </div>
     );
   }

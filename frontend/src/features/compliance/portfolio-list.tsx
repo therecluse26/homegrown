@@ -95,7 +95,7 @@ function PortfolioCard({
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => onDelete(portfolio.id)}
-            className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
+            className="p-2 rounded-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
             aria-label={intl.formatMessage(
               { id: "compliance.portfolio.delete.label" },
               { name: portfolio.title },
@@ -210,7 +210,7 @@ function CreatePortfolioForm({
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             />
           </div>
           <div>
@@ -225,7 +225,7 @@ function CreatePortfolioForm({
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             />
           </div>
           <div>
@@ -359,7 +359,7 @@ export function PortfolioList() {
       {isPending ? (
         <div className="space-y-3">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-20 w-full rounded-md" />
           ))}
         </div>
       ) : !portfolios || portfolios.length === 0 ? (

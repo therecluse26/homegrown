@@ -19,7 +19,7 @@ export function MicroChargeHistory() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32 w-full rounded-radius-md" />
+        <Skeleton className="h-32 w-full rounded-md" />
       </div>
     );
   }

@@ -15,7 +15,7 @@ const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
 
 function KbdKey({ value }: { value: string }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] px-2 py-0.5 rounded-radius-sm bg-surface-container-high text-on-surface type-label-sm font-mono border border-outline-variant/40 select-none">
+    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] px-2 py-0.5 rounded-sm bg-surface-container-high text-on-surface type-label-sm font-mono border border-outline-variant/40 select-none">
       {value}
     </kbd>
   );
@@ -64,7 +64,7 @@ export function KeyboardShortcutsModal() {
               defaultMessage: "Global",
             })}
           </h3>
-          <div className="rounded-radius-md bg-surface-container px-3">
+          <div className="rounded-md bg-surface-container px-3">
             {GLOBAL_SHORTCUTS.map((s) => (
               <ShortcutRow key={s.key} shortcut={s} />
             ))}
@@ -79,7 +79,7 @@ export function KeyboardShortcutsModal() {
                 defaultMessage: "This page",
               })}
             </h3>
-            <div className="rounded-radius-md bg-surface-container px-3">
+            <div className="rounded-md bg-surface-container px-3">
               {pageShortcuts.map((s) => (
                 <ShortcutRow key={s.key} shortcut={s} />
               ))}

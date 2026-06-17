@@ -90,7 +90,7 @@ function SidebarNav() {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-radius-button type-label-lg text-on-surface-variant transition-colors duration-[var(--duration-normal)] ${
+                `flex items-center gap-3 px-3 py-2.5 rounded-button type-label-lg text-on-surface-variant transition-colors duration-[var(--duration-normal)] ${
                   isActive
                     ? "bg-primary/10 text-primary font-semibold"
                     : "hover:bg-surface-container-high"
@@ -107,7 +107,7 @@ function SidebarNav() {
         <NavLink
           to="/help"
           className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-radius-button type-label-lg text-on-surface-variant transition-colors duration-[var(--duration-normal)] ${
+            `flex items-center gap-3 px-3 py-2.5 rounded-button type-label-lg text-on-surface-variant transition-colors duration-[var(--duration-normal)] ${
               isActive
                 ? "bg-primary/10 text-primary font-semibold"
                 : "hover:bg-surface-container-high"
@@ -197,7 +197,7 @@ function BottomNav() {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `flex flex-col items-center gap-0.5 px-3 py-1.5 min-w-[3rem] rounded-radius-button transition-colors duration-[var(--duration-normal)] ${
+                  `flex flex-col items-center gap-0.5 px-3 py-1.5 min-w-[3rem] rounded-button transition-colors duration-[var(--duration-normal)] ${
                     isActive ? "text-primary" : "text-on-surface-variant"
                   }`
                 }
@@ -214,7 +214,7 @@ function BottomNav() {
               onClick={() => setMoreOpen(true)}
               aria-label={intl.formatMessage({ id: "nav.more", defaultMessage: "More" })}
               aria-expanded={moreOpen}
-              className="flex flex-col items-center gap-0.5 px-3 py-1.5 min-w-[3rem] rounded-radius-button text-on-surface-variant transition-colors duration-[var(--duration-normal)] hover:text-primary"
+              className="flex flex-col items-center gap-0.5 px-3 py-1.5 min-w-[3rem] rounded-button text-on-surface-variant transition-colors duration-[var(--duration-normal)] hover:text-primary"
             >
               <Icon icon={MoreHorizontal} size="md" />
               <span className="type-label-sm">
@@ -248,7 +248,7 @@ function Header() {
         <SearchBar />
         <NavLink
           to="/search"
-          className="md:hidden p-2 min-w-11 min-h-11 flex items-center justify-center rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
+          className="md:hidden p-2 min-w-11 min-h-11 flex items-center justify-center rounded-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
           aria-label={intl.formatMessage({ id: "nav.search", defaultMessage: "Search" })}
         >
           <Icon icon={Search} size="md" />
@@ -259,7 +259,7 @@ function Header() {
         {/* Messages */}
         <NavLink
           to="/messages"
-          className="p-2 min-w-11 min-h-11 flex items-center justify-center rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
+          className="p-2 min-w-11 min-h-11 flex items-center justify-center rounded-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
           aria-label={intl.formatMessage({ id: "nav.messages", defaultMessage: "Messages" })}
         >
           <Icon icon={MessageSquare} size="md" />

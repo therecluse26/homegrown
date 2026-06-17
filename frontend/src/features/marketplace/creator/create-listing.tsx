@@ -131,7 +131,7 @@ export function CreateListing() {
                 value={form.description ?? ""}
                 onChange={(e) => updateField("description", e.target.value)}
                 required
-                className="w-full min-h-[120px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[120px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             )}
           </FormField>
@@ -175,7 +175,7 @@ export function CreateListing() {
                 id={id}
                 value={form.content_type ?? ""}
                 onChange={(e) => updateField("content_type", e.target.value)}
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               >
                 {CONTENT_TYPES.map((type) => (
                   <option key={type} value={type}>
@@ -196,7 +196,7 @@ export function CreateListing() {
               <div>
                 <p
                   id={id}
-                  className="type-body-md text-on-surface rounded-radius-sm bg-surface-container px-3 py-2"
+                  className="type-body-md text-on-surface rounded-sm bg-surface-container px-3 py-2"
                 >
                   {creatorProfile?.store_name ?? form.publisher_id ?? "—"}
                 </p>
@@ -238,7 +238,7 @@ export function CreateListing() {
                   key={tag}
                   type="button"
                   onClick={() => removeSubjectTag(tag)}
-                  className="px-2 py-1 rounded-radius-sm bg-secondary-container text-on-secondary-container type-label-sm hover:opacity-80"
+                  className="px-2 py-1 rounded-sm bg-secondary-container text-on-secondary-container type-label-sm hover:opacity-80"
                 >
                   {tag} ×
                 </button>

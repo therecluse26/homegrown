@@ -86,9 +86,9 @@ export function PrivacyControls() {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-24 w-full rounded-radius-md" />
-        <Skeleton className="h-24 w-full rounded-radius-md" />
-        <Skeleton className="h-24 w-full rounded-radius-md" />
+        <Skeleton className="h-24 w-full rounded-md" />
+        <Skeleton className="h-24 w-full rounded-md" />
+        <Skeleton className="h-24 w-full rounded-md" />
       </div>
     );
   }
@@ -104,7 +104,7 @@ export function PrivacyControls() {
       {/* Location sharing toggle */}
       <Card className="p-card-padding mb-6">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-radius-sm bg-primary-container flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-sm bg-primary-container flex items-center justify-center shrink-0">
             <Icon icon={MapPin} size="sm" className="text-on-primary-container" />
           </div>
           <div className="flex-1">

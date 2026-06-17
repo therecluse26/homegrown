@@ -272,7 +272,7 @@ export function SearchResults() {
         {isPending && q && (
           <div className="space-y-3">
             {[1, 2, 3, 4].map((n) => (
-              <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+              <Skeleton key={n} className="h-20 w-full rounded-md" />
             ))}
           </div>
         )}

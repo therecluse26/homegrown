@@ -15,11 +15,16 @@ export type UpdatePreferencesCommand =
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
-export function useRecommendations() {
+export function useRecommendations(options?: { forStudentId?: string }) {
+  const forStudentId = options?.forStudentId;
   return useQuery({
-    queryKey: ["recommendations"],
-    queryFn: () =>
-      apiClient<RecommendationListResponse>("/v1/recommendations"),
+    queryKey: ["recommendations", forStudentId],
+    queryFn: () => {
+      const url = forStudentId
+        ? `/v1/recommendations?for_student_id=${encodeURIComponent(forStudentId)}`
+        : "/v1/recommendations";
+      return apiClient<RecommendationListResponse>(url);
+    },
     select: (data) => data.recommendations ?? [],
     staleTime: 5 * 60 * 1000,
   });

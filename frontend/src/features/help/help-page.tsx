@@ -75,7 +75,7 @@ export function HelpPage() {
             <Link
               key={ql.to}
               to={ql.to}
-              className="flex flex-col items-center gap-2 p-4 rounded-radius-card bg-surface-container hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)] text-center"
+              className="flex flex-col items-center gap-2 p-4 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)] text-center"
             >
               <Icon icon={ql.icon} size="md" className="text-primary" />
               <span className="type-label-sm text-on-surface">

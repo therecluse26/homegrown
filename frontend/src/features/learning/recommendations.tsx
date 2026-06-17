@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { X, ChevronDown, ChevronUp, Sparkles, MoreHorizontal } from "lucide-react";
-import { Badge, Button, Card, Icon, Skeleton } from "@/components/ui";
+import { X, MoreHorizontal } from "lucide-react";
+import { Badge, Button, Card, FitBadge, Icon, Skeleton } from "@/components/ui";
 import {
   useRecommendations,
   useDismissRecommendation,
@@ -9,21 +9,34 @@ import {
   useUndoFeedback,
   type Recommendation,
 } from "@/hooks/use-recommendations";
+import { useStudents } from "@/hooks/use-family";
+import {
+  TYPE_CONFIG,
+  DEFAULT_REC_CONFIG,
+  type RecType,
+} from "@/features/recommendations/rec-type-config";
+import { useState } from "react";
+
+const FIT_BADGE_GATE = 0.60;
 
 function RecommendationCard({ rec }: { rec: Recommendation }) {
   const intl = useIntl();
   const dismiss = useDismissRecommendation();
   const blockRec = useBlockRecommendation();
   const undoFeedback = useUndoFeedback();
-  const [reasonExpanded, setReasonExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [lastDismissedId, setLastDismissedId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { data: students } = useStudents();
 
-  const recType = rec.recommendation_type ?? "marketplace_content";
+  const recType = (rec.recommendation_type ?? "marketplace_content") as RecType;
+  const config = TYPE_CONFIG[recType] ?? DEFAULT_REC_CONFIG;
   const label = rec.target_entity_label ?? "";
   const sourceLabel = rec.source_label ?? "";
+
+  const student = students?.find((s) => s.id === rec.student_id);
+  const studentName = student?.display_name;
 
   async function handleDismiss() {
     setDismissed(true);
@@ -46,7 +59,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
   if (dismissed) {
     return (
       <div
-        className="flex-shrink-0 w-72 rounded-radius-md bg-surface-container-low px-4 py-6 flex flex-col items-center justify-center gap-3 text-center"
+        className="flex-shrink-0 w-72 rounded-md bg-surface-container-low px-4 py-6 flex flex-col items-center justify-center gap-3 text-center"
         role="status"
         aria-live="polite"
       >
@@ -62,21 +75,24 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
 
   return (
     <Card className="flex-shrink-0 w-72 flex flex-col gap-3 relative">
-      {/* Header row */}
+      {/* Header row — 2.1: shared TYPE_CONFIG Badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="type-label-sm text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded-radius-sm">
-            {recType}
-          </span>
+          <Badge variant={config.badgeVariant}>
+            <span className="flex items-center gap-1">
+              <Icon icon={config.icon} size="xs" aria-hidden />
+              <FormattedMessage id={config.labelId} />
+            </span>
+          </Badge>
           {rec.is_suggestion && (
             <Badge variant="secondary">
-              <Icon icon={Sparkles} size="xs" aria-hidden className="mr-0.5" />
+              <Icon icon={config.icon} size="xs" aria-hidden className="mr-0.5" />
               <FormattedMessage id="recommendations.card.aiBadge" />
             </Badge>
           )}
         </div>
         <div className="flex items-center gap-1">
-          {/* Menu */}
+          {/* Menu — 2.2: shadow-ghost-border, 2.3: z-popover */}
           <div className="relative" ref={menuRef}>
             <button
               type="button"
@@ -84,7 +100,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
               aria-label={intl.formatMessage({ id: "recommendations.card.menu.label" })}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
-              className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
+              className="p-1 rounded text-on-surface-variant hover:bg-surface-container transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               <Icon icon={MoreHorizontal} size="sm" aria-hidden />
             </button>
@@ -92,14 +108,14 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
               <div
                 role="menu"
                 aria-label={intl.formatMessage({ id: "recommendations.card.menu.label" })}
-                className="absolute right-0 mt-1 w-44 rounded-radius-sm bg-surface-container shadow-elevation-2 border border-outline-variant z-10"
+                className="absolute right-0 mt-1 w-44 rounded-lg bg-surface-container shadow-ghost-border shadow-ambient-md z-popover"
               >
                 <button
                   type="button"
                   role="menuitem"
                   onClick={handleBlockCategory}
                   disabled={blockRec.isPending}
-                  className="w-full text-left px-3 py-2 type-body-sm text-on-surface hover:bg-surface-container-high focus:outline-none focus:bg-surface-container-high"
+                  className="w-full text-left px-3 py-2 type-body-sm text-on-surface hover:bg-surface-container-high focus:outline-none focus:bg-surface-container-high rounded-lg"
                 >
                   <FormattedMessage
                     id="recommendations.card.blockCategory"
@@ -119,14 +135,14 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
               { id: "recommendations.card.dismiss.label" },
               { title: label },
             )}
-            className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
+            className="p-1 rounded text-on-surface-variant hover:bg-surface-container transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             <Icon icon={X} size="sm" aria-hidden />
           </button>
         </div>
       </div>
 
-      {/* Title */}
+      {/* Title + source */}
       <div>
         <p className="type-title-sm text-on-surface font-semibold">
           {label}
@@ -136,27 +152,10 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
         </p>
       </div>
 
-      {/* Why recommended */}
-      <div>
-        <button
-          type="button"
-          onClick={() => setReasonExpanded((v) => !v)}
-          aria-expanded={reasonExpanded}
-          className="flex items-center gap-1 type-label-sm text-on-surface-variant hover:text-on-surface focus:outline-none focus:underline"
-        >
-          <FormattedMessage id="recommendations.card.whyRecommended" />
-          <Icon
-            icon={reasonExpanded ? ChevronUp : ChevronDown}
-            size="xs"
-            aria-hidden
-          />
-        </button>
-        {reasonExpanded && (
-          <p className="mt-1.5 type-body-sm text-on-surface-variant italic">
-            {rec.source_signal}
-          </p>
-        )}
-      </div>
+      {/* 2.4: FitBadge replaces "Why recommended?" toggle */}
+      {rec.fit_score !== undefined && rec.fit_score >= FIT_BADGE_GATE && (
+        <FitBadge studentName={studentName} whyText={rec.fit_why} />
+      )}
     </Card>
   );
 }
@@ -181,7 +180,7 @@ export function Recommendations() {
           {[1, 2, 3].map((n) => (
             <Skeleton
               key={n}
-              className="flex-shrink-0 w-72 h-36 rounded-radius-md"
+              className="flex-shrink-0 w-72 h-36 rounded-md"
             />
           ))}
         </div>

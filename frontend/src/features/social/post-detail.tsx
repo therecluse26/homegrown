@@ -98,7 +98,7 @@ function Comment({
           name={comment.author_name}
         />
         <div className="flex-1 min-w-0">
-          <div className="bg-surface-container-low rounded-radius-md px-3 py-2">
+          <div className="bg-surface-container-low rounded-md px-3 py-2">
             <p className="type-label-md font-semibold text-on-surface">
               {comment.author_name}
             </p>
@@ -116,7 +116,7 @@ function Comment({
                     }
                   }}
                   aria-label={intl.formatMessage({ id: "social.post.comment.edit" })}
-                  className="flex-1 bg-surface-container-highest rounded-radius-sm px-2 py-1 text-on-surface type-body-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                  className="flex-1 bg-surface-container-highest rounded-sm px-2 py-1 text-on-surface type-body-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                   autoFocus
                 />
                 <button
@@ -201,7 +201,7 @@ function Comment({
                   id: "social.post.comment.replyPlaceholder",
                 })}
                 aria-label={intl.formatMessage({ id: "social.post.comment.reply" })}
-                className="flex-1 bg-surface-container-highest rounded-radius-sm px-3 py-1.5 text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="flex-1 bg-surface-container-highest rounded-sm px-3 py-1.5 text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
               <Button
                 type="submit"
@@ -279,7 +279,7 @@ export function PostDetail() {
       <div className="max-w-content-narrow mx-auto space-y-4">
         <PageTitle title={intl.formatMessage({ id: "social.post.loading.title", defaultMessage: "Post" })} />
         <Skeleton className="h-8 w-24" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
       </div>
     );
   }
@@ -359,7 +359,7 @@ export function PostDetail() {
                 ? unlikePost.mutate(post.id)
                 : likePost.mutate(post.id)
             }
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-radius-sm transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm transition-colors ${
               post.is_liked_by_me
                 ? "text-error bg-error-container/50"
                 : "text-on-surface-variant hover:bg-surface-container-low"
@@ -383,7 +383,7 @@ export function PostDetail() {
 
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="ml-auto text-on-surface-variant hover:text-error transition-colors p-1.5 rounded-radius-sm"
+            className="ml-auto text-on-surface-variant hover:text-error transition-colors p-1.5 rounded-sm"
             aria-label={intl.formatMessage({
               id: "social.post.delete",
             })}
@@ -403,7 +403,7 @@ export function PostDetail() {
             id: "social.post.comment.placeholder",
           })}
           aria-label={intl.formatMessage({ id: "social.post.comment.placeholder" })}
-          className="flex-1 bg-surface-container-highest rounded-radius-md px-4 py-2.5 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+          className="flex-1 bg-surface-container-highest rounded-md px-4 py-2.5 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
         />
         <Button
           type="submit"

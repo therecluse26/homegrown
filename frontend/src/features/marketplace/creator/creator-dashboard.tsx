@@ -29,7 +29,7 @@ function StatCard({
   return (
     <Card className="p-card-padding">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-radius-md bg-primary-container flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-md bg-primary-container flex items-center justify-center shrink-0">
           <Icon icon={icon} size="md" className="text-on-primary-container" />
         </div>
         <div>
@@ -57,7 +57,7 @@ export function CreatorDashboard() {
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((n) => (
-            <Skeleton key={n} className="h-24 rounded-radius-md" />
+            <Skeleton key={n} className="h-24 rounded-md" />
           ))}
         </div>
       </div>
@@ -74,7 +74,7 @@ export function CreatorDashboard() {
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="bg-surface-container-highest rounded-radius-sm px-3 py-2 text-on-surface type-body-sm"
+          className="bg-surface-container-highest rounded-sm px-3 py-2 text-on-surface type-body-sm"
         >
           <option value="last_7_days">Last 7 days</option>
           <option value="last_30_days">Last 30 days</option>
@@ -167,7 +167,7 @@ export function CreatorDashboard() {
               <RouterLink
                 key={listing.id}
                 to={`/creator/listings/${listing.id}/edit`}
-                className="flex items-center justify-between py-2 border-b border-outline-variant/10 last:border-0 hover:bg-surface-container-low px-2 rounded-radius-sm transition-colors"
+                className="flex items-center justify-between py-2 border-b border-outline-variant/10 last:border-0 hover:bg-surface-container-low px-2 rounded-sm transition-colors"
               >
                 <div>
                   <p className="type-body-sm text-on-surface">{listing.title}</p>

@@ -43,12 +43,12 @@ export function ViewingAsSelector({
         id="viewing-as-selector"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || undefined)}
-        className="bg-surface-container-highest rounded-radius-sm px-3 py-1.5 text-on-surface type-body-sm border-0 focus-visible:outline-2 focus-visible:outline-focus-ring"
+        className="bg-surface-container-highest rounded-sm px-3 py-1.5 text-on-surface type-body-sm border-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       >
         <option value="">
           {intl.formatMessage({
             id: "browse.viewingAs.none",
-            defaultMessage: "All children",
+            defaultMessage: "Everyone",
           })}
         </option>
         {students.map((s) => (

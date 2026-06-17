@@ -78,7 +78,7 @@ function FriendCard({ friend }: { friend: FriendResponse }) {
       <div className="flex items-center gap-2 shrink-0">
         <RouterLink
           to={`/messages?start=${friend.family_id}`}
-          className="p-2 rounded-radius-sm bg-secondary-container text-on-secondary-container hover:opacity-90 transition-opacity"
+          className="p-2 rounded-sm bg-secondary-container text-on-secondary-container hover:opacity-90 transition-opacity"
           aria-label={intl.formatMessage({ id: "social.friends.message" })}
         >
           <Icon icon={MessageCircle} size="sm" />
@@ -194,7 +194,7 @@ function DiscoverSection() {
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((n) => (
-          <Skeleton key={n} className="h-16 w-full rounded-radius-md" />
+          <Skeleton key={n} className="h-16 w-full rounded-md" />
         ))}
       </div>
     );
@@ -243,7 +243,7 @@ function DiscoverSection() {
 
 function SocialSubNav() {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-2 px-4 py-2 rounded-radius-button type-label-md transition-colors duration-[var(--duration-normal)] ${
+    `flex items-center gap-2 px-4 py-2 rounded-button type-label-md transition-colors duration-[var(--duration-normal)] ${
       isActive
         ? "bg-primary text-on-primary"
         : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
@@ -300,7 +300,7 @@ export function FriendsList() {
                     placeholder={intl.formatMessage({
                       id: "social.friends.search.placeholder",
                     })}
-                    className="w-full pl-10 pr-4 py-2.5 bg-surface-container-highest rounded-radius-md text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                    className="w-full pl-10 pr-4 py-2.5 bg-surface-container-highest rounded-md text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                   />
                 </div>
 
@@ -308,7 +308,7 @@ export function FriendsList() {
                 {friendsPending && (
                   <div className="space-y-3">
                     {[1, 2, 3].map((n) => (
-                      <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+                      <Skeleton key={n} className="h-20 w-full rounded-md" />
                     ))}
                   </div>
                 )}

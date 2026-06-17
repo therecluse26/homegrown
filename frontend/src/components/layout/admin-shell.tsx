@@ -60,7 +60,7 @@ export function AdminShell({ children }: { children?: ReactNode }) {
             aria-expanded={navOpen}
             aria-controls="admin-nav"
             onClick={() => setNavOpen((prev) => !prev)}
-            className="p-2 -ml-2 rounded-radius-button text-on-surface hover:bg-surface-container-high focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="p-2 -ml-2 rounded-button text-on-surface hover:bg-surface-container-high focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <Icon icon={navOpen ? X : Menu} size="md" />
           </button>
@@ -109,7 +109,7 @@ export function AdminShell({ children }: { children?: ReactNode }) {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-radius-button type-label-lg text-on-surface-variant transition-colors duration-[var(--duration-normal)] ${
+                    `flex items-center gap-3 px-3 py-2.5 rounded-button type-label-lg text-on-surface-variant transition-colors duration-[var(--duration-normal)] ${
                       isActive
                         ? "bg-primary/10 text-primary font-semibold"
                         : "hover:bg-surface-container-high"

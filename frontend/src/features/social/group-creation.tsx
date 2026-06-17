@@ -119,7 +119,7 @@ export function GroupCreation() {
               {JOIN_POLICIES.map((policy) => (
                 <label
                   key={policy.value}
-                  className={`flex items-center gap-3 p-3 rounded-radius-md cursor-pointer transition-colors ${
+                  className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
                     joinPolicy === policy.value
                       ? "bg-primary/10"
                       : "bg-surface-container-low hover:bg-surface-container-high"
@@ -153,7 +153,7 @@ export function GroupCreation() {
                     <FormattedMessage id={policy.labelId} />
                   </span>
                   {joinPolicy === policy.value && (
-                    <span className="ml-auto w-2 h-2 rounded-radius-full bg-primary" />
+                    <span className="ml-auto w-2 h-2 rounded-full bg-primary" />
                   )}
                 </label>
               ))}

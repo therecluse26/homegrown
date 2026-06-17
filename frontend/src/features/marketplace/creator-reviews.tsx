@@ -90,7 +90,7 @@ function ReviewCard({ review }: { review: CreatorReview }) {
 
       {/* Existing response */}
       {review.response && !isResponding && (
-        <div className="rounded-radius-sm bg-surface-container-low px-3 py-2 border-l-2 border-primary">
+        <div className="rounded-sm bg-surface-container-low px-3 py-2 border-l-2 border-primary">
           <p className="type-label-sm text-on-surface-variant mb-1">
             <FormattedMessage id="marketplace.reviews.yourResponse" />
           </p>
@@ -138,7 +138,7 @@ function ReviewCard({ review }: { review: CreatorReview }) {
             value={responseText}
             onChange={(e) => setResponseText(e.target.value)}
             rows={3}
-            className="w-full rounded-radius-sm border border-outline bg-surface px-3 py-2 type-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+            className="w-full rounded-sm border border-outline bg-surface px-3 py-2 type-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary resize-y"
             placeholder={intl.formatMessage({
               id: "marketplace.reviews.response.placeholder",
             })}
@@ -191,7 +191,7 @@ export function CreatorReviews() {
         <Skeleton className="h-4 w-80 mb-6" />
         <div className="flex flex-col gap-4">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-32 rounded-radius-md" />
+            <Skeleton key={n} className="h-32 rounded-md" />
           ))}
         </div>
       </div>
@@ -205,7 +205,7 @@ export function CreatorReviews() {
           title={intl.formatMessage({ id: "marketplace.reviews.creator.title" })}
           className="mb-6"
         />
-        <Card className="rounded-radius-md bg-error-container p-card-padding">
+        <Card className="rounded-md bg-error-container p-card-padding">
           <p className="type-body-sm text-on-error-container">
             <FormattedMessage id="error.generic" />
           </p>
@@ -228,7 +228,7 @@ export function CreatorReviews() {
       />
 
       {reviews.length === 0 ? (
-        <div className="rounded-radius-md bg-surface-container-low px-4 py-8 text-center">
+        <div className="rounded-md bg-surface-container-low px-4 py-8 text-center">
           <p className="type-body-md text-on-surface-variant">
             <FormattedMessage id="marketplace.reviews.creator.empty" />
           </p>

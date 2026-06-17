@@ -59,7 +59,7 @@ export function ReadingListBooks() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
       </div>
     );
   }
@@ -196,7 +196,7 @@ export function ReadingListBooks() {
                 <button
                   key={item.id}
                   type="button"
-                  className="w-full flex items-start justify-between p-2 rounded-radius-sm hover:bg-surface-container-low transition-colors text-left"
+                  className="w-full flex items-start justify-between p-2 rounded-sm hover:bg-surface-container-low transition-colors text-left"
                   onClick={() => handleAddBook(item.id)}
                 >
                   <div>

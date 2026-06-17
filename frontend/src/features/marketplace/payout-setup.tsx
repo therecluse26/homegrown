@@ -70,7 +70,7 @@ function MethodCard({
   return (
     <Card className="flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-radius-sm bg-surface-container flex items-center justify-center">
+        <div className="w-8 h-8 rounded-sm bg-surface-container flex items-center justify-center">
           <Icon icon={DollarSign} size="sm" className="text-on-surface-variant" aria-hidden />
         </div>
         <div>
@@ -169,8 +169,8 @@ export function PayoutSetup() {
       <div className="mx-auto max-w-2xl space-y-4">
         <Skeleton className="h-8 w-48 mb-2" />
         <Skeleton className="h-4 w-72 mb-6" />
-        <Skeleton className="h-32 rounded-radius-md" />
-        <Skeleton className="h-48 rounded-radius-md" />
+        <Skeleton className="h-32 rounded-md" />
+        <Skeleton className="h-48 rounded-md" />
       </div>
     );
   }
@@ -389,7 +389,7 @@ export function PayoutSetup() {
                 <div
                   role="alert"
                   aria-live="assertive"
-                  className="rounded-radius-md bg-error-container px-4 py-3 type-body-sm text-on-error-container"
+                  className="rounded-md bg-error-container px-4 py-3 type-body-sm text-on-error-container"
                 >
                   <FormattedMessage id="error.generic" />
                 </div>
@@ -417,7 +417,7 @@ export function PayoutSetup() {
         )}
 
         {!methodsQuery.data || methodsQuery.data.length === 0 ? (
-          <div className="rounded-radius-md bg-surface-container-low px-4 py-6 text-center">
+          <div className="rounded-md bg-surface-container-low px-4 py-6 text-center">
             <p className="type-body-sm text-on-surface-variant">
               <FormattedMessage id="marketplace.payouts.methods.empty" />
             </p>
@@ -448,17 +448,17 @@ export function PayoutSetup() {
 
         {historyQuery.isPending ? (
           <div className="flex flex-col gap-2">
-            <Skeleton className="h-14 rounded-radius-sm" />
-            <Skeleton className="h-14 rounded-radius-sm" />
+            <Skeleton className="h-14 rounded-sm" />
+            <Skeleton className="h-14 rounded-sm" />
           </div>
         ) : !historyQuery.data || historyQuery.data.length === 0 ? (
-          <div className="rounded-radius-md bg-surface-container-low px-4 py-6 text-center">
+          <div className="rounded-md bg-surface-container-low px-4 py-6 text-center">
             <p className="type-body-sm text-on-surface-variant">
               <FormattedMessage id="marketplace.payouts.history.empty" />
             </p>
           </div>
         ) : (
-          <div className="rounded-radius-md border border-outline-variant overflow-hidden">
+          <div className="rounded-md border border-outline-variant overflow-hidden">
             <table className="w-full" aria-label={intl.formatMessage({ id: "marketplace.payouts.history.title" })}>
               <thead className="bg-surface-container-low">
                 <tr>

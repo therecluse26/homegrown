@@ -28,8 +28,8 @@ export function Cart() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-24 w-full rounded-radius-md" />
-        <Skeleton className="h-24 w-full rounded-radius-md" />
+        <Skeleton className="h-24 w-full rounded-md" />
+        <Skeleton className="h-24 w-full rounded-md" />
       </div>
     );
   }
@@ -101,7 +101,7 @@ export function Cart() {
                 className="p-card-padding flex items-center gap-4"
               >
                 {item.thumbnail_url ? (
-                  <div className="w-16 h-16 rounded-radius-sm overflow-hidden shrink-0 bg-surface-container-low">
+                  <div className="w-16 h-16 rounded-sm overflow-hidden shrink-0 bg-surface-container-low">
                     <img
                       src={item.thumbnail_url}
                       alt={item.title}
@@ -109,7 +109,7 @@ export function Cart() {
                     />
                   </div>
                 ) : (
-                  <div className="w-16 h-16 rounded-radius-sm shrink-0 bg-surface-container-low flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-sm shrink-0 bg-surface-container-low flex items-center justify-center">
                     <Icon
                       icon={ShoppingCart}
                       size="md"
@@ -131,7 +131,7 @@ export function Cart() {
                 <button
                   onClick={() => removeFromCart.mutate(item.listing_id)}
                   disabled={removeFromCart.isPending}
-                  className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-radius-sm"
+                  className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-sm"
                   aria-label={intl.formatMessage({
                     id: "marketplace.cart.remove",
                   })}

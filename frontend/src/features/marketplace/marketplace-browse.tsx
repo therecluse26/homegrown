@@ -65,7 +65,7 @@ function ListingCard({
     >
       <Card className="p-card-padding h-full">
         {listing.thumbnail_url && (
-          <div className="w-full h-32 rounded-radius-sm bg-surface-container-low mb-3 overflow-hidden">
+          <div className="w-full h-32 rounded-sm bg-surface-container-low mb-3 overflow-hidden">
             <img
               src={listing.thumbnail_url}
               alt={listing.title}
@@ -75,7 +75,7 @@ function ListingCard({
           </div>
         )}
         {!listing.thumbnail_url && (
-          <div className="w-full h-32 rounded-radius-sm bg-surface-container-low mb-3 flex items-center justify-center">
+          <div className="w-full h-32 rounded-sm bg-surface-container-low mb-3 flex items-center justify-center">
             <Icon
               icon={ShoppingCart}
               size="xl"
@@ -204,7 +204,7 @@ export function MarketplaceBrowse() {
                     sort_by: e.target.value || undefined,
                   }))
                 }
-                className="bg-surface-container-highest rounded-radius-sm px-3 py-2 text-on-surface type-body-sm"
+                className="bg-surface-container-highest rounded-sm px-3 py-2 text-on-surface type-body-sm"
               >
                 <option value="">
                   {intl.formatMessage({ id: "marketplace.sort.relevance" })}
@@ -235,7 +235,7 @@ export function MarketplaceBrowse() {
                     content_type: e.target.value || undefined,
                   }))
                 }
-                className="bg-surface-container-highest rounded-radius-sm px-3 py-2 text-on-surface type-body-sm"
+                className="bg-surface-container-highest rounded-sm px-3 py-2 text-on-surface type-body-sm"
               >
                 <option value="">All</option>
                 <option value="curriculum">Curriculum</option>
@@ -294,7 +294,7 @@ export function MarketplaceBrowse() {
       {isFiltered && isPending && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-            <Skeleton key={n} className="h-56 rounded-radius-md" />
+            <Skeleton key={n} className="h-56 rounded-md" />
           ))}
         </div>
       )}

@@ -69,7 +69,7 @@ export function CoppaMicroCharge() {
       <div className="mx-auto max-w-lg">
         <Skeleton className="h-8 w-64 mb-2" />
         <Skeleton className="h-4 w-96 mb-6" />
-        <Skeleton className="h-48 rounded-radius-md" />
+        <Skeleton className="h-48 rounded-md" />
       </div>
     );
   }
@@ -112,7 +112,7 @@ export function CoppaMicroCharge() {
         /* Step 1: Explain and initiate */
         <Card className="flex flex-col gap-5">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-radius-md bg-primary-container flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-md bg-primary-container flex items-center justify-center shrink-0">
               <Icon
                 icon={ShieldCheck}
                 size="md"
@@ -148,7 +148,7 @@ export function CoppaMicroCharge() {
 
           <div
             role="note"
-            className="rounded-radius-md bg-surface-container-low px-4 py-3 type-body-sm text-on-surface-variant"
+            className="rounded-md bg-surface-container-low px-4 py-3 type-body-sm text-on-surface-variant"
           >
             <FormattedMessage id="coppa.microCharge.refundNote" />
           </div>
@@ -157,7 +157,7 @@ export function CoppaMicroCharge() {
             <div
               role="alert"
               aria-live="assertive"
-              className="rounded-radius-md bg-error-container px-4 py-3 type-body-sm text-on-error-container"
+              className="rounded-md bg-error-container px-4 py-3 type-body-sm text-on-error-container"
             >
               <FormattedMessage id="error.generic" />
             </div>
@@ -178,7 +178,7 @@ export function CoppaMicroCharge() {
         /* Step 2: Enter charged amount */
         <Card className="flex flex-col gap-5">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-radius-md bg-tertiary-container flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-md bg-tertiary-container flex items-center justify-center shrink-0">
               <Icon
                 icon={CreditCard}
                 size="md"
@@ -236,7 +236,7 @@ export function CoppaMicroCharge() {
 
             <div
               role="note"
-              className="rounded-radius-md bg-surface-container-low px-4 py-3 type-body-sm text-on-surface-variant"
+              className="rounded-md bg-surface-container-low px-4 py-3 type-body-sm text-on-surface-variant"
             >
               <FormattedMessage id="coppa.microCharge.enter.hint" />
             </div>

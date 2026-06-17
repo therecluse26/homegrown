@@ -76,7 +76,7 @@ function CoopItemCard({
 }) {
   return (
     <div
-      className={`flex items-center gap-2 px-2 py-1.5 rounded-radius-sm ${SOURCE_BG[item.source]} ${SOURCE_TEXT[item.source]} type-label-sm`}
+      className={`flex items-center gap-2 px-2 py-1.5 rounded-sm ${SOURCE_BG[item.source]} ${SOURCE_TEXT[item.source]} type-label-sm`}
     >
       <span className="truncate flex-1">{item.title}</span>
       {item.start_time && (
@@ -380,7 +380,7 @@ export function CoopCoordination() {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
+          className="p-2 rounded-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "planning.calendar.previous",
           })}
@@ -398,7 +398,7 @@ export function CoopCoordination() {
           </h2>
           <button
             onClick={goToToday}
-            className="px-2 py-1 type-label-sm text-primary hover:bg-primary-container/30 rounded-radius-sm transition-colors"
+            className="px-2 py-1 type-label-sm text-primary hover:bg-primary-container/30 rounded-sm transition-colors"
           >
             <FormattedMessage id="planning.calendar.today" />
           </button>
@@ -406,7 +406,7 @@ export function CoopCoordination() {
 
         <button
           onClick={() => navigate(1)}
-          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
+          className="p-2 rounded-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "planning.calendar.next",
           })}
@@ -419,7 +419,7 @@ export function CoopCoordination() {
       {isPending ? (
         <div className="space-y-4">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-40 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-40 w-full rounded-md" />
           ))}
         </div>
       ) : (

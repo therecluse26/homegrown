@@ -98,7 +98,7 @@ function PostComposer() {
               placeholder={intl.formatMessage({
                 id: "social.feed.composer.placeholder",
               })}
-              className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               aria-label={intl.formatMessage({
                 id: "social.feed.composer.label",
               })}
@@ -123,7 +123,7 @@ function PostComposer() {
                   key={type}
                   type="button"
                   onClick={() => setPostType(type)}
-                  className={`p-2 rounded-radius-sm transition-colors touch-target ${
+                  className={`p-2 rounded-sm transition-colors touch-target ${
                     postType === type
                       ? "bg-primary-container text-on-primary-container"
                       : "text-on-surface-variant hover:bg-surface-container-low"
@@ -222,7 +222,7 @@ function PostCard({ post }: { post: PostResponse }) {
         <DropdownMenu
           trigger={
             <button
-              className="p-1.5 rounded-radius-sm hover:bg-surface-container-low text-on-surface-variant"
+              className="p-1.5 rounded-sm hover:bg-surface-container-low text-on-surface-variant"
               aria-label={intl.formatMessage({
                 id: "social.post.actions",
               })}
@@ -258,7 +258,7 @@ function PostCard({ post }: { post: PostResponse }) {
           <textarea
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
-            className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+            className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             aria-label={intl.formatMessage({ id: "social.post.edit.label" })}
             autoFocus
           />
@@ -292,7 +292,7 @@ function PostCard({ post }: { post: PostResponse }) {
       <div className="flex items-center gap-4 pt-3 border-t border-outline-variant/10">
         <button
           onClick={handleLikeToggle}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-radius-sm transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm transition-colors ${
             post.is_liked_by_me
               ? "text-error bg-error-container/50"
               : "text-on-surface-variant hover:bg-surface-container-low"
@@ -311,7 +311,7 @@ function PostCard({ post }: { post: PostResponse }) {
 
         <RouterLink
           to={`/post/${post.id}`}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
           aria-label={intl.formatMessage(
             {
               id: "feed.post.comments.aria",
@@ -411,7 +411,7 @@ export function Feed() {
             action={
               <RouterLink
                 to="/friends"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-radius-button type-label-md touch-target"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-button type-label-md touch-target"
               >
                 <FormattedMessage id="social.feed.empty.cta" />
               </RouterLink>

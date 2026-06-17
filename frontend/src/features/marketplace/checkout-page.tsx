@@ -151,9 +151,9 @@ export function CheckoutPage() {
       <Card className="p-card-padding">
         {state === "loading" && (
           <div className="space-y-3">
-            <Skeleton className="h-10 w-full rounded-radius-sm" />
-            <Skeleton className="h-10 w-full rounded-radius-sm" />
-            <Skeleton className="h-10 w-2/3 rounded-radius-sm" />
+            <Skeleton className="h-10 w-full rounded-sm" />
+            <Skeleton className="h-10 w-full rounded-sm" />
+            <Skeleton className="h-10 w-2/3 rounded-sm" />
           </div>
         )}
 

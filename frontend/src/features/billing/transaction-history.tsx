@@ -114,12 +114,12 @@ export function TransactionHistory() {
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3 mb-6">
         {/* Type filter tabs */}
-        <div className="flex items-center gap-1 bg-surface-container-high rounded-radius-full p-1">
+        <div className="flex items-center gap-1 bg-surface-container-high rounded-full p-1">
           {FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
-              className={`px-3 py-1.5 rounded-radius-full type-label-sm transition-colors ${
+              className={`px-3 py-1.5 rounded-full type-label-sm transition-colors ${
                 filterType === opt.value
                   ? "bg-primary text-on-primary"
                   : "text-on-surface-variant hover:bg-surface-container-highest"
@@ -140,7 +140,7 @@ export function TransactionHistory() {
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="type-body-sm text-on-surface bg-surface-container-highest px-2 py-1.5 rounded-radius-sm"
+            className="type-body-sm text-on-surface bg-surface-container-highest px-2 py-1.5 rounded-sm"
           />
           <label className="type-label-sm text-on-surface-variant">
             <FormattedMessage id="billing.transactions.to" />
@@ -149,7 +149,7 @@ export function TransactionHistory() {
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="type-body-sm text-on-surface bg-surface-container-highest px-2 py-1.5 rounded-radius-sm"
+            className="type-body-sm text-on-surface bg-surface-container-highest px-2 py-1.5 rounded-sm"
           />
         </div>
       </div>

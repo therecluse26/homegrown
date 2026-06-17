@@ -33,8 +33,8 @@ export function FamilyProfile() {
   if (isPending) {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
-        <Skeleton className="h-32 w-full rounded-radius-md" />
-        <Skeleton className="h-24 w-full rounded-radius-md" />
+        <Skeleton className="h-32 w-full rounded-md" />
+        <Skeleton className="h-24 w-full rounded-md" />
       </div>
     );
   }
@@ -130,7 +130,7 @@ export function FamilyProfile() {
                 <>
                   <RouterLink
                     to={`/messages?start=${profile.family_id}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-radius-button bg-secondary-container text-on-secondary-container type-label-md hover:opacity-90 transition-opacity"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-secondary-container text-on-secondary-container type-label-md hover:opacity-90 transition-opacity"
                   >
                     <Icon icon={MessageCircle} size="sm" />
                     <FormattedMessage id="social.friends.message" />

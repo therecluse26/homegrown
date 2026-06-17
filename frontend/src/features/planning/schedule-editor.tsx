@@ -133,7 +133,7 @@ export function ScheduleEditor() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full rounded-radius-md" />
+        <Skeleton className="h-64 w-full rounded-md" />
       </div>
     );
   }
@@ -191,7 +191,7 @@ export function ScheduleEditor() {
                 value={form.description ?? ""}
                 onChange={(e) => updateField("description", e.target.value)}
                 rows={2}
-                className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             )}
           </FormField>
@@ -345,7 +345,7 @@ export function ScheduleEditor() {
                 value={form.notes ?? ""}
                 onChange={(e) => updateField("notes", e.target.value)}
                 rows={2}
-                className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             )}
           </FormField>
