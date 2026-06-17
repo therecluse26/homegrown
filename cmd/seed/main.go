@@ -248,6 +248,29 @@ const (
 	// Kratos admin API base URLs (host ports, not container-internal)
 	kratosAdminURL      = "http://localhost:4934" // dev Kratos (homegrown DB)
 	kratosAgentAdminURL = "http://localhost:4936" // agent Kratos (kratos_agent DB)
+
+	// Stress Family — adversarial layout/overflow test data (range: 02...)
+	// Login: stress@example.com / SeedPassword123!
+	// Purpose: surfaces layout bugs hidden by polite happy-path seed data.
+	stressFamilyID         = "02000000-0000-7000-8000-000000000001"
+	stressParentID         = "02000000-0000-7000-8000-000000000002"
+	stressStudent1ID       = "02000000-0000-7000-8000-000000000011" // ~195-char Latin+diacritics name
+	stressStudent2ID       = "02000000-0000-7000-8000-000000000012" // emoji + mixed unicode name
+	stressStudent3ID       = "02000000-0000-7000-8000-000000000013" // Arabic RTL name
+	stressStudent4ID       = "02000000-0000-7000-8000-000000000014" // Greek script name
+	stressStudent5ID       = "02000000-0000-7000-8000-000000000015" // normal (bulk to stress many-students UI)
+	stressStudent6ID       = "02000000-0000-7000-8000-000000000016"
+	stressStudent7ID       = "02000000-0000-7000-8000-000000000017"
+	stressStudent8ID       = "02000000-0000-7000-8000-000000000018"
+	stressWizardProgressID = "02000000-0000-7000-8000-000000000021"
+	stressCoppaAuditID     = "02000000-0000-7000-8000-000000000022"
+	stressPublisherID      = "02000000-0000-7000-8000-000000000031"
+	stressCreatorID        = "02000000-0000-7000-8000-000000000032"
+	stressJournal1ID       = "02000000-0000-7000-8000-000000000041" // very long content
+	stressJournal2ID       = "02000000-0000-7000-8000-000000000042" // emoji + unicode + RTL mix
+	stressJournal3ID       = "02000000-0000-7000-8000-000000000043" // minimal content (missing optional richness)
+	stressReadingListID    = "02000000-0000-7000-8000-000000000051" // empty reading list
+	fallbackStressKratosID = "02000000-0000-7000-8000-000000000999"
 )
 
 func main() {
@@ -302,9 +325,10 @@ func main() {
 	// ── Kratos identities ─────────────────────────────────────────────────
 	seedKratosID := ensureKratosIdentity(dbName)
 	adminKratosID := ensureAdminKratosIdentity(dbName)
+	stressKratosID := ensureStressKratosIdentity(dbName)
 
 	// ── Seed all domains ──────────────────────────────────────────────────
-	if err := seedAll(db, seedKratosID, adminKratosID); err != nil {
+	if err := seedAll(db, seedKratosID, adminKratosID, stressKratosID); err != nil {
 		slog.Error("seeding failed", "err", err)
 		os.Exit(1)
 	}
@@ -511,7 +535,7 @@ func ensureAdminKratosIdentity(dbName string) string {
 
 // ─── Seed orchestrator ────────────────────────────────────────────────────────
 
-func seedAll(db *gorm.DB, seedKratosID, adminKratosID string) error {
+func seedAll(db *gorm.DB, seedKratosID, adminKratosID, stressKratosID string) error {
 	// Look up platform publisher ID (seeded by migration, not by seeder)
 	var platformPublisherID string
 	if err := db.Raw("SELECT id FROM mkt_publishers WHERE slug = 'homegrown-academy'").
@@ -549,6 +573,7 @@ func seedAll(db *gorm.DB, seedKratosID, adminKratosID string) error {
 		{"LearnerProfile", seedLearnerProfile},
 		{"Planning", seedPlan},
 		{"Lifecycle", seedLifecycle},
+		{"StressFamily", func(db *gorm.DB) error { return seedStressFamily(db, stressKratosID) }},
 	}
 
 	for _, step := range steps {
@@ -2625,6 +2650,483 @@ func seedLifecycle(db *gorm.DB) error {
 			lifecycleExport1ID, seedFamilyID, seedParentID,
 		).Error; err != nil {
 			return fmt.Errorf("insert lifecycle export request: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ─── Stress Family ID helpers ─────────────────────────────────────────────────
+// Generate deterministic IDs for bulk stress-family rows. Idempotent across runs.
+
+func stressListingID(n int) string   { return fmt.Sprintf("02000000-0000-7000-8000-0000000001%02d", n) }
+func stressActLogID(n int) string    { return fmt.Sprintf("02000000-0000-7000-8000-0000000002%02d", n) }
+func stressSchedItemID(n int) string { return fmt.Sprintf("02000000-0000-7000-8000-0000000003%02d", n) }
+
+// ─── Stress Kratos identity ───────────────────────────────────────────────────
+
+func ensureStressKratosIdentity(dbName string) string {
+	for _, baseURL := range kratosURLOrder(dbName) {
+		if id, ok := kratosLookupOrCreate(baseURL, "stress@example.com"); ok {
+			return id
+		}
+	}
+	slog.Warn("Kratos unreachable, using fallback identity UUID for stress parent")
+	return fallbackStressKratosID
+}
+
+// ─── Stress family seed ───────────────────────────────────────────────────────
+//
+// Adversarial "stress family" for layout/overflow QA. All data is synthetic.
+//
+// Login:   stress@example.com / SeedPassword123!
+// Purpose: surfaces layout bugs hidden by polite happy-path data.
+//
+// Covered failure modes:
+//   - Long names:    family (~175 chars with diacritics), parent (~150 chars),
+//                    student 1 (~195-char Latin+diacritics), student 2 (emoji+unicode),
+//                    student 3 (Arabic RTL), student 4 (Greek script),
+//                    listing 1 title ~200 chars.
+//   - Many items:    8 students, 20 marketplace listings, 25 activity log entries,
+//                    12 schedule items.
+//   - Empty sets:    zero notifications, zero purchases, zero social posts,
+//                    empty reading list (no items), students 5–8 have zero activity logs.
+//   - Unicode/RTL:   Arabic in student 3 name and activity logs; Greek in student 4;
+//                    emoji in student 2 name and journal entries.
+//   - Missing opts:  empty bio on social profile; 5 draft listings (no published_at);
+//                    journal entry 3 minimal content.
+//   - Huge numbers:  listing 6 at price_cents=9_999_999 (~$100K);
+//                    listing 5 at price_cents=0 (free);
+//                    listing 7 at price_cents=1 (minimum);
+//                    activity log 4 with duration_minutes=9999 (~7 days);
+//                    activity log 10 with duration_minutes=1 (minimum).
+
+func seedStressFamily(db *gorm.DB, stressKratosID string) error {
+	if err := seedStressFamilyIAM(db, stressKratosID); err != nil {
+		return err
+	}
+	if err := seedStressFamilyOnboard(db); err != nil {
+		return err
+	}
+	if err := seedStressFamilySocial(db); err != nil {
+		return err
+	}
+	if err := seedStressFamilyMarketplace(db); err != nil {
+		return err
+	}
+	if err := seedStressFamilyLearn(db); err != nil {
+		return err
+	}
+	return seedStressFamilyPlan(db)
+}
+
+func seedStressFamilyIAM(db *gorm.DB, stressKratosID string) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		const (
+			longFamilyName = "Müller-García-Nakamura-Okonkwo-Johanssen-Papadopoulos International Cooperative Homeschooling Family of Greater Metropolitan Austin — Classical Trivium & Charlotte Mason"
+			longParentName = "Administrateur Pédagogique Principal de la Grande Famille Müller-García-Nakamura-Okonkwo, Responsable de l'Éducation Maison Extraordinairement Dénommée"
+		)
+
+		if err := tx.Exec(`
+			INSERT INTO iam_families
+				(id, display_name, state_code, primary_methodology_slug,
+				 subscription_tier, coppa_consent_status, coppa_consented_at, coppa_consent_method)
+			VALUES (?, ?, 'TX', 'charlotte-mason', 'free',
+				'consented', NOW(), 'credit_card_verification')
+			ON CONFLICT (id) DO NOTHING`,
+			stressFamilyID, longFamilyName,
+		).Error; err != nil {
+			return fmt.Errorf("insert stress family: %w", err)
+		}
+
+		if err := tx.Exec(`
+			INSERT INTO iam_parents
+				(id, family_id, kratos_identity_id, display_name, email, is_primary)
+			VALUES (?, ?, ?, ?, 'stress@example.com', true)
+			ON CONFLICT (id) DO NOTHING`,
+			stressParentID, stressFamilyID, stressKratosID, longParentName,
+		).Error; err != nil {
+			return fmt.Errorf("insert stress parent: %w", err)
+		}
+
+		if err := tx.Exec(`
+			UPDATE iam_families SET primary_parent_id = ?
+			WHERE id = ? AND primary_parent_id IS NULL`,
+			stressParentID, stressFamilyID,
+		).Error; err != nil {
+			return fmt.Errorf("update stress family primary parent: %w", err)
+		}
+
+		type stressStudent struct {
+			id         string
+			name       string
+			birthYear  int
+			gradeLevel string
+		}
+		students := []stressStudent{
+			// #1: ~195-char Latin+diacritics name — tests max-width truncation
+			{stressStudent1ID,
+				"Reginald Bartholomew Constantine Fitzgerald-Montgomery von Schüttemeyer-Nakamura-García-Okonkwo the Third Extraordinarily Long Student Name For Automated Layout Stress Testing Of Text Truncation",
+				2010, "8th"},
+			// #2: emoji + mixed unicode
+			{stressStudent2ID, "🦁 Émilie-Ångström Ñoño 📚🌿 Unicode Emoji Student", 2015, "4th"},
+			// #3: Arabic RTL
+			{stressStudent3ID, "أحمد محمد عبدالله النموذجي للاختبار", 2012, "6th"},
+			// #4: Greek script
+			{stressStudent4ID, "Αλεξάνδρα Νικολάου-Παπαδοπούλου", 2013, "7th"},
+			// #5–#8: normal names, bulk count tests "many students" scroll behaviour
+			{stressStudent5ID, "Alice Verylongsurname-Hyphenated-Compound", 2016, "3rd"},
+			{stressStudent6ID, "Bob Short", 2018, "1st"},
+			{stressStudent7ID, "Carol-Anne Middleton", 2017, "2nd"},
+			{stressStudent8ID, "Dave", 2019, "K"},
+		}
+		for _, s := range students {
+			if err := tx.Exec(`
+				INSERT INTO iam_students
+					(id, family_id, display_name, birth_year, grade_level)
+				VALUES (?, ?, ?, ?, ?)
+				ON CONFLICT (id) DO NOTHING`,
+				s.id, stressFamilyID, s.name, s.birthYear, s.gradeLevel,
+			).Error; err != nil {
+				return fmt.Errorf("insert stress student %s: %w", s.id, err)
+			}
+		}
+
+		if err := tx.Exec(`
+			INSERT INTO iam_coppa_audit_log
+				(id, family_id, action, method,
+				 previous_status, new_status, performed_by)
+			VALUES (?, ?, 'consent_granted', 'credit_card_verification',
+				'noticed', 'consented', ?)
+			ON CONFLICT (id) DO NOTHING`,
+			stressCoppaAuditID, stressFamilyID, stressParentID,
+		).Error; err != nil {
+			return fmt.Errorf("insert stress coppa audit log: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func seedStressFamilyOnboard(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		// Wizard = skipped so the stress family bypasses the onboarding guard.
+		return tx.Exec(`
+			INSERT INTO onb_wizard_progress
+				(id, family_id, status, current_step, completed_steps)
+			VALUES (?, ?, 'skipped', 'family_profile', '{}')
+			ON CONFLICT (family_id) DO NOTHING`,
+			stressWizardProgressID, stressFamilyID,
+		).Error
+	})
+}
+
+func seedStressFamilySocial(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		// Empty bio string — tests the missing-optional-field social profile state.
+		// No posts, conversations, or events: exercises the empty social feed UI state.
+		return tx.Exec(`
+			INSERT INTO soc_profiles (family_id, bio)
+			VALUES (?, '')
+			ON CONFLICT (family_id) DO NOTHING`,
+			stressFamilyID,
+		).Error
+	})
+}
+
+func seedStressFamilyMarketplace(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		// Publisher name is itself a long stress string.
+		if err := tx.Exec(`
+			INSERT INTO mkt_publishers
+				(id, name, slug, description, is_platform, is_verified)
+			VALUES (?,
+				'Stress Test Press — Müller-García-Nakamura-Okonkwo & Associates Educational Publishing House of Greater Metropolitan Austin International',
+				'stress-test-press',
+				NULL,
+				false, false)
+			ON CONFLICT (id) DO NOTHING`,
+			stressPublisherID,
+		).Error; err != nil {
+			return fmt.Errorf("insert stress publisher: %w", err)
+		}
+
+		// store_bio = NULL — tests missing-optional creator bio display.
+		if err := tx.Exec(`
+			INSERT INTO mkt_creators
+				(id, parent_id, onboarding_status, store_name, store_bio, tos_accepted_at)
+			VALUES (?, ?, 'active', 'Stress Test Press', NULL, NOW() - INTERVAL '10 days')
+			ON CONFLICT (id) DO NOTHING`,
+			stressCreatorID, stressParentID,
+		).Error; err != nil {
+			return fmt.Errorf("insert stress creator: %w", err)
+		}
+
+		if err := tx.Exec(`
+			INSERT INTO mkt_publisher_members (publisher_id, creator_id, role)
+			VALUES (?, ?, 'owner')
+			ON CONFLICT (publisher_id, creator_id) DO NOTHING`,
+			stressPublisherID, stressCreatorID,
+		).Error; err != nil {
+			return fmt.Errorf("insert stress publisher member: %w", err)
+		}
+
+		// Long description for listing 2: ~3 000 chars of repetitive text.
+		longDesc := strings.Repeat("This is a very long description paragraph that tests the layout when descriptions are excessively verbose and extend far beyond what a normal creator would write. The narration continues for many sentences to push layout boundaries. ", 14)
+
+		type stressListing struct {
+			n           int
+			title       string
+			description string
+			priceCents  int
+			contentType string
+			status      string
+			published   bool
+		}
+		listings := []stressListing{
+			// 1: ~200-char title — tests listing-card title overflow
+			{1,
+				"The Extraordinarily Comprehensive and Extensively Detailed Charlotte Mason Year-One Curriculum Planning Guide for Ambitious Homeschooling Families Pursuing Excellence in Classical Education",
+				"A complete first-year guide.", 2999, "curriculum", "published", true},
+			// 2: normal title, very long description
+			{2, "Nature Journal Starter Pack — Stress Edition", longDesc, 999, "worksheet", "published", true},
+			// 3: emoji + unicode in title
+			{3, "🌿 Émoji & Ünïcödé Cürrïcülüm Güïdé 📚 — Ångström Edition", "Resources with special characters in title.", 1499, "curriculum", "published", true},
+			// 4: Arabic title — RTL text in a LTR listing card
+			{4, "المواد التعليمية للتجربة — Educational Materials For Testing", "Bilingual Arabic-English listing.", 1799, "worksheet", "published", true},
+			// 5: price = 0 (free listing edge case)
+			{5, "Free Starter Guide — Zero Price Edge Case", "This listing is free. Tests zero-price display.", 0, "worksheet", "published", true},
+			// 6: huge price (~$100 K) — tests currency formatting overflow
+			{6, "Premium Platinum Deluxe Curriculum Suite — Enterprise Edition", "The most expensive listing for stress testing huge price display.", 9999999, "curriculum", "published", true},
+			// 7: minimum price = 1 cent
+			{7, "Minimal Priced Resource (One Cent)", "One cent listing for minimum price edge case.", 1, "worksheet", "published", true},
+			// 8–12: draft listings (no published_at) — tests missing-optional field in listing UI
+			{8, "Draft Listing Alpha — Unpublished", "Draft listing 1.", 500, "worksheet", "draft", false},
+			{9, "Draft Listing Beta — Pending Review", "Draft listing 2.", 500, "worksheet", "draft", false},
+			{10, "Draft Listing Gamma", "Draft listing 3.", 500, "worksheet", "draft", false},
+			{11, "Draft Listing Delta", "Draft listing 4.", 500, "worksheet", "draft", false},
+			{12, "Draft Listing Epsilon", "Draft listing 5.", 500, "worksheet", "draft", false},
+			// 13–20: standard listings to reach 20 total (forces pagination at >10 items)
+			{13, "Stress Listing 13 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+			{14, "Stress Listing 14 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+			{15, "Stress Listing 15 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+			{16, "Stress Listing 16 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+			{17, "Stress Listing 17 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+			{18, "Stress Listing 18 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+			{19, "Stress Listing 19 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+			{20, "Stress Listing 20 — Standard", "Standard listing.", 999, "worksheet", "published", true},
+		}
+
+		for _, l := range listings {
+			id := stressListingID(l.n)
+			if l.published {
+				if err := tx.Exec(`
+					INSERT INTO mkt_listings
+						(id, creator_id, publisher_id, title, description, price_cents,
+						 methodology_tags, subject_tags, content_type, status, published_at)
+					VALUES (?, ?, ?, ?, ?, ?,
+						'{}', ARRAY['science'], ?, ?, NOW() - INTERVAL '5 days')
+					ON CONFLICT (id) DO NOTHING`,
+					id, stressCreatorID, stressPublisherID,
+					l.title, l.description, l.priceCents, l.contentType, l.status,
+				).Error; err != nil {
+					return fmt.Errorf("insert stress listing %d: %w", l.n, err)
+				}
+			} else {
+				// Draft: no published_at — missing optional field
+				if err := tx.Exec(`
+					INSERT INTO mkt_listings
+						(id, creator_id, publisher_id, title, description, price_cents,
+						 methodology_tags, subject_tags, content_type, status)
+					VALUES (?, ?, ?, ?, ?, ?,
+						'{}', ARRAY['science'], ?, ?)
+					ON CONFLICT (id) DO NOTHING`,
+					id, stressCreatorID, stressPublisherID,
+					l.title, l.description, l.priceCents, l.contentType, l.status,
+				).Error; err != nil {
+					return fmt.Errorf("insert stress draft listing %d: %w", l.n, err)
+				}
+			}
+		}
+
+		return nil
+	})
+}
+
+func seedStressFamilyLearn(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		now := time.Now()
+
+		// 25 activity logs across students 1–4.
+		// Students 5–8 have zero activity logs — tests empty activity-history UI state.
+		type actLog struct {
+			n          int
+			studentID  string
+			actDefID   string
+			title      string
+			daysAgo    int
+			durationMn int
+		}
+		logs := []actLog{
+			// Student 1 (long name): many logs, including huge and minimal durations
+			{1, stressStudent1ID, activityDef1ID, "Nature Walk — Stress Student Long Name Day 1", 0, 60},
+			{2, stressStudent1ID, activityDef2ID, "Math Games — Stress Student Day 1", 0, 30},
+			{3, stressStudent1ID, activityDef3ID, "Read Aloud: Charlotte's Web — Stress Student Day 1", 1, 45},
+			{4, stressStudent1ID, activityDef1ID, "Nature Walk — Day 2 (9999 min huge duration)", 1, 9999},
+			{5, stressStudent1ID, activityDef2ID, "Math — Day 3", 2, 35},
+			{6, stressStudent1ID, activityDef3ID, "Read Aloud — Day 3", 2, 45},
+			{7, stressStudent1ID, activityDef1ID, "Nature — Day 5", 4, 50},
+			{8, stressStudent1ID, activityDef2ID, "Math — Day 7", 6, 30},
+			{9, stressStudent1ID, activityDef3ID, "Read Aloud — Day 10", 9, 45},
+			{10, stressStudent1ID, activityDef1ID, "Nature — Day 14 (1 min minimal duration)", 13, 1},
+			// Student 2 (emoji name): logs with emoji/unicode in title
+			{11, stressStudent2ID, activityDef1ID, "🌿 Nature Walk — Émoji Student 📚", 0, 45},
+			{12, stressStudent2ID, activityDef3ID, "Read Aloud — Ångström Study Session 🦁", 1, 40},
+			{13, stressStudent2ID, activityDef2ID, "Math Games — Unicode Émoji ñoño", 2, 30},
+			{14, stressStudent2ID, activityDef1ID, "Nature — Day 5", 4, 55},
+			{15, stressStudent2ID, activityDef3ID, "Read Aloud — Day 7", 6, 45},
+			// Student 3 (Arabic RTL): logs with Arabic text
+			{16, stressStudent3ID, activityDef1ID, "جولة الطبيعة — دراسة التلميذ النموذجي في العلوم", 0, 60},
+			{17, stressStudent3ID, activityDef2ID, "ألعاب الرياضيات — اليوم الأول", 1, 30},
+			{18, stressStudent3ID, activityDef3ID, "القراءة بصوت عالٍ — الفصل الأول", 2, 45},
+			// Student 4 (Greek): logs with Greek text
+			{19, stressStudent4ID, activityDef1ID, "Βόλτα στη Φύση — Ελληνικός Μαθητής", 0, 55},
+			{20, stressStudent4ID, activityDef2ID, "Παιχνίδια Μαθηματικών — Ημέρα 1", 1, 30},
+			{21, stressStudent4ID, activityDef3ID, "Ανάγνωση Δυνατά — Κεφάλαιο Πρώτο", 2, 40},
+			// Additional logs to reach 25 total
+			{22, stressStudent1ID, activityDef2ID, "Math — Week 4", 21, 35},
+			{23, stressStudent2ID, activityDef1ID, "Nature — Week 4", 22, 50},
+			{24, stressStudent3ID, activityDef3ID, "Read Aloud — Week 5", 28, 45},
+			{25, stressStudent4ID, activityDef2ID, "Math — Week 5", 29, 30},
+		}
+
+		for _, l := range logs {
+			id := stressActLogID(l.n)
+			date := now.AddDate(0, 0, -l.daysAgo).Format("2006-01-02")
+			if err := tx.Exec(`
+				INSERT INTO learn_activity_logs
+					(id, family_id, student_id, title, subject_tags,
+					 content_id, duration_minutes, activity_date)
+				VALUES (?, ?, ?, ?, ARRAY['science'], ?, ?, ?)
+				ON CONFLICT (id) DO NOTHING`,
+				id, stressFamilyID, l.studentID, l.title,
+				l.actDefID, l.durationMn, date,
+			).Error; err != nil {
+				return fmt.Errorf("insert stress activity log %d: %w", l.n, err)
+			}
+		}
+
+		// Journal entries: 3 for student 1 only.
+		// Students 2–8 have zero journal entries — tests empty journal UI state.
+		longContent := strings.Repeat("This is a very long journal entry paragraph that tests how the UI handles excessively verbose free-text content from a student or parent. The narration continues for many sentences to push layout boundaries and verify text overflow handling. ", 20)
+		emojiContent := "🦁 Today we saw lions and 🌿 plants! The nature study was 📚 amazing. أحمد and Αλεξάνδρα both attended. 日本語テスト. Ångström units. Ñoño noño. ¡Hola! Ça va? Привет мир."
+
+		journals := []struct {
+			id        string
+			entryType string
+			title     string
+			content   string
+		}{
+			// Long content: tests scroll/overflow in journal entry view
+			{stressJournal1ID, "narration", "Very Long Narration Entry — Layout Stress Test For Maximum Content Overflow", longContent},
+			// Emoji + unicode + RTL mixed: tests bidi rendering
+			{stressJournal2ID, "freeform", "🌿 Emoji & Unicode Journal Entry 📚🦁 — Mixed Scripts", emojiContent},
+			// Minimal content: tests missing-optional-richness display (no subjects inferred)
+			{stressJournal3ID, "freeform", "Brief", "Brief."},
+		}
+		for _, j := range journals {
+			if err := tx.Exec(`
+				INSERT INTO learn_journal_entries
+					(id, family_id, student_id, entry_type, title, content, subject_tags, entry_date)
+				VALUES (?, ?, ?, ?, ?, ?, ARRAY['science'], CURRENT_DATE)
+				ON CONFLICT (id) DO NOTHING`,
+				j.id, stressFamilyID, stressStudent1ID,
+				j.entryType, j.title, j.content,
+			).Error; err != nil {
+				return fmt.Errorf("insert stress journal %s: %w", j.id, err)
+			}
+		}
+
+		// Empty reading list: no items added — tests the empty reading-list UI state.
+		return tx.Exec(`
+			INSERT INTO learn_reading_lists
+				(id, family_id, name, description, student_id)
+			VALUES (?, ?, 'Stress Empty Reading List — Tests Empty State UI', NULL, ?)
+			ON CONFLICT (id) DO NOTHING`,
+			stressReadingListID, stressFamilyID, stressStudent1ID,
+		).Error
+	})
+}
+
+func seedStressFamilyPlan(db *gorm.DB) error {
+	return bypassRLS(db, func(tx *gorm.DB) error {
+		now := time.Now()
+
+		type schedItem struct {
+			n         int
+			studentID *string
+			title     string
+			daysOut   int
+			startTime string
+			endTime   string
+			category  string
+			color     string
+		}
+		s1 := stressStudent1ID
+		s2 := stressStudent2ID
+
+		items := []schedItem{
+			// Unicode/emoji title
+			{1, &s1, "🌿 Nature Walk — Émoji Schedule Item 📚 Ångström Edition", 0, "09:00", "10:00", "activity", "#10B981"},
+			// Long title — tests schedule-card title overflow
+			{2, &s1, "Read Aloud: Charlotte's Web & Mathematics Cross-Subject Integrated Learning Block — Extraordinarily Long Schedule Item Title For Layout Stress", 0, "10:00", "11:30", "reading", "#3B82F6"},
+			// 8-hour item (480 min) — tests huge-duration display
+			{3, &s2, "Full-Day Arabic Language Immersion Session — أحمد محمد — 480 Minutes", 1, "08:00", "16:00", "lesson", "#8B5CF6"},
+			// 5-minute item — tests minimum-duration display
+			{4, &s1, "Quick Vocabulary Check", 1, "09:00", "09:05", "lesson", "#F59E0B"},
+			// Two overlapping items for same student same day — tests schedule conflict display
+			{5, &s1, "Overlapping Block A (10:00–11:00)", 2, "10:00", "11:00", "activity", "#EF4444"},
+			{6, &s1, "Overlapping Block B (10:30–11:30)", 2, "10:30", "11:30", "lesson", "#EF4444"},
+			// Family-wide items (no student)
+			{7, nil, "Family Co-op — All Students Weekly Meeting", 2, "13:00", "16:00", "co_op", "#6366F1"},
+			{8, nil, "Stress Co-op: Ångström Session & الاجتماع العائلي Ελληνικός", 3, "09:00", "12:00", "co_op", "#14B8A6"},
+			// Additional items to force vertical scroll (12 total)
+			{9, &s1, "Stress Item 9 — Standard", 4, "09:00", "09:30", "activity", "#10B981"},
+			{10, &s2, "Stress Item 10 — Standard", 4, "10:00", "10:30", "lesson", "#3B82F6"},
+			{11, &s1, "Stress Item 11 — Standard", 5, "09:00", "09:45", "reading", "#F59E0B"},
+			{12, &s2, "Stress Item 12 — Standard", 5, "11:00", "12:00", "activity", "#8B5CF6"},
+		}
+
+		for _, item := range items {
+			id := stressSchedItemID(item.n)
+			date := now.AddDate(0, 0, item.daysOut).Format("2006-01-02")
+			if item.studentID != nil {
+				if err := tx.Exec(`
+					INSERT INTO plan_schedule_items
+						(id, family_id, student_id, title, start_date,
+						 start_time, end_time, category, color)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT (id) DO NOTHING`,
+					id, stressFamilyID, *item.studentID,
+					item.title, date, item.startTime, item.endTime,
+					item.category, item.color,
+				).Error; err != nil {
+					return fmt.Errorf("insert stress schedule item %d: %w", item.n, err)
+				}
+			} else {
+				if err := tx.Exec(`
+					INSERT INTO plan_schedule_items
+						(id, family_id, title, start_date,
+						 start_time, end_time, category, color)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT (id) DO NOTHING`,
+					id, stressFamilyID,
+					item.title, date, item.startTime, item.endTime,
+					item.category, item.color,
+				).Error; err != nil {
+					return fmt.Errorf("insert stress schedule item %d: %w", item.n, err)
+				}
+			}
 		}
 
 		return nil
