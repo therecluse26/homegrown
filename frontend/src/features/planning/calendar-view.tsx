@@ -163,6 +163,104 @@ function CalendarItemCard({
   );
 }
 
+// ─── Month helpers ──────────────────────────────────────────────────────────
+
+function getMonthStart(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+// ─── Month grid view ─────────────────────────────────────────────────────────
+
+function MonthGridView({
+  year,
+  month,
+  today,
+  getItemsForDate,
+  onSelectDay,
+}: {
+  year: number;
+  month: number;
+  today: Date;
+  getItemsForDate: (date: Date) => CalendarItem[];
+  onSelectDay: (date: Date) => void;
+}) {
+  const intl = useIntl();
+  const monthStart = new Date(year, month, 1);
+  const gridStart = getWeekStart(monthStart);
+
+  // 6 rows × 7 cols = 42 cells to cover any month layout
+  const allDays = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  const weeks = Array.from({ length: 6 }, (_, i) => allDays.slice(i * 7, (i + 1) * 7));
+
+  const dayHeaders = Array.from({ length: 7 }, (_, i) =>
+    addDays(gridStart, i).toLocaleDateString(intl.locale, { weekday: "short" }),
+  );
+
+  return (
+    <div>
+      <div className="grid grid-cols-7 mb-1">
+        {dayHeaders.map((name) => (
+          <div key={name} className="text-center type-label-sm text-on-surface-variant uppercase py-1">
+            {name}
+          </div>
+        ))}
+      </div>
+      <div className="divide-y divide-outline-variant/10">
+        {weeks.map((week, wi) => {
+          // Skip rows that are entirely outside the current month
+          if (week.every((d) => d.getMonth() !== month)) return null;
+          return (
+            <div key={wi} className="grid grid-cols-7 divide-x divide-outline-variant/10">
+              {week.map((date) => {
+                const isCurrentMonth = date.getMonth() === month;
+                const isToday = isSameDay(date, today);
+                const items = getItemsForDate(date);
+                const maxVisible = 2;
+                const overflow = items.length - maxVisible;
+                return (
+                  <button
+                    key={formatDate(date)}
+                    onClick={() => onSelectDay(date)}
+                    className={`min-h-[5rem] p-1 text-left transition-colors hover:bg-surface-container-low ${
+                      !isCurrentMonth ? "opacity-40" : ""
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex items-center justify-center w-6 h-6 rounded-full type-label-md mb-1 ${
+                        isToday ? "bg-primary text-on-primary" : "text-on-surface"
+                      }`}
+                    >
+                      {date.getDate()}
+                    </span>
+                    <div className="space-y-0.5">
+                      {items.slice(0, maxVisible).map((item) => {
+                        const style = SOURCE_STYLES[item.source];
+                        return (
+                          <div
+                            key={`${item.source}-${item.id}`}
+                            className={`px-1 py-0.5 rounded-radius-sm type-label-sm truncate ${style.bg} ${style.text}`}
+                          >
+                            {item.title}
+                          </div>
+                        );
+                      })}
+                      {overflow > 0 && (
+                        <p className="type-label-sm text-on-surface-variant px-1">
+                          +{overflow}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Day column (used in week view) ─────────────────────────────────────────
 
 function DayColumn({
@@ -506,7 +604,7 @@ function ExportPanel({
 
 // ─── Calendar page ──────────────────────────────────────────────────────────
 
-type ViewMode = "week" | "day";
+type ViewMode = "week" | "day" | "month";
 
 export function CalendarView() {
   const intl = useIntl();
@@ -518,6 +616,7 @@ export function CalendarView() {
   const initialViewMode = useMemo((): ViewMode => {
     if (location.pathname.includes("/calendar/day/")) return "day";
     if (location.pathname.includes("/calendar/week/")) return "week";
+    if (location.pathname.includes("/calendar/month")) return "month";
     return "week";
   }, [location.pathname]);
 
@@ -545,6 +644,11 @@ export function CalendarView() {
         end: formatDate(addDays(selectedDate, 1)),
       };
     }
+    if (viewMode === "month") {
+      const ms = getMonthStart(selectedDate);
+      const me = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1);
+      return { start: formatDate(ms), end: formatDate(me) };
+    }
     return {
       start: formatDate(getWeekStart(selectedDate)),
       end: formatDate(getWeekEnd(selectedDate)),
@@ -560,9 +664,15 @@ export function CalendarView() {
   // Navigation
   const navigate = useCallback(
     (direction: -1 | 1) => {
-      setSelectedDate((prev) =>
-        addDays(prev, direction * (viewMode === "week" ? 7 : 1)),
-      );
+      if (viewMode === "month") {
+        setSelectedDate((prev) =>
+          new Date(prev.getFullYear(), prev.getMonth() + direction, 1),
+        );
+      } else {
+        setSelectedDate((prev) =>
+          addDays(prev, direction * (viewMode === "week" ? 7 : 1)),
+        );
+      }
     },
     [viewMode],
   );
@@ -591,6 +701,12 @@ export function CalendarView() {
 
   // Header date text
   const headerText = useMemo(() => {
+    if (viewMode === "month") {
+      return selectedDate.toLocaleDateString(intl.locale, {
+        month: "long",
+        year: "numeric",
+      });
+    }
     if (viewMode === "day") {
       return selectedDate.toLocaleDateString(intl.locale, {
         weekday: "long",
@@ -619,6 +735,16 @@ export function CalendarView() {
         <div className="flex items-center gap-3">
           {/* View toggle */}
           <div className="flex bg-surface-container-low rounded-radius-sm">
+            <button
+              onClick={() => setViewMode("month")}
+              className={`px-3 py-1.5 type-label-md rounded-radius-sm transition-colors ${
+                viewMode === "month"
+                  ? "bg-primary text-on-primary"
+                  : "text-on-surface-variant hover:bg-surface-container-high"
+              }`}
+            >
+              <FormattedMessage id="planning.calendar.view.month" />
+            </button>
             <button
               onClick={() => setViewMode("week")}
               className={`px-3 py-1.5 type-label-md rounded-radius-sm transition-colors ${
@@ -750,6 +876,17 @@ export function CalendarView() {
               <Skeleton key={n} className="h-12 w-full rounded-radius-sm" />
             ))}
           </div>
+        ) : viewMode === "month" ? (
+          <MonthGridView
+            year={selectedDate.getFullYear()}
+            month={selectedDate.getMonth()}
+            today={today}
+            getItemsForDate={getItemsForDate}
+            onSelectDay={(date) => {
+              setSelectedDate(date);
+              setViewMode("day");
+            }}
+          />
         ) : viewMode === "week" ? (
           <div className="flex gap-2 overflow-x-auto">
             {weekDates.map((date) => (

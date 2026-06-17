@@ -115,6 +115,7 @@ function Comment({
                       setEditText(comment.content);
                     }
                   }}
+                  aria-label={intl.formatMessage({ id: "social.post.comment.edit" })}
                   className="flex-1 bg-surface-container-highest rounded-radius-sm px-2 py-1 text-on-surface type-body-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                   autoFocus
                 />
@@ -199,6 +200,7 @@ function Comment({
                 placeholder={intl.formatMessage({
                   id: "social.post.comment.replyPlaceholder",
                 })}
+                aria-label={intl.formatMessage({ id: "social.post.comment.reply" })}
                 className="flex-1 bg-surface-container-highest rounded-radius-sm px-3 py-1.5 text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
               <Button
@@ -206,6 +208,7 @@ function Comment({
                 variant="primary"
                 size="sm"
                 disabled={!replyText.trim() || createComment.isPending}
+                aria-label={intl.formatMessage({ id: "social.post.comment.submit" })}
               >
                 <Icon icon={Send} size="xs" />
               </Button>
@@ -362,16 +365,20 @@ export function PostDetail() {
                 : "text-on-surface-variant hover:bg-surface-container-low"
             }`}
             aria-pressed={post.is_liked_by_me}
+            aria-label={intl.formatMessage(
+              { id: "social.post.like.toggle" },
+              { liked: post.is_liked_by_me },
+            )}
           >
-            <Icon icon={Heart} size="sm" />
+            <Icon icon={Heart} size="sm" aria-hidden />
             <span className="type-label-md">
               {post.likes_count > 0 && post.likes_count}
             </span>
           </button>
 
-          <span className="flex items-center gap-1.5 text-on-surface-variant">
-            <Icon icon={MessageCircle} size="sm" />
-            <span className="type-label-md">{comments.length}</span>
+          <span className="flex items-center gap-1.5 text-on-surface-variant" aria-label={intl.formatMessage({ id: "feed.post.comments.aria" }, { count: comments.length })}>
+            <Icon icon={MessageCircle} size="sm" aria-hidden />
+            <span className="type-label-md" aria-hidden="true">{comments.length}</span>
           </span>
 
           <button
@@ -395,6 +402,7 @@ export function PostDetail() {
           placeholder={intl.formatMessage({
             id: "social.post.comment.placeholder",
           })}
+          aria-label={intl.formatMessage({ id: "social.post.comment.placeholder" })}
           className="flex-1 bg-surface-container-highest rounded-radius-md px-4 py-2.5 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
         />
         <Button
@@ -402,8 +410,9 @@ export function PostDetail() {
           variant="primary"
           size="md"
           disabled={!commentText.trim() || createComment.isPending}
+          aria-label={intl.formatMessage({ id: "social.post.comment.submit" })}
         >
-          <Icon icon={Send} size="sm" />
+          <Icon icon={Send} size="sm" aria-hidden />
         </Button>
       </form>
 

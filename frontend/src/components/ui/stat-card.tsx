@@ -31,8 +31,8 @@ export function StatCard({
     >
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1">
-          <p className="type-label-md text-on-surface-variant">{label}</p>
-          <p className="type-headline-md text-on-surface">{value}</p>
+          <p className="type-label-md text-on-surface-variant" aria-hidden="true">{label}</p>
+          <p className="type-headline-md text-on-surface" aria-label={`${String(value)} ${label}`}>{value}</p>
           {trend && (
             <p className={`type-label-sm ${trendClasses[trend.direction]}`}>
               {trend.label}

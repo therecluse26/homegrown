@@ -141,7 +141,6 @@ const CreatorEarnings = lazy(() => import("@/features/marketplace/creator/creato
 const CreatorAnalytics = lazy(() => import("@/features/marketplace/creator/creator-analytics").then(m => ({ default: m.CreatorAnalytics })));
 
 // Stub / redirect pages
-const ComingSoonStub = lazy(() => import("@/components/common/coming-soon-stub").then(m => ({ default: m.ComingSoonStub })));
 const ProfileRedirect = lazy(() => import("@/features/social/profile-redirect").then(m => ({ default: m.ProfileRedirect })));
 const LogoutRoute = lazy(() => import("@/features/auth/logout-route").then(m => ({ default: m.LogoutRoute })));
 
@@ -401,7 +400,7 @@ const routes: RouteObject[] = [
               // Calendar/Planning redirects
               { path: "planning", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/week", element: <Navigate to="/calendar" replace /> },
-              { path: "calendar/month", element: <Navigate to="/calendar" replace /> },
+              { path: "calendar/month", element: <CalendarView /> },
               { path: "calendar/new", element: <Navigate to="/schedule/new" replace /> },
               { path: "calendar/schedules", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/templates", element: <Navigate to="/planning/templates" replace /> },
@@ -543,9 +542,6 @@ const routes: RouteObject[] = [
           // Compliance pages
           { path: "portfolios/new", element: <PortfolioNew /> },
           { path: "requirements", element: <ComplianceRequirements /> },
-          // Deferred — need new backend models
-          { path: "immunization", element: <ComingSoonStub title="Immunization Records" description="Track immunization records for compliance." backTo="/compliance" backLabel="Back to Compliance" /> },
-          { path: "submissions", element: <ComingSoonStub title="Submissions" description="View and manage compliance document submissions." backTo="/compliance" backLabel="Back to Compliance" /> },
         ],
       },
     ],

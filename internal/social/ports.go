@@ -83,6 +83,7 @@ type SocialService interface {
 	ListPlatformGroups(ctx context.Context) ([]GroupResponse, error)
 	ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, statusFilter string) ([]GroupMemberResponse, error)
 	ListGroupPosts(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
+	ListFamilyPosts(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, offset, limit int) ([]PostResponse, error)
 
 	// ─── Pinned Post Commands ───────────────────────────────────────────
 	PinPost(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, postID uuid.UUID) error

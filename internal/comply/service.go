@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -33,6 +34,7 @@ type ComplianceServiceImpl struct {
 	discoverySvc      DiscoveryServiceForComply
 	mediaSvc          MediaServiceForComply
 	events            *shared.EventBus
+	jobs              shared.JobEnqueuer
 }
 
 // NewComplianceService creates a ComplianceService backed by the provided dependencies.
@@ -52,6 +54,7 @@ func NewComplianceService(
 	discoverySvc DiscoveryServiceForComply,
 	mediaSvc MediaServiceForComply,
 	events *shared.EventBus,
+	jobs shared.JobEnqueuer,
 ) ComplianceService {
 	return &ComplianceServiceImpl{
 		stateConfigRepo:   stateConfigRepo,
@@ -63,12 +66,13 @@ func NewComplianceService(
 		portfolioRepo:     portfolioRepo,
 		portfolioItemRepo: portfolioItemRepo,
 		transcriptRepo:    transcriptRepo,
-		courseRepo:         courseRepo,
+		courseRepo:        courseRepo,
 		iamSvc:            iamSvc,
 		learnSvc:          learnSvc,
 		discoverySvc:      discoverySvc,
 		mediaSvc:          mediaSvc,
 		events:            events,
+		jobs:              jobs,
 	}
 }
 
@@ -493,6 +497,12 @@ func (s *ComplianceServiceImpl) GeneratePortfolio(ctx context.Context, studentID
 	if err != nil {
 		return nil, err
 	}
+	if err := s.jobs.Enqueue(ctx, GeneratePortfolioPayload{
+		PortfolioID: portfolioID,
+		FamilyID:    scope.FamilyID(),
+	}); err != nil {
+		return nil, fmt.Errorf("comply: enqueue generate_portfolio: %w", err)
+	}
 	return mapPortfolioToResponse(updated, nil), nil
 }
 
@@ -535,6 +545,12 @@ func (s *ComplianceServiceImpl) GenerateTranscript(ctx context.Context, studentI
 	updated, err := s.transcriptRepo.UpdateStatus(ctx, transcriptID, string(PortfolioStatusGenerating), nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
+	}
+	if err := s.jobs.Enqueue(ctx, GenerateTranscriptPayload{
+		TranscriptID: transcriptID,
+		FamilyID:     scope.FamilyID(),
+	}); err != nil {
+		return nil, fmt.Errorf("comply: enqueue generate_transcript: %w", err)
 	}
 	return mapTranscriptToResponse(updated, nil, nil), nil
 }
@@ -769,7 +785,21 @@ func (s *ComplianceServiceImpl) GetPortfolio(ctx context.Context, studentID uuid
 		return nil, err
 	}
 
-	return mapPortfolioToResponse(portfolio, items), nil
+	resp := mapPortfolioToResponse(portfolio, items)
+
+	studentName, err := s.iamSvc.GetStudentName(ctx, studentID)
+	if err == nil {
+		resp.StudentName = studentName
+	}
+
+	if portfolio.Status == string(PortfolioStatusReady) && portfolio.UploadID != nil &&
+		(portfolio.ExpiresAt == nil || portfolio.ExpiresAt.After(time.Now().UTC())) {
+		if url, err := s.mediaSvc.PresignedGet(ctx, *portfolio.UploadID); err == nil {
+			resp.DownloadURL = &url
+		}
+	}
+
+	return resp, nil
 }
 
 func (s *ComplianceServiceImpl) ListPortfolios(ctx context.Context, studentID uuid.UUID, scope shared.FamilyScope) ([]PortfolioSummaryResponse, error) {

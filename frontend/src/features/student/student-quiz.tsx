@@ -267,6 +267,7 @@ export function StudentQuiz() {
             size="sm"
             onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
             disabled={currentIndex === 0}
+            aria-label={intl.formatMessage({ id: "quiz.prev" })}
           >
             <Icon icon={ArrowLeft} size="sm" aria-hidden />
           </Button>
@@ -298,6 +299,7 @@ export function StudentQuiz() {
               setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))
             }
             disabled={currentIndex === questions.length - 1}
+            aria-label={intl.formatMessage({ id: "quiz.next" })}
           >
             <Icon icon={ArrowRight} size="sm" aria-hidden />
           </Button>

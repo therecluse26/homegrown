@@ -1654,6 +1654,49 @@ func (s *socialServiceImpl) ListGroupPosts(ctx context.Context, auth *shared.Aut
 	return results, nil
 }
 
+func (s *socialServiceImpl) ListFamilyPosts(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, offset, limit int) ([]PostResponse, error) {
+	var visibilities []string
+	if auth.FamilyID == familyID {
+		visibilities = []string{"public", "friends", "private"}
+	} else {
+		areFriends, err := s.friendshipRepo.AreFriends(ctx, auth.FamilyID, familyID)
+		if err != nil {
+			return nil, err
+		}
+		if areFriends {
+			visibilities = []string{"public", "friends"}
+		} else {
+			visibilities = []string{"public"}
+		}
+	}
+
+	posts, err := s.postRepo.ListByFamily(ctx, familyID, visibilities, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]PostResponse, len(posts))
+	for i, p := range posts {
+		authorName, _ := s.iam.GetFamilyDisplayName(ctx, p.FamilyID)
+		liked, _ := s.likeRepo.Exists(ctx, p.ID, auth.FamilyID)
+		results[i] = PostResponse{
+			ID:            p.ID,
+			FamilyID:      p.FamilyID,
+			AuthorName:    authorName,
+			PostType:      p.PostType,
+			Content:       p.Content,
+			Attachments:   p.Attachments,
+			Visibility:    p.Visibility,
+			LikesCount:    p.LikesCount,
+			CommentsCount: p.CommentsCount,
+			IsEdited:      p.IsEdited,
+			IsLikedByMe:   liked,
+			IsMine:        p.FamilyID == auth.FamilyID,
+			CreatedAt:     p.CreatedAt,
+		}
+	}
+	return results, nil
+}
+
 // ─── Events ─────────────────────────────────────────────────────────────────
 
 func (s *socialServiceImpl) CreateEvent(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error) {

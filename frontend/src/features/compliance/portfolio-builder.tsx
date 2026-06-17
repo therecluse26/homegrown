@@ -431,7 +431,7 @@ export function PortfolioBuilder() {
     setCoverName(portfolio.cover_student_name ?? portfolio.student_name);
     setCoverDateRange(
       portfolio.cover_date_range ??
-        `${portfolio.date_range_start} – ${portfolio.date_range_end}`,
+        `${new Date(portfolio.date_range_start).toLocaleDateString()} – ${new Date(portfolio.date_range_end).toLocaleDateString()}`,
     );
     setOrganization(portfolio.organization);
     setItemsDirty(false);

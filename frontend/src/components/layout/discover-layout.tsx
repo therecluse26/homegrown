@@ -10,7 +10,7 @@ import { useAuthContext } from "@/features/auth/auth-provider";
  * and a CTA to register.
  */
 export function DiscoverLayout() {
-  const { user } = useAuthContext();
+  const { user, isLoading } = useAuthContext();
 
   return (
     <>
@@ -60,7 +60,7 @@ export function DiscoverLayout() {
             </nav>
 
             {/* CTA */}
-            {user ? (
+            {!isLoading && (user ? (
               <Link to="/" tabIndex={-1}>
                 <Button variant="secondary" size="sm">Go to App →</Button>
               </Link>
@@ -68,7 +68,7 @@ export function DiscoverLayout() {
               <Link to="/auth/register" tabIndex={-1}>
                 <Button variant="primary" size="sm">Sign Up Free</Button>
               </Link>
-            )}
+            ))}
           </div>
         </header>
 

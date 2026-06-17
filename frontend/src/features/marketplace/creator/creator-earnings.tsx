@@ -59,9 +59,6 @@ export function CreatorEarnings() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h1 className="type-headline-md text-on-surface font-semibold">
-          <FormattedMessage id="creator.earnings.title" />
-        </h1>
         {dashboard && dashboard.pending_payout_cents > 0 && (
           <Button
             variant="primary"

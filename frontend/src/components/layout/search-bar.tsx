@@ -58,10 +58,24 @@ export function SearchBar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Global Ctrl+K to focus search
+  // Global Ctrl+K or "/" to focus search (not when already in an input)
   useEffect(() => {
     function handleGlobalKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setIsOpen(true);
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      const isInInput =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable;
+
+      if (e.key === "/" && !isInInput) {
         e.preventDefault();
         inputRef.current?.focus();
         setIsOpen(true);

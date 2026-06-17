@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink, useParams } from "react-router";
-import { MapPin, UserPlus, Lock, MessageCircle, UserMinus } from "lucide-react";
+import { MapPin, UserPlus, Lock, MessageCircle, UserMinus, Pencil } from "lucide-react";
 import {
   Button,
   Card,
@@ -117,6 +117,15 @@ export function FamilyProfile() {
 
             {/* Actions */}
             <div className="flex flex-wrap gap-2 mt-4">
+              {profile.family_id === user?.family_id && (
+                <RouterLink to="/settings">
+                  <Button variant="secondary" size="sm">
+                    <Icon icon={Pencil} size="sm" className="mr-1" />
+                    <FormattedMessage id="social.profile.editProfile" />
+                  </Button>
+                </RouterLink>
+              )}
+
               {profile.is_friend && profile.family_id !== user?.family_id && (
                 <>
                   <RouterLink

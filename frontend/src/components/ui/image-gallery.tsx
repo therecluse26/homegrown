@@ -87,6 +87,9 @@ export function ImageGallery({
         createPortal(
            
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={currentImage.alt}
             className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/80"
             onKeyDown={handleKeyDown}
           >
