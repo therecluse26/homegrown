@@ -201,10 +201,10 @@ export function PricingPage() {
         </p>
 
         {/* Monthly/Annual toggle */}
-        <div className="inline-flex items-center gap-1 bg-surface-container-high rounded-radius-full p-1">
+        <div className="inline-flex items-center gap-1 bg-surface-container-high rounded-full p-1">
           <button
             type="button"
-            className={`px-4 py-2 rounded-radius-full type-label-md transition-colors ${
+            className={`px-4 py-2 rounded-full type-label-md transition-colors ${
               interval === "monthly"
                 ? "bg-primary text-on-primary"
                 : "text-on-surface-variant hover:bg-surface-container-highest"
@@ -215,7 +215,7 @@ export function PricingPage() {
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-radius-full type-label-md transition-colors flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-full type-label-md transition-colors flex items-center gap-1.5 ${
               interval === "annual"
                 ? "bg-primary text-on-primary"
                 : "text-on-surface-variant hover:bg-surface-container-highest"

@@ -29,7 +29,7 @@ export function StudentShell({ children }: { children?: ReactNode }) {
         <header className="flex items-center gap-3 p-spacing-page-x py-4 bg-surface-container-low/80 backdrop-blur-[20px] sticky top-0 z-[var(--z-sticky)]">
           <NavLink
             to="/"
-            className="flex items-center gap-2 px-3 py-2 rounded-radius-xl text-primary type-label-lg hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-primary type-label-lg hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
           >
             <Icon icon={ArrowLeft} size="md" />
             <span>{intl.formatMessage({ id: "common.back", defaultMessage: "Back to Parent" })}</span>
@@ -59,7 +59,7 @@ export function StudentShell({ children }: { children?: ReactNode }) {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `flex flex-col items-center gap-0.5 px-4 py-2 min-w-[4rem] rounded-radius-xl transition-colors duration-[var(--duration-normal)] ${
+                    `flex flex-col items-center gap-0.5 px-4 py-2 min-w-[4rem] rounded-xl transition-colors duration-[var(--duration-normal)] ${
                       isActive ? "text-primary" : "text-on-surface-variant"
                     }`
                   }

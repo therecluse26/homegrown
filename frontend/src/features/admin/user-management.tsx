@@ -63,7 +63,7 @@ export function UserManagement() {
         <select
           value={statusFilter}
           onChange={(e) => updateParam("status", e.target.value)}
-          className="bg-surface-container-highest rounded-radius-md px-3 py-2 text-on-surface type-body-sm"
+          className="bg-surface-container-highest rounded-md px-3 py-2 text-on-surface type-body-sm"
         >
           <option value="">All statuses</option>
           <option value="active">Active</option>
@@ -76,7 +76,7 @@ export function UserManagement() {
       {isPending && (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((n) => (
-            <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-20 w-full rounded-md" />
           ))}
         </div>
       )}

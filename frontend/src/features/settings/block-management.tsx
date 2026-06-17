@@ -31,7 +31,7 @@ export function BlockManagement() {
       {isPending && (
         <div className="space-y-3">
           {[1, 2].map((n) => (
-            <Skeleton key={n} className="h-16 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-16 w-full rounded-md" />
           ))}
         </div>
       )}

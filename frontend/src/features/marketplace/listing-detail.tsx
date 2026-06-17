@@ -145,8 +145,8 @@ export function ListingDetail() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full rounded-radius-md" />
-        <Skeleton className="h-32 w-full rounded-radius-md" />
+        <Skeleton className="h-64 w-full rounded-md" />
+        <Skeleton className="h-32 w-full rounded-md" />
       </div>
     );
   }
@@ -211,7 +211,7 @@ export function ListingDetail() {
       <Card className="p-card-padding mb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
           {listing.thumbnail_url ? (
-            <div className="w-full h-48 rounded-radius-md overflow-hidden bg-surface-container-low sm:w-48 sm:shrink-0">
+            <div className="w-full h-48 rounded-md overflow-hidden bg-surface-container-low sm:w-48 sm:shrink-0">
               <img
                 src={listing.thumbnail_url}
                 alt={listing.title}
@@ -219,7 +219,7 @@ export function ListingDetail() {
               />
             </div>
           ) : (
-            <div className="w-full h-48 rounded-radius-md bg-surface-container-low flex items-center justify-center sm:w-48 sm:shrink-0">
+            <div className="w-full h-48 rounded-md bg-surface-container-low flex items-center justify-center sm:w-48 sm:shrink-0">
               <Icon
                 icon={FileText}
                 size="xl"
@@ -413,7 +413,7 @@ export function ListingDetail() {
             {listing.bundle_items.map((item) => (
               <div
                 key={item.listing_id}
-                className="flex items-center gap-3 p-2 rounded-radius-sm bg-surface-container-low"
+                className="flex items-center gap-3 p-2 rounded-sm bg-surface-container-low"
               >
                 <Icon icon={FileText} size="sm" className="text-on-surface-variant shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -449,7 +449,7 @@ export function ListingDetail() {
             {listing.files.map((file) => (
               <div
                 key={file.id}
-                className="flex items-center gap-3 p-2 rounded-radius-sm bg-surface-container-low"
+                className="flex items-center gap-3 p-2 rounded-sm bg-surface-container-low"
               >
                 <Icon icon={FileText} size="sm" className="text-on-surface-variant" />
                 <div className="flex-1 min-w-0">
@@ -512,7 +512,7 @@ export function ListingDetail() {
                 placeholder={intl.formatMessage({
                   id: "marketplace.review.placeholder",
                 })}
-                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
               <div className="flex justify-end gap-2">
                 <Button

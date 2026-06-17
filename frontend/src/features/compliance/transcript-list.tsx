@@ -71,7 +71,7 @@ function TranscriptCard({
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => onDelete(transcript.id)}
-            className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
+            className="p-2 rounded-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
             aria-label={intl.formatMessage(
               { id: "compliance.transcript.delete.label" },
               { name: transcript.title },
@@ -295,7 +295,7 @@ export function TranscriptList() {
       {isPending ? (
         <div className="space-y-3">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-20 w-full rounded-md" />
           ))}
         </div>
       ) : !transcripts || transcripts.length === 0 ? (

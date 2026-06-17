@@ -129,7 +129,7 @@ function CalendarItemCard({
 }) {
   const style = SOURCE_STYLES[item.source];
   const to = getItemPath(item);
-  const baseClass = `flex items-center gap-1.5 px-1.5 py-1 rounded-radius-sm ${style.bg} ${style.text} type-label-sm`;
+  const baseClass = `flex items-center gap-1.5 px-1.5 py-1 rounded-sm ${style.bg} ${style.text} type-label-sm`;
 
   const inner = (
     <>
@@ -238,7 +238,7 @@ function MonthGridView({
                         return (
                           <div
                             key={`${item.source}-${item.id}`}
-                            className={`px-1 py-0.5 rounded-radius-sm type-label-sm truncate ${style.bg} ${style.text}`}
+                            className={`px-1 py-0.5 rounded-sm type-label-sm truncate ${style.bg} ${style.text}`}
                           >
                             {item.title}
                           </div>
@@ -511,7 +511,7 @@ function ExportPanel({
                   key={f}
                   type="button"
                   onClick={() => setFormat(f)}
-                  className={`px-3 py-1.5 rounded-radius-sm type-label-md transition-colors ${
+                  className={`px-3 py-1.5 rounded-sm type-label-md transition-colors ${
                     format === f
                       ? "bg-primary text-on-primary"
                       : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
@@ -535,7 +535,7 @@ function ExportPanel({
                 id="export-student"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               >
                 <option value="">
                   {intl.formatMessage({ id: "planning.export.allStudents" })}
@@ -563,7 +563,7 @@ function ExportPanel({
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             />
           </div>
           <div>
@@ -578,7 +578,7 @@ function ExportPanel({
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             />
           </div>
         </div>
@@ -734,10 +734,10 @@ export function CalendarView() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           {/* View toggle */}
-          <div className="flex bg-surface-container-low rounded-radius-sm">
+          <div className="flex bg-surface-container-low rounded-sm">
             <button
               onClick={() => setViewMode("month")}
-              className={`px-3 py-1.5 type-label-md rounded-radius-sm transition-colors ${
+              className={`px-3 py-1.5 type-label-md rounded-sm transition-colors ${
                 viewMode === "month"
                   ? "bg-primary text-on-primary"
                   : "text-on-surface-variant hover:bg-surface-container-high"
@@ -747,7 +747,7 @@ export function CalendarView() {
             </button>
             <button
               onClick={() => setViewMode("week")}
-              className={`px-3 py-1.5 type-label-md rounded-radius-sm transition-colors ${
+              className={`px-3 py-1.5 type-label-md rounded-sm transition-colors ${
                 viewMode === "week"
                   ? "bg-primary text-on-primary"
                   : "text-on-surface-variant hover:bg-surface-container-high"
@@ -757,7 +757,7 @@ export function CalendarView() {
             </button>
             <button
               onClick={() => setViewMode("day")}
-              className={`px-3 py-1.5 type-label-md rounded-radius-sm transition-colors ${
+              className={`px-3 py-1.5 type-label-md rounded-sm transition-colors ${
                 viewMode === "day"
                   ? "bg-primary text-on-primary"
                   : "text-on-surface-variant hover:bg-surface-container-high"
@@ -837,7 +837,7 @@ export function CalendarView() {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
+          className="p-2 rounded-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "planning.calendar.previous",
           })}
@@ -851,7 +851,7 @@ export function CalendarView() {
           </h2>
           <button
             onClick={goToToday}
-            className="px-2 py-1 type-label-sm text-primary hover:bg-primary-container/30 rounded-radius-sm transition-colors"
+            className="px-2 py-1 type-label-sm text-primary hover:bg-primary-container/30 rounded-sm transition-colors"
           >
             <FormattedMessage id="planning.calendar.today" />
           </button>
@@ -859,7 +859,7 @@ export function CalendarView() {
 
         <button
           onClick={() => navigate(1)}
-          className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
+          className="p-2 rounded-sm text-on-surface-variant hover:bg-surface-container-low transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "planning.calendar.next",
           })}
@@ -873,7 +873,7 @@ export function CalendarView() {
         {isPending ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((n) => (
-              <Skeleton key={n} className="h-12 w-full rounded-radius-sm" />
+              <Skeleton key={n} className="h-12 w-full rounded-sm" />
             ))}
           </div>
         ) : viewMode === "month" ? (

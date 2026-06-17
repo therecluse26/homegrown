@@ -62,7 +62,7 @@ function RSVPButton({ event }: { event: EventDetailResponse }) {
     <div className="flex gap-1.5">
       <button
         onClick={() => handleRSVP("going")}
-        className={`flex items-center gap-1 px-3 py-1.5 rounded-radius-sm type-label-md transition-colors ${
+        className={`flex items-center gap-1 px-3 py-1.5 rounded-sm type-label-md transition-colors ${
           event.my_rsvp === "going"
             ? "bg-primary text-on-primary"
             : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
@@ -75,7 +75,7 @@ function RSVPButton({ event }: { event: EventDetailResponse }) {
       </button>
       <button
         onClick={() => handleRSVP("interested")}
-        className={`flex items-center gap-1 px-3 py-1.5 rounded-radius-sm type-label-md transition-colors ${
+        className={`flex items-center gap-1 px-3 py-1.5 rounded-sm type-label-md transition-colors ${
           event.my_rsvp === "interested"
             ? "bg-secondary-container text-on-secondary-container"
             : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
@@ -99,7 +99,7 @@ function EventCard({ event }: { event: EventDetailResponse }) {
     <Card className="p-card-padding">
       <div className="flex items-start gap-4">
         {/* Date badge */}
-        <div className="w-14 h-14 rounded-radius-md bg-primary-container text-on-primary-container flex flex-col items-center justify-center shrink-0">
+        <div className="w-14 h-14 rounded-md bg-primary-container text-on-primary-container flex flex-col items-center justify-center shrink-0">
           <span className="type-label-sm uppercase">
             {eventDate.toLocaleDateString(undefined, { month: "short" })}
           </span>
@@ -250,7 +250,7 @@ function CreateEventModal({
               id={id}
               value={form.description ?? ""}
               onChange={(e) => updateField("description", e.target.value)}
-              className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             />
           )}
         </FormField>
@@ -345,7 +345,7 @@ function CreateEventModal({
               id={id}
               value={form.visibility ?? "friends"}
               onChange={(e) => updateField("visibility", e.target.value)}
-              className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             >
               <option value="friends">
                 {intl.formatMessage({ id: "social.events.form.visibility.friends" })}
@@ -402,7 +402,7 @@ export function EventsList() {
       {isPending && (
         <div className="space-y-4">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-28 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-28 w-full rounded-md" />
           ))}
         </div>
       )}

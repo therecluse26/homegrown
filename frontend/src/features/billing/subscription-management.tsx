@@ -228,7 +228,7 @@ export function SubscriptionManagement() {
 
         {/* Past-due warning */}
         {sub.status === "past_due" && (
-          <div className="flex items-center gap-2 mt-3 p-3 bg-error-container rounded-radius-sm">
+          <div className="flex items-center gap-2 mt-3 p-3 bg-error-container rounded-sm">
             <Icon
               icon={AlertTriangle}
               size="sm"

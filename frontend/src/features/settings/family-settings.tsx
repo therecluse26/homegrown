@@ -1236,7 +1236,7 @@ function SettingsNav() {
           <RouterLink
             key={link.to}
             to={link.to}
-            className="group flex items-center gap-3 rounded-radius-md bg-surface-container-low p-4 no-underline transition-colors hover:bg-surface-container"
+            className="group flex items-center gap-3 rounded-md bg-surface-container-low p-4 no-underline transition-colors hover:bg-surface-container"
           >
             <Icon icon={link.icon} size="md" className="text-on-surface-variant group-hover:text-primary shrink-0" />
             <span className="type-label-md text-on-surface">

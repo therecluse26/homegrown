@@ -122,12 +122,12 @@ export function InvoiceHistory() {
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3 mb-6">
         {/* Type filter tabs */}
-        <div className="flex items-center gap-1 bg-surface-container-high rounded-radius-full p-1">
+        <div className="flex items-center gap-1 bg-surface-container-high rounded-full p-1">
           {FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
-              className={`px-3 py-1.5 rounded-radius-full type-label-sm transition-colors ${
+              className={`px-3 py-1.5 rounded-full type-label-sm transition-colors ${
                 filterType === opt.value
                   ? "bg-primary text-on-primary"
                   : "text-on-surface-variant hover:bg-surface-container-highest"

@@ -69,8 +69,8 @@ export function GroupDetail() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32 w-full rounded-radius-md" />
-        <Skeleton className="h-24 w-full rounded-radius-md" />
+        <Skeleton className="h-32 w-full rounded-md" />
+        <Skeleton className="h-24 w-full rounded-md" />
       </div>
     );
   }
@@ -100,7 +100,7 @@ export function GroupDetail() {
       {/* Group header card */}
       <Card className="p-card-padding mb-6">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-radius-lg bg-secondary-container flex items-center justify-center shrink-0">
+          <div className="w-16 h-16 rounded-lg bg-secondary-container flex items-center justify-center shrink-0">
             <Icon
               icon={Users}
               size="xl"

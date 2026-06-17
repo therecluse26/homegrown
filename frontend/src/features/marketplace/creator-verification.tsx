@@ -69,7 +69,7 @@ export function CreatorVerification() {
       <div className="mx-auto max-w-lg">
         <Skeleton className="h-8 w-64 mb-2" />
         <Skeleton className="h-4 w-80 mb-6" />
-        <Skeleton className="h-64 rounded-radius-md" />
+        <Skeleton className="h-64 rounded-md" />
       </div>
     );
   }
@@ -83,7 +83,7 @@ export function CreatorVerification() {
           })}
           className="mb-6"
         />
-        <Card className="rounded-radius-md bg-error-container p-card-padding">
+        <Card className="rounded-md bg-error-container p-card-padding">
           <p className="type-body-sm text-on-error-container">
             <FormattedMessage id="error.generic" />
           </p>
@@ -110,7 +110,7 @@ export function CreatorVerification() {
       <Card className="mb-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-radius-md bg-surface-container flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-surface-container flex items-center justify-center">
               <Icon
                 icon={ShieldCheck}
                 size="md"
@@ -166,7 +166,7 @@ export function CreatorVerification() {
 
       {/* Pending message */}
       {status === "pending" && (
-        <Card className="rounded-radius-md bg-surface-container-low p-card-padding mb-6">
+        <Card className="rounded-md bg-surface-container-low p-card-padding mb-6">
           <p className="type-body-sm text-on-surface-variant">
             <FormattedMessage id="marketplace.creator.verification.pending.message" />
           </p>
@@ -194,7 +194,7 @@ export function CreatorVerification() {
           {status === "rejected" && (
             <div
               role="alert"
-              className="rounded-radius-sm bg-error-container px-4 py-3 type-body-sm text-on-error-container mb-4"
+              className="rounded-sm bg-error-container px-4 py-3 type-body-sm text-on-error-container mb-4"
             >
               <FormattedMessage id="marketplace.creator.verification.rejected.message" />
             </div>
@@ -262,7 +262,7 @@ export function CreatorVerification() {
               <div
                 role="alert"
                 aria-live="assertive"
-                className="rounded-radius-md bg-error-container px-4 py-3 type-body-sm text-on-error-container"
+                className="rounded-md bg-error-container px-4 py-3 type-body-sm text-on-error-container"
               >
                 <FormattedMessage id="error.generic" />
               </div>

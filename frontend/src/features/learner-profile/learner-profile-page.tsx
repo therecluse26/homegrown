@@ -1,10 +1,13 @@
 import { useParams, Link } from "react-router";
-import { Card } from "@/components/ui";
+import { Card, Skeleton } from "@/components/ui";
 import { LearnerProfileQuiz } from "./learner-profile-quiz";
 import { useProfile } from "./use-learner-profile";
 import { useStudents } from "@/hooks/use-family";
 import { ProfileSummary } from "./profile-summary";
 import { useState } from "react";
+
+// Q1-Q12 are scored questions; Q13 is the interest question (index 12).
+const INTEREST_STEP = 12;
 
 export function LearnerProfilePage() {
   const { studentId } = useParams<{ studentId: string }>();
@@ -12,6 +15,7 @@ export function LearnerProfilePage() {
   const student = students.data?.find((s) => s.id === studentId);
   const profileQuery = useProfile(studentId);
   const [retaking, setRetaking] = useState(false);
+  const [startAtStep, setStartAtStep] = useState(0);
 
   const studentName = student?.display_name ?? "your child";
 
@@ -19,9 +23,19 @@ export function LearnerProfilePage() {
 
   const customAttrs = Object.entries(student?.custom_attributes ?? {});
 
+  // 3.2: Loading guard — prevent quiz flash while profile loads
+  if (profileQuery.isPending) {
+    return (
+      <div className="max-w-2xl mx-auto py-6 px-6">
+        <Skeleton height="h-8" width="w-64" className="mb-6" />
+        <Card><Skeleton height="h-48" /></Card>
+      </div>
+    );
+  }
+
   if (hasProfile && !retaking) {
     return (
-      <div className="max-w-2xl mx-auto py-6 px-4">
+      <div className="max-w-2xl mx-auto py-6 px-6">
         <h1 className="type-headline-sm text-on-surface font-semibold mb-4">
           {studentName}'s Learning Profile
         </h1>
@@ -38,8 +52,14 @@ export function LearnerProfilePage() {
               structure: profileQuery.data!.structure,
               outdoor_kinesthetic: profileQuery.data!.outdoor_kinesthetic,
             }}
-            onRetake={() => setRetaking(true)}
-            onEditInterests={() => setRetaking(true)}
+            onRetake={() => {
+              setStartAtStep(0);
+              setRetaking(true);
+            }}
+            onEditInterests={() => {
+              setStartAtStep(INTEREST_STEP);
+              setRetaking(true);
+            }}
           />
         </Card>
         {customAttrs.length > 0 && (
@@ -63,22 +83,25 @@ export function LearnerProfilePage() {
     );
   }
 
+  // 3.5: px-6 to match --spacing-page-x (was px-4)
   return (
-    <div className="max-w-2xl mx-auto py-6 px-4">
+    <div className="max-w-2xl mx-auto py-6 px-6">
       <h1 className="type-headline-sm text-on-surface font-semibold mb-4">
         {studentName}'s Learning Profile
       </h1>
-      <div className="mb-4 rounded-lg bg-surface-container-low px-4 py-3 type-body-sm text-on-surface-variant shadow-ghost-border">
-        Only your family can see this. Learner Profiles are never shared or used for ads.{" "}
+      {/* 3.3: Privacy note kept only in ProfileSummary post-quiz state. Single inline sentence here. */}
+      <p className="type-body-sm text-on-surface-variant mb-4">
+        Only your family can see this.{" "}
         <Link to="/legal/privacy" className="underline hover:text-on-surface transition-colors">
           Learn more
         </Link>
-      </div>
+      </p>
       <Card className="mt-4">
         {studentId && (
           <LearnerProfileQuiz
             studentId={studentId}
             onComplete={() => setRetaking(false)}
+            startAtStep={startAtStep}
           />
         )}
       </Card>

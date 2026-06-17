@@ -78,7 +78,7 @@ function PasswordChangeForm({ onDone }: { onDone: () => void }) {
     return (
       <div
         role="status"
-        className="rounded-radius-md bg-success-container px-4 py-3 type-body-sm text-on-success-container"
+        className="rounded-md bg-success-container px-4 py-3 type-body-sm text-on-success-container"
       >
         <FormattedMessage id="settings.account.password.success" />
       </div>

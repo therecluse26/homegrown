@@ -271,7 +271,7 @@ export function FeatureFlags() {
         <Skeleton className="h-4 w-80 mb-6" />
         <div className="flex flex-col gap-4">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-48 rounded-radius-md" />
+            <Skeleton key={n} className="h-48 rounded-md" />
           ))}
         </div>
       </div>
@@ -285,7 +285,7 @@ export function FeatureFlags() {
           title={intl.formatMessage({ id: "admin.featureFlags.title" })}
           className="mb-6"
         />
-        <Card className="rounded-radius-md bg-error-container p-card-padding">
+        <Card className="rounded-md bg-error-container p-card-padding">
           <p className="type-body-sm text-on-error-container">
             <FormattedMessage id="error.generic" />
           </p>
@@ -319,7 +319,7 @@ export function FeatureFlags() {
       )}
 
       {flags.length === 0 && !showCreate ? (
-        <div className="rounded-radius-md bg-surface-container-low px-4 py-8 text-center">
+        <div className="rounded-md bg-surface-container-low px-4 py-8 text-center">
           <p className="type-body-sm text-on-surface-variant">
             <FormattedMessage id="admin.featureFlags.empty" />
           </p>

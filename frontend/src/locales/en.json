@@ -1808,6 +1808,13 @@
   "recommendations.preferences.exploration.occasional.description": "Occasionally surface resources from outside your usual topics.",
   "recommendations.preferences.exploration.frequent": "Frequent",
   "recommendations.preferences.exploration.frequent.description": "Frequently suggest new areas and resources to explore.",
+  "recommendations.preferences.button": "Settings",
+  "recommendations.empty.missingProfile": "{name} doesn't have a learner profile yet. Building one helps us personalize recommendations.",
+  "recommendations.empty.buildProfile": "Build {name}'s profile",
+  "recommendations.empty.adjustPreferences": "Adjust your preferences",
+
+  "browse.viewingAs.label": "Viewing as:",
+  "browse.viewingAs.none": "Everyone",
 
   "social.events.recurrence.enable": "Make this a recurring event",
   "social.events.recurrence.title": "Repeat Settings",

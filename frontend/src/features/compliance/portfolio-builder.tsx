@@ -127,14 +127,14 @@ function ItemRow({
 
   return (
     <div
-      className={`flex items-center gap-3 p-3 rounded-radius-sm transition-colors ${
+      className={`flex items-center gap-3 p-3 rounded-sm transition-colors ${
         grabbed
           ? "bg-primary-container/20 ring-2 ring-primary"
           : "bg-surface-container-low hover:bg-surface-container-high"
       }`}
     >
       <button
-        className="p-1 rounded-radius-sm text-on-surface-variant hover:text-on-surface cursor-grab focus:outline-none focus:ring-2 focus:ring-primary touch-target"
+        className="p-1 rounded-sm text-on-surface-variant hover:text-on-surface cursor-grab focus:outline-none focus:ring-2 focus:ring-primary touch-target"
         onKeyDown={handleKeyDown}
         aria-label={intl.formatMessage(
           { id: "compliance.portfolio.item.reorder" },
@@ -169,7 +169,7 @@ function ItemRow({
         <button
           onClick={() => onMove(index, index - 1)}
           disabled={index === 0}
-          className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-highest disabled:opacity-30 transition-colors touch-target"
+          className="p-1 rounded-sm text-on-surface-variant hover:bg-surface-container-highest disabled:opacity-30 transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "compliance.portfolio.item.moveUp",
           })}
@@ -179,7 +179,7 @@ function ItemRow({
         <button
           onClick={() => onMove(index, index + 1)}
           disabled={index === total - 1}
-          className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-highest disabled:opacity-30 transition-colors touch-target"
+          className="p-1 rounded-sm text-on-surface-variant hover:bg-surface-container-highest disabled:opacity-30 transition-colors touch-target"
           aria-label={intl.formatMessage({
             id: "compliance.portfolio.item.moveDown",
           })}
@@ -188,7 +188,7 @@ function ItemRow({
         </button>
         <button
           onClick={() => onRemove(index)}
-          className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
+          className="p-1 rounded-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
           aria-label={intl.formatMessage(
             { id: "compliance.portfolio.item.remove" },
             { title: item.cached_title },
@@ -260,7 +260,7 @@ function CandidatePicker({
       {isPending ? (
         <div className="space-y-2">
           {[1, 2, 3, 4].map((n) => (
-            <Skeleton key={n} className="h-12 w-full rounded-radius-sm" />
+            <Skeleton key={n} className="h-12 w-full rounded-sm" />
           ))}
         </div>
       ) : !candidates || candidates.length === 0 ? (
@@ -274,7 +274,7 @@ function CandidatePicker({
             return (
               <div
                 key={c.id}
-                className="flex items-center justify-between gap-3 p-2 rounded-radius-sm bg-surface-container-low"
+                className="flex items-center justify-between gap-3 p-2 rounded-sm bg-surface-container-low"
               >
                 <div className="flex-1 min-w-0">
                   <p className="type-body-sm text-on-surface truncate">
@@ -363,7 +363,7 @@ function PreviewModal({
             {items.map((item, i) => (
               <div
                 key={item.id}
-                className="flex items-start gap-3 p-3 bg-surface-container-low rounded-radius-sm"
+                className="flex items-start gap-3 p-3 bg-surface-container-low rounded-sm"
               >
                 <span className="type-label-sm text-on-surface-variant shrink-0 w-6 text-right">
                   {i + 1}.
@@ -536,9 +536,9 @@ export function PortfolioBuilder() {
   if (isPending) {
     return (
       <div className="max-w-content mx-auto">
-        <Skeleton className="h-8 w-48 rounded-radius-sm mb-4" />
-        <Skeleton className="h-40 w-full rounded-radius-md mb-4" />
-        <Skeleton className="h-60 w-full rounded-radius-md" />
+        <Skeleton className="h-8 w-48 rounded-sm mb-4" />
+        <Skeleton className="h-40 w-full rounded-md mb-4" />
+        <Skeleton className="h-60 w-full rounded-md" />
       </div>
     );
   }

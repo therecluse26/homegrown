@@ -28,8 +28,8 @@ export function SystemDashboard() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
       </div>
     );
   }

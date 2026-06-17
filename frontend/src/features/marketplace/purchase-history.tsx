@@ -16,7 +16,7 @@ import type { PurchaseResponse } from "@/hooks/use-marketplace";
 function PurchaseCard({ purchase }: { purchase: PurchaseResponse }) {
   return (
     <Card className="p-card-padding flex items-center gap-4">
-      <div className="w-12 h-12 rounded-radius-sm bg-primary-container flex items-center justify-center shrink-0">
+      <div className="w-12 h-12 rounded-sm bg-primary-container flex items-center justify-center shrink-0">
         <Icon icon={Package} size="md" className="text-on-primary-container" />
       </div>
       <div className="flex-1 min-w-0">
@@ -81,7 +81,7 @@ export function PurchaseHistory() {
       {isPending && (
         <div className="space-y-3">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-20 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-20 w-full rounded-md" />
           ))}
         </div>
       )}

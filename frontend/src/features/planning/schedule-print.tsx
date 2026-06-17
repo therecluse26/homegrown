@@ -223,7 +223,7 @@ export function SchedulePrint() {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             </div>
             <div>
@@ -238,7 +238,7 @@ export function SchedulePrint() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             </div>
             {students && students.length > 0 && (
@@ -300,7 +300,7 @@ export function SchedulePrint() {
         {isPending ? (
           <div className="space-y-3 no-print">
             {[1, 2, 3, 4, 5].map((n) => (
-              <Skeleton key={n} className="h-12 w-full rounded-radius-sm" />
+              <Skeleton key={n} className="h-12 w-full rounded-sm" />
             ))}
           </div>
         ) : dayGroups.length === 0 ? (

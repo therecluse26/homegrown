@@ -69,7 +69,7 @@ function QueueItemCard({ item }: { item: ModerationQueueItem }) {
                   setSelectedAction("approve");
                   setShowActionModal(true);
                 }}
-                className="p-2 rounded-radius-sm text-primary hover:bg-primary-container/30"
+                className="p-2 rounded-sm text-primary hover:bg-primary-container/30"
                 aria-label="Approve"
               >
                 <Icon icon={Check} size="sm" />
@@ -79,7 +79,7 @@ function QueueItemCard({ item }: { item: ModerationQueueItem }) {
                   setSelectedAction("reject");
                   setShowActionModal(true);
                 }}
-                className="p-2 rounded-radius-sm text-error hover:bg-error-container/30"
+                className="p-2 rounded-sm text-error hover:bg-error-container/30"
                 aria-label="Reject"
               >
                 <Icon icon={X} size="sm" />
@@ -89,7 +89,7 @@ function QueueItemCard({ item }: { item: ModerationQueueItem }) {
                   setSelectedAction("escalate");
                   setShowActionModal(true);
                 }}
-                className="p-2 rounded-radius-sm text-warning hover:bg-warning-container/30"
+                className="p-2 rounded-sm text-warning hover:bg-warning-container/30"
                 aria-label="Escalate"
               >
                 <Icon icon={AlertTriangle} size="sm" />
@@ -178,7 +178,7 @@ function AppealCard({ appeal }: { appeal: AdminAppealResponse }) {
             <p className="type-body-sm text-on-surface mb-2">
               {appeal.appeal_text}
             </p>
-            <div className="bg-surface-container-low rounded-radius-sm p-2">
+            <div className="bg-surface-container-low rounded-sm p-2">
               <p className="type-label-sm text-on-surface-variant mb-1">
                 Original action:
               </p>
@@ -211,7 +211,7 @@ function AppealCard({ appeal }: { appeal: AdminAppealResponse }) {
                 id={id}
                 value={resolveStatus}
                 onChange={(e) => setResolveStatus(e.target.value)}
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md"
               >
                 <option value="denied">Deny appeal</option>
                 <option value="approved">Grant appeal</option>
@@ -230,7 +230,7 @@ function AppealCard({ appeal }: { appeal: AdminAppealResponse }) {
                 value={resolution}
                 onChange={(e) => setResolution(e.target.value)}
                 required
-                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             )}
           </FormField>
@@ -289,7 +289,7 @@ export function ModerationQueue() {
                     {[1, 2, 3].map((n) => (
                       <Skeleton
                         key={n}
-                        className="h-24 w-full rounded-radius-md"
+                        className="h-24 w-full rounded-md"
                       />
                     ))}
                   </div>
@@ -321,7 +321,7 @@ export function ModerationQueue() {
                     {[1, 2].map((n) => (
                       <Skeleton
                         key={n}
-                        className="h-32 w-full rounded-radius-md"
+                        className="h-32 w-full rounded-md"
                       />
                     ))}
                   </div>

@@ -107,7 +107,7 @@ export function RecentSearches({ onSelect }: RecentSearchesProps) {
             <button
               type="button"
               onClick={() => onSelect(query)}
-              className="flex w-full items-center gap-3 rounded-radius-md px-3 py-2 text-left transition-colors hover:bg-surface-container-low"
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-surface-container-low"
             >
               <Icon
                 icon={Clock}

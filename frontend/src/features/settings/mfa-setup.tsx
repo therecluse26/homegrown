@@ -28,7 +28,7 @@ function QrCodeDisplay({ uri }: { uri: string }) {
           In production this would be a local QR lib — using a data-uri
           placeholder pattern to avoid external dependency. */}
       <div
-        className="w-48 h-48 bg-surface-container-lowest rounded-radius-lg flex items-center justify-center border-2 border-outline-variant"
+        className="w-48 h-48 bg-surface-container-lowest rounded-lg flex items-center justify-center border-2 border-outline-variant"
         role="img"
         aria-label={intl.formatMessage({ id: "mfa.setup.qrCode.alt" })}
       >
@@ -43,7 +43,7 @@ function QrCodeDisplay({ uri }: { uri: string }) {
         <p className="type-label-sm text-on-surface-variant mb-1">
           <FormattedMessage id="mfa.setup.manualEntry" />
         </p>
-        <code className="type-body-sm text-on-surface bg-surface-container-high px-3 py-2 rounded-radius-sm block break-all select-all">
+        <code className="type-body-sm text-on-surface bg-surface-container-high px-3 py-2 rounded-sm block break-all select-all">
           {uri}
         </code>
       </div>
@@ -83,13 +83,13 @@ function RecoveryCodes({ codes }: { codes: string[] }) {
 
   return (
     <div>
-      <div className="bg-surface-container-high rounded-radius-md p-4 mb-3">
+      <div className="bg-surface-container-high rounded-md p-4 mb-3">
         <div className="grid grid-cols-2 gap-2" role="list" aria-label={intl.formatMessage({ id: "mfa.recovery.listLabel" })}>
           {codes.map((code, i) => (
             <code
               key={i}
               role="listitem"
-              className="type-body-md text-on-surface font-mono bg-surface-container-lowest px-3 py-1.5 rounded-radius-sm text-center select-all"
+              className="type-body-md text-on-surface font-mono bg-surface-container-lowest px-3 py-1.5 rounded-sm text-center select-all"
             >
               {code}
             </code>
@@ -227,7 +227,7 @@ export function MfaSetup() {
         </h1>
         <Card>
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-radius-full bg-primary/10 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
               <Icon icon={ShieldCheck} size="md" className="text-primary" aria-hidden />
             </div>
             <div className="flex-1">
@@ -314,7 +314,7 @@ export function MfaSetup() {
       {step === "idle" && (
         <Card>
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-radius-full bg-surface-container-high flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
               <Icon icon={ShieldCheck} size="md" className="text-on-surface-variant" aria-hidden />
             </div>
             <div className="flex-1">
@@ -418,7 +418,7 @@ export function MfaSetup() {
           <p className="type-body-sm text-on-surface-variant mb-4">
             <FormattedMessage id="mfa.setup.complete.description" />
           </p>
-          <div className="bg-warning-container/30 rounded-radius-md p-3 mb-4">
+          <div className="bg-warning-container/30 rounded-md p-3 mb-4">
             <p className="type-body-sm text-on-surface font-medium">
               <FormattedMessage id="mfa.recovery.warning" />
             </p>

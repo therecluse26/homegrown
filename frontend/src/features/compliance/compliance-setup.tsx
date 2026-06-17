@@ -213,7 +213,7 @@ export function ComplianceSetup() {
 
           {/* State requirements display */}
           {stateReqs.data && (
-            <div className="bg-surface-container-low rounded-radius-md p-4">
+            <div className="bg-surface-container-low rounded-md p-4">
               <h3 className="type-title-sm text-on-surface font-medium mb-2">
                 <FormattedMessage id="compliance.setup.requirements" />
               </h3>

@@ -81,7 +81,7 @@ function StepEditor({
           <button
             onClick={onMoveUp}
             disabled={index === 0}
-            className="p-1 rounded-radius-sm hover:bg-surface-container-low disabled:opacity-30"
+            className="p-1 rounded-sm hover:bg-surface-container-low disabled:opacity-30"
             aria-label={`Move step ${index + 1} up`}
           >
             <Icon icon={ArrowUp} size="xs" />
@@ -89,14 +89,14 @@ function StepEditor({
           <button
             onClick={onMoveDown}
             disabled={index === total - 1}
-            className="p-1 rounded-radius-sm hover:bg-surface-container-low disabled:opacity-30"
+            className="p-1 rounded-sm hover:bg-surface-container-low disabled:opacity-30"
             aria-label={`Move step ${index + 1} down`}
           >
             <Icon icon={ArrowDown} size="xs" />
           </button>
           <button
             onClick={onRemove}
-            className="p-1 rounded-radius-sm text-error hover:bg-error-container/30"
+            className="p-1 rounded-sm text-error hover:bg-error-container/30"
             aria-label="Remove step"
           >
             <Icon icon={Trash2} size="xs" />
@@ -124,7 +124,7 @@ function StepEditor({
               onChange={(e) =>
                 onChange({ ...step, description: e.target.value })
               }
-              className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             />
           )}
         </FormField>
@@ -138,7 +138,7 @@ function StepEditor({
                 onChange={(e) =>
                   onChange({ ...step, content_type: e.target.value })
                 }
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               >
                 {STEP_CONTENT_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -262,8 +262,8 @@ export function SequenceBuilder() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32 w-full rounded-radius-md" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
+        <Skeleton className="h-32 w-full rounded-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
       </div>
     );
   }
@@ -314,7 +314,7 @@ export function SequenceBuilder() {
                 id={id}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[80px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
             )}
           </FormField>

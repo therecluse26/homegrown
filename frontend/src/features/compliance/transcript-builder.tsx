@@ -113,7 +113,7 @@ function CourseRow({
       <td className="py-2 text-center">
         <button
           onClick={() => onDelete(course.id)}
-          className="p-1 rounded-radius-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
+          className="p-1 rounded-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors touch-target"
           aria-label={intl.formatMessage(
             { id: "compliance.transcript.course.remove" },
             { title: course.title },
@@ -219,9 +219,9 @@ export function TranscriptBuilder() {
   if (isPending) {
     return (
       <div className="max-w-content mx-auto">
-        <Skeleton className="h-8 w-48 rounded-radius-sm mb-4" />
-        <Skeleton className="h-40 w-full rounded-radius-md mb-4" />
-        <Skeleton className="h-60 w-full rounded-radius-md" />
+        <Skeleton className="h-8 w-48 rounded-sm mb-4" />
+        <Skeleton className="h-40 w-full rounded-md mb-4" />
+        <Skeleton className="h-60 w-full rounded-md" />
       </div>
     );
   }
@@ -384,7 +384,7 @@ export function TranscriptBuilder() {
       {generateError && (
         <div
           role="alert"
-          className="rounded-radius-md bg-error-container px-4 py-3 type-body-sm text-on-error-container mb-4"
+          className="rounded-md bg-error-container px-4 py-3 type-body-sm text-on-error-container mb-4"
         >
           {generateError}
         </div>

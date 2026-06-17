@@ -33,10 +33,10 @@ export function CreatorAnalytics() {
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Skeleton className="h-24 rounded-radius-md" />
-          <Skeleton className="h-24 rounded-radius-md" />
-          <Skeleton className="h-24 rounded-radius-md" />
-          <Skeleton className="h-24 rounded-radius-md" />
+          <Skeleton className="h-24 rounded-md" />
+          <Skeleton className="h-24 rounded-md" />
+          <Skeleton className="h-24 rounded-md" />
+          <Skeleton className="h-24 rounded-md" />
         </div>
       </div>
     );

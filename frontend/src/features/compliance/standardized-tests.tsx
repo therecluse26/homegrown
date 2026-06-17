@@ -198,7 +198,7 @@ export function StandardizedTests() {
                     type="date"
                     value={testDate}
                     onChange={(e) => setTestDate(e.target.value)}
-                    className="type-body-md text-on-surface bg-surface-container-highest px-3 py-2 rounded-radius-sm w-full"
+                    className="type-body-md text-on-surface bg-surface-container-highest px-3 py-2 rounded-sm w-full"
                   />
                 )}
               </FormField>
@@ -340,7 +340,7 @@ export function StandardizedTests() {
                     {Object.entries(test.scores).map(([name, score]) => (
                       <div
                         key={name}
-                        className="flex items-center justify-between bg-surface-container-low rounded-radius-sm px-3 py-1.5"
+                        className="flex items-center justify-between bg-surface-container-low rounded-sm px-3 py-1.5"
                       >
                         <span className="type-body-sm text-on-surface-variant">
                           {name}

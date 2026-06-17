@@ -124,7 +124,7 @@ function MethodologyRow({ config }: { config: MethodologyConfigFull }) {
               value={philosophy}
               onChange={(e) => handlePhilosophyChange(e.target.value)}
               rows={4}
-              className="w-full rounded-radius-sm border border-outline bg-surface px-3 py-2 type-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+              className="w-full rounded-sm border border-outline bg-surface px-3 py-2 type-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary resize-y"
               placeholder={intl.formatMessage({
                 id: "admin.methodologyConfig.field.philosophy.placeholder",
               })}
@@ -141,7 +141,7 @@ function MethodologyRow({ config }: { config: MethodologyConfigFull }) {
                 {tools.map((tool) => (
                   <div
                     key={tool.key}
-                    className="rounded-radius-sm bg-surface-container-low px-3 py-3 flex flex-col gap-2"
+                    className="rounded-sm bg-surface-container-low px-3 py-3 flex flex-col gap-2"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="type-label-sm text-on-surface font-mono">
@@ -276,7 +276,7 @@ export function MethodologyConfig() {
         <Skeleton className="h-4 w-80 mb-6" />
         <div className="flex flex-col gap-4">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-16 rounded-radius-md" />
+            <Skeleton key={n} className="h-16 rounded-md" />
           ))}
         </div>
       </div>
@@ -290,7 +290,7 @@ export function MethodologyConfig() {
           title={intl.formatMessage({ id: "admin.methodologyConfig.title" })}
           className="mb-6"
         />
-        <Card className="rounded-radius-md bg-error-container p-card-padding">
+        <Card className="rounded-md bg-error-container p-card-padding">
           <p className="type-body-sm text-on-error-container">
             <FormattedMessage id="error.generic" />
           </p>
@@ -310,7 +310,7 @@ export function MethodologyConfig() {
       />
 
       {configs.length === 0 ? (
-        <div className="rounded-radius-md bg-surface-container-low px-4 py-8 text-center">
+        <div className="rounded-md bg-surface-container-low px-4 py-8 text-center">
           <p className="type-body-sm text-on-surface-variant">
             <FormattedMessage id="admin.methodologyConfig.empty" />
           </p>

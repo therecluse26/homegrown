@@ -234,7 +234,7 @@ function CreateTemplateForm({ onSuccess }: { onSuccess: () => void }) {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+              className="w-full min-h-[60px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
             />
           )}
         </FormField>
@@ -248,7 +248,7 @@ function CreateTemplateForm({ onSuccess }: { onSuccess: () => void }) {
             {items.map((item, index) => (
               <div
                 key={index}
-                className="p-3 rounded-radius-md bg-surface-container-low space-y-2"
+                className="p-3 rounded-md bg-surface-container-low space-y-2"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <FormField
@@ -275,7 +275,7 @@ function CreateTemplateForm({ onSuccess }: { onSuccess: () => void }) {
                         onChange={(e) =>
                           updateItem(index, "category", e.target.value)
                         }
-                        className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                        className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                       >
                         {CATEGORIES.map((cat) => (
                           <option key={cat} value={cat}>
@@ -299,7 +299,7 @@ function CreateTemplateForm({ onSuccess }: { onSuccess: () => void }) {
                         onChange={(e) =>
                           updateItem(index, "day_of_week", Number(e.target.value))
                         }
-                        className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                        className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                       >
                         {DAYS_OF_WEEK.map(({ value, labelId }) => (
                           <option key={value} value={value}>
@@ -491,7 +491,7 @@ export function ScheduleTemplates() {
       {isPending && (
         <div className="space-y-4">
           {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-28 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-28 w-full rounded-md" />
           ))}
         </div>
       )}

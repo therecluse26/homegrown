@@ -36,8 +36,8 @@ export function CategoryBrowse() {
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-2 gap-4">
-          <Skeleton className="h-48 rounded-radius-md" />
-          <Skeleton className="h-48 rounded-radius-md" />
+          <Skeleton className="h-48 rounded-md" />
+          <Skeleton className="h-48 rounded-md" />
         </div>
       </div>
     );
@@ -99,7 +99,7 @@ export function CategoryBrowse() {
                   <img
                     src={listing.thumbnail_url}
                     alt=""
-                    className="w-full h-32 object-cover rounded-radius-sm mb-3"
+                    className="w-full h-32 object-cover rounded-sm mb-3"
                   />
                 )}
                 <h3 className="type-title-md text-on-surface mb-1">

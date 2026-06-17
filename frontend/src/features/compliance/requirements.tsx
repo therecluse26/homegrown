@@ -21,7 +21,7 @@ export function Requirements() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full rounded-radius-md" />
+        <Skeleton className="h-48 w-full rounded-md" />
       </div>
     );
   }
@@ -133,7 +133,7 @@ export function Requirements() {
                 {requirements.subjects_required.map((subject) => (
                   <div
                     key={subject}
-                    className="px-3 py-2 rounded-radius-sm bg-surface-container-low type-body-sm text-on-surface"
+                    className="px-3 py-2 rounded-sm bg-surface-container-low type-body-sm text-on-surface"
                   >
                     {subject}
                   </div>

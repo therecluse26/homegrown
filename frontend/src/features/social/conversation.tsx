@@ -90,7 +90,7 @@ function MessageBubble({
       className={`flex ${isMine ? "justify-end" : "justify-start"} mb-2`}
     >
       <div
-        className={`max-w-[75%] px-4 py-2.5 rounded-radius-lg ${
+        className={`max-w-[75%] px-4 py-2.5 rounded-lg ${
           isMine
             ? "bg-primary text-on-primary rounded-br-radius-xs"
             : "bg-surface-container-high text-on-surface rounded-bl-radius-xs"
@@ -216,7 +216,7 @@ export function Conversation() {
       <div className="flex items-center gap-3 pb-4 border-b border-outline-variant/10">
         <RouterLink
           to="/messages"
-          className="p-2 rounded-radius-sm hover:bg-surface-container-low transition-colors"
+          className="p-2 rounded-sm hover:bg-surface-container-low transition-colors"
         >
           <Icon icon={ArrowLeft} size="sm" />
         </RouterLink>
@@ -239,7 +239,7 @@ export function Conversation() {
                 setSearchQuery("");
               }
             }}
-            className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            className="p-2 rounded-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
             aria-label={intl.formatMessage({
               id: "social.messages.search",
             })}
@@ -249,7 +249,7 @@ export function Conversation() {
           <button
             onClick={handleMuteToggle}
             disabled={muteConversation.isPending || unmuteConversation.isPending}
-            className="p-2 rounded-radius-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            className="p-2 rounded-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
             aria-label={intl.formatMessage({
               id: isMuted
                 ? "social.messages.unmute"
@@ -295,7 +295,7 @@ export function Conversation() {
               setShowSearch(false);
               setSearchQuery("");
             }}
-            className="p-1 rounded-radius-sm text-on-surface-variant hover:text-on-surface transition-colors"
+            className="p-1 rounded-sm text-on-surface-variant hover:text-on-surface transition-colors"
             aria-label={intl.formatMessage({ id: "common.close" })}
           >
             <Icon icon={X} size="xs" />
@@ -309,7 +309,7 @@ export function Conversation() {
           <div className="space-y-3 p-4">
             {[1, 2, 3].map((n) => (
               <div key={n} className={`flex ${n % 2 === 0 ? "justify-end" : "justify-start"}`}>
-                <Skeleton className="h-12 w-48 rounded-radius-lg" />
+                <Skeleton className="h-12 w-48 rounded-lg" />
               </div>
             ))}
           </div>
@@ -350,7 +350,7 @@ export function Conversation() {
           placeholder={intl.formatMessage({
             id: "social.messages.composer.placeholder",
           })}
-          className="flex-1 min-h-[44px] max-h-32 resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+          className="flex-1 min-h-[44px] max-h-32 resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
           aria-label={intl.formatMessage({
             id: "social.messages.composer.placeholder",
           })}

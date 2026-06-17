@@ -33,7 +33,7 @@ function AppealCard({ appeal }: { appeal: AppealResponse }) {
       </div>
       <p className="type-body-sm text-on-surface mb-2">{appeal.appeal_text}</p>
       {appeal.resolution_text && (
-        <div className="bg-surface-container-low rounded-radius-sm p-3 mt-2">
+        <div className="bg-surface-container-low rounded-sm p-3 mt-2">
           <p className="type-label-sm text-on-surface-variant mb-1">
             <FormattedMessage id="settings.appeals.resolution" />
           </p>
@@ -120,7 +120,7 @@ export function ModerationAppeals() {
       {appealsPending && (
         <div className="space-y-3">
           {[1, 2].map((n) => (
-            <Skeleton key={n} className="h-24 w-full rounded-radius-md" />
+            <Skeleton key={n} className="h-24 w-full rounded-md" />
           ))}
         </div>
       )}
@@ -158,7 +158,7 @@ export function ModerationAppeals() {
                 value={actionId}
                 onChange={(e) => setActionId(e.target.value)}
                 required
-                className="w-full bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                 placeholder="Moderation action ID"
               />
             )}
@@ -174,7 +174,7 @@ export function ModerationAppeals() {
                 onChange={(e) => setAppealText(e.target.value)}
                 required
                 minLength={10}
-                className="w-full min-h-[120px] resize-none bg-surface-container-highest rounded-radius-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full min-h-[120px] resize-none bg-surface-container-highest rounded-md p-3 text-on-surface type-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                 placeholder={intl.formatMessage({
                   id: "settings.appeals.textPlaceholder",
                 })}

@@ -51,14 +51,14 @@ function FacetGroup({
       {buckets.map((bucket) => (
         <label
           key={bucket.value}
-          className="flex items-center justify-between gap-2 cursor-pointer select-none type-body-md text-on-surface hover:bg-surface-container-low rounded-radius-md px-2 py-1.5 transition-colors"
+          className="flex items-center justify-between gap-2 cursor-pointer select-none type-body-md text-on-surface hover:bg-surface-container-low rounded-md px-2 py-1.5 transition-colors"
         >
           <span className="flex items-center gap-3">
             <input
               type="checkbox"
               checked={selected.includes(bucket.value ?? "")}
               onChange={() => onToggle(bucket.value ?? "")}
-              className="h-5 w-5 shrink-0 cursor-pointer appearance-none rounded-radius-sm bg-surface-container-highest transition-colors checked:bg-primary checked:bg-[image:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%223%22%3E%3Cpath%20d%3D%22M20%206%209%2017l-5-5%22%2F%3E%3C%2Fsvg%3E')] bg-center bg-no-repeat hover:bg-surface-container-high checked:hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+              className="h-5 w-5 shrink-0 cursor-pointer appearance-none rounded-sm bg-surface-container-highest transition-colors checked:bg-primary checked:bg-[image:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%223%22%3E%3Cpath%20d%3D%22M20%206%209%2017l-5-5%22%2F%3E%3C%2Fsvg%3E')] bg-center bg-no-repeat hover:bg-surface-container-high checked:hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             />
             <span>{bucket.display_name}</span>
           </span>

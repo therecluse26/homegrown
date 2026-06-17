@@ -48,7 +48,7 @@ function GroupCard({
         className="block hover:opacity-90 transition-opacity"
       >
         <div className="flex items-start gap-3">
-          <div className="w-12 h-12 rounded-radius-md bg-secondary-container flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded-md bg-secondary-container flex items-center justify-center shrink-0">
             <Icon icon={Users} size="lg" className="text-on-secondary-container" />
           </div>
           <div className="flex-1 min-w-0">
@@ -108,7 +108,7 @@ function GroupCard({
 
 function SocialSubNav() {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-2 px-4 py-2 rounded-radius-button type-label-md transition-colors duration-[var(--duration-normal)] ${
+    `flex items-center gap-2 px-4 py-2 rounded-button type-label-md transition-colors duration-[var(--duration-normal)] ${
       isActive
         ? "bg-primary text-on-primary"
         : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
@@ -159,7 +159,7 @@ export function GroupsList() {
                 {myGroupsPending && (
                   <div className="space-y-3">
                     {[1, 2, 3].map((n) => (
-                      <Skeleton key={n} className="h-24 w-full rounded-radius-md" />
+                      <Skeleton key={n} className="h-24 w-full rounded-md" />
                     ))}
                   </div>
                 )}
@@ -206,7 +206,7 @@ export function GroupsList() {
                 {platformPending && (
                   <div className="space-y-3">
                     {[1, 2].map((n) => (
-                      <Skeleton key={n} className="h-24 w-full rounded-radius-md" />
+                      <Skeleton key={n} className="h-24 w-full rounded-md" />
                     ))}
                   </div>
                 )}

@@ -104,7 +104,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="relative p-2 min-w-11 min-h-11 flex items-center justify-center rounded-radius-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
+        className="relative p-2 min-w-11 min-h-11 flex items-center justify-center rounded-button text-on-surface-variant hover:bg-surface-container-high transition-colors duration-[var(--duration-normal)]"
         aria-label={intl.formatMessage(
           { id: "notifications.bell.label" },
           { count },
@@ -132,7 +132,7 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label={intl.formatMessage({ id: "notifications.title" })}
-          className="absolute right-0 top-full mt-2 w-80 max-h-[28rem] overflow-y-auto bg-surface-container rounded-radius-card shadow-elevation-2 ring-1 ring-outline-variant z-[var(--z-popover)] flex flex-col"
+          className="absolute right-0 top-full mt-2 w-80 max-h-[28rem] overflow-y-auto bg-surface-container rounded-lg shadow-elevation-2 ring-1 ring-outline-variant z-[var(--z-popover)] flex flex-col"
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant sticky top-0 bg-surface-container">
             <span className="type-title-sm text-on-surface font-semibold">

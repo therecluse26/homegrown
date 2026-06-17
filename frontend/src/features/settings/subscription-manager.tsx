@@ -156,7 +156,7 @@ export function SubscriptionManager() {
 
         {/* Cancelled notice */}
         {isCancelled && sub && (
-          <div className="mt-4 bg-warning-container/30 rounded-radius-md p-3">
+          <div className="mt-4 bg-warning-container/30 rounded-md p-3">
             <p className="type-body-sm text-on-surface">
               <FormattedMessage
                 id="subscription.manager.cancelledDescription"

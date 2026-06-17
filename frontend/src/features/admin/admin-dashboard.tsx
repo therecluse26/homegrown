@@ -45,7 +45,7 @@ function StatCard({
     <Card className="p-card-padding hover:bg-surface-container-low transition-colors">
       <div className="flex items-center gap-3">
         <div
-          className={`w-10 h-10 rounded-radius-md flex items-center justify-center shrink-0 ${colorMap[variant]}`}
+          className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 ${colorMap[variant]}`}
         >
           <Icon icon={icon} size="md" />
         </div>
@@ -79,7 +79,7 @@ export function AdminDashboard() {
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-            <Skeleton key={n} className="h-24 rounded-radius-md" />
+            <Skeleton key={n} className="h-24 rounded-md" />
           ))}
         </div>
       </div>
@@ -110,7 +110,7 @@ export function AdminDashboard() {
             {health.components.map((comp) => (
               <div
                 key={comp.name}
-                className="flex items-center gap-2 px-3 py-2 rounded-radius-sm bg-surface-container-low"
+                className="flex items-center gap-2 px-3 py-2 rounded-sm bg-surface-container-low"
               >
                 <div
                   className={`w-2 h-2 rounded-full ${

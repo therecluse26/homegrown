@@ -74,7 +74,7 @@ function RSVPButton({
         <button
           key={status}
           onClick={() => handleRSVP(status)}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-radius-sm type-label-md transition-colors ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-sm type-label-md transition-colors ${
             myRsvp === status
               ? status === "going"
                 ? "bg-primary text-on-primary"
@@ -201,7 +201,7 @@ export function EventDetail() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full rounded-radius-md" />
+        <Skeleton className="h-64 w-full rounded-md" />
       </div>
     );
   }
@@ -228,13 +228,13 @@ export function EventDetail() {
 
       <Card className="p-card-padding mb-6">
         {isCancelled && (
-          <div className="mb-4 px-4 py-3 bg-error-container text-on-error-container rounded-radius-sm type-label-md">
+          <div className="mb-4 px-4 py-3 bg-error-container text-on-error-container rounded-sm type-label-md">
             <FormattedMessage id="social.events.cancelled" />
           </div>
         )}
 
         <div className="flex items-start gap-4 mb-4">
-          <div className="w-16 h-16 rounded-radius-md bg-primary-container text-on-primary-container flex flex-col items-center justify-center shrink-0">
+          <div className="w-16 h-16 rounded-md bg-primary-container text-on-primary-container flex flex-col items-center justify-center shrink-0">
             <span className="type-label-sm uppercase">
               {eventDate.toLocaleDateString(undefined, { month: "short" })}
             </span>
@@ -310,7 +310,7 @@ export function EventDetail() {
 
         {/* Virtual URL (only shown to RSVPed attendees) */}
         {event.virtual_url && event.my_rsvp === "going" && (
-          <div className="mb-6 px-4 py-3 bg-primary-container/30 rounded-radius-md">
+          <div className="mb-6 px-4 py-3 bg-primary-container/30 rounded-md">
             <p className="type-label-md text-on-surface mb-1">
               <FormattedMessage id="social.events.meetingLink" />
             </p>

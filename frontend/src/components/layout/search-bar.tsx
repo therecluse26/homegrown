@@ -154,7 +154,7 @@ export function SearchBar() {
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={intl.formatMessage({ id: "search.bar.placeholder" })}
-          className="w-56 lg:w-72 pl-9 pr-8 py-2 bg-surface-container-highest rounded-radius-md text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset transition-all duration-[var(--duration-normal)]"
+          className="w-56 lg:w-72 pl-9 pr-8 py-2 bg-surface-container-highest rounded-md text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset transition-all duration-[var(--duration-normal)]"
           role="combobox"
           aria-expanded={showSuggestions}
           aria-controls="search-suggestions"
@@ -170,7 +170,7 @@ export function SearchBar() {
               setIsOpen(false);
               inputRef.current?.focus();
             }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-radius-sm text-on-surface-variant hover:text-on-surface transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-sm text-on-surface-variant hover:text-on-surface transition-colors"
             aria-label={intl.formatMessage({ id: "search.bar.clear" })}
           >
             <Icon icon={X} size="xs" />
@@ -183,7 +183,7 @@ export function SearchBar() {
         <ul
           id="search-suggestions"
           role="listbox"
-          className="absolute top-full left-0 mt-1 bg-surface-container-lowest rounded-radius-md shadow-ambient-md z-[var(--z-popover)] overflow-hidden min-w-full w-80 lg:w-96"
+          className="absolute top-full left-0 mt-1 bg-surface-container-lowest rounded-md shadow-ambient-md z-[var(--z-popover)] overflow-hidden min-w-full w-80 lg:w-96"
         >
           {suggestions.map((suggestion, index) => (
             <li

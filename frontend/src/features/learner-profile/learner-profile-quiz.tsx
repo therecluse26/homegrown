@@ -216,9 +216,11 @@ type Props = {
   onComplete?: () => void;
   /** When true, show the privacy note and page chrome (standalone quiz page mode) */
   standalone?: boolean;
+  /** Skip to this question index (0-based). Use SCORED_PAIRS.length to jump to interests. */
+  startAtStep?: number;
 };
 
-export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, standalone = false }: Props) {
+export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, standalone = false, startAtStep = 0 }: Props) {
   const params = useParams<{ studentId: string }>();
   const studentId = propStudentId ?? params.studentId;
   const navigate = useNavigate();
@@ -227,7 +229,7 @@ export function LearnerProfileQuiz({ studentId: propStudentId, onComplete, stand
   const profileQuery = useProfile(studentId);
   const submitQuiz = useSubmitQuiz(studentId);
 
-  const [questionIndex, setQuestionIndex] = useState(0);
+  const [questionIndex, setQuestionIndex] = useState(startAtStep);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // scoredAnswers[i] = selected option id (or null if skipped) for scored Q i (0-11)
   const [scoredAnswers, setScoredAnswers] = useState<(string | null)[]>(

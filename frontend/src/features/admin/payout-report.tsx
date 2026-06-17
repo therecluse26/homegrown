@@ -121,12 +121,12 @@ export function PayoutReport() {
       </div>
 
       {/* Status filter */}
-      <div className="flex items-center gap-1 bg-surface-container-high rounded-radius-full p-1 w-fit">
+      <div className="flex items-center gap-1 bg-surface-container-high rounded-full p-1 w-fit">
         {STATUS_OPTIONS.map((opt) => (
           <button
             key={opt.value}
             type="button"
-            className={`px-3 py-1.5 rounded-radius-full type-label-sm transition-colors ${
+            className={`px-3 py-1.5 rounded-full type-label-sm transition-colors ${
               statusFilter === opt.value
                 ? "bg-primary text-on-primary"
                 : "text-on-surface-variant hover:bg-surface-container-highest"
