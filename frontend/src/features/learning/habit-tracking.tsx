@@ -163,11 +163,15 @@ export function HabitTracking() {
       .join("\n");
 
     const successCount = habitEntries.filter(e => e.checkIn === "yes").length;
+    const metadata: Record<string, string> = {
+      "Check-in summary": `${successCount}/${habitEntries.length} completed`,
+    };
 
     logActivity.mutate(
       {
         title: `Habit Check-in (${successCount}/${habitEntries.length} habits)`,
-        description: `Habit check-in:\n${checkInLines}${parentNotes ? `\n\nNotes: ${parentNotes}` : ""}`,
+        description: `${checkInLines}${parentNotes ? `\n\nNotes: ${parentNotes}` : ""}`,
+        metadata,
         subject_tags: ["religion.character"],
         tool_id: "habit-tracking",
         activity_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,

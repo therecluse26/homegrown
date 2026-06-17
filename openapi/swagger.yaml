@@ -1104,6 +1104,8 @@ definitions:
         type: string
       description:
         type: string
+      download_url:
+        type: string
       expires_at:
         type: string
       generated_at:
@@ -1125,6 +1127,8 @@ definitions:
       status:
         type: string
       student_id:
+        type: string
+      student_name:
         type: string
       title:
         type: string
@@ -1656,6 +1660,10 @@ definitions:
         maximum: 2030
         minimum: 2000
         type: integer
+      custom_attributes:
+        additionalProperties:
+          type: string
+        type: object
       display_name:
         maxLength: 100
         minLength: 1
@@ -1755,6 +1763,10 @@ definitions:
         type: integer
       created_at:
         type: string
+      custom_attributes:
+        additionalProperties:
+          type: string
+        type: object
       display_name:
         type: string
       grade_level:
@@ -1839,6 +1851,10 @@ definitions:
         maximum: 2030
         minimum: 2000
         type: integer
+      custom_attributes:
+        additionalProperties:
+          type: string
+        type: object
       display_name:
         maxLength: 100
         minLength: 1
@@ -1904,6 +1920,13 @@ definitions:
     properties:
       est_duration_minutes:
         type: integer
+      fit_score:
+        description: |-
+          FitScore is the learner-profile fit score for the requested child.
+          Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+        type: number
+      fit_why:
+        type: string
       id:
         type: string
       methodology_id:
@@ -1935,6 +1958,8 @@ definitions:
         type: integer
       id:
         type: string
+      metadata:
+        type: object
       methodology_id:
         type: string
       student_id:
@@ -2443,6 +2468,8 @@ definitions:
         type: string
       duration_minutes:
         type: integer
+      metadata:
+        type: object
       methodology_id:
         type: string
       subject_tags:
@@ -2782,6 +2809,13 @@ definitions:
         type: string
       cover_image_url:
         type: string
+      fit_score:
+        description: |-
+          FitScore is the learner-profile fit score for the requested child.
+          Omitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]
+        type: number
+      fit_why:
+        type: string
       id:
         type: string
       subject_tags:
@@ -3114,6 +3148,8 @@ definitions:
         type: string
       duration_minutes:
         type: integer
+      metadata:
+        type: object
       subject_tags:
         items:
           type: string
@@ -3943,7 +3979,14 @@ definitions:
     properties:
       checkout_url:
         type: string
+      client_secret:
+        description: |-
+          ClientSecret is the Hyperswitch client secret for SDK-based embedded checkout.
+          Empty when the payment provider is not configured.
+        type: string
       payment_session_id:
+        type: string
+      publishable_key:
         type: string
     type: object
   mkt.CreateListingCommand:
@@ -4102,6 +4145,14 @@ definitions:
       creator_store_name:
         type: string
       description_preview:
+        type: string
+      fit_score:
+        description: |-
+          FitScore is the learner-profile fit score for the requested child (0.0–1.0).
+          Omitted when forStudentId is absent, the child has no profile, or the listing
+          has no preference_tags. [18-learner-profile §6]
+        type: number
+      fit_why:
         type: string
       id:
         type: string
@@ -10723,6 +10774,10 @@ paths:
         in: query
         name: cursor
         type: string
+      - description: Child UUID — returns fit_score for that child
+        in: query
+        name: for_student_id
+        type: string
       produces:
       - application/json
       responses:
@@ -11913,6 +11968,10 @@ paths:
       - description: Cursor UUID for pagination
         in: query
         name: cursor
+        type: string
+      - description: Child UUID — returns fit_score for that child
+        in: query
+        name: for_student_id
         type: string
       produces:
       - application/json
@@ -14624,6 +14683,10 @@ paths:
         in: query
         name: cursor
         type: string
+      - description: Child UUID — returns fit_score for that child (requires auth)
+        in: query
+        name: for_student_id
+        type: string
       produces:
       - application/json
       responses:
@@ -14633,6 +14696,10 @@ paths:
             $ref: '#/definitions/mkt.BrowseListingsResult'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/shared.AppError'
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/shared.AppError'
       summary: Browse marketplace listings

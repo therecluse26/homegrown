@@ -15,6 +15,9 @@ export interface ListingBrowseResponse {
   rating_count: number;
   publisher_name: string;
   creator_store_name: string;
+  /** Learner-profile fit score [18-learner-profile §6]; omitted when gate not met. */
+  fit_score?: number;
+  fit_why?: string;
 }
 
 export interface ListingFileResponse {
@@ -95,6 +98,8 @@ export interface CartResponse {
 export interface CheckoutSessionResponse {
   checkout_url: string;
   payment_session_id: string;
+  client_secret?: string;
+  publishable_key?: string;
 }
 
 // Purchases
@@ -223,6 +228,8 @@ export interface BrowseParams {
   sort_by?: string;
   cursor?: string;
   limit?: number;
+  /** Child UUID — returns fit_score for that child [18-learner-profile §6] */
+  for_student_id?: string;
 }
 
 // ─── Browse & Discovery ─────────────────────────────────────────────────────
@@ -239,6 +246,7 @@ function buildBrowseQuery(params: BrowseParams): string {
   if (params.price_min != null) qs.set("price_min", String(params.price_min));
   if (params.price_max != null) qs.set("price_max", String(params.price_max));
   if (params.min_rating != null) qs.set("min_rating", String(params.min_rating));
+  if (params.for_student_id) qs.set("for_student_id", params.for_student_id);
   params.methodology_ids?.forEach((id) => qs.append("methodology_ids", id));
   params.subject_slugs?.forEach((s) => qs.append("subject_slugs", s));
   params.worldview_tags?.forEach((w) => qs.append("worldview_tags", w));

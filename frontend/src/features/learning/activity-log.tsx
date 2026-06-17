@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useSearchParams, useNavigate } from "react-router";
 import { Plus, Clock, Calendar, ClipboardList } from "lucide-react";
@@ -16,6 +16,7 @@ import { SubjectPicker } from "@/components/common/subject-picker";
 import { useStudents } from "@/hooks/use-family";
 import { useActivityLog, useLogActivity } from "@/hooks/use-activities";
 import { useMethodologyContext } from "@/features/auth/methodology-provider";
+import { useSubjectNameResolver } from "@/hooks/use-subjects";
 import { parseLocalDate } from "@/lib/date-utils";
 
 // ─── Add activity form ──────────────────────────────────────────────────────
@@ -176,9 +177,24 @@ export function ActivityLog() {
   const [searchParams] = useSearchParams();
   const { data: students, isPending: studentsLoading } = useStudents();
   const { toolLabel } = useMethodologyContext();
+  const slugToName = useSubjectNameResolver();
+  const pageTitle = toolLabel("activities", intl.formatMessage({ id: "activityLog.title" }));
+
+  useEffect(() => {
+    document.title = `${pageTitle} — ${intl.formatMessage({ id: "app.name" })}`;
+  }, [pageTitle, intl]);
+  const formRef = useRef<HTMLDivElement>(null);
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showForm, setShowForm] = useState(searchParams.get("new") === "1");
   const [subjectFilter, setSubjectFilter] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (showForm) {
+      requestAnimationFrame(() =>
+        formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
+      );
+    }
+  }, [showForm]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -205,7 +221,7 @@ export function ActivityLog() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="type-headline-md text-on-surface font-semibold">
-          {toolLabel("activities", intl.formatMessage({ id: "activityLog.title" }))}
+          {pageTitle}
         </h1>
         <Button
           variant="primary"
@@ -298,10 +314,12 @@ export function ActivityLog() {
 
       {/* Add activity form */}
       {showForm && effectiveStudent && (
-        <AddActivityForm
-          studentId={effectiveStudent}
-          onClose={() => setShowForm(false)}
-        />
+        <div ref={formRef}>
+          <AddActivityForm
+            studentId={effectiveStudent}
+            onClose={() => setShowForm(false)}
+          />
+        </div>
       )}
 
       {/* Activity list */}
@@ -385,7 +403,7 @@ export function ActivityLog() {
                           key={tag}
                           className="px-2 py-0.5 bg-primary-container text-on-primary-container type-label-sm rounded-full"
                         >
-                          {tag}
+                          {slugToName(tag)}
                         </span>
                       ))}
                     </div>

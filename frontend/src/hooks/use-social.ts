@@ -1107,6 +1107,16 @@ export function useFamilyProfileView(familyId: string | undefined) {
   });
 }
 
+export function useFamilyPosts(familyId: string | undefined) {
+  return useQuery({
+    queryKey: ["social", "families", familyId, "posts"],
+    queryFn: () =>
+      apiClient<PostResponse[]>(`/v1/social/families/${familyId ?? ""}/posts`),
+    enabled: !!familyId,
+    retry: false,
+  });
+}
+
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
   return useMutation({

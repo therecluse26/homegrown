@@ -207,6 +207,11 @@ export async function initVerificationFlow(): Promise<KratosFlow> {
   return kratosGet<KratosFlow>("/self-service/verification/browser");
 }
 
+/** Start a new self-service settings flow (password change, profile update, etc.). */
+export async function initSettingsFlow(): Promise<KratosFlow> {
+  return kratosGet<KratosFlow>("/self-service/settings/browser");
+}
+
 /**
  * Fetch an existing flow by ID and type (used when Kratos redirects back with ?flow=xxx).
  */

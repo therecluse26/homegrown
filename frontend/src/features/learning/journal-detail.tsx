@@ -14,6 +14,7 @@ import {
   Modal,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { ResourceNotFound } from "@/components/common/resource-not-found";
 import { SubjectPicker } from "@/components/common/subject-picker";
 import {
@@ -104,6 +105,11 @@ export function JournalDetail() {
           intl.formatMessage({ id: "journalDetail.untitled" })
         }
       />
+      <Breadcrumb items={[
+        { label: "Learning", to: "/learning" },
+        { label: "Journals", to: "/learning/journals" },
+        { label: entry.title ?? intl.formatMessage({ id: "journalDetail.untitled" }) },
+      ]} />
 
       <div className="flex items-center gap-3">
         <RouterLink

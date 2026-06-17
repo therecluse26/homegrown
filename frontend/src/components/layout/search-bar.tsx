@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useIntl } from "react-intl";
 import { Search, X } from "lucide-react";
 import { Icon } from "@/components/ui";
@@ -25,9 +25,17 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get("q") ?? "";
+
+  const [query, setQuery] = useState(urlQuery);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  // Keep header input in sync when navigating to/from search pages
+  useEffect(() => {
+    setQuery(urlQuery);
+  }, [urlQuery]);
 
   const debouncedQuery = useDebouncedValue(query, 300);
   const { data: autocomplete } = useAutocomplete(debouncedQuery);
@@ -50,10 +58,24 @@ export function SearchBar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Global Ctrl+K to focus search
+  // Global Ctrl+K or "/" to focus search (not when already in an input)
   useEffect(() => {
     function handleGlobalKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setIsOpen(true);
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      const isInInput =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable;
+
+      if (e.key === "/" && !isInInput) {
         e.preventDefault();
         inputRef.current?.focus();
         setIsOpen(true);
@@ -67,7 +89,6 @@ export function SearchBar() {
     (searchQuery: string) => {
       if (!searchQuery.trim()) return;
       setIsOpen(false);
-      setQuery("");
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     },
     [navigate],
@@ -76,7 +97,6 @@ export function SearchBar() {
   const handleSelect = useCallback(
     (suggestion: AutocompleteSuggestion) => {
       setIsOpen(false);
-      setQuery("");
       navigate(`/search?q=${encodeURIComponent(suggestion.text ?? "")}`);
     },
     [navigate],
@@ -163,7 +183,7 @@ export function SearchBar() {
         <ul
           id="search-suggestions"
           role="listbox"
-          className="absolute top-full left-0 right-0 mt-1 bg-surface-container-lowest rounded-radius-md shadow-ambient-md z-[var(--z-popover)] overflow-hidden"
+          className="absolute top-full left-0 mt-1 bg-surface-container-lowest rounded-radius-md shadow-ambient-md z-[var(--z-popover)] overflow-hidden min-w-full w-80 lg:w-96"
         >
           {suggestions.map((suggestion, index) => (
             <li

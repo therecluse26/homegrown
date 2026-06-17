@@ -191,6 +191,7 @@ func (a *HyperswitchPaymentAdapter) CreatePayment(ctx context.Context,lineItems 
 	return &mkt.PaymentSession{
 		CheckoutURL:      checkoutURL,
 		PaymentSessionID: result.PaymentID,
+		ClientSecret:     result.ClientSecret,
 	}, nil
 }
 

@@ -67,12 +67,13 @@ function formatTime(raw: string): string {
 
 const SOURCE_STYLES: Record<
   CalendarSource,
-  { bg: string; text: string; border: string; icon: typeof BookOpen; labelId: string }
+  { bg: string; text: string; border: string; dot: string; icon: typeof BookOpen; labelId: string }
 > = {
   activities: {
     bg: "bg-tertiary-container",
     text: "text-on-tertiary-container",
     border: "border-tertiary",
+    dot: "bg-tertiary",
     icon: BookOpen,
     labelId: "planning.calendar.source.activities",
   },
@@ -80,6 +81,7 @@ const SOURCE_STYLES: Record<
     bg: "bg-primary-container",
     text: "text-on-primary-container",
     border: "border-primary",
+    dot: "bg-primary",
     icon: CalendarDays,
     labelId: "planning.calendar.source.events",
   },
@@ -87,6 +89,7 @@ const SOURCE_STYLES: Record<
     bg: "bg-secondary-container",
     text: "text-on-secondary-container",
     border: "border-secondary",
+    dot: "bg-secondary",
     icon: CheckCircle2,
     labelId: "planning.calendar.source.attendance",
   },
@@ -94,10 +97,26 @@ const SOURCE_STYLES: Record<
     bg: "bg-surface-container-high",
     text: "text-on-surface",
     border: "border-outline-variant",
+    dot: "bg-outline",
     icon: Calendar,
     labelId: "planning.calendar.source.schedule",
   },
 };
+
+// ─── Item navigation helper ──────────────────────────────────────────────────
+
+function getItemPath(item: CalendarItem): string | null {
+  switch (item.source) {
+    case "events":
+      return `/events/${item.id}`;
+    case "activities":
+      return `/learning/activities/${item.id}`;
+    case "schedule":
+      return `/schedule/${item.id}/edit`;
+    case "attendance":
+      return null; // no per-record detail page
+  }
+}
 
 // ─── Calendar item component ────────────────────────────────────────────────
 
@@ -109,12 +128,11 @@ function CalendarItemCard({
   compact?: boolean;
 }) {
   const style = SOURCE_STYLES[item.source];
+  const to = getItemPath(item);
+  const baseClass = `flex items-center gap-1.5 px-1.5 py-1 rounded-radius-sm ${style.bg} ${style.text} type-label-sm`;
 
-  return (
-    <div
-      title={item.title}
-      className={`flex items-center gap-1.5 px-1.5 py-1 rounded-radius-sm ${style.bg} ${style.text} type-label-sm`}
-    >
+  const inner = (
+    <>
       <Icon icon={style.icon} size="xs" className="shrink-0" />
       <span className="truncate flex-1 min-w-0">{item.title}</span>
       {!compact && item.start_time && (
@@ -123,6 +141,122 @@ function CalendarItemCard({
       {item.is_completed && (
         <Icon icon={CheckCircle2} size="xs" className="shrink-0 opacity-60" />
       )}
+    </>
+  );
+
+  if (to) {
+    return (
+      <RouterLink
+        to={to}
+        title={item.title}
+        className={`${baseClass} hover:opacity-90 transition-opacity`}
+      >
+        {inner}
+      </RouterLink>
+    );
+  }
+
+  return (
+    <div title={item.title} className={baseClass}>
+      {inner}
+    </div>
+  );
+}
+
+// ─── Month helpers ──────────────────────────────────────────────────────────
+
+function getMonthStart(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+// ─── Month grid view ─────────────────────────────────────────────────────────
+
+function MonthGridView({
+  year,
+  month,
+  today,
+  getItemsForDate,
+  onSelectDay,
+}: {
+  year: number;
+  month: number;
+  today: Date;
+  getItemsForDate: (date: Date) => CalendarItem[];
+  onSelectDay: (date: Date) => void;
+}) {
+  const intl = useIntl();
+  const monthStart = new Date(year, month, 1);
+  const gridStart = getWeekStart(monthStart);
+
+  // 6 rows × 7 cols = 42 cells to cover any month layout
+  const allDays = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  const weeks = Array.from({ length: 6 }, (_, i) => allDays.slice(i * 7, (i + 1) * 7));
+
+  const dayHeaders = Array.from({ length: 7 }, (_, i) =>
+    addDays(gridStart, i).toLocaleDateString(intl.locale, { weekday: "short" }),
+  );
+
+  return (
+    <div>
+      <div className="grid grid-cols-7 mb-1">
+        {dayHeaders.map((name) => (
+          <div key={name} className="text-center type-label-sm text-on-surface-variant uppercase py-1">
+            {name}
+          </div>
+        ))}
+      </div>
+      <div className="divide-y divide-outline-variant/10">
+        {weeks.map((week, wi) => {
+          // Skip rows that are entirely outside the current month
+          if (week.every((d) => d.getMonth() !== month)) return null;
+          return (
+            <div key={wi} className="grid grid-cols-7 divide-x divide-outline-variant/10">
+              {week.map((date) => {
+                const isCurrentMonth = date.getMonth() === month;
+                const isToday = isSameDay(date, today);
+                const items = getItemsForDate(date);
+                const maxVisible = 2;
+                const overflow = items.length - maxVisible;
+                return (
+                  <button
+                    key={formatDate(date)}
+                    onClick={() => onSelectDay(date)}
+                    className={`min-h-[5rem] p-1 text-left transition-colors hover:bg-surface-container-low ${
+                      !isCurrentMonth ? "opacity-40" : ""
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex items-center justify-center w-6 h-6 rounded-full type-label-md mb-1 ${
+                        isToday ? "bg-primary text-on-primary" : "text-on-surface"
+                      }`}
+                    >
+                      {date.getDate()}
+                    </span>
+                    <div className="space-y-0.5">
+                      {items.slice(0, maxVisible).map((item) => {
+                        const style = SOURCE_STYLES[item.source];
+                        return (
+                          <div
+                            key={`${item.source}-${item.id}`}
+                            className={`px-1 py-0.5 rounded-radius-sm type-label-sm truncate ${style.bg} ${style.text}`}
+                          >
+                            {item.title}
+                          </div>
+                        );
+                      })}
+                      {overflow > 0 && (
+                        <p className="type-label-sm text-on-surface-variant px-1">
+                          +{overflow}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -235,11 +369,9 @@ function DayDetailView({
                 <Badge variant="secondary">{sourceItems.length}</Badge>
               </h3>
               <div className="space-y-2">
-                {sourceItems.map((item) => (
-                  <Card
-                    key={`${item.source}-${item.id}`}
-                    className={`p-card-padding border-l-4 ${style.border}`}
-                  >
+                {sourceItems.map((item) => {
+                  const to = getItemPath(item);
+                  const cardContent = (
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <p className="type-title-sm text-on-surface">
@@ -272,8 +404,24 @@ function DayDetailView({
                         )}
                       </div>
                     </div>
-                  </Card>
-                ))}
+                  );
+
+                  if (to) {
+                    return (
+                      <RouterLink key={`${item.source}-${item.id}`} to={to} className="block">
+                        <Card className={`p-card-padding border-l-4 ${style.border} hover:bg-surface-container-low transition-colors`}>
+                          {cardContent}
+                        </Card>
+                      </RouterLink>
+                    );
+                  }
+
+                  return (
+                    <Card key={`${item.source}-${item.id}`} className={`p-card-padding border-l-4 ${style.border}`}>
+                      {cardContent}
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           );
@@ -292,7 +440,7 @@ function ColorLegend() {
         ([source, style]) => (
           <div key={source} className="flex items-center gap-1.5">
             <span
-              className={`w-3 h-3 rounded-full ${style.bg}`}
+              className={`w-3 h-3 rounded-full ${style.dot}`}
               aria-hidden
             />
             <span className="type-label-sm text-on-surface-variant">
@@ -456,7 +604,7 @@ function ExportPanel({
 
 // ─── Calendar page ──────────────────────────────────────────────────────────
 
-type ViewMode = "week" | "day";
+type ViewMode = "week" | "day" | "month";
 
 export function CalendarView() {
   const intl = useIntl();
@@ -468,6 +616,7 @@ export function CalendarView() {
   const initialViewMode = useMemo((): ViewMode => {
     if (location.pathname.includes("/calendar/day/")) return "day";
     if (location.pathname.includes("/calendar/week/")) return "week";
+    if (location.pathname.includes("/calendar/month")) return "month";
     return "week";
   }, [location.pathname]);
 
@@ -495,6 +644,11 @@ export function CalendarView() {
         end: formatDate(addDays(selectedDate, 1)),
       };
     }
+    if (viewMode === "month") {
+      const ms = getMonthStart(selectedDate);
+      const me = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1);
+      return { start: formatDate(ms), end: formatDate(me) };
+    }
     return {
       start: formatDate(getWeekStart(selectedDate)),
       end: formatDate(getWeekEnd(selectedDate)),
@@ -510,9 +664,15 @@ export function CalendarView() {
   // Navigation
   const navigate = useCallback(
     (direction: -1 | 1) => {
-      setSelectedDate((prev) =>
-        addDays(prev, direction * (viewMode === "week" ? 7 : 1)),
-      );
+      if (viewMode === "month") {
+        setSelectedDate((prev) =>
+          new Date(prev.getFullYear(), prev.getMonth() + direction, 1),
+        );
+      } else {
+        setSelectedDate((prev) =>
+          addDays(prev, direction * (viewMode === "week" ? 7 : 1)),
+        );
+      }
     },
     [viewMode],
   );
@@ -541,6 +701,12 @@ export function CalendarView() {
 
   // Header date text
   const headerText = useMemo(() => {
+    if (viewMode === "month") {
+      return selectedDate.toLocaleDateString(intl.locale, {
+        month: "long",
+        year: "numeric",
+      });
+    }
     if (viewMode === "day") {
       return selectedDate.toLocaleDateString(intl.locale, {
         weekday: "long",
@@ -569,6 +735,16 @@ export function CalendarView() {
         <div className="flex items-center gap-3">
           {/* View toggle */}
           <div className="flex bg-surface-container-low rounded-radius-sm">
+            <button
+              onClick={() => setViewMode("month")}
+              className={`px-3 py-1.5 type-label-md rounded-radius-sm transition-colors ${
+                viewMode === "month"
+                  ? "bg-primary text-on-primary"
+                  : "text-on-surface-variant hover:bg-surface-container-high"
+              }`}
+            >
+              <FormattedMessage id="planning.calendar.view.month" />
+            </button>
             <button
               onClick={() => setViewMode("week")}
               className={`px-3 py-1.5 type-label-md rounded-radius-sm transition-colors ${
@@ -700,6 +876,17 @@ export function CalendarView() {
               <Skeleton key={n} className="h-12 w-full rounded-radius-sm" />
             ))}
           </div>
+        ) : viewMode === "month" ? (
+          <MonthGridView
+            year={selectedDate.getFullYear()}
+            month={selectedDate.getMonth()}
+            today={today}
+            getItemsForDate={getItemsForDate}
+            onSelectDay={(date) => {
+              setSelectedDate(date);
+              setViewMode("day");
+            }}
+          />
         ) : viewMode === "week" ? (
           <div className="flex gap-2 overflow-x-auto">
             {weekDates.map((date) => (

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
 // ─── Custom DB Array Types ──────────────────────────────────────────────────
@@ -408,6 +409,11 @@ type ListingBrowseResponse struct {
 	RatingCount        int32     `json:"rating_count"`
 	PublisherName      string    `json:"publisher_name"`
 	CreatorStoreName   string    `json:"creator_store_name"`
+	// FitScore is the learner-profile fit score for the requested child (0.0–1.0).
+	// Omitted when forStudentId is absent, the child has no profile, or the listing
+	// has no preference_tags. [18-learner-profile §6]
+	FitScore *float32 `json:"fit_score,omitempty"`
+	FitWhy   *string  `json:"fit_why,omitempty"`
 }
 
 type ListingDetailResponse struct {
@@ -534,6 +540,10 @@ type CheckoutRequest struct {
 type CheckoutSessionResponse struct {
 	CheckoutURL      string `json:"checkout_url"`
 	PaymentSessionID string `json:"payment_session_id"`
+	// ClientSecret is the Hyperswitch client secret for SDK-based embedded checkout.
+	// Empty when the payment provider is not configured.
+	ClientSecret   string `json:"client_secret,omitempty"`
+	PublishableKey string `json:"publishable_key,omitempty"`
 }
 
 type OnboardingLinkResponse struct {
@@ -578,6 +588,10 @@ type BrowseListingsParams struct {
 	SortBy         *ListingSortBy `query:"sort_by"`
 	Cursor         *string        `query:"cursor"`
 	Limit          *uint8         `query:"limit"`
+	// ForStudentID requests child-scoped fit scores. Requires authenticated FamilyScope.
+	// Handler populates FamilyScope from the request context when this is non-nil.
+	ForStudentID *uuid.UUID         `query:"for_student_id"`
+	FamilyScope  *shared.FamilyScope `query:"-"`
 }
 
 type CreatorListingQueryParams struct {

@@ -667,6 +667,7 @@ func newTestService(
 		discoverySvc,
 		mediaSvc,
 		shared.NewEventBus(),
+		shared.NoopJobEnqueuer{},
 	)
 }
 

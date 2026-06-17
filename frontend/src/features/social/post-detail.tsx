@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
 import { useParams, Link as RouterLink, useNavigate } from "react-router";
 import { FormattedMessage, useIntl } from "react-intl";
+import { formatTimeAgo } from "@/lib/date-utils";
+import { useAuthContext } from "@/features/auth/auth-provider";
 import {
   Heart,
   MessageCircle,
@@ -39,10 +41,12 @@ function Comment({
   comment,
   postId,
   depth = 0,
+  myFamilyId,
 }: {
   comment: CommentResponse;
   postId: string;
   depth?: number;
+  myFamilyId?: string;
 }) {
   const intl = useIntl();
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -111,6 +115,7 @@ function Comment({
                       setEditText(comment.content);
                     }
                   }}
+                  aria-label={intl.formatMessage({ id: "social.post.comment.edit" })}
                   className="flex-1 bg-surface-container-highest rounded-radius-sm px-2 py-1 text-on-surface type-body-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                   autoFocus
                 />
@@ -141,7 +146,7 @@ function Comment({
           </div>
           <div className="flex items-center gap-3 mt-1 type-label-sm text-on-surface-variant">
             <span>
-              {new Date(comment.created_at).toLocaleDateString()}
+              {formatTimeAgo(comment.created_at)}
             </span>
             {depth === 0 && (
               <button
@@ -172,7 +177,9 @@ function Comment({
             >
               <Icon icon={Trash2} size="xs" />
             </button>
-            <ReportButton targetType="comment" targetId={comment.id} />
+            {comment.family_id !== myFamilyId && (
+              <ReportButton targetType="comment" targetId={comment.id} />
+            )}
           </div>
 
           {/* Reply form */}
@@ -193,6 +200,7 @@ function Comment({
                 placeholder={intl.formatMessage({
                   id: "social.post.comment.replyPlaceholder",
                 })}
+                aria-label={intl.formatMessage({ id: "social.post.comment.reply" })}
                 className="flex-1 bg-surface-container-highest rounded-radius-sm px-3 py-1.5 text-on-surface type-body-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               />
               <Button
@@ -200,6 +208,7 @@ function Comment({
                 variant="primary"
                 size="sm"
                 disabled={!replyText.trim() || createComment.isPending}
+                aria-label={intl.formatMessage({ id: "social.post.comment.submit" })}
               >
                 <Icon icon={Send} size="xs" />
               </Button>
@@ -213,6 +222,7 @@ function Comment({
               comment={reply}
               postId={postId}
               depth={depth + 1}
+              myFamilyId={myFamilyId}
             />
           ))}
         </div>
@@ -244,6 +254,7 @@ export function PostDetail() {
   const navigate = useNavigate();
   const { postId } = useParams<{ postId: string }>();
   const { data, isPending, error } = usePostDetail(postId);
+  const { user } = useAuthContext();
   const likePost = useLikePost();
   const unlikePost = useUnlikePost();
   const deletePost = useDeletePost();
@@ -266,6 +277,7 @@ export function PostDetail() {
   if (isPending) {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
+        <PageTitle title={intl.formatMessage({ id: "social.post.loading.title", defaultMessage: "Post" })} />
         <Skeleton className="h-8 w-24" />
         <Skeleton className="h-48 w-full rounded-radius-md" />
       </div>
@@ -320,13 +332,7 @@ export function PostDetail() {
               {post.author_name}
             </p>
             <p className="type-label-sm text-on-surface-variant">
-              {new Date(post.created_at).toLocaleDateString(undefined, {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatTimeAgo(post.created_at)}
               {post.is_edited && (
                 <span className="ml-1">
                   (<FormattedMessage id="social.post.edited" />)
@@ -334,7 +340,9 @@ export function PostDetail() {
               )}
             </p>
           </div>
-          <ReportButton targetType="post" targetId={post.id} />
+          {!post.is_mine && (
+            <ReportButton targetType="post" targetId={post.id} />
+          )}
         </div>
 
         {post.content && (
@@ -357,16 +365,20 @@ export function PostDetail() {
                 : "text-on-surface-variant hover:bg-surface-container-low"
             }`}
             aria-pressed={post.is_liked_by_me}
+            aria-label={intl.formatMessage(
+              { id: "social.post.like.toggle" },
+              { liked: post.is_liked_by_me },
+            )}
           >
-            <Icon icon={Heart} size="sm" />
+            <Icon icon={Heart} size="sm" aria-hidden />
             <span className="type-label-md">
               {post.likes_count > 0 && post.likes_count}
             </span>
           </button>
 
-          <span className="flex items-center gap-1.5 text-on-surface-variant">
-            <Icon icon={MessageCircle} size="sm" />
-            <span className="type-label-md">{comments.length}</span>
+          <span className="flex items-center gap-1.5 text-on-surface-variant" aria-label={intl.formatMessage({ id: "feed.post.comments.aria" }, { count: comments.length })}>
+            <Icon icon={MessageCircle} size="sm" aria-hidden />
+            <span className="type-label-md" aria-hidden="true">{comments.length}</span>
           </span>
 
           <button
@@ -390,6 +402,7 @@ export function PostDetail() {
           placeholder={intl.formatMessage({
             id: "social.post.comment.placeholder",
           })}
+          aria-label={intl.formatMessage({ id: "social.post.comment.placeholder" })}
           className="flex-1 bg-surface-container-highest rounded-radius-md px-4 py-2.5 text-on-surface type-body-md placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
         />
         <Button
@@ -397,8 +410,9 @@ export function PostDetail() {
           variant="primary"
           size="md"
           disabled={!commentText.trim() || createComment.isPending}
+          aria-label={intl.formatMessage({ id: "social.post.comment.submit" })}
         >
-          <Icon icon={Send} size="sm" />
+          <Icon icon={Send} size="sm" aria-hidden />
         </Button>
       </form>
 
@@ -411,6 +425,7 @@ export function PostDetail() {
               key={comment.id}
               comment={comment}
               postId={post.id}
+              myFamilyId={user?.family_id}
             />
           ))}
       </div>

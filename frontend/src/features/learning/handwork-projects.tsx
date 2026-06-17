@@ -110,19 +110,16 @@ export function HandworkProjects() {
     const craftLabel = intl.formatMessage({ id: CRAFT_TYPES.find(c => c.value === craftType)?.labelId ?? "" });
     const statusLabel = intl.formatMessage({ id: PROJECT_STATUSES.find(s => s.value === status)?.labelId ?? "" });
 
-    const descParts: string[] = [
-      `Craft: ${craftLabel}`,
-      `Status: ${statusLabel}`,
-      materials ? `Materials: ${materials}` : "",
-      techniques ? `Techniques: ${techniques}` : "",
-      progressNotes ? `Progress notes: ${progressNotes}` : "",
-      photoFiles.length > 0 ? `Photos: ${photoFiles.map(f => f.name).join(", ")}` : "",
-    ].filter(Boolean);
+    const metadata: Record<string, string> = { Craft: craftLabel, Status: statusLabel };
+    if (materials) metadata.Materials = materials;
+    if (techniques) metadata.Techniques = techniques;
+    if (photoFiles.length > 0) metadata.Photos = photoFiles.map(f => f.name).join(", ");
 
     logActivity.mutate(
       {
         title: `Handwork: ${projectName} (${craftLabel})`,
-        description: descParts.join("\n"),
+        description: progressNotes.trim() || undefined,
+        metadata,
         subject_tags: ["arts"],
         tool_id: "handwork-projects",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,

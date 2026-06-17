@@ -99,20 +99,24 @@ export function TriviumTracker() {
     if (!effectiveStudent || !topic.trim()) return;
 
     const stageLabel = intl.formatMessage({ id: TRIVIUM_STAGES.find(s => s.value === stage)?.labelId ?? "" });
-    const descParts: string[] = [
-      `Stage: ${stageLabel}`,
-      `Topic: ${topic}`,
-      vocabulary ? `Vocabulary / Facts: ${vocabulary}` : "",
-      memorization ? `Memorization type: ${intl.formatMessage({ id: MEMORIZATION_OPTIONS.find(m => m.value === memorization)?.labelId ?? "" })}` : "",
-      connections ? `Connections / Analysis: ${connections}` : "",
-      compositionType ? `Composition type: ${intl.formatMessage({ id: COMPOSITION_OPTIONS.find(c => c.value === compositionType)?.labelId ?? "" })}` : "",
-      notes ? `Notes: ${notes}` : "",
-    ].filter(Boolean);
+    const memLabel = memorization
+      ? intl.formatMessage({ id: MEMORIZATION_OPTIONS.find(m => m.value === memorization)?.labelId ?? "" })
+      : "";
+    const compLabel = compositionType
+      ? intl.formatMessage({ id: COMPOSITION_OPTIONS.find(c => c.value === compositionType)?.labelId ?? "" })
+      : "";
+
+    const metadata: Record<string, string> = { Stage: stageLabel, Topic: topic };
+    if (vocabulary) metadata["Vocabulary / Facts"] = vocabulary;
+    if (memLabel) metadata["Memorization type"] = memLabel;
+    if (connections) metadata["Connections / Analysis"] = connections;
+    if (compLabel) metadata["Composition type"] = compLabel;
 
     logActivity.mutate(
       {
         title: `Trivium (${stageLabel}): ${topic}`,
-        description: descParts.join("\n"),
+        description: notes.trim() || undefined,
+        metadata,
         subject_tags: subjectTags.length > 0 ? subjectTags : undefined,
         tool_id: "trivium-tracker",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,

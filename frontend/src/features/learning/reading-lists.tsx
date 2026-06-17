@@ -266,7 +266,7 @@ export function ReadingLists() {
                       {list.description}
                     </p>
                   )}
-                  <ProgressBar value={pct} />
+                  {list.item_count > 0 && <ProgressBar value={pct} />}
                 </Card>
               );
             })}

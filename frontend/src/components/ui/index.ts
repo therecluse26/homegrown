@@ -34,3 +34,4 @@ export { Tabs } from "./tabs";
 export { Textarea } from "./textarea";
 export { ToastProvider, useToast } from "./toast";
 export { Tooltip } from "./tooltip";
+export { ViewingAsSelector } from "./viewing-as-selector";

@@ -123,6 +123,7 @@ const GroupManagement = lazy(() => import("@/features/social/group-management").
 const MarketplaceBrowse = lazy(() => import("@/features/marketplace/marketplace-browse").then(m => ({ default: m.MarketplaceBrowse })));
 const ListingDetail = lazy(() => import("@/features/marketplace/listing-detail").then(m => ({ default: m.ListingDetail })));
 const Cart = lazy(() => import("@/features/marketplace/cart").then(m => ({ default: m.Cart })));
+const CheckoutPage = lazy(() => import("@/features/marketplace/checkout-page").then(m => ({ default: m.CheckoutPage })));
 const PurchaseHistory = lazy(() => import("@/features/marketplace/purchase-history").then(m => ({ default: m.PurchaseHistory })));
 const RefundRequest = lazy(() => import("@/features/marketplace/refund-request").then(m => ({ default: m.RefundRequest })));
 const CreatorDashboard = lazy(() => import("@/features/marketplace/creator/creator-dashboard").then(m => ({ default: m.CreatorDashboard })));
@@ -140,9 +141,11 @@ const CreatorEarnings = lazy(() => import("@/features/marketplace/creator/creato
 const CreatorAnalytics = lazy(() => import("@/features/marketplace/creator/creator-analytics").then(m => ({ default: m.CreatorAnalytics })));
 
 // Stub / redirect pages
-const ComingSoonStub = lazy(() => import("@/components/common/coming-soon-stub").then(m => ({ default: m.ComingSoonStub })));
 const ProfileRedirect = lazy(() => import("@/features/social/profile-redirect").then(m => ({ default: m.ProfileRedirect })));
 const LogoutRoute = lazy(() => import("@/features/auth/logout-route").then(m => ({ default: m.LogoutRoute })));
+
+// Help
+const HelpPage = lazy(() => import("@/features/help/help-page").then(m => ({ default: m.HelpPage })));
 
 // Billing
 const PricingPage = lazy(() => import("@/features/billing/pricing-page").then(m => ({ default: m.PricingPage })));
@@ -275,6 +278,7 @@ const routes: RouteObject[] = [
               { path: "marketplace", element: <MarketplaceBrowse />, errorElement: <RouteErrorBoundary /> },
               { path: "marketplace/listings/:id", element: <ListingDetail /> },
               { path: "marketplace/cart", element: <Cart /> },
+              { path: "marketplace/checkout", element: <CheckoutPage /> },
               { path: "marketplace/purchases", element: <PurchaseHistory /> },
               { path: "marketplace/purchases/:id/refund", element: <RefundRequest /> },
 
@@ -325,6 +329,9 @@ const routes: RouteObject[] = [
 
               // Search
               { path: "search", element: <SearchResults />, errorElement: <RouteErrorBoundary /> },
+
+              // Help & Support
+              { path: "help", element: <HelpPage />, errorElement: <RouteErrorBoundary /> },
 
               // Family profile
               { path: "family/:familyId", element: <FamilyProfile /> },
@@ -393,7 +400,7 @@ const routes: RouteObject[] = [
               // Calendar/Planning redirects
               { path: "planning", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/week", element: <Navigate to="/calendar" replace /> },
-              { path: "calendar/month", element: <Navigate to="/calendar" replace /> },
+              { path: "calendar/month", element: <CalendarView /> },
               { path: "calendar/new", element: <Navigate to="/schedule/new" replace /> },
               { path: "calendar/schedules", element: <Navigate to="/calendar" replace /> },
               { path: "calendar/templates", element: <Navigate to="/planning/templates" replace /> },
@@ -535,9 +542,6 @@ const routes: RouteObject[] = [
           // Compliance pages
           { path: "portfolios/new", element: <PortfolioNew /> },
           { path: "requirements", element: <ComplianceRequirements /> },
-          // Deferred — need new backend models
-          { path: "immunization", element: <ComingSoonStub title="Immunization Records" description="Track immunization records for compliance." backTo="/compliance" backLabel="Back to Compliance" /> },
-          { path: "submissions", element: <ComingSoonStub title="Submissions" description="View and manage compliance document submissions." backTo="/compliance" backLabel="Back to Compliance" /> },
         ],
       },
     ],

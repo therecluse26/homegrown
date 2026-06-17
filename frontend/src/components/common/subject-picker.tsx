@@ -5,6 +5,7 @@ import { Button, Icon, Input, Spinner } from "@/components/ui";
 import {
   useSubjectTaxonomy,
   useCreateCustomSubject,
+  useSubjectNameResolver,
   type SubjectTaxonomyResponse,
 } from "@/hooks/use-subjects";
 
@@ -110,6 +111,7 @@ export function SubjectPicker({
   const intl = useIntl();
   const { data: taxonomy, isPending } = useSubjectTaxonomy();
   const createCustom = useCreateCustomSubject();
+  const slugToName = useSubjectNameResolver();
   const [newSubjectName, setNewSubjectName] = useState("");
   const [showCustomForm, setShowCustomForm] = useState(false);
 
@@ -163,7 +165,7 @@ export function SubjectPicker({
               className="inline-flex items-center gap-1 px-2 py-1 bg-primary-container text-on-primary-container type-label-sm rounded-full"
             >
               <Icon icon={Tag} size="xs" aria-hidden />
-              {slug}
+              {slugToName(slug)}
               <button
                 type="button"
                 onClick={() => handleToggle(slug)}

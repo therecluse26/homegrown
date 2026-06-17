@@ -577,3 +577,28 @@ type MktServiceForLearn interface {
 	// IsPublisherMember checks if a caller is a member of a publisher.
 	IsPublisherMember(ctx context.Context, callerID uuid.UUID, publisherID uuid.UUID) (bool, error)
 }
+
+// LearnerProfileForLearn is a consumer-defined interface for learner profile access in learn.
+// Wired in main.go via a function adapter over learner_profile.ProfileRepository.
+// learn does not import learner_profile directly (consumer-defined interface pattern). [ARCH §4.2]
+type LearnerProfileForLearn interface {
+	// GetStudentFitProfile returns the learner profile data for fit scoring.
+	// Returns nil (no error) when the student has no profile or is not in this family.
+	// Family ownership enforced via FamilyScope (RLS). [18-learner-profile §6]
+	GetStudentFitProfile(ctx context.Context, scope *shared.FamilyScope, studentID uuid.UUID) (*LearnStudentFitProfile, error)
+	// GetStudentDisplayName returns the student's display name for why-text substitution.
+	GetStudentDisplayName(ctx context.Context, studentID uuid.UUID) (string, error)
+}
+
+// LearnStudentFitProfile holds the learner profile data needed for fit score computation in learn.
+// Consumer-defined to avoid importing internal/learner_profile. [ARCH §4.2]
+type LearnStudentFitProfile struct {
+	ActivityFormat     *float64
+	SessionLength      *float64
+	Motivation         *float64
+	SoloCollaborative  *float64
+	Structure          *float64
+	OutdoorKinesthetic *float64
+	Interests          []string
+	Confidence         float64
+}

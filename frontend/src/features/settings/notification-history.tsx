@@ -32,7 +32,7 @@ const NOTIFICATION_CONFIG: Record<
   string,
   { icon: typeof Info; colorClass: string }
 > = {
-  friend_request_received: { icon: UserPlus, colorClass: "text-primary" },
+  friend_request_sent: { icon: UserPlus, colorClass: "text-primary" },
   friend_request_accepted: { icon: UserCheck, colorClass: "text-primary" },
   message_received: { icon: MessageCircle, colorClass: "text-secondary" },
   content_flagged: { icon: AlertTriangle, colorClass: "text-warning" },
@@ -40,7 +40,7 @@ const NOTIFICATION_CONFIG: Record<
   system: { icon: Info, colorClass: "text-on-surface-variant" },
 };
 
-function getConfig(type: NotificationType) {
+function getConfig(type: string) {
   return (
     NOTIFICATION_CONFIG[type] ?? {
       icon: Info,
@@ -53,19 +53,17 @@ function getConfig(type: NotificationType) {
 
 const NOTIFICATION_TYPE_OPTIONS: { value: NotificationType; labelId: string }[] =
   [
-    { value: "friend_request_received", labelId: "notificationHistory.type.friendRequest" },
+    { value: "friend_request_sent", labelId: "notificationHistory.type.friendRequest" },
     { value: "friend_request_accepted", labelId: "notificationHistory.type.friendAccepted" },
     { value: "message_received", labelId: "notificationHistory.type.message" },
-    { value: "content_flagged", labelId: "notificationHistory.type.flagged" },
     { value: "event_cancelled", labelId: "notificationHistory.type.eventCancelled" },
+    { value: "milestone_achieved", labelId: "notificationHistory.type.learningMilestone" },
+    { value: "book_completed", labelId: "notificationHistory.type.bookCompleted" },
+    { value: "activity_streak", labelId: "notificationHistory.type.streak" },
     { value: "purchase_completed", labelId: "notificationHistory.type.purchase" },
-    { value: "review_received", labelId: "notificationHistory.type.review" },
     { value: "subscription_created", labelId: "notificationHistory.type.subscriptionCreated" },
     { value: "subscription_cancelled", labelId: "notificationHistory.type.subscriptionCancelled" },
-    { value: "subscription_renewed", labelId: "notificationHistory.type.subscriptionRenewed" },
-    { value: "streak_milestone", labelId: "notificationHistory.type.streak" },
-    { value: "learning_milestone", labelId: "notificationHistory.type.learningMilestone" },
-    { value: "attendance_threshold_warning", labelId: "notificationHistory.type.attendance" },
+    { value: "content_flagged", labelId: "notificationHistory.type.flagged" },
     { value: "payout_completed", labelId: "notificationHistory.type.payout" },
     { value: "system", labelId: "notificationHistory.type.system" },
   ];
@@ -347,15 +345,15 @@ export function NotificationHistory() {
             })}
           >
             {notifications.map((notification) => {
-              const config = getConfig(notification.type);
+              const config = getConfig(notification.notification_type);
               const content = (
                 <Card
                   className={`flex items-start gap-3 transition-colors ${
-                    notification.read
+                    notification.is_read
                       ? ""
                       : "bg-surface-container-low ring-1 ring-primary/10"
                   }`}
-                  interactive={!!notification.deep_link}
+                  interactive={!!notification.action_url}
                 >
                   <div
                     className={`mt-0.5 shrink-0 ${config.colorClass}`}
@@ -373,7 +371,7 @@ export function NotificationHistory() {
                       {formatTimeAgo(notification.created_at, intl)}
                     </p>
                   </div>
-                  {!notification.read && (
+                  {!notification.is_read && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -394,9 +392,9 @@ export function NotificationHistory() {
 
               return (
                 <li key={notification.id}>
-                  {notification.deep_link ? (
+                  {notification.action_url ? (
                     <RouterLink
-                      to={notification.deep_link}
+                      to={notification.action_url}
                       className="block no-underline"
                     >
                       {content}

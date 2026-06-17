@@ -73,6 +73,11 @@
   }
 }
 
+/* ─── Safe Area Utilities ──────────────────────────────────────────── */
+@utility safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* ─── Print Break Utilities ────────────────────────────────────────── */
 @utility print-break-before { @media print { break-before: page; } }
 @utility print-break-after { @media print { break-after: page; } }

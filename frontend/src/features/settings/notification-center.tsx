@@ -1,7 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
 import {
+  BookOpen,
+  ShoppingBag,
+  Star,
   UserPlus,
   UserCheck,
   MessageCircle,
@@ -20,7 +23,6 @@ import {
   useNotifications,
   useMarkRead,
   useMarkAllRead,
-  type NotificationType,
 } from "@/hooks/use-notifications";
 
 // ─── Notification type → icon/color mapping ────────────────────────────────
@@ -29,33 +31,20 @@ const NOTIFICATION_CONFIG: Record<
   string,
   { icon: typeof Info; colorClass: string }
 > = {
-  friend_request_received: {
-    icon: UserPlus,
-    colorClass: "text-primary",
-  },
-  friend_request_accepted: {
-    icon: UserCheck,
-    colorClass: "text-primary",
-  },
-  message_received: {
-    icon: MessageCircle,
-    colorClass: "text-secondary",
-  },
-  content_flagged: {
-    icon: AlertTriangle,
-    colorClass: "text-warning",
-  },
-  event_cancelled: {
-    icon: CalendarX,
-    colorClass: "text-error",
-  },
-  system: {
-    icon: Info,
-    colorClass: "text-on-surface-variant",
-  },
+  friend_request_sent: { icon: UserPlus, colorClass: "text-primary" },
+  friend_request_accepted: { icon: UserCheck, colorClass: "text-primary" },
+  message_received: { icon: MessageCircle, colorClass: "text-secondary" },
+  content_flagged: { icon: AlertTriangle, colorClass: "text-warning" },
+  event_cancelled: { icon: CalendarX, colorClass: "text-error" },
+  book_completed: { icon: BookOpen, colorClass: "text-tertiary" },
+  milestone_achieved: { icon: Star, colorClass: "text-tertiary" },
+  activity_streak: { icon: Star, colorClass: "text-tertiary" },
+  purchase_completed: { icon: ShoppingBag, colorClass: "text-secondary" },
+  purchase_refunded: { icon: ShoppingBag, colorClass: "text-on-surface-variant" },
+  system: { icon: Info, colorClass: "text-on-surface-variant" },
 };
 
-function getConfig(type: NotificationType) {
+function getConfig(type: string) {
   return (
     NOTIFICATION_CONFIG[type] ?? {
       icon: Info,
@@ -87,10 +76,21 @@ function formatTimeAgo(dateStr: string, intl: ReturnType<typeof useIntl>) {
   );
 }
 
+const CATEGORIES = [
+  { id: "", labelId: "notifications.filter.all" },
+  { id: "social", labelId: "notifications.filter.social" },
+  { id: "learning", labelId: "notifications.filter.learning" },
+  { id: "marketplace", labelId: "notifications.filter.marketplace" },
+  { id: "system", labelId: "notifications.filter.system" },
+] as const;
+
 export function NotificationCenter() {
   const intl = useIntl();
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const { data, isPending, error } = useNotifications();
+  const [category, setCategory] = useState("");
+  const { data, isPending, error } = useNotifications(
+    category ? { category } : undefined,
+  );
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
 
@@ -102,13 +102,22 @@ export function NotificationCenter() {
   const notifications = data?.notifications ?? [];
   const unreadCount = data?.unread_count ?? 0;
 
-  function handleMarkRead(id: string) {
+  const handleMarkRead = useCallback((id: string) => {
     markRead.mutate(id);
-  }
+  }, [markRead]);
 
-  function handleMarkAllRead() {
+  const handleMarkAllRead = useCallback(() => {
     markAllRead.mutate();
-  }
+  }, [markAllRead]);
+
+  // Auto-mark all as read when the page is visited with unread notifications (B-33).
+  const hasAutoMarked = useRef(false);
+  useEffect(() => {
+    if (!hasAutoMarked.current && unreadCount > 0) {
+      hasAutoMarked.current = true;
+      markAllRead.mutate();
+    }
+  }, [unreadCount, markAllRead]);
 
   if (isPending) {
     return (
@@ -142,7 +151,7 @@ export function NotificationCenter() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none">
           <FormattedMessage id="notifications.title" />
         </h1>
@@ -158,6 +167,23 @@ export function NotificationCenter() {
         )}
       </div>
 
+      <div className="flex gap-2 flex-wrap mb-6" role="group" aria-label={intl.formatMessage({ id: "notifications.filter.label" })}>
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => setCategory(cat.id)}
+            className={`px-3 py-1.5 rounded-full type-label-md transition-colors ${
+              category === cat.id
+                ? "bg-primary text-on-primary"
+                : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+            }`}
+          >
+            {intl.formatMessage({ id: cat.labelId })}
+          </button>
+        ))}
+      </div>
+
       {notifications.length === 0 ? (
         <EmptyState
           message={intl.formatMessage({ id: "notifications.empty" })}
@@ -168,15 +194,15 @@ export function NotificationCenter() {
       ) : (
         <ul className="flex flex-col gap-2" role="list">
           {notifications.map((notification) => {
-            const config = getConfig(notification.type);
+            const config = getConfig(notification.notification_type);
             const content = (
               <Card
                 className={`flex items-start gap-3 transition-colors ${
-                  notification.read
+                  notification.is_read
                     ? ""
                     : "bg-surface-container-low ring-1 ring-primary/10"
                 }`}
-                interactive={!!notification.deep_link}
+                interactive={!!notification.action_url}
               >
                 <div
                   className={`mt-0.5 shrink-0 ${config.colorClass}`}
@@ -194,7 +220,7 @@ export function NotificationCenter() {
                     {formatTimeAgo(notification.created_at, intl)}
                   </p>
                 </div>
-                {!notification.read && (
+                {!notification.is_read && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -215,9 +241,9 @@ export function NotificationCenter() {
 
             return (
               <li key={notification.id}>
-                {notification.deep_link ? (
+                {notification.action_url ? (
                   <RouterLink
-                    to={notification.deep_link}
+                    to={notification.action_url}
                     className="block no-underline"
                   >
                     {content}

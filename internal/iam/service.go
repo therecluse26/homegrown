@@ -476,12 +476,17 @@ func buildFamilyProfileResponse(family *Family, parents []Parent, students []Stu
 }
 
 func toStudentResponse(s *Student) StudentResponse {
+	attrs := s.CustomAttributes
+	if attrs == nil {
+		attrs = map[string]string{}
+	}
 	return StudentResponse{
 		ID:                      s.ID,
 		DisplayName:             s.DisplayName,
 		BirthYear:               s.BirthYear,
 		GradeLevel:              s.GradeLevel,
 		MethodologyOverrideSlug: s.MethodologyOverrideSlug,
+		CustomAttributes:        attrs,
 		CreatedAt:               s.CreatedAt,
 		UpdatedAt:               s.UpdatedAt,
 	}

@@ -7524,6 +7524,12 @@ const docTemplate = `{
                         "description": "Cursor UUID for pagination",
                         "name": "cursor",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Child UUID — returns fit_score for that child",
+                        "name": "for_student_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -9401,6 +9407,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Cursor UUID for pagination",
                         "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Child UUID — returns fit_score for that child",
+                        "name": "for_student_id",
                         "in": "query"
                     }
                 ],
@@ -13649,6 +13661,12 @@ const docTemplate = `{
                         "description": "Pagination cursor",
                         "name": "cursor",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Child UUID — returns fit_score for that child (requires auth)",
+                        "name": "for_student_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -13660,6 +13678,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/shared.AppError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/shared.AppError"
                         }
@@ -19896,6 +19920,9 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "download_url": {
+                    "type": "string"
+                },
                 "expires_at": {
                     "type": "string"
                 },
@@ -19927,6 +19954,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "student_id": {
+                    "type": "string"
+                },
+                "student_name": {
                     "type": "string"
                 },
                 "title": {
@@ -20731,6 +20761,12 @@ const docTemplate = `{
                     "maximum": 2030,
                     "minimum": 2000
                 },
+                "custom_attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "display_name": {
                     "type": "string",
                     "maxLength": 100,
@@ -20876,6 +20912,12 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "custom_attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "display_name": {
                     "type": "string"
                 },
@@ -21002,6 +21044,12 @@ const docTemplate = `{
                     "maximum": 2030,
                     "minimum": 2000
                 },
+                "custom_attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "display_name": {
                     "type": "string",
                     "maxLength": 100,
@@ -21099,6 +21147,13 @@ const docTemplate = `{
                 "est_duration_minutes": {
                     "type": "integer"
                 },
+                "fit_score": {
+                    "description": "FitScore is the learner-profile fit score for the requested child.\nOmitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]",
+                    "type": "number"
+                },
+                "fit_why": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -21145,6 +21200,9 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "metadata": {
+                    "type": "object"
                 },
                 "methodology_id": {
                     "type": "string"
@@ -21895,6 +21953,9 @@ const docTemplate = `{
                 "duration_minutes": {
                     "type": "integer"
                 },
+                "metadata": {
+                    "type": "object"
+                },
                 "methodology_id": {
                     "type": "string"
                 },
@@ -22407,6 +22468,13 @@ const docTemplate = `{
                 "cover_image_url": {
                     "type": "string"
                 },
+                "fit_score": {
+                    "description": "FitScore is the learner-profile fit score for the requested child.\nOmitted when forStudentId is absent, child has no profile, or content is untagged. [18-learner-profile §6]",
+                    "type": "number"
+                },
+                "fit_why": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -22910,6 +22978,9 @@ const docTemplate = `{
                 },
                 "duration_minutes": {
                     "type": "integer"
+                },
+                "metadata": {
+                    "type": "object"
                 },
                 "subject_tags": {
                     "type": "array",
@@ -24119,7 +24190,14 @@ const docTemplate = `{
                 "checkout_url": {
                     "type": "string"
                 },
+                "client_secret": {
+                    "description": "ClientSecret is the Hyperswitch client secret for SDK-based embedded checkout.\nEmpty when the payment provider is not configured.",
+                    "type": "string"
+                },
                 "payment_session_id": {
+                    "type": "string"
+                },
+                "publishable_key": {
                     "type": "string"
                 }
             }
@@ -24353,6 +24431,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "description_preview": {
+                    "type": "string"
+                },
+                "fit_score": {
+                    "description": "FitScore is the learner-profile fit score for the requested child (0.0–1.0).\nOmitted when forStudentId is absent, the child has no profile, or the listing\nhas no preference_tags. [18-learner-profile §6]",
+                    "type": "number"
+                },
+                "fit_why": {
                     "type": "string"
                 },
                 "id": {

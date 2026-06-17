@@ -16,6 +16,9 @@ export interface ReadingItemSummaryResponse {
   author?: string;
   subject_tags: string[];
   cover_image_url?: string;
+  /** Learner-profile fit score [18-learner-profile §6]; omitted when gate not met. */
+  fit_score?: number;
+  fit_why?: string;
 }
 
 export interface ReadingItemResponse {
@@ -78,6 +81,8 @@ export function useReadingItems(params?: {
   search?: string;
   subject?: string;
   isbn?: string;
+  /** Child UUID — returns fit_score for that child [18-learner-profile §6] */
+  for_student_id?: string;
 }) {
   return useInfiniteQuery({
     queryKey: ["learning", "reading-items", params],
@@ -86,6 +91,7 @@ export function useReadingItems(params?: {
       if (params?.search) sp.set("search", params.search);
       if (params?.subject) sp.set("subject", params.subject);
       if (params?.isbn) sp.set("isbn", params.isbn);
+      if (params?.for_student_id) sp.set("for_student_id", params.for_student_id);
       if (pageParam) sp.set("cursor", pageParam);
       const qs = sp.toString();
       return apiClient<PaginatedResponse<ReadingItemSummaryResponse>>(
@@ -201,6 +207,9 @@ export function useUpdateReadingProgress(studentId: string) {
       });
       void qc.invalidateQueries({
         queryKey: ["learning", "progress", studentId],
+      });
+      void qc.invalidateQueries({
+        queryKey: ["learning", "reading-lists"],
       });
     },
   });

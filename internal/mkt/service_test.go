@@ -217,9 +217,11 @@ func newMktService(deps mktServiceDeps) MarketplaceService {
 		nil, // reviews
 		nil, // curatedSections
 		nil, // payment
+		"",  // paymentPublishableKey
 		nil, // media
 		bus,
 		nil, // db
+		nil, // learnerProfile — fit scoring disabled in unit tests
 	)
 }
 

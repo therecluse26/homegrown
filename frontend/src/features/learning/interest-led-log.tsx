@@ -98,17 +98,15 @@ export function InterestLedLog() {
       .map(m => intl.formatMessage({ id: EXPLORATION_METHODS.find(opt => opt.value === m)?.labelId ?? "" }))
       .join(", ");
 
-    const descParts: string[] = [
-      `Interest: ${interest}`,
-      howExplored.length > 0 ? `How explored: ${explorationLabels}` : "",
-      activityDescription ? `Description: ${activityDescription}` : "",
-      resourceList.length > 0 ? `Resources: ${resourceList.join(", ")}` : "",
-    ].filter(Boolean);
+    const metadata: Record<string, string> = { Interest: interest };
+    if (explorationLabels) metadata["How explored"] = explorationLabels;
+    if (resourceList.length > 0) metadata.Resources = resourceList.join(", ");
 
     logActivity.mutate(
       {
         title: `Interest-Led: ${interest}`,
-        description: descParts.join("\n"),
+        description: activityDescription.trim() || undefined,
+        metadata,
         subject_tags: subjectTags.length > 0 ? subjectTags : undefined,
         tool_id: "interest-led-log",
         duration_minutes: durationMinutes ? Number(durationMinutes) : undefined,

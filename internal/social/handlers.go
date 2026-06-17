@@ -33,6 +33,7 @@ func (h *Handler) Register(authGroup *echo.Group) {
 	soc.GET("/profile", h.getOwnProfile)
 	soc.PATCH("/profile", h.updateProfile)
 	soc.GET("/families/:id/profile", h.getFamilyProfile)
+	soc.GET("/families/:id/posts", h.listFamilyPosts)
 
 	// Friends
 	soc.POST("/friends/request/:familyId", h.sendFriendRequest)
@@ -152,6 +153,23 @@ func (h *Handler) getFamilyProfile(c echo.Context) error {
 		return shared.ErrBadRequest("invalid family ID")
 	}
 	resp, err := h.svc.GetFamilyProfile(c.Request().Context(), auth, targetID)
+	if err != nil {
+		return mapSocialError(err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) listFamilyPosts(c echo.Context) error {
+	auth, err := shared.GetAuthContext(c)
+	if err != nil {
+		return err
+	}
+	familyID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return shared.ErrBadRequest("invalid family ID")
+	}
+	offset, limit := parsePagination(c)
+	resp, err := h.svc.ListFamilyPosts(c.Request().Context(), auth, familyID, offset, limit)
 	if err != nil {
 		return mapSocialError(err)
 	}
@@ -782,7 +800,8 @@ func (h *Handler) listGroupMembers(c echo.Context) error {
 	if err != nil {
 		return shared.ErrBadRequest("invalid group ID")
 	}
-	resp, err := h.svc.ListGroupMembers(c.Request().Context(), auth, groupID)
+	statusFilter := c.QueryParam("status")
+	resp, err := h.svc.ListGroupMembers(c.Request().Context(), auth, groupID, statusFilter)
 	if err != nil {
 		return mapSocialError(err)
 	}

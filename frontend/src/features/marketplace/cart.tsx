@@ -1,5 +1,5 @@
 import { FormattedMessage, useIntl } from "react-intl";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, useNavigate } from "react-router";
 import { ShoppingCart, Trash2, ArrowLeft } from "lucide-react";
 import {
   Button,
@@ -18,6 +18,7 @@ import {
 
 export function Cart() {
   const intl = useIntl();
+  const navigate = useNavigate();
   const { data: cart, isPending } = useCart();
   const removeFromCart = useRemoveFromCart();
   const checkout = useCheckout();
@@ -36,7 +37,18 @@ export function Cart() {
   const handleCheckout = () => {
     checkout.mutate(undefined, {
       onSuccess: (data) => {
-        if (data.checkout_url) {
+        // If we have a client_secret, use the in-app SDK checkout page.
+        // Otherwise fall back to an external redirect (e.g. a hosted payment page).
+        if (data.client_secret && data.payment_session_id) {
+          const params = new URLSearchParams({
+            payment_id: data.payment_session_id,
+            client_secret: data.client_secret,
+            ...(data.publishable_key
+              ? { publishable_key: data.publishable_key }
+              : {}),
+          });
+          navigate(`/marketplace/checkout?${params.toString()}`);
+        } else if (data.checkout_url) {
           window.location.href = data.checkout_url;
         }
       },

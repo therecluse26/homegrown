@@ -430,6 +430,7 @@ type TestListResponse struct {
 type PortfolioResponse struct {
 	ID                 uuid.UUID               `json:"id"`
 	StudentID          uuid.UUID               `json:"student_id"`
+	StudentName        string                  `json:"student_name"`
 	Title              string                  `json:"title"`
 	Description        *string                 `json:"description"`
 	Organization       string                  `json:"organization"`
@@ -441,6 +442,7 @@ type PortfolioResponse struct {
 	ItemCount          int32                   `json:"item_count"`
 	GeneratedAt        *time.Time              `json:"generated_at"`
 	ExpiresAt          *time.Time              `json:"expires_at"`
+	DownloadURL        *string                 `json:"download_url,omitempty"`
 	Items              []PortfolioItemResponse `json:"items,omitempty"`
 	CreatedAt          time.Time               `json:"created_at"`
 }

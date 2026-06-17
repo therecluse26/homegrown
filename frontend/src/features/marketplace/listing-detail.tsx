@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useParams, Link as RouterLink, useNavigate } from "react-router";
-import { ArrowLeft, ShoppingCart, Star, Download, FileText, Package, Check, BookOpen } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Star, Download, FileText, Package, Check, BookOpen, ExternalLink } from "lucide-react";
 import {
   Button,
   Card,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { PageTitle } from "@/components/common/page-title";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
 import {
   useListingDetail,
   useListingReviews,
@@ -20,6 +21,58 @@ import {
 } from "@/hooks/use-marketplace";
 import type { ReviewResponse } from "@/hooks/use-marketplace";
 
+// ─── Utilities ───────────────────────────────────────────────────────────────
+
+/** Convert a slug like `language_arts` to `Language Arts`. */
+function formatSlug(slug: string): string {
+  return slug
+    .split(/[_\s]+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+interface GutenbergMeta {
+  authors: string;
+  subjects: string[];
+  readFreeUrl?: string;
+}
+
+/**
+ * Parse the raw Gutenberg metadata blob stored in `description`.
+ * Returns null when the description does not match the Gutenberg format.
+ */
+function parseGutenbergDescription(desc: string): GutenbergMeta | null {
+  if (!desc.includes("Author(s):")) return null;
+  // The full description is newline-separated; parse line-by-line for safety.
+  const lines = desc.split("\n");
+  const authorLine = lines.find((l) => l.startsWith("Author(s):")) ?? "";
+  const subjectsLine = lines.find((l) => l.startsWith("Subjects:")) ?? "";
+  const readFreeLine = lines.find((l) => l.startsWith("Read free at:")) ?? "";
+  const authorMatch = authorLine.match(/Author\(s\):\s*(.+)/);
+  const subjectsMatch = subjectsLine.match(/Subjects:\s*(.+)/);
+  const readFreeMatch = readFreeLine.match(/Read free at:\s*(https?:\/\/\S+)/);
+  return {
+    authors: authorMatch?.[1]?.trim() ?? "",
+    subjects: subjectsMatch?.[1]
+      ? subjectsMatch[1].split(",").map((s) => s.trim()).filter(Boolean)
+      : [],
+    readFreeUrl: readFreeMatch?.[1],
+  };
+}
+
+/**
+ * Parse Gutenberg-style title `"Title — Author Name"` into separate parts.
+ * Returns title unchanged when the separator is absent.
+ */
+function splitGutenbergTitle(title: string): { displayTitle: string; author?: string } {
+  const sep = title.lastIndexOf(" — "); // em-dash with spaces
+  if (sep === -1) return { displayTitle: title };
+  return {
+    displayTitle: title.slice(0, sep).trim(),
+    author: title.slice(sep + 3).trim(),
+  };
+}
+
 // ─── Review card ─────────────────────────────────────────────────────────────
 
 function ReviewCard({ review }: { review: ReviewResponse }) {
@@ -28,13 +81,12 @@ function ReviewCard({ review }: { review: ReviewResponse }) {
       <div className="flex items-center gap-2 mb-2">
         <div className="flex gap-0.5">
           {[1, 2, 3, 4, 5].map((star) => (
-            <Icon
+            <Star
               key={star}
-              icon={Star}
-              size="xs"
-              className={
-                star <= review.rating ? "text-warning" : "text-on-surface-variant/30"
-              }
+              size={12}
+              aria-hidden
+              className={star <= review.rating ? "text-warning" : "text-on-surface-variant/30"}
+              fill={star <= review.rating ? "currentColor" : "none"}
             />
           ))}
         </div>
@@ -142,6 +194,10 @@ export function ListingDetail() {
   return (
     <div className="max-w-content-narrow mx-auto">
       <PageTitle title={listing.title} />
+      <Breadcrumb items={[
+        { label: "Marketplace", to: "/marketplace" },
+        { label: listing.title },
+      ]} />
 
       <RouterLink
         to="/marketplace"
@@ -174,8 +230,7 @@ export function ListingDetail() {
 
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <Badge variant="secondary">{listing.content_type.replace("_", " ")}</Badge>
-              <Badge variant="default">{listing.status}</Badge>
+              <Badge variant="secondary">{listing.content_type.replace(/_/g, " ")}</Badge>
               {listing.is_bundle && (
                 <Badge variant="primary">
                   <Icon icon={Package} size="xs" className="mr-1" />
@@ -184,9 +239,21 @@ export function ListingDetail() {
               )}
             </div>
 
-            <h1 className="type-headline-sm text-on-surface mb-2">
-              {listing.title}
-            </h1>
+            {(() => {
+              const { displayTitle, author } = splitGutenbergTitle(listing.title);
+              return (
+                <>
+                  <h1 className="type-headline-sm text-on-surface mb-1">
+                    {displayTitle}
+                  </h1>
+                  {author && (
+                    <p className="type-label-md text-on-surface-variant mb-1">
+                      {author}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
 
             <p className="type-label-md text-on-surface-variant mb-3">
               {listing.publisher_name}
@@ -196,15 +263,16 @@ export function ListingDetail() {
               <div className="flex items-center gap-2 mb-3">
                 <div className="flex gap-0.5">
                   {[1, 2, 3, 4, 5].map((star) => (
-                    <Icon
+                    <Star
                       key={star}
-                      icon={Star}
-                      size="sm"
+                      size={16}
+                      aria-hidden
                       className={
                         star <= Math.round(listing.rating_avg)
                           ? "text-warning"
                           : "text-on-surface-variant/30"
                       }
+                      fill={star <= Math.round(listing.rating_avg) ? "currentColor" : "none"}
                     />
                   ))}
                 </div>
@@ -270,20 +338,54 @@ export function ListingDetail() {
         <h2 className="type-title-md text-on-surface mb-3">
           <FormattedMessage id="marketplace.description" />
         </h2>
-        <p className="type-body-md text-on-surface whitespace-pre-wrap">
-          {listing.description}
-        </p>
+        {(() => {
+          const gutenberg = parseGutenbergDescription(listing.description);
+          if (gutenberg) {
+            return (
+              <div className="space-y-2">
+                {gutenberg.authors && (
+                  <p className="type-body-md text-on-surface">
+                    <span className="type-label-md text-on-surface-variant">Author(s): </span>
+                    {gutenberg.authors}
+                  </p>
+                )}
+                {gutenberg.subjects.length > 0 && (
+                  <p className="type-body-md text-on-surface">
+                    <span className="type-label-md text-on-surface-variant">Subjects: </span>
+                    {gutenberg.subjects.join(", ")}
+                  </p>
+                )}
+                {gutenberg.readFreeUrl && (
+                  <a
+                    href={gutenberg.readFreeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 type-label-md text-primary hover:underline"
+                  >
+                    <FormattedMessage id="marketplace.readFree" defaultMessage="Read free at Project Gutenberg" />
+                    <Icon icon={ExternalLink} size="xs" />
+                  </a>
+                )}
+              </div>
+            );
+          }
+          return (
+            <p className="type-body-md text-on-surface whitespace-pre-wrap">
+              {listing.description}
+            </p>
+          );
+        })()}
 
         {/* Tags */}
         <div className="flex flex-wrap gap-2 mt-4">
           {listing.subject_tags.map((tag) => (
             <Badge key={tag} variant="secondary">
-              {tag}
+              {formatSlug(tag)}
             </Badge>
           ))}
           {listing.worldview_tags.map((tag) => (
             <Badge key={tag} variant="default">
-              {tag}
+              {formatSlug(tag)}
             </Badge>
           ))}
         </div>
@@ -393,15 +495,12 @@ export function ListingDetail() {
                       type="button"
                       onClick={() => setReviewRating(star)}
                       className="p-0.5"
+                      aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
                     >
-                      <Icon
-                        icon={Star}
-                        size="md"
-                        className={
-                          star <= reviewRating
-                            ? "text-warning"
-                            : "text-on-surface-variant/30"
-                        }
+                      <Star
+                        size={20}
+                        className={star <= reviewRating ? "text-warning" : "text-on-surface-variant/30"}
+                        fill={star <= reviewRating ? "currentColor" : "none"}
                       />
                     </button>
                   ))}

@@ -19,7 +19,10 @@ const sizeClasses: Record<AvatarSize, string> = {
 };
 
 function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
+  let parts = name.trim().split(/\s+/);
+  // Skip generic prefix/suffix words so "The Howard Family" → "H" not "TF"
+  if (parts.length > 1 && /^the$/i.test(parts[0]!)) parts = parts.slice(1);
+  if (parts.length > 1 && /^family$/i.test(parts[parts.length - 1]!)) parts = parts.slice(0, -1);
   if (parts.length === 0) return "?";
   if (parts.length === 1) return (parts[0]?.[0] ?? "?").toUpperCase();
   return `${(parts[0]?.[0] ?? "").toUpperCase()}${(parts[parts.length - 1]?.[0] ?? "").toUpperCase()}`;

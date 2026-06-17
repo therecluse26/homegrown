@@ -107,8 +107,9 @@ type mockSocialService struct {
 	getGroupFn          func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) (*GroupResponse, error)
 	listMyGroupsFn      func(ctx context.Context, scope *shared.FamilyScope) ([]GroupResponse, error)
 	listPlatformGroupsFn func(ctx context.Context) ([]GroupResponse, error)
-	listGroupMembersFn  func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error)
+	listGroupMembersFn  func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, statusFilter string) ([]GroupMemberResponse, error)
 	listGroupPostsFn    func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
+	listFamilyPostsFn   func(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, offset, limit int) ([]PostResponse, error)
 
 	// Events
 	createEventFn func(ctx context.Context, auth *shared.AuthContext, cmd CreateEventCommand) (*EventDetailResponse, error)
@@ -462,9 +463,9 @@ func (m *mockSocialService) ListPlatformGroups(ctx context.Context) ([]GroupResp
 	panic("unexpected call to ListPlatformGroups")
 }
 
-func (m *mockSocialService) ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error) {
+func (m *mockSocialService) ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, statusFilter string) ([]GroupMemberResponse, error) {
 	if m.listGroupMembersFn != nil {
-		return m.listGroupMembersFn(ctx, auth, groupID)
+		return m.listGroupMembersFn(ctx, auth, groupID, statusFilter)
 	}
 	panic("unexpected call to ListGroupMembers")
 }
@@ -474,6 +475,13 @@ func (m *mockSocialService) ListGroupPosts(ctx context.Context, auth *shared.Aut
 		return m.listGroupPostsFn(ctx, auth, groupID, offset, limit)
 	}
 	panic("unexpected call to ListGroupPosts")
+}
+
+func (m *mockSocialService) ListFamilyPosts(ctx context.Context, auth *shared.AuthContext, familyID uuid.UUID, offset, limit int) ([]PostResponse, error) {
+	if m.listFamilyPostsFn != nil {
+		return m.listFamilyPostsFn(ctx, auth, familyID, offset, limit)
+	}
+	panic("unexpected call to ListFamilyPosts")
 }
 
 // ─── Events ─────────────────────────────────────────────────────────────────

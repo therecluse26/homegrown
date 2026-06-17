@@ -1525,6 +1525,9 @@ func TestGetPortfolio_ReturnsPortfolioWithItems(t *testing.T) {
 		studentBelongsToFamilyFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyID) (bool, error) {
 			return true, nil
 		},
+		getStudentNameFn: func(_ context.Context, _ uuid.UUID) (string, error) {
+			return "Emma", nil
+		},
 	}
 	portfolioRepo := &stubPortfolioRepo{
 		findByIDFn: func(_ context.Context, _ uuid.UUID, _ shared.FamilyScope) (*ComplyPortfolio, error) {

@@ -42,6 +42,38 @@ export function useSubjectTaxonomy(params?: {
   });
 }
 
+// ─── Slug → Name Utilities ───────────────────────────────────────────────────
+
+/** Flatten a taxonomy tree into a slug → display-name map. */
+function flattenTaxonomy(
+  nodes: SubjectTaxonomyResponse[],
+  map: Map<string, string> = new Map(),
+): Map<string, string> {
+  for (const node of nodes) {
+    map.set(node.slug, node.name);
+    if (node.children.length > 0) flattenTaxonomy(node.children, map);
+  }
+  return map;
+}
+
+/**
+ * Returns a function that converts a subject slug to its display name.
+ * Falls back to a humanised slug if taxonomy hasn't loaded yet.
+ */
+export function useSubjectNameResolver() {
+  const { data: taxonomy } = useSubjectTaxonomy();
+
+  const nameMap = taxonomy ? flattenTaxonomy(taxonomy) : new Map<string, string>();
+
+  return (slug: string): string => {
+    if (nameMap.has(slug)) return nameMap.get(slug)!;
+    // Graceful fallback: convert slug separators to spaces and title-case.
+    return slug
+      .replace(/[_.\-]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+}
+
 // ─── Mutations ──────────────────────────────────────────────────────────────
 
 export function useCreateCustomSubject() {

@@ -19,6 +19,7 @@ import {
   ConfirmationDialog,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { TierGate } from "@/components/common/tier-gate";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -253,6 +254,11 @@ export function TranscriptBuilder() {
           { name: transcript.title },
         )}
       />
+      <Breadcrumb items={[
+        { label: "Compliance", to: "/compliance" },
+        { label: "Transcripts", to: "/compliance/transcripts" },
+        { label: transcript.title },
+      ]} />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">

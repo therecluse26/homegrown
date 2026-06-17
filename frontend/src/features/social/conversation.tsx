@@ -21,6 +21,35 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { MessageResponse } from "@/hooks/use-social";
 
+// ─── Date separator ─────────────────────────────────────────────────────────
+
+function formatDateLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  if (msgDay.getTime() === today.getTime()) return "Today";
+  if (msgDay.getTime() === yesterday.getTime()) return "Yesterday";
+  if (now.getTime() - date.getTime() < 7 * 86400000) {
+    return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  }
+  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
+function DateSeparator({ dateStr }: { dateStr: string }) {
+  return (
+    <div className="flex items-center gap-3 py-2 px-2">
+      <div className="flex-1 h-px bg-outline-variant/20" />
+      <span className="type-label-sm text-on-surface-variant shrink-0">
+        {formatDateLabel(dateStr)}
+      </span>
+      <div className="flex-1 h-px bg-outline-variant/20" />
+    </div>
+  );
+}
+
 // ─── Message bubble ─────────────────────────────────────────────────────────
 
 function MessageBubble({
@@ -286,14 +315,21 @@ export function Conversation() {
           </div>
         )}
 
-        {filteredMessages?.map((msg) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            isMine={msg.sender_parent_id === user?.parent_id}
-            searchHighlight={searchQuery}
-          />
-        ))}
+        {filteredMessages?.map((msg, i) => {
+          const msgDate = new Date(msg.created_at).toDateString();
+          const prevDate = i > 0 ? new Date(filteredMessages[i - 1]!.created_at).toDateString() : null;
+          const showSeparator = !searchQuery && msgDate !== prevDate;
+          return (
+            <div key={msg.id}>
+              {showSeparator && <DateSeparator dateStr={msg.created_at} />}
+              <MessageBubble
+                message={msg}
+                isMine={msg.sender_parent_id === user?.parent_id}
+                searchHighlight={searchQuery}
+              />
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 

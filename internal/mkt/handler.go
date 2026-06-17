@@ -751,13 +751,15 @@ func (h *Handler) uploadListingFile(c echo.Context) error {
 // @Summary     Browse marketplace listings
 // @Tags        marketplace
 // @Produce     json
-// @Param       q          query string false "Search query"
-// @Param       category   query string false "Filter by category"
-// @Param       sort       query string false "Sort order"
-// @Param       limit      query int    false "Results per page"
-// @Param       cursor     query string false "Pagination cursor"
+// @Param       q              query string false "Search query"
+// @Param       category       query string false "Filter by category"
+// @Param       sort           query string false "Sort order"
+// @Param       limit          query int    false "Results per page"
+// @Param       cursor         query string false "Pagination cursor"
+// @Param       for_student_id query string false "Child UUID — returns fit_score for that child (requires auth)"
 // @Success     200 {object} BrowseListingsResult
 // @Failure     400 {object} shared.AppError
+// @Failure     401 {object} shared.AppError
 // @Router      /marketplace/listings [get]
 func (h *Handler) browseListings(c echo.Context) error {
 	var params BrowseListingsParams
@@ -766,6 +768,15 @@ func (h *Handler) browseListings(c echo.Context) error {
 	}
 	if err := c.Validate(&params); err != nil {
 		return shared.ValidationError(err)
+	}
+
+	// for_student_id requires an authenticated family scope.
+	if params.ForStudentID != nil {
+		scope, scopeErr := shared.GetFamilyScope(c)
+		if scopeErr != nil {
+			return shared.ErrUnauthorized()
+		}
+		params.FamilyScope = &scope
 	}
 
 	resp, err := h.svc.BrowseListings(c.Request().Context(), params)
