@@ -2,10 +2,10 @@
 
 > **Purpose:** A self-contained prompt that an AI agent can execute to perform exhaustive
 > exploratory end-to-end testing of the Homegrown Academy application using Playwright MCP
-> tools. The goal is to systematically discover functional gaps and bugs that code review
-> alone cannot reveal.
+> tools. The goal is to systematically discover **functional gaps AND visual/design-system
+> defects** that code review alone cannot reveal.
 >
-> **Output:** A structured gap report following the format in `specs/gaps_04-05_26.md`.
+> **Output:** A structured gap report + coverage ledger (§6, §7).
 
 ---
 
@@ -36,13 +36,16 @@ make dev
 Wait for both servers to be ready before proceeding. The frontend dev server prints
 `Local: http://localhost:5673/` when ready.
 
-### 1.3  Browser Configuration
+### 1.3  Viewport Configuration (E6)
 
-Use Playwright MCP in **Chromium** mode. Set viewport to `1280×800` for desktop testing:
+Every surface MUST be tested at **two mandatory viewports** (see §4.2 — E6):
 
-```
-mcp__pw__browser_resize → width: 1280, height: 800
-```
+| Label | Command | Dimensions |
+|-------|---------|------------|
+| Desktop | `mcp__pw__browser_resize → width: 1440, height: 900` | 1440×900 |
+| Mobile | `mcp__pw__browser_resize → width: 390, height: 844` | 390×844 |
+
+Do **not** use any other viewport as a substitute. `1280×800` is retired.
 
 ---
 
@@ -163,23 +166,210 @@ All seed entity UUIDs for parameterized routes. Source: `cmd/seed/main.go`.
 
 ## 4  Testing Strategy
 
-Testing proceeds in three phases: breadth-first smoke testing, depth-focused user journeys,
-then creative edge case exploration.
+Testing proceeds through three phases. Every phase applies the **per-surface execution
+pipeline** defined in §4.1–§4.6 before recording a verdict. Read §4.1–§4.6 completely
+before beginning Phase 1.
+
+---
+
+### 4.1  E1 — Render-AND-Judge Gate (Verdict Rule)
+
+> **Rule: A surface verdict MUST NOT be filed without (a) a rendered screenshot and
+> (b) explicit citation of rubric items from §4.3 (E2) and §4.4 (E3). Rendering alone
+> is NOT a pass. "Content present, no console errors" is NOT sufficient for PASS.**
+
+For every surface, the mandatory pipeline is:
+
+```
+RENDER  →  JUDGE  →  FILE
+```
+
+Never:
+
+```
+RENDER  →  FILE          ← forbidden (no judgment)
+RENDER  →  JUDGE  →  ...   ← forbidden if filed without rubric citation
+```
+
+**What "judge" requires:**
+1. A `mcp__pw__browser_take_screenshot` captured (not just snapshot).
+2. A visual quality score from E2 rubric (§4.3) stated explicitly: `VQ: 3/3`.
+3. Any token/Hearth violations from E3 (§4.4) listed or confirmed absent: `E3: none`.
+4. State coverage from E7 matrix (§4.5) noted: which states were exercised.
+
+Only after these four items are recorded may a verdict (`PASS` / `WARN` / `FAIL` / `BLOCKED`) be filed.
+
+**Verdict definitions (updated):**
+
+| Verdict | Meaning |
+|---------|---------|
+| **PASS** | Renders, no console errors, VQ ≥ 2/3, no E3 violations |
+| **WARN** | Renders but VQ = 1/3, or has console warnings, or minor E3 violations |
+| **FAIL** | Page crashes / error boundary / JS errors, **or** VQ = 0/3, **or** critical E3 violations (off-token color, 1px sectioning border) |
+| **BLOCKED** | Cannot reach (auth issue, redirect loop, token requirement) |
+
+> **Important:** A surface with VQ = 0/3 or critical E3 violations MUST be `FAIL` even
+> if the page renders and has no console errors. Raw/cramped/off-token is a defect.
+
+---
+
+### 4.2  E6 — Mandatory Viewports
+
+Every surface in Phase 1 (smoke test) MUST be tested at both viewports. Journeys (Phase 2)
+MUST be run at desktop; repeat the journey at mobile for any flows modified in recent work.
+
+```
+Desktop:  mcp__pw__browser_resize → width: 1440, height: 900
+Mobile:   mcp__pw__browser_resize → width: 390, height: 844
+```
+
+Record the viewport in the verdict: `PASS/D` (desktop), `PASS/M` (mobile), `FAIL/M` (mobile fail).
+
+If a surface passes desktop but fails mobile, the overall verdict is `WARN` at minimum.
+If it crashes at mobile, the verdict is `FAIL`.
+
+---
+
+### 4.3  E2 — Visual-Quality Rubric
+
+Score each surface 0–3 using the four criteria below. **All four must be assessed.** A
+score of 3 means all four pass cleanly. Record as `VQ: N/3` in the surface row.
+
+Partial credit (0.5) is allowed for borderline cases; round down when filing.
+
+#### Criterion A — Hierarchy Visible
+
+A stranger should identify primary, secondary, and tertiary content within two seconds of
+viewing the screenshot. Primary actions (CTAs) must stand out; supporting text must recede.
+
+- **3:** Clear 3-tier hierarchy. Primary: uses `text-primary` or `bg-primary` token.
+  Secondary: `text-on-surface-variant`. Tertiary: clearly subordinate size or color.
+- **2:** Two tiers visible but a third is ambiguous or missing.
+- **1:** Only one visual weight used; everything competes equally.
+- **0:** No hierarchy. Everything is the same size, color, and weight ("programmer default").
+
+#### Criterion B — Spacing on Token Scale
+
+All padding, margin, and gap values MUST come from Tailwind's spacing scale as registered in
+`frontend/src/styles/tokens.css`. Reference values: `spacing-1` (0.35rem), `spacing-2`
+(0.7rem), `spacing-4` (1.4rem), `spacing-6` (2.1rem), `spacing-8` (2.8rem), `spacing-12`
+(4.2rem), `spacing-16` (5.6rem). No arbitrary values (`p-[13px]`, `gap-[22px]`).
+
+- **3:** All gaps generous and from token scale. Breathing room evident; elements don't crowd edges.
+- **2:** Mostly correct but one area is cramped or uses a one-off value.
+- **1:** Visible crowding or elements touching edges; likely off-scale.
+- **0:** Densely packed; default browser spacing; content runs to viewport edge.
+
+#### Criterion C — Ruthless Alignment
+
+Every element must align to a grid, a shared baseline, or a common edge. Misaligned text,
+ragged card grids, and uneven column starts are defects.
+
+- **3:** Perfect grid alignment. Cards, labels, and content share left/right edges. Text baselines match within rows.
+- **2:** Mostly aligned with one visible exception.
+- **1:** Visibly ragged layout; multiple elements misaligned.
+- **0:** No alignment system apparent.
+
+#### Criterion D — Type System Consistency
+
+Headlines MUST use Plus Jakarta Sans (`font-display` token); body/utility MUST use Manrope
+(`font-sans` token). Sizes MUST come from the type scale defined in `components.css`
+(`display-lg`, `headline-md`, `title-sm`, `body-lg`, `label-md`, etc.). No ad-hoc font
+sizes (`text-[17px]`).
+
+- **3:** Consistent application of display/headline/title/body/label scale. No free-form sizes.
+- **2:** Mostly correct; one component uses a mismatched size or weight.
+- **1:** Multiple inconsistent sizes; visual hierarchy broken by type variation.
+- **0:** Default browser font-size throughout; or multiple different fonts not from the token set.
+
+---
+
+### 4.4  E3 — Token & Curated-Hearth Conformance Scan
+
+After capturing screenshots, scan for the following violations. Each violation must be cited
+by its offending element, the incorrect value observed, and the correct token/rule that should
+apply. Record findings as a list under `E3:` in the surface row. If no violations are found,
+write `E3: clean`.
+
+#### Violation Checklist
+
+| ID | What to Flag | Correct Token / Rule |
+|----|-------------|---------------------|
+| **E3-A** | Any hex color value not in the token palette (check `tokens.css §2`) | Use `text-primary`, `bg-surface-container`, `text-error`, etc. from `DESIGN_TOKENS.md §2` |
+| **E3-B** | 1px solid borders used for sectioning / dividing layout regions | **Forbidden.** Use background color shifts (`bg-surface-container-low` vs `bg-surface`) per DESIGN.md "No-Line Rule" |
+| **E3-C** | Horizontal dividers (`<hr>`, `divide-y`, `border-b`) between list items | **Forbidden.** Use `spacing-4` (1.4rem) vertical gap or alternating `surface` / `surface-container-low` per DESIGN.md §5 |
+| **E3-D** | Arbitrary z-index values (`z-[50]`, `z-[100]`, inline `z-index: 999`) | Use Tailwind's named z-scale (`z-0` through `z-50`) or token-registered z-values only |
+| **E3-E** | Off-scale spacing (`p-[13px]`, `gap-[22px]`, inline `margin: 7px`) | Replace with nearest token step (`spacing-2` = 0.7rem, `spacing-4` = 1.4rem, etc.) |
+| **E3-F** | Wrong typeface for context (e.g., Manrope used for `display-lg` headline) | Headlines: `font-display` (Plus Jakarta Sans). Body/utility: `font-sans` (Manrope) |
+| **E3-G** | Flat drop shadows with full opacity or tight blur (< 8px) | Ambient only: 32px+ blur, 4% opacity using `on-surface` tint (`#1b1c1a`) per DESIGN.md §4 |
+| **E3-H** | Cards without `xl` radius on student content, or without `lg` on parent data | Student cards: `rounded-xl` (1.5rem). Parent data cards: `rounded-lg` (1rem) per DESIGN.md §5 |
+| **E3-I** | Primary buttons not using `bg-primary` (`#0c5252`) + `text-on-primary` (`#ffffff`) | Per DESIGN.md §5 Buttons spec |
+| **E3-J** | Navigation using opaque background instead of `surface-container-low` at 80% opacity with `backdrop-blur` | Per DESIGN.md §2 "Glass & Gradient" Rule |
+
+**Severity mapping for E3 violations:**
+
+| Severity | Violations |
+|----------|-----------|
+| **High** (→ FAIL) | E3-A (off-token hex), E3-B (1px sectioning borders), E3-C (list dividers) |
+| **Medium** (→ WARN) | E3-D (arbitrary z-index), E3-E (off-scale spacing), E3-F (wrong typeface), E3-G (wrong shadow) |
+| **Low** (→ WARN or note) | E3-H (wrong radius), E3-I (button token), E3-J (nav glass) |
+
+---
+
+### 4.5  E7 — State-Coverage Matrix
+
+For every surface, assess each interaction state below. Mark each cell as:
+- **✓** — tested and judged (apply E1 pipeline)
+- **N/A** — state is structurally impossible for this surface (document reason)
+- **—** — not tested this run (must be listed in E9 coverage ledger as untested)
+
+| State | Description | How to exercise |
+|-------|-------------|-----------------|
+| **Default** | Loaded, data present | Navigate to route normally |
+| **Loading** | In-flight API state (skeleton/spinner) | Slow network, or inspect loading state during first render |
+| **Empty** | No data in the collection | Navigate with no seed / filter to empty result |
+| **Error** | API error, offline, or server 500 | Disconnect backend or use an invalid ID |
+| **No-permission** | Unauthorized user accessing route | Use wrong account role (parent→admin route, etc.) |
+| **Overflow/long-content** | Unusually long text, many items | Observe with large seed data or manually trigger |
+| **Focus/hover/active** | Interactive element states | Tab through the page; hover over buttons/cards |
+
+**Minimum state coverage per surface per viewport:**
+
+- `Default` and `No-permission` (where applicable) are **required** in Phase 1.
+- `Empty` and `Error` are **required** for list/collection views.
+- `Focus/hover/active` is **required** for any surface with interactive controls.
+- Remaining states are best-effort; note them as untested in E9 if skipped.
+
+---
+
+### 4.6  E9 — Coverage Ledger
+
+The coverage ledger is a mandatory output artifact. It records every `surface × viewport ×
+state` cell as **covered**, **not covered**, or **N/A**, with a reason when not covered.
+
+**No silent truncation.** If a surface was skipped, it MUST appear in the ledger as
+`not covered` with a reason. Omitting a row is a reporting defect.
+
+The ledger template is in §6.3. Generate it as part of the output report.
+
+---
 
 ### Phase 1: Route Smoke Test
 
-**Goal:** Visit every route in the application. For each route:
+**Goal:** Apply the E1 pipeline (§4.1) to every route at both viewports (E6, §4.2).
+For each route, perform this sequence **at desktop then at mobile**:
 
-1. `mcp__pw__browser_navigate` → the URL
-2. `mcp__pw__browser_snapshot` → capture accessibility tree
-3. `mcp__pw__browser_console_messages` → check for errors (level: "error")
-4. `mcp__pw__browser_take_screenshot` → visual record
+```
+1. mcp__pw__browser_resize → [Desktop: 1440×900] [Mobile: 390×844]
+2. mcp__pw__browser_navigate → the URL
+3. mcp__pw__browser_snapshot → accessibility tree (DOM structure check)
+4. mcp__pw__browser_console_messages → level: "error" (zero tolerance)
+5. mcp__pw__browser_take_screenshot → type: "png" (REQUIRED — judgment requires pixels)
+6. Judge: score VQ (§4.3), scan E3 violations (§4.4), note states covered (§4.5)
+7. File verdict: PASS / WARN / FAIL / BLOCKED with VQ score + E3 result
+```
 
-**Classification per route:**
-- **PASS** — Page renders meaningful content, no console errors
-- **WARN** — Page renders but has console warnings or missing data
-- **FAIL** — Page crashes, shows error boundary, or has JS errors
-- **BLOCKED** — Cannot reach (auth issue, redirect loop, etc.)
+**Do not file a verdict until steps 5 and 6 are complete.**
 
 #### 4.1.1  Auth Routes (unauthenticated)
 
@@ -381,8 +571,9 @@ Student routes require token-based session auth (not Kratos browser login). Thes
 
 ### Phase 2: User Journey Tests
 
-Interactive workflows that exercise state transitions across multiple pages. For each
-journey, follow the steps using Playwright MCP tools. Document any unexpected behavior.
+Interactive workflows that exercise state transitions across multiple pages. Apply the E1
+judgment pipeline at key screens within each journey (not every page — focus on state
+transitions, final states, and error branches).
 
 #### Journey 1: Onboarding Flow
 
@@ -538,7 +729,9 @@ journey, follow the steps using Playwright MCP tools. Document any unexpected be
 
 #### 3.1  Empty States
 
-Test pages with no data to verify graceful empty-state rendering:
+Test pages with no data to verify graceful empty-state rendering. **Apply E1 judgment:**
+empty states must be visually designed — not raw "No items found." text on a blank page.
+A styled, on-brand empty state scores VQ ≥ 2/3; a raw text fallback scores VQ = 0/3 → FAIL.
 
 - Navigate to `/search` with no query → expect empty state or prompt
 - Navigate to `/search?q=xyznonexistent` → expect "no results"
@@ -547,7 +740,8 @@ Test pages with no data to verify graceful empty-state rendering:
 
 #### 3.2  Invalid / Missing Data Routes
 
-Navigate to routes with non-existent IDs. Expect graceful error handling (not crashes):
+Navigate to routes with non-existent IDs. Expect graceful error handling (not crashes).
+**Apply E1 judgment:** error states must render a designed error component, not a blank page.
 
 ```
 /messages/00000000-0000-0000-0000-000000000000
@@ -588,7 +782,8 @@ Test form inputs with invalid data:
 - **Schedule editor:** Submit with conflicting times or missing student
 - **Listing creation:** Submit with empty price or missing required fields
 
-**Expected:** Inline validation errors, form does NOT submit.
+**Expected:** Inline validation errors, form does NOT submit. Error text uses `text-error`
+(`#ba1a1a`); field background shifts to `bg-error-container` (`#ffdad6`) per DESIGN.md §5.
 
 #### 3.5  Methodology Tool Behavior
 
@@ -598,32 +793,37 @@ Methodology-specific tools should render based on the family's configured method
 2. Navigate to each methodology tool (LR17–LR24) regardless of family config
 3. Check if non-matching methodology tools show an appropriate message or are hidden
 
-#### 3.6  Responsive Layout Checks
+#### 3.6  Overflow / Long-Content States
 
-Resize the browser to test mobile breakpoints:
+Test how surfaces handle unusually long content:
 
-```
-mcp__pw__browser_resize → width: 375, height: 812    # iPhone
-mcp__pw__browser_resize → width: 768, height: 1024   # iPad
-```
+- Feed with many posts — scroll to verify pagination or infinite scroll works
+- Group with many members — verify overflow list handling
+- Conversation with long message history — scroll behavior
+- Long student name or family name in header elements — no text overflow clip
 
-Key pages to check at mobile size:
-- Feed (`/`)
-- Learning Dashboard (`/learning`)
-- Settings (`/settings`)
-- Calendar (`/calendar`)
-- Navigation (hamburger menu)
+**Apply E1 judgment at the overflow state.** A surface that clips text without ellipsis or
+wraps in a way that breaks layout scores VQ = 0/3 on Criterion C.
 
-**Expected:** Content is usable, no horizontal overflow, navigation collapses to mobile menu.
+#### 3.7  Focus / Hover / Active States
 
-#### 3.7  Notification System
+Tab through key interactive surfaces to verify keyboard navigability:
+
+- Tab through the main navigation — verify focus ring is visible
+- Tab through a form — verify all fields are reachable
+- Hover over buttons and cards — verify hover states are visible
+- Check that focus ring uses `primary` color token (`#0c5252`) not browser default blue
+
+**E3 note:** Missing focus ring or wrong focus ring color is an E3-A violation (off-token).
+
+#### 3.8  Notification System
 
 1. Navigate to `/notifications` → verify notification center
 2. Check notification bell in header → verify unread badge
 3. Click on a notification → verify it navigates to relevant content
 4. Check notification preferences at `/settings/notifications`
 
-#### 3.8  Search Functionality
+#### 3.9  Search Functionality
 
 1. Navigate to `/search`
 2. Try searching for a known entity (e.g., seed listing title, student name)
@@ -640,11 +840,34 @@ Key pages to check at mobile size:
 | Level | Definition | Examples |
 |-------|-----------|----------|
 | **Critical** | Blocks core user workflow or violates privacy/legal | Auth broken, data leak, COPPA violation |
-| **High** | Feature non-functional but workaround exists | Form won't submit, page crashes on valid data |
-| **Medium** | Degraded experience but functional | Missing empty states, poor error messages, layout issues |
-| **Low** | Polish / improvement opportunity | Visual glitches, minor UX friction, missing loading states |
+| **High** | Feature non-functional **or** severe visual/design-system violation | Form won't submit; page crashes; off-token hex colors; 1px sectioning borders; VQ = 0/3 |
+| **Medium** | Degraded experience but functional **or** moderate visual defect | Poor error messages; off-scale spacing; arbitrary z-index; VQ = 1/3; missing empty/loading states |
+| **Low** | Minor polish / improvement opportunity | Minor hover state missing; radius one step off; VQ = 2/3 with one criterion missed |
 
-### 5.2  What Counts as a Gap
+> **Design-system and visual-polish defects are first-class defects at the same severity
+> level as functional defects.** A screen with raw HTML, cramped spacing, or off-token
+> colors is a High defect, not Low. "It renders" is not an excuse for "it looks broken."
+
+### 5.2  Visual Polish & Design-System Conformance (First-Class Category)
+
+This is an explicit top-level gap category in the gap register (§6.4). Report visual polish
+and design-system gaps here, not buried under "Medium/Low miscellaneous."
+
+**Severity mapping for visual defects:**
+
+| Defect | Severity |
+|--------|---------|
+| VQ = 0/3 (no hierarchy, default browser styling, no spacing) | **High** |
+| E3-A: off-token hex color | **High** |
+| E3-B: 1px sectioning border | **High** |
+| E3-C: list dividers | **High** |
+| VQ = 1/3 (one criterion met) | **Medium** |
+| E3-D through E3-G violations | **Medium** |
+| Missing empty/loading/error state design | **Medium** |
+| VQ = 2/3 (three criteria met, one missed) | **Low** |
+| E3-H through E3-J violations | **Low** |
+
+### 5.3  What Counts as a Gap
 
 **IS a gap:**
 - Page fails to render (JS error, blank page, error boundary)
@@ -653,8 +876,12 @@ Key pages to check at mobile size:
 - Navigation leads to unexpected destination
 - Data from seed not appearing where expected
 - Missing permission checks (unauthorized access succeeds)
-- Broken responsive layout (content unusable)
+- Broken responsive layout (content unusable at mobile viewport)
 - Missing ARIA labels on interactive elements (accessibility)
+- VQ = 0/3 or 1/3 for any surface
+- Any E3-A through E3-C violation (High)
+- Any E3-D through E3-J violation (Medium/Low)
+- Missing designed empty/loading/error states (raw text fallbacks)
 
 **Is NOT a gap:**
 - Features documented as "not yet implemented" in gap reports
@@ -668,12 +895,13 @@ Key pages to check at mobile size:
 
 Produce a structured gap report as a markdown file. Follow this template:
 
-```markdown
+````markdown
 # E2E Exploratory Testing Report — {DATE}
 
 > **Agent:** {model name}
 > **Duration:** {approximate time}
 > **Scope:** Full application E2E via Playwright MCP
+> **Viewports:** Desktop 1440×900 + Mobile 390×844
 
 ---
 
@@ -681,9 +909,11 @@ Produce a structured gap report as a markdown file. Follow this template:
 
 - **Routes tested:** {N} / {total}
 - **Pass:** {N} | **Warn:** {N} | **Fail:** {N} | **Blocked:** {N}
+- **VQ Distribution:** 3/3: {N} | 2/3: {N} | 1/3: {N} | 0/3: {N}
+- **E3 Violations:** High: {N} | Medium: {N} | Low: {N}
 - **Critical gaps found:** {N}
-- **High gaps found:** {N}
-- **Medium gaps found:** {N}
+- **High gaps found:** {N}  (functional: {N} / visual: {N})
+- **Medium gaps found:** {N}  (functional: {N} / visual: {N})
 - **Low gaps found:** {N}
 
 ---
@@ -692,10 +922,10 @@ Produce a structured gap report as a markdown file. Follow this template:
 
 ### 2.1  Auth & Legal Routes
 
-| # | Route | Status | Notes |
-|---|-------|--------|-------|
-| A1 | `/auth/login` | PASS | Renders login form correctly |
-| ... | ... | ... | ... |
+| # | Route | Status/D | Status/M | VQ | E3 | Notes |
+|---|-------|----------|----------|----|-----|-------|
+| A1 | `/auth/login` | PASS/D | PASS/M | 3/3 | clean | Renders login form correctly |
+| ... | ... | ... | ... | ... | ... | ... |
 
 ### 2.2  Social Routes
 (same format)
@@ -711,7 +941,8 @@ Produce a structured gap report as a markdown file. Follow this template:
 
 ### Journey 1: Onboarding Flow
 - **Status:** PASS / PARTIAL / FAIL
-- **Steps completed:** {N}/{total}
+- **Key screens judged:** {list of screens with VQ scores}
+- **E3 findings:** {list or "none"}
 - **Issues found:**
   - {description of issue}
 
@@ -722,15 +953,18 @@ Produce a structured gap report as a markdown file. Follow this template:
 ## 4  Edge Case Results
 
 ### 4.1  Empty States
-| Page | Status | Notes |
-|------|--------|-------|
-| Search (no query) | PASS | Shows "Enter a search term" prompt |
-| ... | ... | ... |
+| Page | Status | VQ | E3 | Notes |
+|------|--------|----|-----|-------|
+| Search (no query) | PASS | 2/3 | clean | Shows "Enter a search term" prompt |
+| ... | ... | ... | ... | ... |
 
 ### 4.2  Invalid Routes
 (same format)
 
 ### 4.3  Permission Boundaries
+(same format)
+
+### 4.4  Overflow & Focus States
 (same format)
 
 ---
@@ -744,18 +978,27 @@ Produce a structured gap report as a markdown file. Follow this template:
 | Field | Value |
 |-------|-------|
 | **Route(s)** | {affected routes} |
+| **Viewport(s)** | Desktop / Mobile / Both |
 | **Observed** | {what happened} |
 | **Expected** | {what should happen} |
 | **Console errors** | {any JS errors from console} |
+| **VQ Score** | {N}/3 — {which criteria failed} |
+| **E3 Violations** | {list or "none"} |
 | **Screenshot** | {filename} |
 
-### 5.2  High
+### 5.2  High (Functional)
 (same format)
 
-### 5.3  Medium
+### 5.3  High (Visual Polish & Design-System Conformance)
+(same format — cite offending element, incorrect value, correct token/rule)
+
+### 5.4  Medium (Functional)
 (same format)
 
-### 5.4  Low
+### 5.5  Medium (Visual Polish & Design-System Conformance)
+(same format)
+
+### 5.6  Low
 (same format)
 
 ---
@@ -763,10 +1006,39 @@ Produce a structured gap report as a markdown file. Follow this template:
 ## 6  Screenshots
 
 All screenshots saved to `research/screenshots/e2e/` with naming convention:
-`{route-group}-{route-number}-{status}.png`
+`{route-group}-{route-number}-{viewport}-{status}.png`
 
-Example: `social-S1-PASS.png`, `learning-LR9-FAIL.png`
+Example: `social-S1-desktop-PASS.png`, `learning-LR9-mobile-FAIL.png`
+````
+
+---
+
+### 6.3  Coverage Ledger Template (E9)
+
+The coverage ledger MUST be included in the output report. Copy this table and fill every
+row. **Do not omit rows.** Every surface in §4.1 must appear. Use one row per
+surface × viewport combination. States that were not exercised MUST appear with reason.
+
+```markdown
+## 7  Coverage Ledger (E9)
+
+| Surface | Route | Viewport | Default | Loading | Empty | Error | No-perm | Overflow | Focus/Hover | Notes |
+|---------|-------|----------|---------|---------|-------|-------|---------|----------|-------------|-------|
+| Login | /auth/login | Desktop | ✓ | N/A | N/A | N/A | N/A | N/A | ✓ | |
+| Login | /auth/login | Mobile | ✓ | N/A | N/A | N/A | N/A | N/A | — | not tested on mobile |
+| Feed | / | Desktop | ✓ | — | N/A | — | ✓ | ✓ | ✓ | error/loading skipped — time budget |
+| Feed | / | Mobile | ✓ | — | N/A | — | N/A | — | — | partial mobile coverage |
+| ... (one row per surface × viewport) | | | | | | | | | | |
+
+**Legend:** ✓ = covered and judged | N/A = structurally impossible (reason in Notes) | — = not tested this run (reason in Notes)
+
+**Untested cells summary:**
+- {N} cells untested: {list reasons — time budget / session expiry / auth blocker / etc.}
+- Silent truncation count: 0 (all untested cells are listed above)
 ```
+
+> **Rule:** "Silent truncation count" MUST be 0. If you cannot complete a row, write it
+> anyway with `—` and a reason. Never leave a surface out of the ledger.
 
 ---
 
@@ -774,20 +1046,25 @@ Example: `social-S1-PASS.png`, `learning-LR9-FAIL.png`
 
 ### 7.1  Recommended Order
 
-1. Auth & Legal routes (unauthenticated)
+1. Auth & Legal routes (unauthenticated) — desktop then mobile
 2. Login as parent → Onboarding → Skip
-3. All parent-accessible routes (Phase 1)
+3. All parent-accessible routes (Phase 1) — desktop then mobile
 4. User journeys 1–7 (Phase 2)
 5. Logout → Login as admin
 6. Admin routes (Phase 1) → Journey 8
 7. Edge cases (Phase 3)
+8. Fill coverage ledger (E9) from results
 
 ### 7.2  Time Budget
 
 This is an extensive test suite. If time is limited, prioritize:
-1. **Phase 1 smoke test** — catches the most issues per minute
-2. **Journey 2 (Learning)** and **Journey 3 (Social)** — highest user traffic
-3. **Edge case §3.2 (Invalid routes)** — catches missing error handling
+1. **Phase 1 smoke test at desktop** — catches the most issues per minute
+2. **Phase 1 smoke test at mobile** — repeat top 20 highest-traffic routes
+3. **Journey 2 (Learning)** and **Journey 3 (Social)** — highest user traffic
+4. **Edge case §3.2 (Invalid routes)** — catches missing error handling
+5. **Edge case §3.7 (Focus states)** — catches accessibility gaps
+
+When time is cut short, still fill all ledger rows — mark skipped cells `—` with reason.
 
 ### 7.3  Error Recovery
 
@@ -809,4 +1086,7 @@ Save all screenshots to `research/screenshots/e2e/`. Create the directory if it 
 mkdir -p research/screenshots/e2e
 ```
 
-Use descriptive filenames: `{group}-{number}-{status}.png`
+Use descriptive filenames: `{group}-{number}-{viewport}-{status}.png`
+
+Desktop: `social-S1-desktop-PASS.png`
+Mobile: `social-S1-mobile-WARN.png`
