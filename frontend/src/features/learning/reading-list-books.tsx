@@ -5,11 +5,13 @@ import { ArrowLeft, BookOpen, Plus, X } from "lucide-react";
 import {
   Button,
   Card,
+  FitBadge,
   Icon,
   Skeleton,
   Badge,
   Input,
   Modal,
+  ViewingAsSelector,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
 import { ResourceNotFound } from "@/components/common/resource-not-found";
@@ -18,17 +20,22 @@ import {
   useUpdateReadingList,
   useReadingItems,
 } from "@/hooks/use-reading";
+import { useStudents } from "@/hooks/use-family";
 
 export function ReadingListBooks() {
   const intl = useIntl();
   const { id } = useParams<{ id: string }>();
   const [showAddModal, setShowAddModal] = useState(false);
   const [bookSearch, setBookSearch] = useState("");
+  const [viewingAsStudentId, setViewingAsStudentId] = useState<string | undefined>();
 
   const { data: list, isPending } = useReadingListDetail(id ?? "");
+  const { data: students } = useStudents();
+  const viewingAsName = students?.find((s) => s.id === viewingAsStudentId)?.display_name;
   const updateList = useUpdateReadingList();
   const { data: searchResults } = useReadingItems({
     search: bookSearch.length >= 2 ? bookSearch : undefined,
+    for_student_id: viewingAsStudentId,
   });
 
   const existingItemIds = new Set(
@@ -170,6 +177,10 @@ export function ReadingListBooks() {
         title={intl.formatMessage({ id: "readingListBooks.addBookTitle" })}
       >
         <div className="space-y-4">
+          <ViewingAsSelector
+            value={viewingAsStudentId}
+            onChange={setViewingAsStudentId}
+          />
           <Input
             value={bookSearch}
             onChange={(e) => setBookSearch(e.target.value)}
@@ -185,10 +196,17 @@ export function ReadingListBooks() {
                 <button
                   key={item.id}
                   type="button"
-                  className="w-full flex items-center justify-between p-2 rounded-radius-sm hover:bg-surface-container-low transition-colors text-left"
+                  className="w-full flex items-start justify-between p-2 rounded-radius-sm hover:bg-surface-container-low transition-colors text-left"
                   onClick={() => handleAddBook(item.id)}
                 >
                   <div>
+                    {item.fit_score != null && (
+                      <FitBadge
+                        studentName={viewingAsName}
+                        whyText={item.fit_why}
+                        className="mb-1"
+                      />
+                    )}
                     <p className="type-body-sm text-on-surface">
                       {item.title}
                     </p>
@@ -198,7 +216,7 @@ export function ReadingListBooks() {
                       </p>
                     )}
                   </div>
-                  <Icon icon={Plus} size="sm" className="text-primary" />
+                  <Icon icon={Plus} size="sm" className="text-primary mt-1 shrink-0" />
                 </button>
               ))}
           </div>

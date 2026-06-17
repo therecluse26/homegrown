@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
+import { useStudents } from "@/hooks/use-family";
 import { Search, ShoppingCart, Star, Filter } from "lucide-react";
 
 /** Strip Gutenberg `" — Author"` suffix from listing titles for card display. */
@@ -26,10 +27,12 @@ import {
   Button,
   Card,
   EmptyState,
+  FitBadge,
   Icon,
   Skeleton,
   Badge,
   Input,
+  ViewingAsSelector,
 } from "@/components/ui";
 import { PageTitle } from "@/components/common/page-title";
 import {
@@ -43,7 +46,13 @@ import type {
 
 // ─── Listing card ────────────────────────────────────────────────────────────
 
-function ListingCard({ listing }: { listing: ListingBrowseResponse }) {
+function ListingCard({
+  listing,
+  viewingAsName,
+}: {
+  listing: ListingBrowseResponse;
+  viewingAsName?: string;
+}) {
   const price =
     listing.price_cents === 0
       ? "Free"
@@ -73,6 +82,13 @@ function ListingCard({ listing }: { listing: ListingBrowseResponse }) {
               className="text-on-surface-variant"
             />
           </div>
+        )}
+        {listing.fit_score != null && (
+          <FitBadge
+            studentName={viewingAsName}
+            whyText={listing.fit_why}
+            className="mb-2"
+          />
         )}
         <p className="type-title-sm text-on-surface line-clamp-2">
           {stripGutenbergAuthor(listing.title)}
@@ -104,8 +120,17 @@ export function MarketplaceBrowse() {
   const [searchQuery, setSearchQuery] = useState("");
   const [params, setParams] = useState<BrowseParams>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [viewingAsStudentId, setViewingAsStudentId] = useState<string | undefined>();
 
-  const { data: browseResp, isPending } = useBrowseListings(params);
+  const { data: students } = useStudents();
+  const viewingAsName = students?.find((s) => s.id === viewingAsStudentId)?.display_name;
+
+  const browseParams: BrowseParams = {
+    ...params,
+    for_student_id: viewingAsStudentId,
+  };
+
+  const { data: browseResp, isPending } = useBrowseListings(browseParams);
   const listings = browseResp?.data;
   const { data: curated } = useCuratedSections();
 
@@ -155,6 +180,13 @@ export function MarketplaceBrowse() {
           <Icon icon={Filter} size="sm" />
         </Button>
       </form>
+
+      {/* Child selector */}
+      <ViewingAsSelector
+        value={viewingAsStudentId}
+        onChange={setViewingAsStudentId}
+        className="mb-4"
+      />
 
       {/* Filters */}
       {showFilters && (
@@ -249,7 +281,7 @@ export function MarketplaceBrowse() {
               )}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {section.listings.map((listing) => (
-                  <ListingCard key={listing.id} listing={listing} />
+                  <ListingCard key={listing.id} listing={listing} viewingAsName={viewingAsName} />
                 ))}
               </div>
             </div>
@@ -287,7 +319,7 @@ export function MarketplaceBrowse() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {listings.map((listing) => (
-              <ListingCard key={listing.id} listing={listing} />
+              <ListingCard key={listing.id} listing={listing} viewingAsName={viewingAsName} />
             ))}
           </div>
         </>

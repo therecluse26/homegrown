@@ -37,6 +37,9 @@ export interface ActivityDefSummaryResponse {
   subject_tags: string[];
   methodology_id?: string;
   est_duration_minutes?: number;
+  /** Learner-profile fit score [18-learner-profile §6]; omitted when gate not met. */
+  fit_score?: number;
+  fit_why?: string;
 }
 
 export interface ActivityLogResponse {
@@ -68,6 +71,8 @@ export function useActivityDefs(params?: {
   subject?: string;
   methodology_id?: string;
   search?: string;
+  /** Child UUID — returns fit_score for that child [18-learner-profile §6] */
+  for_student_id?: string;
 }) {
   return useInfiniteQuery({
     queryKey: ["learning", "activity-defs", params],
@@ -77,6 +82,8 @@ export function useActivityDefs(params?: {
       if (params?.methodology_id)
         sp.set("methodology_id", params.methodology_id);
       if (params?.search) sp.set("search", params.search);
+      if (params?.for_student_id)
+        sp.set("for_student_id", params.for_student_id);
       if (pageParam) sp.set("cursor", pageParam);
       const qs = sp.toString();
       return apiClient<PaginatedResponse<ActivityDefSummaryResponse>>(
