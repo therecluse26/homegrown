@@ -379,6 +379,15 @@
   "notifications.time.minutes": "{count, plural, one {1 minute ago} other {{count} minutes ago}}",
   "notifications.time.hours": "{count, plural, one {1 hour ago} other {{count} hours ago}}",
   "notifications.time.days": "{count, plural, one {1 day ago} other {{count} days ago}}",
+  "notifications.bell.viewAll": "View all notifications",
+  "notifications.bell.noRecent": "No recent notifications",
+  "notifications.bell.unread.indicator": "Unread",
+  "notifications.filter.label": "Filter by category",
+  "notifications.filter.all": "All",
+  "notifications.filter.social": "Social",
+  "notifications.filter.learning": "Learning",
+  "notifications.filter.marketplace": "Marketplace",
+  "notifications.filter.system": "System",
 
   "sessions.title": "Active Sessions",
   "sessions.description": "These are the devices currently logged into your account. You can revoke access to any session you don't recognize.",
@@ -849,6 +858,7 @@
   "social.profile.location": "Location",
   "social.profile.addFriend": "Add Friend",
   "social.profile.friendsOnly": "This profile is only visible to friends.",
+  "social.profile.editProfile": "Edit Profile",
 
   "social.blocks.title": "Blocked Users",
   "social.blocks.empty": "You haven't blocked anyone.",
@@ -1119,10 +1129,12 @@
   "social.events.attendees.none": "No responses yet.",
   "social.events.rsvp.not_going": "Not Going",
 
+  "feed.post.comments.aria": "{count, plural, =0 {Comments} one {# comment} other {# comments}}",
   "social.post.backToFeed": "Back to feed",
   "social.post.comment.reply": "Reply",
   "social.post.comment.replyPlaceholder": "Write a reply...",
   "social.post.comment.placeholder": "Write a comment...",
+  "social.post.comment.submit": "Post comment",
   "social.post.comment.edit": "Edit comment",
   "social.post.comment.delete": "Delete comment",
   "social.post.comment.delete.title": "Delete comment?",
@@ -1146,6 +1158,7 @@
   "planning.calendar.pageTitle": "Calendar",
   "planning.calendar.view.week": "Week",
   "planning.calendar.view.day": "Day",
+  "planning.calendar.view.month": "Month",
   "planning.calendar.today": "Today",
   "planning.calendar.previous": "Previous",
   "planning.calendar.next": "Next",
@@ -2378,5 +2391,27 @@
   "billing.payouts.status.failed": "Failed",
   "billing.payouts.status.unknown": "Unknown",
   "billing.payouts.purchase_count": "{count, plural, one {# sale} other {# sales}}",
-  "billing.payouts.refund_deduction": "Refund deduction: {amount}"
+  "billing.payouts.refund_deduction": "Refund deduction: {amount}",
+
+  "shortcuts.modal.title": "Keyboard shortcuts",
+  "shortcuts.section.global": "Global",
+  "shortcuts.section.page": "This page",
+
+  "nav.community": "Community",
+  "nav.messages": "Messages",
+  "nav.more": "More",
+  "nav.create": "Create",
+  "nav.logout": "Log out",
+  "nav.profile": "My Profile",
+  "nav.account-settings": "Account Settings",
+  "nav.family-settings": "Family Settings",
+  "nav.billing": "Billing & Subscription",
+  "nav.recommendations": "Recommendations",
+  "nav.create.post": "New Post",
+  "nav.create.event": "New Event",
+  "nav.create.message": "New Message",
+  "nav.create.listing": "New Listing",
+  "nav.create.activity": "Log Activity",
+
+  "discover.cta.go-to-app": "Go to App →"
 }

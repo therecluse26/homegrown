@@ -53,6 +53,8 @@ interface NotificationListResponse {
 export function useNotifications(params?: {
   page?: number;
   type?: NotificationType;
+  category?: string;
+  limit?: number;
   read?: boolean;
 }) {
   return useQuery({
@@ -61,6 +63,8 @@ export function useNotifications(params?: {
       const searchParams = new URLSearchParams();
       if (params?.page) searchParams.set("page", String(params.page));
       if (params?.type) searchParams.set("type", params.type);
+      if (params?.category) searchParams.set("category", params.category);
+      if (params?.limit) searchParams.set("limit", String(params.limit));
       if (params?.read !== undefined)
         searchParams.set("read", String(params.read));
       const qs = searchParams.toString();

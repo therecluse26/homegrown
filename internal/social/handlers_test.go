@@ -107,7 +107,7 @@ type mockSocialService struct {
 	getGroupFn          func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) (*GroupResponse, error)
 	listMyGroupsFn      func(ctx context.Context, scope *shared.FamilyScope) ([]GroupResponse, error)
 	listPlatformGroupsFn func(ctx context.Context) ([]GroupResponse, error)
-	listGroupMembersFn  func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error)
+	listGroupMembersFn  func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, statusFilter string) ([]GroupMemberResponse, error)
 	listGroupPostsFn    func(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
 
 	// Events
@@ -462,9 +462,9 @@ func (m *mockSocialService) ListPlatformGroups(ctx context.Context) ([]GroupResp
 	panic("unexpected call to ListPlatformGroups")
 }
 
-func (m *mockSocialService) ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error) {
+func (m *mockSocialService) ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, statusFilter string) ([]GroupMemberResponse, error) {
 	if m.listGroupMembersFn != nil {
-		return m.listGroupMembersFn(ctx, auth, groupID)
+		return m.listGroupMembersFn(ctx, auth, groupID, statusFilter)
 	}
 	panic("unexpected call to ListGroupMembers")
 }

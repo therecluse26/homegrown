@@ -1590,7 +1590,7 @@ func (s *socialServiceImpl) ListPlatformGroups(ctx context.Context) ([]GroupResp
 	return results, nil
 }
 
-func (s *socialServiceImpl) ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error) {
+func (s *socialServiceImpl) ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, statusFilter string) ([]GroupMemberResponse, error) {
 	isMember, err := s.groupMemberRepo.IsMember(ctx, groupID, auth.FamilyID)
 	if err != nil {
 		return nil, err
@@ -1599,7 +1599,7 @@ func (s *socialServiceImpl) ListGroupMembers(ctx context.Context, auth *shared.A
 		return nil, &SocialError{Err: domain.ErrNotGroupMember}
 	}
 
-	members, err := s.groupMemberRepo.ListByGroup(ctx, groupID)
+	members, err := s.groupMemberRepo.ListByGroup(ctx, groupID, statusFilter)
 	if err != nil {
 		return nil, err
 	}

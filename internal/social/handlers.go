@@ -782,7 +782,8 @@ func (h *Handler) listGroupMembers(c echo.Context) error {
 	if err != nil {
 		return shared.ErrBadRequest("invalid group ID")
 	}
-	resp, err := h.svc.ListGroupMembers(c.Request().Context(), auth, groupID)
+	statusFilter := c.QueryParam("status")
+	resp, err := h.svc.ListGroupMembers(c.Request().Context(), auth, groupID, statusFilter)
 	if err != nil {
 		return mapSocialError(err)
 	}

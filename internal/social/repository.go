@@ -387,6 +387,19 @@ func (r *PgPostRepository) ListByGroup(ctx context.Context, groupID uuid.UUID, o
 	return posts, nil
 }
 
+func (r *PgPostRepository) ListByFamily(ctx context.Context, familyID uuid.UUID, visibilities []string, offset, limit int) ([]Post, error) {
+	var posts []Post
+	err := r.db.WithContext(ctx).
+		Where("family_id = ? AND group_id IS NULL AND visibility IN ?", familyID, visibilities).
+		Order("created_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&posts).Error
+	if err != nil {
+		return nil, shared.ErrDatabase(err)
+	}
+	return posts, nil
+}
+
 func (r *PgPostRepository) IncrementLikes(ctx context.Context, id uuid.UUID) error {
 	err := r.db.WithContext(ctx).Model(&Post{}).Where("id = ?", id).
 		Update("likes_count", gorm.Expr("likes_count + 1")).Error
@@ -937,12 +950,13 @@ func (r *PgGroupMemberRepository) Delete(ctx context.Context, groupID, familyID 
 	return nil
 }
 
-func (r *PgGroupMemberRepository) ListByGroup(ctx context.Context, groupID uuid.UUID) ([]GroupMember, error) {
+func (r *PgGroupMemberRepository) ListByGroup(ctx context.Context, groupID uuid.UUID, statusFilter string) ([]GroupMember, error) {
 	var members []GroupMember
-	err := r.db.WithContext(ctx).
-		Where("group_id = ? AND status = 'active'", groupID).
-		Order("joined_at ASC").
-		Find(&members).Error
+	q := r.db.WithContext(ctx).Where("group_id = ?", groupID)
+	if statusFilter != "" {
+		q = q.Where("status = ?", statusFilter)
+	}
+	err := q.Order("joined_at ASC").Find(&members).Error
 	if err != nil {
 		return nil, shared.ErrDatabase(err)
 	}

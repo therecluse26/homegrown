@@ -454,7 +454,7 @@ func (s *NotificationServiceImpl) HandleFriendRequestSent(ctx context.Context, e
 		NotificationType: TypeFriendRequestSent,
 		Title:            TypeToTitleTemplate[TypeFriendRequestSent],
 		Body:             "You have a new friend request",
-		ActionURL:        strPtr("/friends/requests"),
+		ActionURL:        strPtr("/friends"),
 		Metadata: map[string]any{
 			"source_event_id":     event.FriendshipID.String(),
 			"requester_family_id": event.RequesterFamilyID.String(),
@@ -700,7 +700,7 @@ func (s *NotificationServiceImpl) HandleOnboardingCompleted(ctx context.Context,
 		NotificationType: TypeOnboardingCompleted,
 		Title:            TypeToTitleTemplate[TypeOnboardingCompleted],
 		Body:             "Your family is all set up! Start exploring.",
-		ActionURL:        strPtr("/dashboard"),
+		ActionURL:        strPtr("/"),
 		Metadata: map[string]any{
 			"source_event_id": event.FamilyID.String(),
 		},
@@ -748,7 +748,7 @@ func (s *NotificationServiceImpl) HandleActivityLogged(ctx context.Context, even
 			NotificationType: TypeActivityStreak,
 			Title:            fmt.Sprintf("%d-day activity streak!", consecutiveDays),
 			Body:             fmt.Sprintf("Keep up the great work! %d consecutive days of learning.", consecutiveDays),
-			ActionURL:        strPtr("/dashboard"),
+			ActionURL:        strPtr("/learning"),
 			Metadata: map[string]any{
 				"source_event_id": fmt.Sprintf("streak:%s:%d", event.StudentID, consecutiveDays),
 				"student_id":      event.StudentID.String(),
@@ -766,7 +766,7 @@ func (s *NotificationServiceImpl) HandleMilestoneAchieved(ctx context.Context, e
 		NotificationType: TypeMilestoneAchieved,
 		Title:            fmt.Sprintf("%s achieved: %s", event.StudentName, event.Description),
 		Body:             fmt.Sprintf("%s reached a new milestone: %s", event.StudentName, event.Description),
-		ActionURL:        strPtr("/dashboard"),
+		ActionURL:        strPtr("/learning"),
 		Metadata: map[string]any{
 			"source_event_id": fmt.Sprintf("milestone:%s:%s", event.StudentID, event.Description),
 			"student_name":    event.StudentName,
@@ -781,7 +781,7 @@ func (s *NotificationServiceImpl) HandleBookCompleted(ctx context.Context, event
 		NotificationType: TypeBookCompleted,
 		Title:            fmt.Sprintf("Finished '%s'", event.ReadingItemTitle),
 		Body:             fmt.Sprintf("Congratulations on finishing '%s'!", event.ReadingItemTitle),
-		ActionURL:        strPtr("/learning/reading"),
+		ActionURL:        strPtr("/learning/reading-lists"),
 		Metadata: map[string]any{
 			"source_event_id": fmt.Sprintf("book:%s:%s", event.StudentID, event.ReadingItemTitle),
 			"book_title":      event.ReadingItemTitle,
@@ -844,7 +844,7 @@ func (s *NotificationServiceImpl) HandleCreatorOnboarded(ctx context.Context, ev
 		NotificationType: TypeCreatorOnboarded,
 		Title:            TypeToTitleTemplate[TypeCreatorOnboarded],
 		Body:             fmt.Sprintf("Welcome, %s! Your creator account is ready.", event.StoreName),
-		ActionURL:        strPtr("/marketplace/creator/dashboard"),
+		ActionURL:        strPtr("/creator"),
 		Metadata: map[string]any{
 			"source_event_id": event.CreatorID.String(),
 			"store_name":      event.StoreName,
@@ -965,7 +965,7 @@ func (s *NotificationServiceImpl) HandlePayoutCompleted(ctx context.Context, eve
 		NotificationType: TypePayoutCompleted,
 		Title:            TypeToTitleTemplate[TypePayoutCompleted],
 		Body:             fmt.Sprintf("Your payout of %s has been sent", amountFormatted),
-		ActionURL:        strPtr("/marketplace/creator/payouts"),
+		ActionURL:        strPtr("/creator/payouts"),
 		Metadata: map[string]any{
 			"payout_id":    event.PayoutID.String(),
 			"amount_cents": event.AmountCents,

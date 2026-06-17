@@ -81,7 +81,7 @@ type SocialService interface {
 	GetGroup(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) (*GroupResponse, error)
 	ListMyGroups(ctx context.Context, scope *shared.FamilyScope) ([]GroupResponse, error)
 	ListPlatformGroups(ctx context.Context) ([]GroupResponse, error)
-	ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID) ([]GroupMemberResponse, error)
+	ListGroupMembers(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, statusFilter string) ([]GroupMemberResponse, error)
 	ListGroupPosts(ctx context.Context, auth *shared.AuthContext, groupID uuid.UUID, offset, limit int) ([]PostResponse, error)
 
 	// ─── Pinned Post Commands ───────────────────────────────────────────
@@ -200,6 +200,8 @@ type PostRepository interface {
 	FindByIDs(ctx context.Context, ids []uuid.UUID) ([]Post, error)
 	// ListByGroup lists posts in a specific group.
 	ListByGroup(ctx context.Context, groupID uuid.UUID, offset, limit int) ([]Post, error)
+	// ListByFamily lists non-group posts by a family filtered by visibility slice.
+	ListByFamily(ctx context.Context, familyID uuid.UUID, visibilities []string, offset, limit int) ([]Post, error)
 	IncrementLikes(ctx context.Context, id uuid.UUID) error
 	DecrementLikes(ctx context.Context, id uuid.UUID) error
 	IncrementComments(ctx context.Context, id uuid.UUID) error
@@ -279,7 +281,7 @@ type GroupMemberRepository interface {
 	FindByGroupAndFamily(ctx context.Context, groupID, familyID uuid.UUID) (*GroupMember, error)
 	Update(ctx context.Context, member *GroupMember) error
 	Delete(ctx context.Context, groupID, familyID uuid.UUID) error
-	ListByGroup(ctx context.Context, groupID uuid.UUID) ([]GroupMember, error)
+	ListByGroup(ctx context.Context, groupID uuid.UUID, statusFilter string) ([]GroupMember, error)
 	// ListGroupsByFamily returns group IDs where the family is an active member.
 	ListGroupsByFamily(ctx context.Context, familyID uuid.UUID) ([]uuid.UUID, error)
 	// IsMember checks if a family is an active member of a group.

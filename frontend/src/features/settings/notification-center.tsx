@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Link as RouterLink } from "react-router";
 import {
@@ -76,10 +76,21 @@ function formatTimeAgo(dateStr: string, intl: ReturnType<typeof useIntl>) {
   );
 }
 
+const CATEGORIES = [
+  { id: "", labelId: "notifications.filter.all" },
+  { id: "social", labelId: "notifications.filter.social" },
+  { id: "learning", labelId: "notifications.filter.learning" },
+  { id: "marketplace", labelId: "notifications.filter.marketplace" },
+  { id: "system", labelId: "notifications.filter.system" },
+] as const;
+
 export function NotificationCenter() {
   const intl = useIntl();
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const { data, isPending, error } = useNotifications();
+  const [category, setCategory] = useState("");
+  const { data, isPending, error } = useNotifications(
+    category ? { category } : undefined,
+  );
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
 
@@ -140,7 +151,7 @@ export function NotificationCenter() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 ref={headingRef} tabIndex={-1} className="type-headline-md text-on-surface font-semibold outline-none">
           <FormattedMessage id="notifications.title" />
         </h1>
@@ -154,6 +165,23 @@ export function NotificationCenter() {
             <FormattedMessage id="notifications.markAllRead" />
           </Button>
         )}
+      </div>
+
+      <div className="flex gap-2 flex-wrap mb-6" role="group" aria-label={intl.formatMessage({ id: "notifications.filter.label" })}>
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => setCategory(cat.id)}
+            className={`px-3 py-1.5 rounded-full type-label-md transition-colors ${
+              category === cat.id
+                ? "bg-primary text-on-primary"
+                : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+            }`}
+          >
+            {intl.formatMessage({ id: cat.labelId })}
+          </button>
+        ))}
       </div>
 
       {notifications.length === 0 ? (
