@@ -45,8 +45,9 @@ type NavItem = {
 const navItems: NavItem[] = [
   { to: "/", icon: Home, labelId: "nav.home", end: true },
   { to: "/learning", icon: BookOpen, labelId: "nav.learning" },
-  { to: "/calendar", icon: Calendar, labelId: "nav.calendar" },
+  { to: "/recommendations", icon: Star, labelId: "nav.recommendations" },
   { to: "/friends", icon: Users, labelId: "nav.community" },
+  { to: "/calendar", icon: Calendar, labelId: "nav.calendar" },
   { to: "/marketplace", icon: ShoppingBag, labelId: "nav.marketplace" },
   { to: "/compliance", icon: ClipboardList, labelId: "nav.compliance" },
   { to: "/settings", icon: Settings, labelId: "nav.settings" },
@@ -327,10 +328,6 @@ function Header() {
           <DropdownMenuItem onClick={() => navigate("/billing")}>
             <Icon icon={CreditCard} size="sm" />
             {intl.formatMessage({ id: "nav.billing", defaultMessage: "Billing & Subscription" })}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => navigate("/recommendations")}>
-            <Icon icon={Star} size="sm" />
-            {intl.formatMessage({ id: "nav.recommendations", defaultMessage: "Recommendations" })}
           </DropdownMenuItem>
           <div className="border-t border-outline-variant my-1" />
           <DropdownMenuItem destructive onClick={() => void handleLogout()}>

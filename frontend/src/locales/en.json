@@ -1773,6 +1773,7 @@
   "recommendations.section.list.label": "Recommendation cards",
   "recommendations.card.aiBadge": "AI",
   "recommendations.card.whyRecommended": "Why recommended?",
+  "recommendations.card.view.label": "View {title}",
   "recommendations.card.dismiss.label": "Dismiss {title}",
   "recommendations.card.dismissed": "Recommendation dismissed",
   "recommendations.card.undo": "Undo",

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router";
 import { FormattedMessage, useIntl } from "react-intl";
 import {
   BookOpen,
@@ -83,6 +84,22 @@ const DEFAULT_CONFIG = {
   labelId: "recommendations.type.content",
 };
 
+// ─── URL routing helpers ────────────────────────────────────────────────────
+
+function getTargetUrl(type: string, entityId?: string): string | null {
+  if (!entityId) return null;
+  switch (type) {
+    case "marketplace_content":
+    case "activity_idea":
+    case "reading_suggestion":
+      return `/marketplace/listings/${entityId}`;
+    case "community_group":
+      return `/groups/${entityId}`;
+    default:
+      return null;
+  }
+}
+
 // ─── Recommendation card ────────────────────────────────────────────────────
 
 const FIT_BADGE_GATE = 0.60;
@@ -103,6 +120,7 @@ function RecommendationCard({
   const recType = (recommendation.recommendation_type ?? "marketplace_content") as RecType;
   const config = TYPE_CONFIG[recType] ?? DEFAULT_CONFIG;
   const id = recommendation.id ?? "";
+  const targetUrl = getTargetUrl(recType, recommendation.target_entity_id);
 
   // Inline undo prompt shown immediately after dismissal
   if (dismissed) {
@@ -151,8 +169,21 @@ function RecommendationCard({
       </div>
 
       <div className="flex-1 min-w-0">
-        <h3 className="type-title-sm text-on-surface font-medium mb-1">
-          {recommendation.target_entity_label}
+        <h3 className="type-title-sm font-medium mb-1">
+          {targetUrl ? (
+            <RouterLink
+              to={targetUrl}
+              className="text-on-surface hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+              aria-label={intl.formatMessage(
+                { id: "recommendations.card.view.label" },
+                { title: recommendation.target_entity_label },
+              )}
+            >
+              {recommendation.target_entity_label}
+            </RouterLink>
+          ) : (
+            <span className="text-on-surface">{recommendation.target_entity_label}</span>
+          )}
         </h3>
         {recommendation.source_label && (
           <p className="type-body-sm text-on-surface-variant mb-2">
