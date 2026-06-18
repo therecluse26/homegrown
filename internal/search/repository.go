@@ -454,6 +454,9 @@ func NewPgMarketplaceSearchRepository(db *gorm.DB) *PgMarketplaceSearchRepositor
 
 // SearchListings performs full-text search with faceted filtering and sorting. [12-search §10.2]
 func (r *PgMarketplaceSearchRepository) SearchListings(ctx context.Context, query string, filters *MarketplaceSearchFilters, sortOrder SearchSortOrder, limit int, cursor *string) (*MarketplaceSearchResults, error) {
+	if filters == nil {
+		filters = &MarketplaceSearchFilters{}
+	}
 	offset := 0
 	if cursor != nil {
 		var err error

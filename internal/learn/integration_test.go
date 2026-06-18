@@ -216,7 +216,7 @@ func TestLearnIntegration_JournalEntryCRUD(t *testing.T) {
 
 	entry := &JournalEntryModel{
 		StudentID:   studentID,
-		EntryType:   "daily",
+		EntryType:   "freeform",
 		Content:     "Today we learned about prime numbers.",
 		SubjectTags: StringArray{"math"},
 		Attachments: json.RawMessage(`[]`),
@@ -253,7 +253,7 @@ func TestLearnIntegration_JournalEntryCrossFamily(t *testing.T) {
 
 	entry := &JournalEntryModel{
 		StudentID:   studentA,
-		EntryType:   "daily",
+		EntryType:   "freeform",
 		Content:     "Secret family A entry.",
 		SubjectTags: StringArray{},
 		Attachments: json.RawMessage(`[]`),

@@ -175,7 +175,6 @@ func (r *PgStateConfigRepository) FindByStateCode(ctx context.Context, stateCode
 }
 
 func (r *PgStateConfigRepository) Upsert(ctx context.Context, config UpsertStateConfigRow) (*ComplyStateConfig, error) {
-	subjectsJSON, _ := json.Marshal(config.RequiredSubjects)
 	err := r.db.WithContext(ctx).Exec(`
 		INSERT INTO comply_state_configs
 			(state_code, state_name, notification_required, notification_details,
@@ -205,7 +204,7 @@ func (r *PgStateConfigRepository) Upsert(ctx context.Context, config UpsertState
 			updated_at = now()`,
 		config.StateCode, config.StateName,
 		config.NotificationRequired, config.NotificationDetails,
-		string(subjectsJSON),
+		stringSliceToPostgresArray(config.RequiredSubjects),
 		config.AssessmentRequired, config.AssessmentDetails,
 		config.RecordKeepingRequired, config.RecordKeepingDetails,
 		config.AttendanceRequired, config.AttendanceDays, config.AttendanceHours, config.AttendanceDetails,
@@ -2014,6 +2013,18 @@ func parsePostgresTextArray(s string) []string {
 		out = append(out, part)
 	}
 	return out
+}
+
+// stringSliceToPostgresArray converts []string to a PostgreSQL array literal: {"a","b",...}
+func stringSliceToPostgresArray(ss []string) string {
+	if len(ss) == 0 {
+		return "{}"
+	}
+	parts := make([]string, len(ss))
+	for i, s := range ss {
+		parts[i] = `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	}
+	return "{" + strings.Join(parts, ",") + "}"
 }
 
 // boolSliceToPostgresArray converts []bool to a PostgreSQL array literal: {true,false,...}

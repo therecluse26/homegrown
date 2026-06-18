@@ -183,18 +183,18 @@ func TestSafetyIntegration_ContentFlagCreateAndList(t *testing.T) {
 	targetFamily := insertTestFamily(ctx, t, "Flag Target Family")
 
 	flag, err := repo.Create(ctx, CreateContentFlagRow{
-		Source:         "rekognition",
+		Source:         "auto_moderation",
 		TargetType:     "upload",
 		TargetID:       targetID,
 		TargetFamilyID: &targetFamily,
-		FlagType:       "nudity",
+		FlagType:       "explicit_content",
 		AutoRejected:   true,
 	})
 	if err != nil {
 		t.Fatalf("Create content flag: %v", err)
 	}
-	if flag.FlagType != "nudity" {
-		t.Errorf("want flag_type=nudity, got %q", flag.FlagType)
+	if flag.FlagType != "explicit_content" {
+		t.Errorf("want flag_type=explicit_content, got %q", flag.FlagType)
 	}
 	if !flag.AutoRejected {
 		t.Error("want auto_rejected=true")

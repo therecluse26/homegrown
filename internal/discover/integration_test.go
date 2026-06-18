@@ -426,6 +426,8 @@ func TestIntegration_PartialQuizSubmission(t *testing.T) {
 		Questions:    json.RawMessage(questionsJSON),
 		Explanations: json.RawMessage(`{}`),
 	}
+	// Remove any active quiz left by a prior test (unique: one active quiz at a time).
+	testDB.WithContext(ctx).Where("status = ?", "active").Delete(&QuizDefinition{})
 	if err := testDB.WithContext(ctx).Create(&def).Error; err != nil {
 		t.Fatalf("create quiz definition: %v", err)
 	}

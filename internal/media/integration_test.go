@@ -119,6 +119,25 @@ func skipIfNoTestDB(t *testing.T) {
 	}
 }
 
+// insertTestParent inserts a minimal iam_parents row (bypassing RLS) and returns its UUID.
+// media_uploads.uploaded_by FKs to iam_parents.
+func insertTestParent(ctx context.Context, t *testing.T, familyID uuid.UUID) uuid.UUID {
+	t.Helper()
+	parentID := uuid.Must(uuid.NewV7())
+	kratosID := uuid.Must(uuid.NewV7())
+	err := shared.BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
+		return tx.Exec(
+			`INSERT INTO iam_parents (id, family_id, kratos_identity_id, display_name, email, is_primary)
+			 VALUES (?, ?, ?, 'Test Parent', 'media-test@example.com', true)`,
+			parentID, familyID, kratosID,
+		).Error
+	})
+	if err != nil {
+		t.Fatalf("insert parent: %v", err)
+	}
+	return parentID
+}
+
 // insertTestFamily creates a minimal family row bypassing RLS.
 func insertTestFamily(ctx context.Context, t *testing.T, name string) uuid.UUID {
 	t.Helper()
@@ -143,7 +162,7 @@ func TestMediaIntegration_UploadCreateAndFind(t *testing.T) {
 
 	familyID := insertTestFamily(ctx, t, "Media Family")
 	scope := shared.NewFamilyScopeFromID(familyID)
-	uploader := uuid.Must(uuid.NewV7())
+	uploader := insertTestParent(ctx, t, familyID)
 	repo := NewPgUploadRepository(testDB)
 
 	uploadID := uuid.Must(uuid.NewV7())
@@ -183,7 +202,7 @@ func TestMediaIntegration_UploadUpdateStatus(t *testing.T) {
 
 	familyID := insertTestFamily(ctx, t, "Media Family 2")
 	scope := shared.NewFamilyScopeFromID(familyID)
-	uploader := uuid.Must(uuid.NewV7())
+	uploader := insertTestParent(ctx, t, familyID)
 	repo := NewPgUploadRepository(testDB)
 
 	uploadID := uuid.Must(uuid.NewV7())
@@ -217,6 +236,7 @@ func TestMediaIntegration_UploadFamilyIsolation(t *testing.T) {
 
 	familyA := insertTestFamily(ctx, t, "Media Family A")
 	familyB := insertTestFamily(ctx, t, "Media Family B")
+	uploaderA := insertTestParent(ctx, t, familyA)
 	scopeA := shared.NewFamilyScopeFromID(familyA)
 	scopeB := shared.NewFamilyScopeFromID(familyB)
 	repo := NewPgUploadRepository(testDB)
@@ -225,7 +245,7 @@ func TestMediaIntegration_UploadFamilyIsolation(t *testing.T) {
 	_, err := repo.Create(ctx, scopeA, &CreateUploadRow{
 		ID:               uploadID,
 		FamilyID:         familyA,
-		UploadedBy:       uuid.Must(uuid.NewV7()),
+		UploadedBy:       uploaderA,
 		Context:          UploadContextProfilePhoto,
 		ContentType:      "image/jpeg",
 		OriginalFilename: "secret.jpg",
