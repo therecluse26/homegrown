@@ -345,7 +345,7 @@ function AppFooter() {
   return (
     <footer
       aria-label={intl.formatMessage({ id: "footer.landmark", defaultMessage: "Site footer" })}
-      className="no-print mt-8 py-5 border-t border-outline-variant/20"
+      className="no-print mt-8 py-5 bg-surface-container-low"
     >
       <nav
         aria-label={intl.formatMessage({ id: "footer.nav", defaultMessage: "Legal and help links" })}

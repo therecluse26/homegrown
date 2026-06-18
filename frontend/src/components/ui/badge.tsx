@@ -11,7 +11,7 @@ type BadgeProps = {
 const variantClasses: Record<BadgeVariant, string> = {
   default: "bg-surface-container-high text-on-surface",
   primary: "bg-primary text-on-primary",
-  secondary: "bg-secondary-container text-on-secondary-container",
+  secondary: "bg-surface-container text-on-surface-variant",
   success: "bg-success-container text-on-success-container",
   warning: "bg-warning-container text-on-warning-container",
   error: "bg-error-container text-on-error-container",

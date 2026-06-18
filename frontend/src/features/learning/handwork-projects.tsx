@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useNavigate } from "react-router";
 import { Scissors, ArrowLeft } from "lucide-react";
@@ -81,7 +81,6 @@ function MethodologyBanner() {
 export function HandworkProjects() {
   const intl = useIntl();
   const navigate = useNavigate();
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const { data: students, isPending: studentsLoading } = useStudents();
 
   const [studentId, setStudentId] = useState("");
@@ -100,7 +99,6 @@ export function HandworkProjects() {
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "methodologyTools.handworkProjects.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
-    headingRef.current?.focus();
   }, [intl]);
 
   function handleSubmit(e: React.FormEvent) {
@@ -145,8 +143,6 @@ export function HandworkProjects() {
           <Icon icon={ArrowLeft} size="sm" aria-hidden />
         </Button>
         <h1
-          ref={headingRef}
-          tabIndex={-1}
           className="type-headline-sm text-on-surface font-semibold flex items-center gap-2"
         >
           <Icon icon={Scissors} size="md" className="text-secondary" aria-hidden />

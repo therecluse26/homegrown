@@ -15,7 +15,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(function Card(
       ref={ref}
       className={`bg-surface-container-lowest p-card-padding parent:rounded-lg student:rounded-xl transition-all ${
         interactive
-          ? "cursor-pointer hover:shadow-ambient-sm active:bg-surface-container-low"
+          ? "cursor-pointer hover:shadow-ambient-sm active:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           : ""
       } ${className}`}
       {...props}

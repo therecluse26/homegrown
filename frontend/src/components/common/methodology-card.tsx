@@ -40,7 +40,7 @@ export function MethodologyCard({
       onClick={onClick}
       className={`relative transition-all ${
         selected
-          ? "ring-2 ring-primary bg-primary-container"
+          ? "border-2 border-primary bg-primary-container"
           : "hover:bg-surface-container-low"
       }`}
       role={onClick ? "button" : undefined}

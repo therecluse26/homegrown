@@ -196,7 +196,7 @@ export function ReadingListBooks() {
                 <button
                   key={item.id}
                   type="button"
-                  className="w-full flex items-start justify-between p-2 rounded-sm hover:bg-surface-container-low transition-colors text-left"
+                  className="w-full flex items-start justify-between p-2 rounded-md hover:bg-surface-container-low transition-colors text-left"
                   onClick={() => handleAddBook(item.id)}
                 >
                   <div>
