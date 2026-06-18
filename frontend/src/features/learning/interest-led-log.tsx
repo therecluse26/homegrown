@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useNavigate } from "react-router";
 import { Lightbulb, ArrowLeft, X } from "lucide-react";
@@ -53,7 +53,6 @@ function MethodologyBanner() {
 export function InterestLedLog() {
   const intl = useIntl();
   const navigate = useNavigate();
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const { data: students, isPending: studentsLoading } = useStudents();
 
   const [studentId, setStudentId] = useState("");
@@ -71,7 +70,6 @@ export function InterestLedLog() {
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "methodologyTools.interestLedLog.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
-    headingRef.current?.focus();
   }, [intl]);
 
   function toggleExploration(method: ExplorationMethod) {
@@ -132,8 +130,6 @@ export function InterestLedLog() {
           <Icon icon={ArrowLeft} size="sm" aria-hidden />
         </Button>
         <h1
-          ref={headingRef}
-          tabIndex={-1}
           className="type-headline-sm text-on-surface font-semibold flex items-center gap-2"
         >
           <Icon icon={Lightbulb} size="md" className="text-tertiary" aria-hidden />

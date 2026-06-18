@@ -295,7 +295,7 @@ export function PricingPage() {
               <Button
                 variant={isCurrent ? "tertiary" : plan.highlighted ? "primary" : "secondary"}
                 disabled={isCurrent || isBusy}
-                className="w-full"
+                className={`w-full${action === "downgrade" ? " bg-error-container text-on-error-container" : ""}`}
                 onClick={() => {
                   if (isCurrent) return;
                   setErrorMessage(null);

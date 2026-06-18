@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useNavigate } from "react-router";
 import { Heart, ArrowLeft, CheckCircle2, MinusCircle, XCircle } from "lucide-react";
@@ -112,7 +112,6 @@ function HabitRow({
 export function HabitTracking() {
   const intl = useIntl();
   const navigate = useNavigate();
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const { data: students, isPending: studentsLoading } = useStudents();
 
   // Resolve CM habit names for initial entries
@@ -132,7 +131,6 @@ export function HabitTracking() {
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "methodologyTools.habitTracking.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
-    headingRef.current?.focus();
   }, [intl]);
 
   function addHabit(name: string) {
@@ -195,7 +193,7 @@ export function HabitTracking() {
         <Button variant="tertiary" size="sm" onClick={() => void navigate("/learning")}>
           <Icon icon={ArrowLeft} size="sm" aria-hidden />
         </Button>
-        <h1 ref={headingRef} tabIndex={-1} className="type-headline-sm text-on-surface font-semibold flex items-center gap-2">
+        <h1 className="type-headline-sm text-on-surface font-semibold flex items-center gap-2">
           <Icon icon={Heart} size="md" className="text-tertiary" aria-hidden />
           <FormattedMessage id="methodologyTools.habitTracking.title" />
         </h1>

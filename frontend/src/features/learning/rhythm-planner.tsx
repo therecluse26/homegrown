@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useNavigate } from "react-router";
 import { Music, ArrowLeft, Plus, Trash2 } from "lucide-react";
@@ -147,7 +147,6 @@ function TimeBlockRow({
 export function RhythmPlanner() {
   const intl = useIntl();
   const navigate = useNavigate();
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const { data: students, isPending: studentsLoading } = useStudents();
 
   const [studentId, setStudentId] = useState("");
@@ -161,7 +160,6 @@ export function RhythmPlanner() {
 
   useEffect(() => {
     document.title = `${intl.formatMessage({ id: "methodologyTools.rhythmPlanner.title" })} — ${intl.formatMessage({ id: "app.name" })}`;
-    headingRef.current?.focus();
   }, [intl]);
 
   function addBlock() {
@@ -220,7 +218,7 @@ export function RhythmPlanner() {
         <Button variant="tertiary" size="sm" onClick={() => void navigate("/learning")}>
           <Icon icon={ArrowLeft} size="sm" aria-hidden />
         </Button>
-        <h1 ref={headingRef} tabIndex={-1} className="type-headline-sm text-on-surface font-semibold flex items-center gap-2">
+        <h1 className="type-headline-sm text-on-surface font-semibold flex items-center gap-2">
           <Icon icon={Music} size="md" className="text-tertiary" aria-hidden />
           <FormattedMessage id="methodologyTools.rhythmPlanner.title" />
         </h1>

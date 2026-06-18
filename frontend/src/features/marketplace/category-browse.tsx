@@ -35,7 +35,7 @@ export function CategoryBrowse() {
     return (
       <div className="max-w-content-narrow mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
           <Skeleton className="h-48 rounded-md" />
           <Skeleton className="h-48 rounded-md" />
         </div>
@@ -87,7 +87,7 @@ export function CategoryBrowse() {
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {listings.map((listing) => (
             <RouterLink
               key={listing.id}

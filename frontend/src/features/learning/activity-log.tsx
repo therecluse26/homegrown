@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useSearchParams, useNavigate } from "react-router";
-import { Plus, Clock, Calendar, ClipboardList } from "lucide-react";
+import { Plus, Clock, Calendar, ClipboardList, ChevronDown } from "lucide-react";
 import {
   Button,
   Card,
@@ -187,6 +187,7 @@ export function ActivityLog() {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [showForm, setShowForm] = useState(searchParams.get("new") === "1");
   const [subjectFilter, setSubjectFilter] = useState<string[]>([]);
+  const [subjectFilterOpen, setSubjectFilterOpen] = useState(false);
 
   useEffect(() => {
     if (showForm) {
@@ -269,15 +270,39 @@ export function ActivityLog() {
           </div>
 
           <div className="min-w-[200px] flex-1">
-            <label className="block type-label-md text-on-surface-variant mb-1.5">
+            <button
+              type="button"
+              onClick={() => setSubjectFilterOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between type-label-md text-on-surface-variant mb-1.5 hover:text-on-surface transition-colors"
+            >
               <FormattedMessage id="activityLog.filter.subject" />
-            </label>
-            <SubjectPicker
-              value={subjectFilter}
-              onChange={setSubjectFilter}
-              allowCustom={false}
-              max={1}
-            />
+              <Icon
+                icon={ChevronDown}
+                size="xs"
+                className={`transition-transform ${subjectFilterOpen ? "rotate-180" : ""}`}
+                aria-hidden
+              />
+            </button>
+            {subjectFilter.length > 0 && !subjectFilterOpen && (
+              <div className="flex flex-wrap gap-1.5">
+                {subjectFilter.map((slug) => (
+                  <span
+                    key={slug}
+                    className="px-2 py-0.5 bg-primary-container text-on-primary-container type-label-sm rounded-full"
+                  >
+                    {slugToName(slug)}
+                  </span>
+                ))}
+              </div>
+            )}
+            {subjectFilterOpen && (
+              <SubjectPicker
+                value={subjectFilter}
+                onChange={setSubjectFilter}
+                allowCustom={false}
+                max={1}
+              />
+            )}
           </div>
 
           <div className="min-w-[140px]">
