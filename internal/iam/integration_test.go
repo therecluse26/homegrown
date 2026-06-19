@@ -319,6 +319,12 @@ func TestStudentCRUD_FamilyScoped(t *testing.T) {
 	// student exists in the table.
 	var rawCount int64
 	err = testDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Drop from the postgres superuser to a non-privileged role so that RLS
+		// policies are enforced. Superusers bypass RLS by default; pg_read_all_data
+		// has SELECT on all tables but no BYPASSRLS attribute. [§15.8, PG docs]
+		if execErr := tx.Exec("SET LOCAL ROLE pg_read_all_data").Error; execErr != nil {
+			return execErr
+		}
 		setSQL := fmt.Sprintf("SET LOCAL app.current_family_id = '%s'", parentB.FamilyID.String())
 		if execErr := tx.Exec(setSQL).Error; execErr != nil {
 			return execErr
