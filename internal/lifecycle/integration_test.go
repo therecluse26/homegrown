@@ -10,6 +10,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -229,7 +230,7 @@ func TestLifecycleIntegration_DeletionRequestCreateAndCancel(t *testing.T) {
 	}
 
 	active2, err := repo.FindActiveByFamily(ctx, &scope)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrDeletionNotFound) {
 		t.Fatalf("FindActiveByFamily after cancel: %v", err)
 	}
 	if active2 != nil {

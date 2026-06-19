@@ -218,7 +218,7 @@ func TestAdminIntegration_AuditLogCreate(t *testing.T) {
 
 	entry, err := repo.Create(ctx, &CreateAuditLogEntry{
 		AdminID:    adminID,
-		Action:     "create_flag",
+		Action:     "flag_create",
 		TargetType: "feature_flag",
 		Details:    json.RawMessage(`{"key":"test"}`),
 		IPAddress:  "127.0.0.1",

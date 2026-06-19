@@ -10,6 +10,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -258,9 +259,12 @@ func TestMediaIntegration_UploadFamilyIsolation(t *testing.T) {
 
 	found, err := repo.FindByID(ctx, scopeB, uploadID)
 	if err != nil {
-		t.Fatalf("FindByID (family B): %v", err)
-	}
-	if found != nil {
+		var mediaErr *MediaError
+		if !errors.As(err, &mediaErr) || !errors.Is(mediaErr.Err, ErrUploadNotFound) {
+			t.Fatalf("FindByID (family B): unexpected error: %v", err)
+		}
+		// ErrUploadNotFound is expected: family B cannot see family A's upload
+	} else if found != nil {
 		t.Error("expected nil when reading family A upload as family B")
 	}
 }

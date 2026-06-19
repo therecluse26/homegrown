@@ -427,7 +427,10 @@ func TestIntegration_PartialQuizSubmission(t *testing.T) {
 		Explanations: json.RawMessage(`{}`),
 	}
 	// Remove any active quiz left by a prior test (unique: one active quiz at a time).
-	testDB.WithContext(ctx).Where("status = ?", "active").Delete(&QuizDefinition{})
+	// Use raw Exec to bypass GORM's implicit zero-UUID PK condition on struct models.
+	if err := testDB.WithContext(ctx).Exec("DELETE FROM disc_quiz_definitions WHERE status = 'active'").Error; err != nil {
+		t.Logf("cleanup active quizzes: %v", err)
+	}
 	if err := testDB.WithContext(ctx).Create(&def).Error; err != nil {
 		t.Fatalf("create quiz definition: %v", err)
 	}

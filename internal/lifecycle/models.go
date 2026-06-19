@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -109,6 +110,17 @@ type exportRequestRow struct {
 
 func (exportRequestRow) TableName() string { return "lifecycle_export_requests" }
 
+func (r *exportRequestRow) BeforeCreate(_ *gorm.DB) error {
+	if r.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		r.ID = id
+	}
+	return nil
+}
+
 func (r exportRequestRow) toDomain() ExportRequest {
 	return ExportRequest{
 		ID:                r.ID,
@@ -146,6 +158,17 @@ type deletionRequestRow struct {
 }
 
 func (deletionRequestRow) TableName() string { return "lifecycle_deletion_requests" }
+
+func (r *deletionRequestRow) BeforeCreate(_ *gorm.DB) error {
+	if r.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		r.ID = id
+	}
+	return nil
+}
 
 func (r deletionRequestRow) toDomain() DeletionRequest {
 	return DeletionRequest{

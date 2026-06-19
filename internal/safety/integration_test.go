@@ -183,7 +183,7 @@ func TestSafetyIntegration_ContentFlagCreateAndList(t *testing.T) {
 	targetFamily := insertTestFamily(ctx, t, "Flag Target Family")
 
 	flag, err := repo.Create(ctx, CreateContentFlagRow{
-		Source:         "auto_moderation",
+		Source:         "automated",
 		TargetType:     "upload",
 		TargetID:       targetID,
 		TargetFamilyID: &targetFamily,

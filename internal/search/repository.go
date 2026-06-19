@@ -759,9 +759,9 @@ func (r *PgLearningSearchRepository) SearchLearning(ctx context.Context, familyS
 	_ = cursor
 
 	// Build source type filter
-	includeActivity := filters.SourceType == nil || *filters.SourceType == LearningSourceTypeActivity
-	includeJournal := filters.SourceType == nil || *filters.SourceType == LearningSourceTypeJournal
-	includeReading := filters.SourceType == nil || *filters.SourceType == LearningSourceTypeReading
+	includeActivity := filters == nil || filters.SourceType == nil || *filters.SourceType == LearningSourceTypeActivity
+	includeJournal := filters == nil || filters.SourceType == nil || *filters.SourceType == LearningSourceTypeJournal
+	includeReading := filters == nil || filters.SourceType == nil || *filters.SourceType == LearningSourceTypeReading
 
 	type learningRow struct {
 		ID          uuid.UUID `gorm:"column:id"`
