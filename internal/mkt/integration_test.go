@@ -235,6 +235,7 @@ func TestMktIntegration_ListingCreateAndFind(t *testing.T) {
 		Description: "A classical Latin curriculum for all ages.",
 		PriceCents:  1999,
 		ContentType: "curriculum",
+		SubjectTags: []string{},
 	})
 	if err != nil {
 		t.Fatalf("Create listing: %v", err)
@@ -282,6 +283,7 @@ func TestMktIntegration_CartAddAndRetrieve(t *testing.T) {
 		Description: "Test.",
 		PriceCents:  500,
 		ContentType: "worksheet",
+		SubjectTags: []string{},
 	})
 	if err != nil {
 		t.Fatalf("Create listing: %v", err)

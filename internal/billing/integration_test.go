@@ -164,7 +164,7 @@ func TestBillingIntegration_CustomerUpsertAndFind(t *testing.T) {
 	ctx := context.Background()
 
 	repo := NewPgCustomerRepository(testDB)
-	familyID := uuid.Must(uuid.NewV7())
+	familyID := seedIntTestFamily(t)
 
 	customer, err := repo.Upsert(ctx, familyID, UpsertCustomerRow{
 		HyperswitchCustomerID: fmt.Sprintf("hs_cust_%s", familyID),

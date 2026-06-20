@@ -33,10 +33,15 @@ func CreatePool(cfg *config.AppConfig) (*gorm.DB, error) {
 
 // ScopedTransaction executes fn within a family-scoped transaction.
 //
-// Adds `WHERE family_id = ?` to every GORM query within the transaction,
-// ensuring all reads and writes are restricted to the given family. [ARCH §1.5, §5.2, ADR-008]
+// Sets the PostgreSQL session variable `app.current_family_id` (consumed by RLS
+// policies) and adds `WHERE family_id = ?` to every GORM query within the
+// transaction, giving defense-in-depth enforcement. [ARCH §1.5, §5.2, ADR-008]
 func ScopedTransaction(ctx context.Context, db *gorm.DB, scope FamilyScope, fn func(tx *gorm.DB) error) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		setSQL := fmt.Sprintf("SET LOCAL app.current_family_id = '%s'", scope.FamilyID().String())
+		if err := tx.Exec(setSQL).Error; err != nil {
+			return err
+		}
 		scopedTx := tx.Where("family_id = ?", scope.FamilyID())
 		return fn(scopedTx)
 	})

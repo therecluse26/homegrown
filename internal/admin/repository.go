@@ -214,7 +214,7 @@ func (r *PgFeatureFlagRepository) Delete(ctx context.Context, key string) error 
 type auditLogRow struct {
 	ID         uuid.UUID  `gorm:"column:id;type:uuid;primaryKey"`
 	AdminID    uuid.UUID  `gorm:"column:admin_id"`
-	AdminEmail *string    `gorm:"column:admin_email;-:migration"` // populated via LEFT JOIN
+	AdminEmail *string    `gorm:"column:admin_email;->"` // read-only: populated via LEFT JOIN in Search
 	Action     string     `gorm:"column:action"`
 	TargetType string     `gorm:"column:target_type"`
 	TargetID   *uuid.UUID `gorm:"column:target_id"`

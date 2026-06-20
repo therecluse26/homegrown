@@ -76,6 +76,9 @@ func (s *IamServiceImpl) SetBillingService(svc BillingServiceForIam) {
 // getDefaultMethodologySlug returns the default methodology slug, falling back to a
 // hardcoded slug on error.
 func (s *IamServiceImpl) getDefaultMethodologySlug(ctx context.Context) string {
+	if s.defaultMethodologyResolver == nil {
+		return fallbackMethodologySlug
+	}
 	slug, err := s.defaultMethodologyResolver(ctx)
 	if err != nil {
 		slog.Error("failed to resolve default methodology slug, using fallback", "error", err)

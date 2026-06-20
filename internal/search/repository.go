@@ -454,6 +454,9 @@ func NewPgMarketplaceSearchRepository(db *gorm.DB) *PgMarketplaceSearchRepositor
 
 // SearchListings performs full-text search with faceted filtering and sorting. [12-search §10.2]
 func (r *PgMarketplaceSearchRepository) SearchListings(ctx context.Context, query string, filters *MarketplaceSearchFilters, sortOrder SearchSortOrder, limit int, cursor *string) (*MarketplaceSearchResults, error) {
+	if filters == nil {
+		filters = &MarketplaceSearchFilters{}
+	}
 	offset := 0
 	if cursor != nil {
 		var err error
@@ -756,9 +759,9 @@ func (r *PgLearningSearchRepository) SearchLearning(ctx context.Context, familyS
 	_ = cursor
 
 	// Build source type filter
-	includeActivity := filters.SourceType == nil || *filters.SourceType == LearningSourceTypeActivity
-	includeJournal := filters.SourceType == nil || *filters.SourceType == LearningSourceTypeJournal
-	includeReading := filters.SourceType == nil || *filters.SourceType == LearningSourceTypeReading
+	includeActivity := filters == nil || filters.SourceType == nil || *filters.SourceType == LearningSourceTypeActivity
+	includeJournal := filters == nil || filters.SourceType == nil || *filters.SourceType == LearningSourceTypeJournal
+	includeReading := filters == nil || filters.SourceType == nil || *filters.SourceType == LearningSourceTypeReading
 
 	type learningRow struct {
 		ID          uuid.UUID `gorm:"column:id"`
@@ -779,6 +782,9 @@ func (r *PgLearningSearchRepository) SearchLearning(ctx context.Context, familyS
 	// We avoid "? IS NULL OR col op ?" patterns because GORM + pgx can't
 	// infer the type of an untyped NULL for array operators (&&).
 	buildLearningFilters := func(studentCol, dateCol, tagsCol string) (string, []any) {
+		if filters == nil {
+			return "", nil
+		}
 		var clauses []string
 		var args []any
 		if filters.StudentID != nil {

@@ -172,7 +172,7 @@ func TestComplyIntegration_FamilyConfigUpsertAndFind(t *testing.T) {
 	// Upsert a state config so the FK is valid.
 	stateRepo := NewPgStateConfigRepository(testDB)
 	if _, err := stateRepo.Upsert(ctx, UpsertStateConfigRow{
-		StateCode: "TX", StateName: "Texas", RegulationLevel: "medium",
+		StateCode: "TX", StateName: "Texas", RegulationLevel: "moderate",
 	}); err != nil {
 		t.Fatalf("upsert state config: %v", err)
 	}

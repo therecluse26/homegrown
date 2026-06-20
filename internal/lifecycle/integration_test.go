@@ -10,6 +10,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -119,6 +120,25 @@ func skipIfNoTestDB(t *testing.T) {
 	}
 }
 
+// insertTestParent inserts a minimal iam_parents row (bypassing RLS) and returns its UUID.
+// lifecycle_export_requests.requested_by and lifecycle_deletion_requests.requested_by FK to iam_parents.
+func insertTestParent(ctx context.Context, t *testing.T, familyID uuid.UUID) uuid.UUID {
+	t.Helper()
+	parentID := uuid.Must(uuid.NewV7())
+	kratosID := uuid.Must(uuid.NewV7())
+	err := shared.BypassRLSTransaction(ctx, testDB, func(tx *gorm.DB) error {
+		return tx.Exec(
+			`INSERT INTO iam_parents (id, family_id, kratos_identity_id, display_name, email, is_primary)
+			 VALUES (?, ?, ?, 'Test Parent', 'lifecycle-test@example.com', true)`,
+			parentID, familyID, kratosID,
+		).Error
+	})
+	if err != nil {
+		t.Fatalf("insert parent: %v", err)
+	}
+	return parentID
+}
+
 // insertTestFamily is a helper that creates a minimal family row bypassing RLS.
 func insertTestFamily(ctx context.Context, t *testing.T, name string) uuid.UUID {
 	t.Helper()
@@ -142,7 +162,7 @@ func TestLifecycleIntegration_ExportRequestCreateAndFind(t *testing.T) {
 	ctx := context.Background()
 
 	familyID := insertTestFamily(ctx, t, "Export Family")
-	parentID := uuid.Must(uuid.NewV7())
+	parentID := insertTestParent(ctx, t, familyID)
 
 	scope := shared.NewFamilyScopeFromID(familyID)
 	repo := NewPgExportRequestRepository(testDB)
@@ -178,7 +198,7 @@ func TestLifecycleIntegration_DeletionRequestCreateAndCancel(t *testing.T) {
 	ctx := context.Background()
 
 	familyID := insertTestFamily(ctx, t, "Deletion Family")
-	parentID := uuid.Must(uuid.NewV7())
+	parentID := insertTestParent(ctx, t, familyID)
 
 	scope := shared.NewFamilyScopeFromID(familyID)
 	repo := NewPgDeletionRequestRepository(testDB)
@@ -210,7 +230,7 @@ func TestLifecycleIntegration_DeletionRequestCreateAndCancel(t *testing.T) {
 	}
 
 	active2, err := repo.FindActiveByFamily(ctx, &scope)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrDeletionNotFound) {
 		t.Fatalf("FindActiveByFamily after cancel: %v", err)
 	}
 	if active2 != nil {
@@ -224,7 +244,7 @@ func TestLifecycleIntegration_ExportListByFamily(t *testing.T) {
 	ctx := context.Background()
 
 	familyID := insertTestFamily(ctx, t, "List Family")
-	parentID := uuid.Must(uuid.NewV7())
+	parentID := insertTestParent(ctx, t, familyID)
 	scope := shared.NewFamilyScopeFromID(familyID)
 	repo := NewPgExportRequestRepository(testDB)
 
