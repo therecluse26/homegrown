@@ -230,7 +230,7 @@ func TestAdminIntegration_AuditLogCreate(t *testing.T) {
 	if entry.AdminID != adminID {
 		t.Errorf("want AdminID=%v, got %v", adminID, entry.AdminID)
 	}
-	if entry.Action != "create_flag" {
-		t.Errorf("want action=create_flag, got %q", entry.Action)
+	if entry.Action != "flag_create" {
+		t.Errorf("want action=flag_create, got %q", entry.Action)
 	}
 }

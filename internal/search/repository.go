@@ -782,6 +782,9 @@ func (r *PgLearningSearchRepository) SearchLearning(ctx context.Context, familyS
 	// We avoid "? IS NULL OR col op ?" patterns because GORM + pgx can't
 	// infer the type of an untyped NULL for array operators (&&).
 	buildLearningFilters := func(studentCol, dateCol, tagsCol string) (string, []any) {
+		if filters == nil {
+			return "", nil
+		}
 		var clauses []string
 		var args []any
 		if filters.StudentID != nil {
