@@ -4373,6 +4373,14 @@ Per-request auth is still local JWT verification (ADR-017) — the `sid` lookup 
 
 **Revision trigger**: If mobile apps are added (Phase 3+), they use the standard PKCE flow with PKCE-secured native token storage — the BFF pattern is SPA-only.
 
+**Frontend implementation (WS5 — HOM-167)**:
+- `frontend/src/lib/hearth-auth.ts` — thin BFF client: `redirectToLogin()`, `register()`, `logout()`, `refresh()`.
+- `@hearth-auth/sdk@1.0.6` installed; `HearthProvider`/`useHasPermission` wired in `auth-provider.tsx`. In BFF mode `getToken: () => null` so all `hasPermission` checks return `false` (correct safe default — browser holds no JWT). The provider is wired for future claim-surfacing.
+- Login flow: `Login` component redirects browser to `GET /v1/auth/login` (PKCE start). Hearth hosts the login UI. On return the BFF sets the `sid` cookie and redirects back to the SPA.
+- Registration: form collects `email`, `display_name`, `family_display_name`; `POST /v1/auth/register`. Default `primary_methodology_slug: "charlotte-mason"` (can be updated during onboarding). Hearth sends activation email; user sets password through Hearth's hosted UI.
+- Password management: delegated to Hearth's hosted account settings (external link in account settings page).
+- `kratos.ts` and its Kratos self-service flow helpers are fully removed.
+
 ---
 
 *This architecture document translates the Homegrown Academy specification (`specs/SPEC.md`) into concrete, opinionated technology decisions. Every choice traces back to spec requirements via `[S§n]` references. The document is designed to be practical enough that development can start directly from it — the Go code examples, SQL schemas, and React patterns are intended as starting templates, not pseudocode.*

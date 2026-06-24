@@ -33,7 +33,7 @@ import {
   useKeyboardShortcutRegistry,
 } from "@/hooks/use-keyboard-shortcut-registry";
 import { CoppaReverificationBanner } from "@/features/auth/coppa-reverification-banner";
-import { initLogout, performLogout } from "@/lib/kratos";
+import { logout } from "@/lib/hearth-auth";
 
 type NavItem = {
   to: string;
@@ -58,13 +58,8 @@ function useLogout() {
   const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
-    try {
-      const { logout_token } = await initLogout();
-      await performLogout(logout_token);
-      window.location.href = "/auth/login";
-    } catch {
-      window.location.href = "/auth/login";
-    }
+    await logout();
+    window.location.href = "/auth/login";
   };
   return { handleLogout, isLoggingOut };
 }

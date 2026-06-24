@@ -25,16 +25,7 @@ export default defineConfig({
         target: "http://localhost:3500",
         changeOrigin: true,
       },
-      // Kratos self-service routes (browser flows, SPA AJAX)
-      // Uses KRATOS_PORT env var to switch between dev (4933) and agent (4935)
-      "/self-service": {
-        target: `http://localhost:${process.env.KRATOS_PORT ?? "4933"}`,
-        changeOrigin: true,
-      },
-      "/sessions": {
-        target: `http://localhost:${process.env.KRATOS_PORT ?? "4933"}`,
-        changeOrigin: true,
-      },
+      // Auth flows are handled by the backend BFF — no direct Hearth proxy needed. [ARCH ADR-020]
     },
   },
 });

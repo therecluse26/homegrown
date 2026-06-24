@@ -20,6 +20,7 @@
     "test:a11y": "playwright test e2e/a11y.spec.ts"
   },
   "dependencies": {
+    "@hearth-auth/sdk": "^1.0.6",
     "@marsidev/react-turnstile": "^1.5.0",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-query": "^5",

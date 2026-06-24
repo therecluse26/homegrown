@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useIntl, FormattedMessage } from "react-intl";
 import { Button, Modal } from "@/components/ui";
-import { initLogout } from "@/lib/kratos";
+import { refresh, logout } from "@/lib/hearth-auth";
 import { apiClient } from "@/api/client";
 
 const WARNING_BEFORE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -100,22 +100,15 @@ export function SessionTimeoutWarning({ expiresAt }: SessionTimeoutWarningProps)
   async function handleExtendSession() {
     setIsExtending(true);
     try {
-      // Touching the whoami endpoint with credentials refreshes the session cookie
+      // Silently rotate the access token in the BFF session. [ARCH ADR-020]
+      await refresh();
+      // Confirm the session is still valid.
       await apiClient<unknown>("/v1/auth/me");
       setIsVisible(false);
       clearTimers();
     } catch {
-      // If extending fails, the session may have already expired
-      const { logout_token } = await initLogout().catch(() => ({
-        logout_url: "",
-        logout_token: "",
-      }));
-      if (logout_token) {
-        await fetch(
-          `/self-service/logout?token=${encodeURIComponent(logout_token)}`,
-          { credentials: "include" },
-        );
-      }
+      // Refresh or session check failed — log out and redirect.
+      await logout();
       navigate("/auth/login", { replace: true });
     } finally {
       setIsExtending(false);

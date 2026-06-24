@@ -1,38 +1,34 @@
 import { useEffect, useState } from "react";
-import { initLogout, performLogout } from "@/lib/kratos";
+import { useQueryClient } from "@tanstack/react-query";
+import { logout } from "@/lib/hearth-auth";
 import { Spinner } from "@/components/ui";
 
 /**
- * Route component that performs logout and redirects to the login page.
- * Handles the Kratos logout flow (init -> perform -> redirect).
+ * Route component that performs BFF logout and redirects to the login page.
+ *
+ * Calls POST /v1/auth/logout which revokes the refresh token (RFC 7009),
+ * deletes the server-side session, and clears the sid cookie. [ARCH ADR-020]
  */
 export function LogoutRoute() {
   const [done, setDone] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let cancelled = false;
 
     async function doLogout() {
-      try {
-        const { logout_token } = await initLogout();
-        await performLogout(logout_token);
-      } catch {
-        // If logout fails (no session, network error), still redirect to login
-      }
-      if (!cancelled) {
-        setDone(true);
-      }
+      await logout();
+      queryClient.clear();
+      if (!cancelled) setDone(true);
     }
 
     void doLogout();
-
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [queryClient]);
 
   if (done) {
-    // Use window.location to ensure a full page reload clears cached auth state
     window.location.href = "/auth/login";
     return null;
   }

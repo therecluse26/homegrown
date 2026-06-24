@@ -1,162 +1,39 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate, Link } from "react-router";
+import { useState, useCallback } from "react";
+import { Link } from "react-router";
 import { useIntl, FormattedMessage } from "react-intl";
-import { useQueryClient } from "@tanstack/react-query";
-import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
-import { Button, Input, Spinner, FormField } from "@/components/ui";
+import { Button, Input, FormField } from "@/components/ui";
 import { PageTitle } from "@/components/common";
-import { useAuthContext } from "@/features/auth/auth-provider";
-import {
-  initRegistrationFlow,
-  submitFlow,
-  extractCsrfToken,
-  extractFieldErrors,
-  extractGlobalMessages,
-  extractOAuthProviders,
-  type KratosFlow,
-  type KratosError,
-} from "@/lib/kratos";
-import { OAuthButton } from "./oauth-button";
-
-// Turnstile site key — use test key in dev, real key in production
-const TURNSTILE_SITE_KEY =
-  import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "1x00000000000000000000AA";
+import { register } from "@/lib/hearth-auth";
+import type { AuthError } from "@/lib/hearth-auth";
 
 type RegisterFormState = {
   email: string;
-  name: string;
-  password: string;
+  display_name: string;
+  family_display_name: string;
   tosAccepted: boolean;
 };
 
-// ─── Password strength ────────────────────────────────────────────────────────
-
-type PasswordStrength = "weak" | "fair" | "strong" | "very-strong";
-
-function measurePasswordStrength(password: string): PasswordStrength | null {
-  if (!password) return null;
-  let score = 0;
-  if (password.length >= 10) score++;
-  if (password.length >= 14) score++;
-  if (/[A-Z]/.test(password)) score++;
-  if (/[0-9]/.test(password)) score++;
-  if (/[^A-Za-z0-9]/.test(password)) score++;
-
-  if (score <= 1) return "weak";
-  if (score <= 2) return "fair";
-  if (score <= 3) return "strong";
-  return "very-strong";
-}
-
-const STRENGTH_CONFIG: Record<
-  PasswordStrength,
-  { label: string; widthClass: string; colorClass: string }
-> = {
-  weak: {
-    label: "auth.register.passwordStrength.weak",
-    widthClass: "w-1/4",
-    colorClass: "bg-error",
-  },
-  fair: {
-    label: "auth.register.passwordStrength.fair",
-    widthClass: "w-2/4",
-    colorClass: "bg-tertiary",
-  },
-  strong: {
-    label: "auth.register.passwordStrength.strong",
-    widthClass: "w-3/4",
-    colorClass: "bg-secondary",
-  },
-  "very-strong": {
-    label: "auth.register.passwordStrength.veryStrong",
-    widthClass: "w-full",
-    colorClass: "bg-primary",
-  },
-};
-
-function PasswordStrengthIndicator({ password }: { password: string }) {
-  const intl = useIntl();
-  const strength = useMemo(() => measurePasswordStrength(password), [password]);
-
-  if (!strength) return null;
-  const config = STRENGTH_CONFIG[strength];
-
-  const scoreValue =
-    strength === "weak"
-      ? 25
-      : strength === "fair"
-        ? 50
-        : strength === "strong"
-          ? 75
-          : 100;
-
-  return (
-    <div className="mt-2" aria-live="polite">
-      <div
-        className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest"
-        role="progressbar"
-        aria-valuenow={scoreValue}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label="Password strength"
-      >
-        <div
-          className={`h-full transition-all duration-300 ${config.widthClass} ${config.colorClass}`}
-        />
-      </div>
-      <p className="mt-1 text-label-sm text-on-surface-variant">
-        {intl.formatMessage({ id: config.label })}
-      </p>
-    </div>
-  );
-}
-
-// ─── Register page ────────────────────────────────────────────────────────────
-
 /**
- * Registration page — rendered inside AuthLayout's card.
+ * Registration page — app-orchestrated Hearth registration.
  *
- * After successful registration, Kratos fires the post-registration webhook
- * which creates the family + parent records in our database, then redirects to /onboarding.
+ * Submits to POST /v1/auth/register. The backend creates the Hearth identity
+ * and the family + parent records. Hearth then emails an activation link;
+ * the user sets their password through Hearth's hosted UI, then logs in via
+ * the PKCE flow. [ARCH ADR-020, §10.1]
  */
 export function Register() {
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuthContext();
   const intl = useIntl();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
-  const [flow, setFlow] = useState<KratosFlow | null>(null);
   const [form, setForm] = useState<RegisterFormState>({
     email: "",
-    name: "",
-    password: "",
+    display_name: "",
+    family_display_name: "",
     tosAccepted: false,
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [captchaToken, setCaptchaToken] = useState<string>("");
-  const turnstileRef = useRef<TurnstileInstance | null>(null);
-
-  useEffect(() => {
-    if (isAuthLoading || isAuthenticated) return;
-    let active = true;
-    void initRegistrationFlow()
-      .then((f) => {
-        if (active) setFlow(f);
-      })
-      .catch(() => {
-        if (active)
-          setGlobalError(intl.formatMessage({ id: "error.generic" }));
-      })
-      .finally(() => {
-        if (active) setIsInitializing(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [intl, isAuthLoading, isAuthenticated]);
+  const [success, setSuccess] = useState(false);
 
   const handleChange = useCallback(
     (field: keyof Omit<RegisterFormState, "tosAccepted">) =>
@@ -169,7 +46,7 @@ export function Register() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!flow || isSubmitting) return;
+    if (isSubmitting) return;
 
     if (!form.tosAccepted) {
       setFieldErrors((prev) => ({
@@ -182,79 +59,72 @@ export function Register() {
       return;
     }
 
-    const strength = measurePasswordStrength(form.password);
-    if (!strength || strength === "weak") {
-      setFieldErrors((prev) => ({
-        ...prev,
-        password: intl.formatMessage({
-          id: "auth.register.passwordTooWeak",
-          defaultMessage: "Please choose a stronger password",
-        }),
-      }));
-      return;
-    }
-
-    if (!captchaToken) {
-      setFieldErrors((prev) => ({
-        ...prev,
-        captcha: intl.formatMessage({ id: "auth.register.captchaRequired" }),
-      }));
-      return;
-    }
-
     setIsSubmitting(true);
     setGlobalError("");
     setFieldErrors({});
 
-    const csrfToken = extractCsrfToken(flow);
-
     try {
-      const result = await submitFlow(flow.ui.action, flow.ui.method, {
-        "traits.email": form.email,
-        "traits.name": form.name,
-        password: form.password,
-        method: "password",
-        csrf_token: csrfToken,
-        captcha_token: captchaToken,
+      await register({
+        email: form.email,
+        display_name: form.display_name,
+        family_display_name: form.family_display_name,
+        // Default; can be updated during onboarding. [§10.1]
+        primary_methodology_slug: "charlotte-mason",
       });
-
-      if (result.kind === "success") {
-        await queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-        navigate("/onboarding", { replace: true });
-        return;
-      }
-
-      if (result.kind === "redirect") {
-        window.location.href = result.url;
-        return;
-      }
-
-      const updatedFlow = result.flow;
-      const errors = extractFieldErrors(updatedFlow);
-      const globals = extractGlobalMessages(updatedFlow);
-      setFieldErrors(errors);
-      setFlow(updatedFlow);
-
-      const firstGlobal = globals.find((m) => m.type === "error");
-      if (firstGlobal) setGlobalError(firstGlobal.text);
+      setSuccess(true);
     } catch (err: unknown) {
-      const kratosErr = err as KratosError;
+      const authErr = err as AuthError;
       setGlobalError(
-        kratosErr.error?.message ?? intl.formatMessage({ id: "error.generic" }),
+        authErr.message ?? intl.formatMessage({ id: "error.generic" }),
       );
     } finally {
       setIsSubmitting(false);
-      // Reset CAPTCHA so user gets a fresh challenge on retry
-      setCaptchaToken("");
-      turnstileRef.current?.reset();
     }
   }
 
-  const csrfToken = flow ? extractCsrfToken(flow) : "";
-  const oauthAction = flow?.ui.action ?? "";
-  const oauthProviders = flow
-    ? (extractOAuthProviders(flow) as Array<"google" | "facebook" | "apple">)
-    : [];
+  if (success) {
+    return (
+      <>
+        <PageTitle title={intl.formatMessage({ id: "auth.register" })} />
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-container"
+            aria-hidden="true"
+          >
+            <svg
+              className="h-8 w-8 text-on-primary-container"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-title-lg font-semibold text-on-surface">
+              <FormattedMessage
+                id="auth.register.success.title"
+                defaultMessage="Account created!"
+              />
+            </h2>
+            <p className="mt-1 text-body-sm text-on-surface-variant">
+              <FormattedMessage
+                id="auth.register.success.subtitle"
+                defaultMessage="Check your email to set a password, then sign in."
+              />
+            </p>
+          </div>
+          <Link
+            to="/auth/login"
+            className="text-label-md font-medium text-primary hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+          >
+            <FormattedMessage id="auth.login.submit" defaultMessage="Sign in" />
+          </Link>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -279,199 +149,134 @@ export function Register() {
         </div>
       )}
 
-      {isInitializing ? (
-        <div
-          className="flex justify-center py-6"
-          role="status"
-          aria-live="polite"
-          aria-label={intl.formatMessage({ id: "loading.default" })}
+      <form onSubmit={(e) => void handleSubmit(e)} noValidate className="space-y-4">
+        <FormField
+          label={intl.formatMessage({ id: "auth.register.name" })}
+          error={fieldErrors["display_name"]}
         >
-          <Spinner size="lg" />
-        </div>
-      ) : (
-        <>
-          {oauthProviders.length > 0 && (
-            <>
-              <div className="space-y-3">
-                {oauthProviders.map((provider) => (
-                  <OAuthButton
-                    key={provider}
-                    provider={provider}
-                    kratosActionUrl={oauthAction}
-                    csrfToken={csrfToken}
-                    disabled={isSubmitting}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-outline-variant" />
-                <span className="text-label-sm text-on-surface-variant">
-                  <FormattedMessage id="common.or" />
-                </span>
-                <div className="h-px flex-1 bg-outline-variant" />
-              </div>
-            </>
+          {({ id, errorId }) => (
+            <Input
+              id={id}
+              type="text"
+              name="display_name"
+              value={form.display_name}
+              onChange={handleChange("display_name")}
+              autoComplete="name"
+              required
+              error={!!fieldErrors["display_name"]}
+              aria-describedby={errorId}
+            />
           )}
+        </FormField>
 
-          <form onSubmit={handleSubmit} noValidate className="space-y-4">
-            <FormField
-              label={intl.formatMessage({ id: "auth.register.name" })}
-              error={fieldErrors["traits.name"]}
-            >
-              {({ id, errorId }) => (
-                <Input
-                  id={id}
-                  type="text"
-                  name="traits.name"
-                  value={form.name}
-                  onChange={handleChange("name")}
-                  autoComplete="name"
-                  required
-                  error={!!fieldErrors["traits.name"]}
-                  aria-describedby={errorId}
-                />
-              )}
-            </FormField>
+        <FormField
+          label={intl.formatMessage({
+            id: "auth.register.familyName",
+            defaultMessage: "Family name",
+          })}
+          error={fieldErrors["family_display_name"]}
+        >
+          {({ id, errorId }) => (
+            <Input
+              id={id}
+              type="text"
+              name="family_display_name"
+              value={form.family_display_name}
+              onChange={handleChange("family_display_name")}
+              autoComplete="organization"
+              required
+              error={!!fieldErrors["family_display_name"]}
+              aria-describedby={errorId}
+            />
+          )}
+        </FormField>
 
-            <FormField
-              label={intl.formatMessage({ id: "auth.register.email" })}
-              error={fieldErrors["traits.email"]}
-            >
-              {({ id, errorId }) => (
-                <Input
-                  id={id}
-                  type="email"
-                  name="traits.email"
-                  value={form.email}
-                  onChange={handleChange("email")}
-                  autoComplete="email"
-                  required
-                  error={!!fieldErrors["traits.email"]}
-                  aria-describedby={errorId}
-                />
-              )}
-            </FormField>
+        <FormField
+          label={intl.formatMessage({ id: "auth.register.email" })}
+          error={fieldErrors["email"]}
+        >
+          {({ id, errorId }) => (
+            <Input
+              id={id}
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange("email")}
+              autoComplete="email"
+              required
+              error={!!fieldErrors["email"]}
+              aria-describedby={errorId}
+            />
+          )}
+        </FormField>
 
-            <div>
-              <FormField
-                label={intl.formatMessage({ id: "auth.register.password" })}
-                error={fieldErrors["password"]}
-              >
-                {({ id, errorId }) => (
-                  <Input
-                    id={id}
-                    type="password"
-                    name="password"
-                    value={form.password}
-                    onChange={handleChange("password")}
-                    autoComplete="new-password"
-                    required
-                    error={!!fieldErrors["password"]}
-                    aria-describedby={errorId}
-                  />
-                )}
-              </FormField>
-              <PasswordStrengthIndicator password={form.password} />
-            </div>
-
-            {/* ToS acceptance */}
-            <div>
-              <label
-                htmlFor="tos-accept"
-                className="flex cursor-pointer select-none items-start gap-3"
-              >
-                <input
-                  id="tos-accept"
-                  type="checkbox"
-                  name="tos-accept"
-                  checked={form.tosAccepted}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      tosAccepted: e.target.checked,
-                    }))
-                  }
-                  className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer appearance-none rounded-sm bg-surface-container-highest transition-colors checked:bg-primary checked:bg-[image:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%223%22%3E%3Cpath%20d%3D%22M20%206%209%2017l-5-5%22%2F%3E%3C%2Fsvg%3E')] bg-center bg-no-repeat focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-                  aria-describedby={
-                    fieldErrors["tos"] ? "tos-error" : undefined
-                  }
-                />
-                <span className="text-body-sm text-on-surface">
-                  <FormattedMessage
-                    id="auth.register.tosAcceptance"
-                    values={{
-                      termsLink: (
-                        <Link
-                          to="/legal/terms"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-primary hover:underline"
-                        >
-                          <FormattedMessage id="auth.register.terms" />
-                        </Link>
-                      ),
-                      privacyLink: (
-                        <Link
-                          to="/legal/privacy"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-primary hover:underline"
-                        >
-                          <FormattedMessage id="auth.register.privacy" />
-                        </Link>
-                      ),
-                    }}
-                  />
-                </span>
-              </label>
-              {fieldErrors["tos"] && (
-                <p
-                  id="tos-error"
-                  className="mt-1 text-label-sm text-error"
-                  role="alert"
-                  aria-live="assertive"
-                >
-                  {fieldErrors["tos"]}
-                </p>
-              )}
-            </div>
-
-            {/* CAPTCHA verification */}
-            <div>
-              <Turnstile
-                ref={turnstileRef}
-                siteKey={TURNSTILE_SITE_KEY}
-                onSuccess={(token) => {
-                  setCaptchaToken(token);
-                  setFieldErrors((prev) => ({ ...prev, captcha: "" }));
+        {/* ToS acceptance */}
+        <div>
+          <label
+            htmlFor="tos-accept"
+            className="flex cursor-pointer select-none items-start gap-3"
+          >
+            <input
+              id="tos-accept"
+              type="checkbox"
+              name="tos-accept"
+              checked={form.tosAccepted}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, tosAccepted: e.target.checked }))
+              }
+              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer appearance-none rounded-sm bg-surface-container-highest transition-colors checked:bg-primary checked:bg-[image:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%223%22%3E%3Cpath%20d%3D%22M20%206%209%2017l-5-5%22%2F%3E%3C%2Fsvg%3E')] bg-center bg-no-repeat focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+              aria-describedby={fieldErrors["tos"] ? "tos-error" : undefined}
+            />
+            <span className="text-body-sm text-on-surface">
+              <FormattedMessage
+                id="auth.register.tosAcceptance"
+                values={{
+                  termsLink: (
+                    <Link
+                      to="/legal/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary hover:underline"
+                    >
+                      <FormattedMessage id="auth.register.terms" />
+                    </Link>
+                  ),
+                  privacyLink: (
+                    <Link
+                      to="/legal/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary hover:underline"
+                    >
+                      <FormattedMessage id="auth.register.privacy" />
+                    </Link>
+                  ),
                 }}
-                onError={() => setCaptchaToken("")}
-                onExpire={() => setCaptchaToken("")}
-                options={{ theme: "light", size: "normal" }}
               />
-              {fieldErrors["captcha"] && (
-                <p
-                  className="mt-1 text-label-sm text-error"
-                  role="alert"
-                  aria-live="assertive"
-                >
-                  {fieldErrors["captcha"]}
-                </p>
-              )}
-            </div>
-
-            <Button
-              type="submit"
-              variant="primary"
-              className="w-full"
-              loading={isSubmitting}
-              disabled={isSubmitting}
+            </span>
+          </label>
+          {fieldErrors["tos"] && (
+            <p
+              id="tos-error"
+              className="mt-1 text-label-sm text-error"
+              role="alert"
+              aria-live="assertive"
             >
-              <FormattedMessage id="auth.register.submit" />
-            </Button>
-          </form>
-        </>
-      )}
+              {fieldErrors["tos"]}
+            </p>
+          )}
+        </div>
+
+        <Button
+          type="submit"
+          variant="primary"
+          className="w-full"
+          loading={isSubmitting}
+          disabled={isSubmitting}
+        >
+          <FormattedMessage id="auth.register.submit" />
+        </Button>
+      </form>
 
       <p className="text-center text-body-sm text-on-surface-variant">
         <FormattedMessage id="auth.register.haveAccount" />{" "}
