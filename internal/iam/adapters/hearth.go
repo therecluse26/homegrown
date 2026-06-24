@@ -3,10 +3,12 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,39 +17,145 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
-// HearthAdapter implements shared.SessionValidator for the Hearth BFF auth flow.
+// HearthAdapterImpl implements iam.HearthAdapter (admin ops) and shared.SessionValidator
+// (BFF session validation for auth middleware).
 //
-// ValidateSession: sid cookie → session store lookup → local JWT claim decode → shared.Session.
-// Zero calls to Hearth in steady state. Signature trust is established at code-exchange time
-// (server-to-server) and tokens are stored encrypted in Postgres. [ADR-A, ADR-D]
-type HearthAdapter struct {
-	client *hearthsdk.Client
-	store  iam.SessionStore
+// Admin ops use the Hearth SDK admin client authenticated with a static admin token.
+// ValidateSession: sid cookie → session store → local JWT claim decode → shared.Session.
+// Zero steady-state calls to Hearth per request. [ARCH ADR-017, ADR-020]
+type HearthAdapterImpl struct {
+	client     *hearthsdk.Client
+	adminURL   string
+	realmID    string
+	adminToken string // static service-account token (HEARTH_ADMIN_TOKEN)
+	clientID   string // PKCE public client ID e.g. "homegrown-spa"
+	store      iam.SessionStore
+	httpClient *http.Client
 }
 
-// NewHearthAdapter creates a HearthAdapter.
-//   - client: configured Hearth SDK client (realm pre-set)
-//   - store:  AES-256-GCM encrypted Postgres-backed session store
-func NewHearthAdapter(client *hearthsdk.Client, store iam.SessionStore) *HearthAdapter {
-	return &HearthAdapter{
-		client: client,
-		store:  store,
+// NewHearthAdapter creates a HearthAdapterImpl.
+func NewHearthAdapter(
+	client *hearthsdk.Client,
+	adminURL, realmID, adminToken, clientID string,
+	store iam.SessionStore,
+) *HearthAdapterImpl {
+	return &HearthAdapterImpl{
+		client:     client,
+		adminURL:   adminURL,
+		realmID:    realmID,
+		adminToken: adminToken,
+		clientID:   clientID,
+		store:      store,
+		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
-// Client returns the underlying Hearth SDK client.
-// Used by BFF auth endpoints (WS3) for code exchange, token refresh, and logout.
-func (a *HearthAdapter) Client() *hearthsdk.Client { return a.client }
+// Client returns the underlying Hearth SDK client for use by BFF auth endpoints.
+func (a *HearthAdapterImpl) Client() *hearthsdk.Client { return a.client }
 
-// ValidateSession reads the sid cookie value, loads the stored access token,
-// decodes JWT claims locally, and returns a populated shared.Session.
-// No network call to Hearth in steady state. [ADR-A]
-//
-// Returns shared.ErrUnauthorized() when:
-//   - sid absent from session store (deleted on logout or TTL exceeded)
-//   - access token is expired (silent refresh is WS3's responsibility)
-//   - JWT claims are malformed or required claims (sub, oid) are missing
-func (a *HearthAdapter) ValidateSession(ctx context.Context, sid string) (*shared.Session, error) {
+// ─── iam.HearthAdapter ────────────────────────────────────────────────────────
+
+func (a *HearthAdapterImpl) CreateUser(ctx context.Context, email, displayName string) (uuid.UUID, error) {
+	user, err := a.client.Admin(a.adminToken).CreateUser(ctx, hearthsdk.CreateUserRequest{
+		Email:       email,
+		DisplayName: displayName,
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: CreateUser: %v", iam.ErrHearthError, err)
+	}
+	id, err := uuid.Parse(user.ID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: CreateUser: invalid user ID %q", iam.ErrHearthError, user.ID)
+	}
+	return id, nil
+}
+
+func (a *HearthAdapterImpl) CreateOrgForFamily(ctx context.Context, familyDisplayName string) (uuid.UUID, error) {
+	// Hearth SDK admin client has no CreateOrg — call the admin HTTP API directly.
+	body, err := json.Marshal(map[string]string{"name": familyDisplayName})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.adminURL+"/admin/orgs", bytes.NewReader(body))
+	if err != nil {
+		return uuid.Nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Realm-ID", a.realmID)
+	req.Header.Set("Authorization", "Bearer "+a.adminToken)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: CreateOrgForFamily: %v", iam.ErrHearthError, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode >= 400 {
+		return uuid.Nil, fmt.Errorf("%w: CreateOrgForFamily: HTTP %d", iam.ErrHearthError, resp.StatusCode)
+	}
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return uuid.Nil, fmt.Errorf("%w: CreateOrgForFamily: decode response: %v", iam.ErrHearthError, err)
+	}
+	id, err := uuid.Parse(result.ID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: CreateOrgForFamily: invalid org ID %q", iam.ErrHearthError, result.ID)
+	}
+	return id, nil
+}
+
+func (a *HearthAdapterImpl) AssignUserToOrg(ctx context.Context, hearthUserID, hearthOrgID uuid.UUID) error {
+	_, err := a.client.Admin(a.adminToken).AddOrgMember(ctx, hearthOrgID.String(), hearthsdk.AddOrgMemberRequest{
+		UserID: hearthUserID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("%w: AssignUserToOrg: %v", iam.ErrHearthError, err)
+	}
+	return nil
+}
+
+func (a *HearthAdapterImpl) RemoveUserFromOrg(ctx context.Context, hearthUserID, hearthOrgID uuid.UUID) error {
+	if err := a.client.Admin(a.adminToken).RemoveOrgMember(ctx, hearthOrgID.String(), hearthUserID.String()); err != nil {
+		return fmt.Errorf("%w: RemoveUserFromOrg: %v", iam.ErrHearthError, err)
+	}
+	return nil
+}
+
+func (a *HearthAdapterImpl) DeleteUser(ctx context.Context, hearthUserID uuid.UUID) error {
+	if err := a.client.Admin(a.adminToken).DeleteUser(ctx, hearthUserID.String()); err != nil {
+		return fmt.Errorf("%w: DeleteUser: %v", iam.ErrHearthError, err)
+	}
+	return nil
+}
+
+func (a *HearthAdapterImpl) RevokeUserSessions(ctx context.Context, hearthUserID uuid.UUID) error {
+	// Not in the SDK — call the admin HTTP API directly.
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s/admin/users/%s/sessions/revoke", a.adminURL, hearthUserID.String()), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Realm-ID", a.realmID)
+	req.Header.Set("Authorization", "Bearer "+a.adminToken)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: RevokeUserSessions: %v", iam.ErrHearthError, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode >= 400 && resp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("%w: RevokeUserSessions: HTTP %d", iam.ErrHearthError, resp.StatusCode)
+	}
+	return nil
+}
+
+// ─── shared.SessionValidator ──────────────────────────────────────────────────
+
+// ValidateSession reads the sid, loads the stored access token, silently refreshes
+// if within 60 s of expiry, decodes JWT claims locally, and returns a shared.Session.
+// Zero steady-state calls to Hearth per request. [ARCH ADR-017, ADR-020, §11.1]
+func (a *HearthAdapterImpl) ValidateSession(ctx context.Context, sid string) (*shared.Session, error) {
 	sess, err := a.store.Get(ctx, sid)
 	if err != nil {
 		if errors.Is(err, iam.ErrSessionNotFound) {
@@ -56,54 +164,59 @@ func (a *HearthAdapter) ValidateSession(ctx context.Context, sid string) (*share
 		return nil, fmt.Errorf("%w: session store: %v", iam.ErrHearthError, err)
 	}
 
-	// Local expiry check — zero Hearth calls.
-	// The BFF auth endpoints (WS3) are responsible for proactive silent refresh.
-	if time.Now().After(sess.ExpiresAt) {
-		return nil, shared.ErrUnauthorized()
+	accessToken := sess.AccessToken
+
+	// Silent refresh when within 60 s of expiry. [§11.1 step 3]
+	if time.Until(sess.ExpiresAt) < 60*time.Second {
+		newTokens, refreshErr := a.client.RefreshTokens(ctx, a.clientID, sess.RefreshToken)
+		if refreshErr == nil {
+			expiresAt := time.Now().Add(time.Duration(newTokens.ExpiresIn) * time.Second)
+			if updateErr := a.store.UpdateTokens(ctx, sid, newTokens.AccessToken, newTokens.RefreshToken, expiresAt); updateErr == nil {
+				accessToken = newTokens.AccessToken
+			}
+		} else if time.Now().After(sess.ExpiresAt) {
+			// Expired AND refresh failed — token unrecoverable.
+			return nil, shared.ErrUnauthorized()
+		}
+		// Refresh failed but token still valid — proceed with existing token.
 	}
 
-	// Decode JWT claims locally. Trust is established at code-exchange time: the
-	// backend received this token directly from Hearth (server-to-server) and stored
-	// it encrypted. We do not re-verify the Ed25519 signature per request. [ADR-A]
-	claims, err := hearthsdk.ParseClaims(sess.AccessToken)
+	// Decode JWT claims locally — trust established at server-side code exchange. [ADR-017]
+	claims, err := hearthsdk.ParseClaims(accessToken)
 	if err != nil {
 		return nil, shared.ErrUnauthorized()
 	}
 
-	// sub = Hearth user ID. Maps to iam_parents.hearth_user_id. [ADR-B]
+	// sub = Hearth user ID → iam_parents.hearth_user_id [ADR-018]
 	sub := claims.Subject()
 	if sub == "" {
 		return nil, shared.ErrUnauthorized()
 	}
-	// Fast path: HearthUserID is already stored in the session row — use it
-	// as a defence-in-depth check against a tampered token.
-	claimSubID, parseErr := uuid.Parse(sub)
-	if parseErr != nil || claimSubID != sess.HearthUserID {
+	identityID, err := uuid.Parse(sub)
+	if err != nil {
 		return nil, shared.ErrUnauthorized()
 	}
 
-	// oid = Hearth org ID = family_id (org-per-family, ADR-B).
-	// FamilyScope derived from the JWT — no DB JOIN required. [ADR-B, CODING §2.4]
-	// Cross-check against the denormalized family_id stored in the session row.
+	// oid = org ID = family_id under the org-per-family model [ADR-018]
 	oid := claims.OrganizationId()
 	if oid == "" {
 		return nil, shared.ErrUnauthorized()
 	}
-	claimOrgID, parseErr := uuid.Parse(oid)
-	if parseErr != nil || claimOrgID != sess.FamilyID {
+	orgID, err := uuid.Parse(oid)
+	if err != nil {
 		return nil, shared.ErrUnauthorized()
 	}
 
-	// Extract email — PII, never log. [CODING §5.2]
+	// email — PII, never log. [CODING §5.2]
 	var email string
 	if raw := claims.Get("email"); raw != nil {
-		_ = json.Unmarshal(raw, &email) // best-effort; empty string on failure is acceptable
+		_ = json.Unmarshal(raw, &email) // best-effort
 	}
 
 	return &shared.Session{
-		IdentityID: sess.HearthUserID, // JWT sub — maps to iam_parents.hearth_user_id
-		OrgID:      sess.FamilyID,     // JWT oid — maps to family_id (ADR-B)
-		SessionID:  sid,               // opaque sid for current-session detection [15-lifecycle §12]
-		Email:      email,             // PII — never log [CODING §5.2]
+		IdentityID: identityID, // JWT sub → hearth_user_id [ADR-018]
+		OrgID:      orgID,      // JWT oid → family_id [ADR-018]
+		SessionID:  sid,        // BFF sid cookie value [15-lifecycle §12]
+		Email:      email,      // PII — never log [CODING §5.2]
 	}, nil
 }

@@ -154,14 +154,21 @@ func main() {
 	// ── Step 7: Wire IAM domain ───────────────────────────────────────────────────
 	kratosAdapter := iamadapters.NewKratosAdapter(cfg.AuthAdminURL, cfg.AuthPublicURL)
 
-	// Hearth BFF auth adapter: session store + local JWT decode. [ADR-A, ADR-D]
+	// Hearth BFF auth adapter: session store + local JWT decode + admin ops. [ADR-A, ADR-D, ADR-019]
 	hearthClient := hearthsdk.NewClient(cfg.AuthPublicURL, cfg.HearthRealmID)
 	sidSessionStore, err := iam.NewPgSessionStore(db, cfg.HearthSessionKey)
 	if err != nil {
 		slog.Error("failed to create Hearth session store", "error", err)
 		os.Exit(1)
 	}
-	hearthAdapter := iamadapters.NewHearthAdapter(hearthClient, sidSessionStore)
+	hearthAdapter := iamadapters.NewHearthAdapter(
+		hearthClient,
+		cfg.AuthAdminURL,
+		cfg.HearthRealmID,
+		cfg.HearthAdminToken,
+		cfg.HearthClientID,
+		sidSessionStore,
+	)
 
 	familyRepo := iam.NewPgFamilyRepository(db)
 	parentRepo := iam.NewPgParentRepository(db)

@@ -47,6 +47,9 @@ type AppConfig struct {
 	// Hearth SPA client ID (public client, no secret). Example: "homegrown-spa"
 	HearthClientID string
 
+	// Hearth service-account admin token for backend-only admin API calls. [ADR-019]
+	HearthAdminToken string
+
 	// Shared secret for Hearth signed webhook signature validation.
 	AuthWebhookSecret string
 
@@ -200,6 +203,7 @@ func LoadConfig() (*AppConfig, error) {
 
 	hearthRealmID := envOrDefault("HEARTH_REALM_ID", "homegrown")
 	hearthClientID := envOrDefault("HEARTH_CLIENT_ID", "homegrown-spa")
+	hearthAdminToken := envOrDefault("HEARTH_ADMIN_TOKEN", "dev-admin-token")
 
 	authWebhookSecret, err := requiredEnv("AUTH_WEBHOOK_SECRET")
 	if err != nil {
@@ -376,6 +380,7 @@ func LoadConfig() (*AppConfig, error) {
 		AuthAdminURL:           authAdminURL,
 		HearthRealmID:          hearthRealmID,
 		HearthClientID:         hearthClientID,
+		HearthAdminToken:       hearthAdminToken,
 		HearthSessionKey:       hearthSessionKey,
 		AuthWebhookSecret:      authWebhookSecret,
 		CORSAllowedOrigins:     origins,
