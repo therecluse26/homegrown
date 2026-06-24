@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -17,18 +16,15 @@ type authDeps interface {
 	// GetAuthValidator returns the SessionValidator used to validate browser sessions.
 	GetAuthValidator() shared.SessionValidator
 
-	// GetDB returns the database pool for parent+family lookup.
+	// GetDB returns the database pool for parent lookup.
 	GetDB() *gorm.DB
 }
 
-// authLookup holds the result of the JOIN query used to build AuthContext.
-// Defined here (not in iam/) to avoid a circular import: iam imports middleware... no wait,
-// actually iam does not import middleware. But to avoid any future circular dependency risk,
-// we keep this struct middleware-local and use raw SQL. [01-iam §11.1]
+// authLookup holds the result of the query used to build AuthContext.
+// Only parent-specific fields are fetched; family_id comes from the JWT oid claim. [ADR-B]
 type authLookup struct {
 	ParentID        string
 	FamilyID        string
-	IdentityID      string
 	DisplayName     string
 	Email           string
 	IsPrimary       bool
@@ -37,107 +33,114 @@ type authLookup struct {
 	ConsentStatus   string
 }
 
-// kratosSessionCookieName is the default Ory Kratos session cookie name.
-const kratosSessionCookieName = "ory_kratos_session"
+// sidCookieName is the server-issued session cookie name for the Hearth BFF flow. [ADR-D]
+const sidCookieName = "sid"
 
-// Auth returns an Echo middleware that validates Kratos sessions and populates AuthContext.
+// Auth returns an Echo middleware that validates Hearth BFF sessions and populates AuthContext.
 //
-// Flow: [01-iam §11.1]
-//  1. Extract Ory Kratos session cookie from the request
-//  2. Validate session via SessionValidator.ValidateSession (calls Kratos /sessions/whoami)
-//  3. JOIN-query iam_parents + iam_families by kratos_identity_id (RLS bypassed)
-//  4. Build AuthContext with parent + family fields
-//  5. Set AuthContext on Echo context; call next handler
+// Flow: [01-iam §11.1, ADR-A, ADR-D]
+//  1. Extract the sid cookie from the request
+//  2. Validate via SessionValidator.ValidateSession — sid → session store → local JWT decode
+//  3. Derive FamilyScope from session.OrgID (JWT oid claim); no DB JOIN required [ADR-B]
+//  4. Query iam_parents by hearth_user_id (= JWT sub) for parent + family details
+//  5. Build AuthContext and store it on the Echo context; call next handler
 //
 // Returns 401 if:
-//   - No session cookie is present
-//   - Kratos session is invalid or expired
-//   - Parent not found in local DB (orphaned Kratos identity)
+//   - No sid cookie is present
+//   - Session not found in store, or access token expired
+//   - Parent not found by hearth_user_id (unprovisioned identity)
 func Auth(deps authDeps) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			validator := deps.GetAuthValidator()
 			if validator == nil {
-				// No SessionValidator wired yet — should not happen in production.
 				return shared.ErrUnauthorized()
 			}
 
-			// Step 1: Extract session credential — cookie (browser) or X-Session-Token (native/API clients).
-			var kratosRef string
-			if cookie, err := c.Request().Cookie(kratosSessionCookieName); err == nil {
-				kratosRef = fmt.Sprintf("%s=%s", cookie.Name, cookie.Value)
-			} else if token := c.Request().Header.Get("X-Session-Token"); token != "" {
-				// Native API clients (e.g. mobile, load tests) pass the Kratos session token
-				// via X-Session-Token header. Prefix distinguishes it from a cookie string
-				// so the adapter can forward the correct header to Kratos /sessions/whoami.
-				kratosRef = "X-Session-Token:" + token
-			} else {
-				return shared.ErrUnauthorized()
-			}
-
-			// Step 2: Validate session with Kratos.
-			session, err := validator.ValidateSession(c.Request().Context(), kratosRef)
+			// Step 1: Extract the sid cookie. No fallback header — BFF sessions are
+			// always cookie-based; Bearer tokens are not accepted here. [ADR-D]
+			cookie, err := c.Request().Cookie(sidCookieName)
 			if err != nil {
+				return shared.ErrUnauthorized()
+			}
+			sid := cookie.Value
+			if sid == "" {
+				return shared.ErrUnauthorized()
+			}
+
+			// Step 2: Validate the session — sid → store lookup → local JWT decode.
+			// Zero calls to Hearth in steady state. [ADR-A]
+			session, err := validator.ValidateSession(c.Request().Context(), sid)
+			if err != nil {
+				return shared.ErrUnauthorized()
+			}
+
+			// Step 3: Derive FamilyScope from the verified JWT oid claim.
+			// The family_id is embedded in the token — no DB JOIN needed. [ADR-B]
+			if session.OrgID == uuid.Nil {
 				return shared.ErrUnauthorized()
 			}
 
 			db := deps.GetDB()
 
-			// Step 3: JOIN-query to build AuthContext.
-			// No family scope available yet — finding parent by Kratos identity_id. [01-iam §11.1]
+			// Step 4: Look up parent details by hearth_user_id (= JWT sub).
+			// Family details are fetched via JOIN to get subscription tier and COPPA status.
+			// family_id from the JOIN is validated against session.OrgID as a defence-in-depth check.
 			var lookup authLookup
 			err = db.WithContext(c.Request().Context()).Raw(`
 				SELECT
-					p.id           AS parent_id,
-					p.family_id    AS family_id,
-					p.kratos_identity_id AS identity_id,
-					p.display_name AS display_name,
-					p.email        AS email,
-					p.is_primary   AS is_primary,
-					p.is_platform_admin AS is_platform_admin,
-					f.subscription_tier AS tier,
+					p.id                   AS parent_id,
+					p.family_id            AS family_id,
+					p.display_name         AS display_name,
+					p.email                AS email,
+					p.is_primary           AS is_primary,
+					p.is_platform_admin    AS is_platform_admin,
+					f.subscription_tier    AS tier,
 					f.coppa_consent_status AS consent_status
 				FROM iam_parents p
 				JOIN iam_families f ON f.id = p.family_id
-				WHERE p.kratos_identity_id = ?
+				WHERE p.hearth_user_id = ?
 			`, session.IdentityID).Scan(&lookup).Error
 			if err != nil {
 				slog.Error("auth middleware: db error", "error", err)
 				return shared.ErrUnauthorized()
 			}
 
-			// Step 4: Check parent was found.
 			if lookup.ParentID == "" {
-				// Orphaned Kratos identity — parent not found in local DB.
-				// This can happen if the registration webhook failed.
+				// hearth_user_id not found — identity not yet provisioned in local DB.
 				return shared.ErrUnauthorized()
 			}
 
+			// Step 5: Parse UUIDs and verify the JWT family claim matches the DB row.
 			parentID, err := uuid.Parse(lookup.ParentID)
 			if err != nil {
 				return shared.ErrUnauthorized()
 			}
-			familyID, err := uuid.Parse(lookup.FamilyID)
+			dbFamilyID, err := uuid.Parse(lookup.FamilyID)
 			if err != nil {
 				return shared.ErrUnauthorized()
 			}
-			identityID, err := uuid.Parse(lookup.IdentityID)
-			if err != nil {
+			// Defence-in-depth: JWT oid must agree with the DB-stored family_id. [ADR-B]
+			if dbFamilyID != session.OrgID {
+				slog.Warn("auth middleware: JWT oid mismatch with DB family_id",
+					"jwt_oid", session.OrgID,
+					"db_family_id", dbFamilyID,
+				)
 				return shared.ErrUnauthorized()
 			}
 
-			// Step 5: Build and store AuthContext.
+			// Step 6: Build and store AuthContext. FamilyScope comes from the JWT. [ADR-B]
 			auth := &shared.AuthContext{
 				ParentID:           parentID,
-				FamilyID:           familyID,
-				IdentityID:         identityID,
+				FamilyID:           session.OrgID, // from JWT — no extra lookup [ADR-B]
+				IdentityID:         session.IdentityID,
 				DisplayName:        lookup.DisplayName,
 				IsPrimaryParent:    lookup.IsPrimary,
 				IsPlatformAdmin:    lookup.IsPlatformAdmin,
 				SubscriptionTier:   shared.ParseSubscriptionTier(lookup.Tier),
 				CoppaConsentStatus: lookup.ConsentStatus,
-				Email:              lookup.Email,      // PII — not logged [CODING §5.2]
-				SessionID:          session.SessionID, // for current-session detection [15-lifecycle §12]
+				Email:              session.Email, // PII — not logged [CODING §5.2]
+				SessionID:          session.SessionID,
 			}
 			shared.SetAuthContext(c, auth)
 

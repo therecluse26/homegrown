@@ -219,12 +219,13 @@ incomplete, fix the spec first, then continue coding.
 | `make test` | Run `go test ./...` |
 | `make type-check` | Run TypeScript type checker in `frontend/` |
 | `make migrate` | Run pending database migrations (goose) |
-| `make db-reset` | Reset the DEV database (homegrown) + dev Kratos only |
+| `make db-reset` | Reset the DEV database (homegrown) |
 | `make seed` | Re-seed the agent database (idempotent; safe to rerun) |
 | `make seed-full` | Full-scale seed for the dev database (homegrown) — ~1000 families |
-| `make agent-db-reset` | Full agent reset: drop → recreate app DB + Kratos DB, recreate Kratos container, seed |
+| `make agent-db-reset` | Full agent reset: drop → recreate app DB, reset Hearth identity store, seed |
 | `make agent-seed-full` | Basic seed + full-scale seed for the agent database |
-| `make agent-kratos-reset` | Wipe + reinitialise the agent Kratos identity store |
+| `make hearth-bootstrap` | Bootstrap / re-bootstrap the Hearth dev realm via admin API |
+| `make hearth-reset` | Wipe + reinitialise Hearth identity store (clears embedded DB, re-bootstraps) |
 | `make openapi` | Regenerate OpenAPI spec from Go swag annotations |
 | `make generate-types` | Regenerate TypeScript types from OpenAPI spec |
 | `make full-generate` | Run both `openapi` + `generate-types` in sequence |
@@ -236,8 +237,8 @@ incomplete, fix the spec first, then continue coding.
 
 ## Agent Database
 
-The project runs two isolated databases and two Kratos instances so that agent test
-sessions never pollute the developer's working data.
+The project runs two isolated PostgreSQL databases (one dev, one agent) and a single Hearth
+auth server so that agent test sessions never pollute the developer's working data.
 
 ### Two-Database Model
 
@@ -249,12 +250,15 @@ sessions never pollute the developer's working data.
 All seed/reset commands default to `homegrown_agent`. To target the developer database
 explicitly: `make seed DB=homegrown`.
 
-### Two Kratos Instances
+### Hearth Auth Server
 
-| Instance | Public port | Admin port | Used by |
-|----------|-------------|------------|---------|
-| Dev Kratos | `localhost:4933` | `localhost:4934` | Developer login |
-| Agent Kratos | `localhost:4935` | `localhost:4936` | Agent test identities (`seed@example.com`, `admin@example.com`) |
+One Hearth instance serves both dev and agent workflows via the `homegrown` realm.
+
+| Service | Public (OIDC) | Admin API | Dev mailcatcher |
+|---------|---------------|-----------|-----------------|
+| Hearth | `localhost:4933` | `localhost:4934` | `localhost:8420/dev/mail` |
+
+Config: `hearth/hearth.yaml` — committed to git (Config-in-git rule, `[ARCH §6]`).
 
 ### When to Run Each Command
 
@@ -262,7 +266,7 @@ explicitly: `make seed DB=homegrown`.
 |-----------|---------|
 | Starting a new agent test session (data may be stale) | `make seed` |
 | New migrations have been added since last reset | `make agent-db-reset` |
-| Agent login / Kratos identity is broken or stale | `make agent-kratos-reset` |
+| Hearth identity store is broken or stale | `make hearth-reset` |
 | Full clean slate (schema + data + identities) | `make agent-db-reset` |
 | Seed the developer's own DB (rarely needed) | `make seed DB=homegrown` |
 | Full-scale seed for the dev database (homegrown) | `make seed-full` |
@@ -272,11 +276,10 @@ explicitly: `make seed DB=homegrown`.
 
 - **Idempotent** — uses `ON CONFLICT … DO NOTHING` throughout; always safe to rerun
   without duplicating data.
-- **Kratos connectivity** — tries agent Kratos admin API (`localhost:4936`) first, then
-  falls back to dev Kratos (`localhost:4934`). If both are unreachable it falls back to
-  deterministic UUID constants and logs a WARN. Seed data is still inserted correctly; the
-  only difference is that Kratos identities won't exist for those UUIDs (agent login will
-  fail until Kratos is running).
+- **Hearth connectivity** — tries Hearth admin API (`localhost:4934`) to create users/orgs.
+  If unreachable it falls back to deterministic UUID constants and logs a WARN. Seed data is
+  still inserted correctly; the only difference is that Hearth identities won't exist for
+  those UUIDs (agent login will fail until Hearth is running).
 
 ---
 

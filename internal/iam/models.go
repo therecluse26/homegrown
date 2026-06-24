@@ -109,20 +109,21 @@ func (a *SlugArray) Scan(src interface{}) error {
 
 // FamilyModel is the GORM model for the iam_families table.
 type FamilyModel struct {
-	ID                       uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	DisplayName              string     `gorm:"not null"`
-	StateCode                *string    `gorm:"type:char(2)"`
-	LocationRegion           *string
-	PrimaryParentID          *uuid.UUID `gorm:"type:uuid"`
-	PrimaryMethodologySlug   string     `gorm:"not null"`
+	ID                        uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	HearthOrgID               *uuid.UUID `gorm:"type:uuid;uniqueIndex"` // Hearth JWT oid claim [ARCH ADR-018]
+	DisplayName               string     `gorm:"not null"`
+	StateCode                 *string    `gorm:"type:char(2)"`
+	LocationRegion            *string
+	PrimaryParentID           *uuid.UUID `gorm:"type:uuid"`
+	PrimaryMethodologySlug    string     `gorm:"not null"`
 	SecondaryMethodologySlugs SlugArray  `gorm:"type:text[]"`
-	SubscriptionTier         string     `gorm:"not null;default:free"`
-	CoppaConsentStatus       string     `gorm:"not null;default:registered"`
-	CoppaConsentedAt         *time.Time
-	CoppaConsentMethod       *string
-	DeletionRequestedAt      *time.Time
-	CreatedAt                time.Time  `gorm:"not null"`
-	UpdatedAt                time.Time  `gorm:"not null"`
+	SubscriptionTier          string     `gorm:"not null;default:free"`
+	CoppaConsentStatus        string     `gorm:"not null;default:registered"`
+	CoppaConsentedAt          *time.Time
+	CoppaConsentMethod        *string
+	DeletionRequestedAt       *time.Time
+	CreatedAt                 time.Time  `gorm:"not null"`
+	UpdatedAt                 time.Time  `gorm:"not null"`
 }
 
 func (FamilyModel) TableName() string { return "iam_families" }
@@ -162,16 +163,17 @@ func (m *FamilyModel) toDomain() *Family {
 }
 
 // ParentModel is the GORM model for the iam_parents table.
+// kratos_identity_id was dropped in migration 20260624000037000 (WS3/WS4 cutover). [HOM-165]
 type ParentModel struct {
-	ID               uuid.UUID `gorm:"type:uuid;primaryKey"`
-	FamilyID         uuid.UUID `gorm:"type:uuid;not null"`
-	KratosIdentityID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex"`
-	DisplayName      string    `gorm:"not null"`
-	Email            string    `gorm:"not null"`
-	IsPrimary        bool      `gorm:"not null;default:false"`
-	IsPlatformAdmin  bool      `gorm:"not null;default:false"`
-	CreatedAt        time.Time `gorm:"not null"`
-	UpdatedAt        time.Time `gorm:"not null"`
+	ID              uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	FamilyID        uuid.UUID  `gorm:"type:uuid;not null"`
+	HearthUserID    *uuid.UUID `gorm:"type:uuid;uniqueIndex"` // Hearth JWT sub claim [ARCH ADR-018]
+	DisplayName     string     `gorm:"not null"`
+	Email           string     `gorm:"not null"`
+	IsPrimary       bool       `gorm:"not null;default:false"`
+	IsPlatformAdmin bool       `gorm:"not null;default:false"`
+	CreatedAt       time.Time  `gorm:"not null"`
+	UpdatedAt       time.Time  `gorm:"not null"`
 }
 
 func (ParentModel) TableName() string { return "iam_parents" }
@@ -191,7 +193,7 @@ func (m *ParentModel) toDomain() *Parent {
 	return &Parent{
 		ID:              m.ID,
 		FamilyID:        m.FamilyID,
-		IdentityID:      m.KratosIdentityID,
+		HearthUserID:    m.HearthUserID,
 		DisplayName:     m.DisplayName,
 		Email:           m.Email,
 		IsPrimary:       m.IsPrimary,
@@ -291,7 +293,8 @@ type Family struct {
 type Parent struct {
 	ID              uuid.UUID
 	FamilyID        uuid.UUID
-	IdentityID      uuid.UUID
+	IdentityID      uuid.UUID  // legacy: kratos_identity_id
+	HearthUserID    *uuid.UUID // Hearth JWT sub claim [ADR-018]
 	DisplayName     string
 	Email           string // PII — never log [CODING §5.2]
 	IsPrimary       bool
@@ -338,19 +341,30 @@ type KratosIdentity struct {
 
 // ─── Repository Command Types ─────────────────────────────────────────────────
 
+// RegisterCommand is the input for IamService.Register (app-orchestrated Hearth registration).
+// [§10.1, ARCH ADR-019]
+type RegisterCommand struct {
+	Email                  string `json:"email" validate:"required,email"`
+	DisplayName            string `json:"display_name" validate:"required,min=1,max=100"`
+	FamilyDisplayName      string `json:"family_display_name" validate:"required,min=1,max=100"`
+	PrimaryMethodologySlug string `json:"primary_methodology_slug" validate:"required"`
+}
+
 // CreateFamily is the command type for FamilyRepository.Create.
 type CreateFamily struct {
 	DisplayName            string
+	HearthOrgID            uuid.UUID // Hearth org ID set during app-orchestrated registration [ADR-019]
 	PrimaryMethodologySlug string
 }
 
 // CreateParent is the command type for ParentRepository.Create.
 type CreateParent struct {
-	FamilyID    uuid.UUID
-	IdentityID  uuid.UUID
-	DisplayName string
-	Email       string // PII — never log [CODING §5.2]
-	IsPrimary   bool
+	FamilyID     uuid.UUID
+	IdentityID   uuid.UUID  // legacy: kratos_identity_id (zero value if Hearth registration)
+	HearthUserID *uuid.UUID // Hearth JWT sub claim [ADR-018]
+	DisplayName  string
+	Email        string // PII — never log [CODING §5.2]
+	IsPrimary    bool
 }
 
 // CreateStudent is the command type for StudentRepository.Create.

@@ -13,7 +13,7 @@ GOOSE := $(GOBIN)/goose
 DATABASE_URL ?= postgres://homegrown:homegrown@localhost:5932/homegrown
 
 .PHONY: default dev dev-api dev-web docker-up docker-down check check-full lint test type-check a11y \
-        migrate db-reset seed seed-full agent-seed-full agent-db-reset agent-kratos-reset agent-server \
+        migrate db-reset seed seed-full agent-seed-full agent-db-reset hearth-bootstrap hearth-reset agent-server \
         openapi generate-types full-generate audit install-tools install-hooks \
         backup restore-drill hs-setup
 
@@ -75,17 +75,11 @@ a11y:
 migrate:
 	$(GOOSE) -dir migrations postgres "$(DATABASE_URL)" up
 
-# Reset the DEV database (homegrown) + dev Kratos only. For the agent DB, use agent-db-reset.
+# Reset the DEV database (homegrown). For the agent DB, use agent-db-reset.
 db-reset:
 	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'homegrown' AND pid <> pg_backend_pid();"
 	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS homegrown;"
 	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE homegrown;"
-	docker compose stop kratos
-	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'kratos' AND pid <> pg_backend_pid();"
-	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS kratos;"
-	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE kratos;"
-	docker compose run --rm kratos-migrate
-	docker compose up -d --force-recreate kratos
 	$(MAKE) migrate
 
 # ─── Code Generation ─────────────────────────────────────────────────
@@ -135,25 +129,34 @@ agent-seed-full:
 	$(MAKE) seed
 	$(GO) run ./cmd/seed-full/ --db $(DB)
 
-# Full agent reset: drop → recreate app DB + Kratos DB → migrate Kratos schema → seed
+# Full agent reset: drop → recreate app DB → reset Hearth identity store → seed
 agent-db-reset:
 	docker compose exec postgres psql -U homegrown -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'homegrown_agent' AND pid <> pg_backend_pid();"
 	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS homegrown_agent;"
 	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE homegrown_agent;"
-	docker compose stop kratos_agent
-	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS kratos_agent;"
-	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE kratos_agent;"
-	docker compose run --rm -e DSN="postgres://homegrown:homegrown@postgres:5432/kratos_agent?sslmode=disable" kratos-migrate
-	docker compose up -d --force-recreate kratos_agent
+	$(MAKE) hearth-reset
 	$(MAKE) seed
 
-# Wipe and reinitialise only the agent Kratos identity store.
-agent-kratos-reset:
-	docker compose stop kratos_agent
-	docker compose exec postgres psql -U homegrown -d postgres -c "DROP DATABASE IF EXISTS kratos_agent;"
-	docker compose exec postgres psql -U homegrown -d postgres -c "CREATE DATABASE kratos_agent;"
-	docker compose run --rm -e DSN="postgres://homegrown:homegrown@postgres:5432/kratos_agent?sslmode=disable" kratos-migrate
-	docker compose up -d --force-recreate kratos_agent
+# Bootstrap the Hearth dev realm via the admin API (idempotent; safe to re-run).
+# Hearth's --dev flag auto-bootstraps on first start, but this target lets you
+# explicitly (re-)seed the realm config after a hearth-reset.
+hearth-bootstrap:
+	@echo "Waiting for Hearth admin API..."
+	@until wget --spider --quiet http://localhost:4434/health 2>/dev/null; do sleep 2; done
+	curl -sf -X POST http://localhost:4434/admin/bootstrap \
+	  -H "Content-Type: application/json" \
+	  -d '{"realm": "homegrown", "dev": true}'
+	@echo ""
+	@echo "Hearth realm 'homegrown' bootstrapped."
+
+# Wipe and reinitialise the Hearth identity store (clears embedded DB, re-bootstraps realm).
+# Equivalent to the old agent-kratos-reset but for Hearth's embedded storage.
+hearth-reset:
+	docker compose stop hearth
+	docker compose rm -f hearth
+	docker volume rm homegrown-academy_hearth_data 2>/dev/null || true
+	docker compose up -d hearth
+	$(MAKE) hearth-bootstrap
 
 # Start the API server on port 15180 pointed at the agent database.
 agent-server:

@@ -152,6 +152,9 @@ The following patterns are **never** acceptable in committed code:
 | Raw SQL strings in application code (outside migrations) | Bypasses GORM type safety |
 | Raw SDK call in `service.go` (e.g., `stripe.CreateCustomer()`) | Bypasses adapter isolation; blocks vendor swaps and unit testing `[ARCH §4.3]` |
 | Logging PII, tokens, or secrets | Privacy and security violation `[ARCH §1.5]` |
+| Sending OAuth access/refresh tokens in HTTP responses to the browser | Violates BFF pattern; XSS-exploitable `[ARCH ADR-020]` |
+| Calling `HearthAdapter.IntrospectToken()` in a standard request handler | Per-request auth MUST be local JWT verify; introspection reserved for high-sensitivity actions only `[ARCH ADR-017]` |
+| Constructing `FamilyScope` from a DB query when the JWT `oid` claim is available | Redundant DB round-trip; use `NewFamilyScopeFromClaims(oid)` `[ARCH ADR-018]` |
 | `log.Fatal()` outside `main()` | Exits the process without cleanup; use error returns instead |
 | Exported mutable package-level variables | Creates global state that breaks testing and concurrency |
 
@@ -435,7 +438,7 @@ Before writing a new utility, check `internal/shared/` for an existing implement
 | File | Purpose |
 |------|---------|
 | `internal/shared/pagination.go` | Cursor-based and offset pagination helpers |
-| `internal/shared/family_scope.go` | `FamilyScope` type for privacy-enforcing queries |
+| `internal/shared/family_scope.go` | `FamilyScope` type; `NewFamilyScopeFromClaims(oid)` for JWT-based construction; `NewFamilyScopeFromID(id)` for event handlers |
 | `internal/shared/db.go` | Database connection pool acquisition |
 | `internal/shared/cache.go` | `Cache` port + generic `CacheGet[T]`/`CacheSet[T]` helpers |
 | `internal/shared/redis.go` | Redis `Cache` implementation (`redisCache`; factory: `CreateCache`) |
@@ -447,6 +450,42 @@ Before writing a new utility, check `internal/shared/` for an existing implement
 
 MUST NOT duplicate functionality already present in `internal/shared/`. Extend the shared
 module instead.
+
+### §5.4 Authentication & Session Patterns (Hearth)
+
+These rules apply to all code that touches authentication, JWT verification, or BFF session management. `[ARCH ADR-017, ADR-018, ADR-019, ADR-020]`
+
+#### JWKS Caching
+
+- MUST use the Hearth Go SDK's built-in JWKS client for token verification. MUST NOT hand-roll JWKS fetching or Ed25519 verification.
+- JWKS keys MUST be cached by `kid` (key ID). On receipt of a JWT with an unknown `kid`, the JWKS MUST be re-fetched exactly once before rejecting the token.
+- Cached JWKS MUST respect `Cache-Control` response headers from the Hearth JWKS endpoint. A 24-hour hard cap applies regardless of `Cache-Control`.
+- MUST NOT call the Hearth JWKS endpoint on every request. JWKS is a warm in-process cache, not a per-request network call.
+
+#### FamilyScope Construction from JWT
+
+- When a verified JWT is available (i.e., in request handlers and middleware), `FamilyScope` MUST be constructed via `NewFamilyScopeFromClaims(oid)`.
+- MUST NOT construct `FamilyScope` from a DB-queried `family_id` when the JWT `oid` claim is already available and verified.
+- `NewFamilyScopeFromID(id)` is reserved for event handlers, background jobs, and other contexts where no JWT is present (unchanged from pre-Hearth usage).
+- MUST NOT pass an unverified `oid` to `NewFamilyScopeFromClaims`. The JWT MUST have passed `shared.SessionValidator` verification first.
+
+#### BFF Session Rules
+
+- **Access tokens and refresh tokens MUST NEVER appear in logs.** Apply the same treatment as passwords: redact at the logging boundary. `[ARCH ADR-020]`
+- **Access tokens and refresh tokens MUST NEVER be sent to the browser.** Only the opaque `sid` cookie is set on the client. `[S§17.1]`
+- **Access tokens MUST NOT be written to disk** (no file-based session stores; PostgreSQL or Redis only).
+- The `sid` cookie MUST be set with `HttpOnly; Secure; SameSite=Strict` attributes. Missing any of these three attributes is a security bug.
+- `sid` values MUST be generated with `crypto/rand` (minimum 32 bytes). MUST NOT use `math/rand` or UUID for session IDs.
+- Session records (`iam_sessions`) MUST be deleted on logout, not merely expired. Expiry is a background cleanup for abandoned sessions only.
+- Silent refresh (access token near-expiry) MUST use a `SELECT FOR UPDATE` (PostgreSQL) or equivalent locking to prevent concurrent refresh races.
+- `access_token` and `refresh_token` columns in `iam_sessions` MUST be stored encrypted (AES-256-GCM). The encryption key comes from environment config, never from the source tree.
+
+#### Live Introspection Exception
+
+- Per-request auth MUST be local JWT verification (no call to Hearth). `[ARCH ADR-017]`
+- Live token introspection via `HearthAdapter.IntrospectToken()` is permitted ONLY for high-sensitivity actions: account deletion, COPPA consent state changes, and operations that require certainty the token has not been revoked since issue.
+- Each use of `IntrospectToken` MUST be justified by a code comment citing the specific security requirement.
+- MUST NOT add `IntrospectToken` calls to standard CRUD handlers, list/get endpoints, or any endpoint that runs on every page load.
 
 ---
 

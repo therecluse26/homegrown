@@ -11,18 +11,19 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	hearth "github.com/hearth-auth/hearth/sdks/go/hearth"
 	"github.com/joho/godotenv"
 	"github.com/pressly/goose/v3"
 	"gorm.io/driver/postgres"
@@ -240,14 +241,14 @@ const (
 	// Lifecycle
 	lifecycleExport1ID = "01900000-0000-7000-8000-000000000970"
 
-	// Fallback Kratos identity UUIDs when Kratos is unreachable
-	fallbackKratosID       = "01900000-0000-7000-8000-000000000999" // seed parent
-	fallbackFriendKratosID = "01900000-0000-7000-8000-000000000998" // friend parent
-	fallbackAdminKratosID  = "01900000-0000-7000-8000-000000000997" // platform admin
+	// Fallback Hearth user UUIDs when Hearth is unreachable.
+	// ON CONFLICT DO NOTHING means these only land on the very first seed run.
+	fallbackHearthUserID       = "01900000-0000-7000-8000-000000000999" // seed parent
+	fallbackFriendHearthUserID = "01900000-0000-7000-8000-000000000998" // friend parent (no Hearth user created)
+	fallbackAdminHearthUserID  = "01900000-0000-7000-8000-000000000997" // platform admin
 
-	// Kratos admin API base URLs (host ports, not container-internal)
-	kratosAdminURL      = "http://localhost:4934" // dev Kratos (homegrown DB)
-	kratosAgentAdminURL = "http://localhost:4936" // agent Kratos (kratos_agent DB)
+	// Hearth admin API URL (external port 4934 → container 4434).
+	hearthAdminURL = "http://localhost:4934"
 
 	// Stress Family — adversarial layout/overflow test data (range: 02...)
 	// Login: stress@example.com / SeedPassword123!
@@ -270,7 +271,7 @@ const (
 	stressJournal2ID       = "02000000-0000-7000-8000-000000000042" // emoji + unicode + RTL mix
 	stressJournal3ID       = "02000000-0000-7000-8000-000000000043" // minimal content (missing optional richness)
 	stressReadingListID    = "02000000-0000-7000-8000-000000000051" // empty reading list
-	fallbackStressKratosID = "02000000-0000-7000-8000-000000000999"
+	fallbackStressHearthUserID = "02000000-0000-7000-8000-000000000999"
 )
 
 func main() {
@@ -322,13 +323,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── Kratos identities ─────────────────────────────────────────────────
-	seedKratosID := ensureKratosIdentity(dbName)
-	adminKratosID := ensureAdminKratosIdentity(dbName)
-	stressKratosID := ensureStressKratosIdentity(dbName)
+	// ── Hearth identities ─────────────────────────────────────────────────
+	seedHearthUserID, adminHearthUserID, stressHearthUserID := ensureHearthUsers()
 
 	// ── Seed all domains ──────────────────────────────────────────────────
-	if err := seedAll(db, seedKratosID, adminKratosID, stressKratosID); err != nil {
+	if err := seedAll(db, seedHearthUserID, adminHearthUserID, stressHearthUserID); err != nil {
 		slog.Error("seeding failed", "err", err)
 		os.Exit(1)
 	}
@@ -430,112 +429,118 @@ func runMigrations(db *sql.DB) error {
 	return nil
 }
 
-// ─── Kratos identity ──────────────────────────────────────────────────────────
+// ─── Hearth identity ──────────────────────────────────────────────────────────
 
-type kratosIdentityBody struct {
-	SchemaID    string         `json:"schema_id"`
-	Traits      map[string]any `json:"traits"`
-	Credentials map[string]any `json:"credentials"`
-}
+// hearthBootstrapAdmin calls POST /admin/bootstrap in dev mode and returns an
+// AdminClient ready to call the realm "homegrown". Returns nil when Hearth is
+// unreachable — callers must fall back to deterministic UUID constants.
+func hearthBootstrapAdmin() *hearth.AdminClient {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-// kratosLookupOrCreate attempts to find or create a Kratos identity at baseURL.
-// Returns (id, true) on success, ("", false) if the server is unreachable.
-func kratosLookupOrCreate(baseURL, email string) (string, bool) {
-	resp, err := http.Get(baseURL + "/admin/identities?credentials_identifier=" + url.QueryEscape(email))
+	resp, err := hearth.Bootstrap(ctx, hearthAdminURL)
 	if err != nil {
-		return "", false
+		slog.Warn("Hearth admin bootstrap failed", "err", err)
+		return nil
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Warn("close resp body", "err", err)
-		}
-	}()
-
-	body, _ := io.ReadAll(resp.Body)
-	var identities []map[string]any
-	if jsonErr := json.Unmarshal(body, &identities); jsonErr == nil && len(identities) > 0 {
-		if id, ok := identities[0]["id"].(string); ok && id != "" {
-			slog.Info("found existing Kratos identity", "email", email, "id", id)
-			return id, true
-		}
-	}
-
-	// Create new identity
-	payload := kratosIdentityBody{
-		SchemaID: "user",
-		Traits:   map[string]any{"email": email, "name": email},
-		Credentials: map[string]any{
-			"password": map[string]any{
-				"config": map[string]any{
-					"password": "SeedPassword123!",
-				},
-			},
-		},
-	}
-	payloadBytes, _ := json.Marshal(payload)
-
-	createResp, createErr := http.Post(
-		baseURL+"/admin/identities",
-		"application/json",
-		strings.NewReader(string(payloadBytes)),
-	)
-	if createErr != nil {
-		return "", false
-	}
-	defer func() {
-		if err := createResp.Body.Close(); err != nil {
-			slog.Warn("close create resp body", "err", err)
-		}
-	}()
-
-	createBody, _ := io.ReadAll(createResp.Body)
-	var created map[string]any
-	if jsonErr := json.Unmarshal(createBody, &created); jsonErr == nil {
-		if id, ok := created["id"].(string); ok && id != "" {
-			slog.Info("created Kratos identity", "email", email, "id", id)
-			return id, true
-		}
-	}
-	return "", false
+	client := hearth.NewClient(hearthAdminURL, "homegrown")
+	return client.Admin(resp.AccessToken)
 }
 
-// kratosURLOrder returns Kratos admin base URLs in priority order for the given
-// database name. The agent database uses agent Kratos first; everything else
-// (including the dev "homegrown" database) tries dev Kratos first so that
-// identities land in the correct instance and dev-app login works.
-func kratosURLOrder(dbName string) []string {
-	if dbName == "homegrown_agent" {
-		return []string{kratosAgentAdminURL, kratosAdminURL}
+// hearthFindOrCreateUser finds an existing Hearth user by email or creates a new one.
+// Returns (userID, true) on success, (fallbackUUID, false) on error.
+func hearthFindOrCreateUser(admin *hearth.AdminClient, email, displayName, fallbackUUID string) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	user, err := admin.CreateUser(ctx, hearth.CreateUserRequest{
+		Email:       email,
+		DisplayName: displayName,
+	})
+	if err == nil {
+		slog.Info("created Hearth user", "email", email, "id", user.ID)
+		return user.ID, true
 	}
-	return []string{kratosAdminURL, kratosAgentAdminURL}
+
+	var apiErr *hearth.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != 409 {
+		slog.Warn("Hearth CreateUser failed", "email", email, "err", err)
+		return fallbackUUID, false
+	}
+
+	// 409: user already exists — scan list to retrieve the existing ID.
+	var cursor string
+	for {
+		page, listErr := admin.ListUsers(ctx, hearth.ListOptions{Limit: 200, Cursor: cursor})
+		if listErr != nil {
+			slog.Warn("Hearth ListUsers failed", "err", listErr)
+			return fallbackUUID, false
+		}
+		for _, u := range page.Items {
+			if u.Email == email {
+				slog.Info("found existing Hearth user", "email", email, "id", u.ID)
+				return u.ID, true
+			}
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		cursor = *page.NextCursor
+	}
+
+	slog.Warn("Hearth user conflict but not found in list", "email", email)
+	return fallbackUUID, false
 }
 
-// ensureKratosIdentity creates or retrieves the seed@example.com identity.
-// Tries the appropriate Kratos instance first based on the target database.
-func ensureKratosIdentity(dbName string) string {
-	for _, baseURL := range kratosURLOrder(dbName) {
-		if id, ok := kratosLookupOrCreate(baseURL, "seed@example.com"); ok {
-			return id
-		}
+// hearthEnsureOrgMember adds a user to a Hearth org (orgID = family UUID).
+// Hearth auto-creates the org on the first AddOrgMember call for that orgID.
+// 409 is treated as idempotent success.
+func hearthEnsureOrgMember(admin *hearth.AdminClient, orgID, userID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := admin.AddOrgMember(ctx, orgID, hearth.AddOrgMemberRequest{
+		UserID: userID,
+		Role:   "owner",
+	})
+	if err == nil {
+		return
 	}
-	slog.Warn("Kratos unreachable, using fallback identity UUID for seed parent")
-	return fallbackKratosID
+	var apiErr *hearth.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == 409 {
+		return // membership already exists — idempotent
+	}
+	slog.Warn("Hearth AddOrgMember failed", "org", orgID, "user", userID, "err", err)
 }
 
-// ensureAdminKratosIdentity creates or retrieves the admin@example.com identity.
-func ensureAdminKratosIdentity(dbName string) string {
-	for _, baseURL := range kratosURLOrder(dbName) {
-		if id, ok := kratosLookupOrCreate(baseURL, "admin@example.com"); ok {
-			return id
-		}
+// ensureHearthUsers bootstraps Hearth and provisions the seed identities.
+// Returns (seedUserID, adminUserID, stressUserID) — falls back to deterministic
+// UUIDs when Hearth is unreachable so the DB seed can proceed offline.
+func ensureHearthUsers() (seedUserID, adminUserID, stressUserID string) {
+	seedUserID = fallbackHearthUserID
+	adminUserID = fallbackAdminHearthUserID
+	stressUserID = fallbackStressHearthUserID
+
+	admin := hearthBootstrapAdmin()
+	if admin == nil {
+		slog.Warn("Hearth unreachable — seeding with fallback Hearth user UUIDs")
+		return
 	}
-	slog.Warn("Kratos unreachable, using fallback identity UUID for admin parent")
-	return fallbackAdminKratosID
+
+	seedUserID, _ = hearthFindOrCreateUser(admin, "seed@example.com", "Seed Parent", fallbackHearthUserID)
+	adminUserID, _ = hearthFindOrCreateUser(admin, "admin@example.com", "Platform Admin", fallbackAdminHearthUserID)
+	stressUserID, _ = hearthFindOrCreateUser(admin, "stress@example.com", "Stress Parent", fallbackStressHearthUserID)
+
+	// Provision Hearth orgs (one org per family, keyed by the family UUID).
+	hearthEnsureOrgMember(admin, seedFamilyID, seedUserID)
+	hearthEnsureOrgMember(admin, platformFamilyID, adminUserID)
+	hearthEnsureOrgMember(admin, stressFamilyID, stressUserID)
+	return
 }
 
 // ─── Seed orchestrator ────────────────────────────────────────────────────────
 
-func seedAll(db *gorm.DB, seedKratosID, adminKratosID, stressKratosID string) error {
+func seedAll(db *gorm.DB, seedHearthUserID, adminHearthUserID, stressHearthUserID string) error {
 	// Look up platform publisher ID (seeded by migration, not by seeder)
 	var platformPublisherID string
 	if err := db.Raw("SELECT id FROM mkt_publishers WHERE slug = 'homegrown-academy'").
@@ -550,8 +555,8 @@ func seedAll(db *gorm.DB, seedKratosID, adminKratosID, stressKratosID string) er
 	}
 
 	steps := []seedStep{
-		{"PlatformSetup", func(db *gorm.DB) error { return seedPlatformSetup(db, adminKratosID) }},
-		{"IAM", func(db *gorm.DB) error { return seedIAM(db, seedKratosID) }},
+		{"PlatformSetup", func(db *gorm.DB) error { return seedPlatformSetup(db, adminHearthUserID) }},
+		{"IAM", func(db *gorm.DB) error { return seedIAM(db, seedHearthUserID) }},
 		{"IAMExtended", seedIAMExtended},
 		{"Onboard", seedOnboard},
 		{"Social", seedSocial},
@@ -573,7 +578,7 @@ func seedAll(db *gorm.DB, seedKratosID, adminKratosID, stressKratosID string) er
 		{"LearnerProfile", seedLearnerProfile},
 		{"Planning", seedPlan},
 		{"Lifecycle", seedLifecycle},
-		{"StressFamily", func(db *gorm.DB) error { return seedStressFamily(db, stressKratosID) }},
+		{"StressFamily", func(db *gorm.DB) error { return seedStressFamily(db, stressHearthUserID) }},
 	}
 
 	for _, step := range steps {
@@ -597,16 +602,16 @@ func bypassRLS(db *gorm.DB, fn func(tx *gorm.DB) error) error {
 
 // ─── Platform setup seed ──────────────────────────────────────────────────────
 
-func seedPlatformSetup(db *gorm.DB, adminKratosID string) error {
+func seedPlatformSetup(db *gorm.DB, adminHearthUserID string) error {
 	return bypassRLS(db, func(tx *gorm.DB) error {
-		// Platform family
+		// Platform family — hearth_org_id = platformFamilyID (org-per-family design)
 		if err := tx.Exec(`
 			INSERT INTO iam_families
 				(id, display_name, state_code, primary_methodology_slug,
-				 subscription_tier, coppa_consent_status)
-			VALUES (?, 'Platform Team', 'TX', 'classical', 'premium', 'consented')
+				 subscription_tier, coppa_consent_status, hearth_org_id)
+			VALUES (?, 'Platform Team', 'TX', 'classical', 'premium', 'consented', ?)
 			ON CONFLICT (id) DO NOTHING`,
-			platformFamilyID,
+			platformFamilyID, platformFamilyID,
 		).Error; err != nil {
 			return fmt.Errorf("insert platform family: %w", err)
 		}
@@ -614,11 +619,11 @@ func seedPlatformSetup(db *gorm.DB, adminKratosID string) error {
 		// Platform admin parent (is_platform_admin=true)
 		if err := tx.Exec(`
 			INSERT INTO iam_parents
-				(id, family_id, kratos_identity_id, display_name, email,
+				(id, family_id, hearth_user_id, display_name, email,
 				 is_primary, is_platform_admin)
 			VALUES (?, ?, ?, 'Platform Admin', 'admin@example.com', true, true)
 			ON CONFLICT (id) DO NOTHING`,
-			adminParentID, platformFamilyID, adminKratosID,
+			adminParentID, platformFamilyID, adminHearthUserID,
 		).Error; err != nil {
 			return fmt.Errorf("insert admin parent: %w", err)
 		}
@@ -638,20 +643,21 @@ func seedPlatformSetup(db *gorm.DB, adminKratosID string) error {
 
 // ─── IAM seed ─────────────────────────────────────────────────────────────────
 
-func seedIAM(db *gorm.DB, kratosID string) error {
+func seedIAM(db *gorm.DB, seedHearthUserID string) error {
 	return bypassRLS(db, func(tx *gorm.DB) error {
-		// Families (primary_parent_id set after parents are inserted)
+		// Families — hearth_org_id = family_id (org-per-family design)
 		if err := tx.Exec(`
 			INSERT INTO iam_families
 				(id, display_name, state_code, primary_methodology_slug, subscription_tier,
-				 coppa_consent_status, coppa_consented_at, coppa_consent_method)
+				 coppa_consent_status, coppa_consented_at, coppa_consent_method, hearth_org_id)
 			VALUES
 				(?, 'The Seed Family',   'TX', 'charlotte-mason', 'premium',
-				 'consented', NOW(), 'credit_card_verification'),
+				 'consented', NOW(), 'credit_card_verification', ?),
 				(?, 'The Friend Family', 'TX', 'classical',       'free',
-				 'registered', NULL, NULL)
+				 'registered', NULL, NULL, ?)
 			ON CONFLICT (id) DO NOTHING`,
-			seedFamilyID, friendFamilyID,
+			seedFamilyID, seedFamilyID,
+			friendFamilyID, friendFamilyID,
 		).Error; err != nil {
 			return fmt.Errorf("insert families: %w", err)
 		}
@@ -659,13 +665,13 @@ func seedIAM(db *gorm.DB, kratosID string) error {
 		// Parents
 		if err := tx.Exec(`
 			INSERT INTO iam_parents
-				(id, family_id, kratos_identity_id, display_name, email, is_primary)
+				(id, family_id, hearth_user_id, display_name, email, is_primary)
 			VALUES
 				(?, ?, ?, 'Seed Parent',   'seed@example.com',   true),
 				(?, ?, ?, 'Friend Parent', 'friend@example.com', true)
 			ON CONFLICT (id) DO NOTHING`,
-			seedParentID, seedFamilyID, kratosID,
-			friendParentID, friendFamilyID, fallbackFriendKratosID,
+			seedParentID, seedFamilyID, seedHearthUserID,
+			friendParentID, friendFamilyID, fallbackFriendHearthUserID,
 		).Error; err != nil {
 			return fmt.Errorf("insert parents: %w", err)
 		}
@@ -2663,17 +2669,6 @@ func stressListingID(n int) string   { return fmt.Sprintf("02000000-0000-7000-80
 func stressActLogID(n int) string    { return fmt.Sprintf("02000000-0000-7000-8000-0000000002%02d", n) }
 func stressSchedItemID(n int) string { return fmt.Sprintf("02000000-0000-7000-8000-0000000003%02d", n) }
 
-// ─── Stress Kratos identity ───────────────────────────────────────────────────
-
-func ensureStressKratosIdentity(dbName string) string {
-	for _, baseURL := range kratosURLOrder(dbName) {
-		if id, ok := kratosLookupOrCreate(baseURL, "stress@example.com"); ok {
-			return id
-		}
-	}
-	slog.Warn("Kratos unreachable, using fallback identity UUID for stress parent")
-	return fallbackStressKratosID
-}
 
 // ─── Stress family seed ───────────────────────────────────────────────────────
 //
@@ -2701,8 +2696,8 @@ func ensureStressKratosIdentity(dbName string) string {
 //                    activity log 4 with duration_minutes=9999 (~7 days);
 //                    activity log 10 with duration_minutes=1 (minimum).
 
-func seedStressFamily(db *gorm.DB, stressKratosID string) error {
-	if err := seedStressFamilyIAM(db, stressKratosID); err != nil {
+func seedStressFamily(db *gorm.DB, stressHearthUserID string) error {
+	if err := seedStressFamilyIAM(db, stressHearthUserID); err != nil {
 		return err
 	}
 	if err := seedStressFamilyOnboard(db); err != nil {
@@ -2720,31 +2715,33 @@ func seedStressFamily(db *gorm.DB, stressKratosID string) error {
 	return seedStressFamilyPlan(db)
 }
 
-func seedStressFamilyIAM(db *gorm.DB, stressKratosID string) error {
+func seedStressFamilyIAM(db *gorm.DB, stressHearthUserID string) error {
 	return bypassRLS(db, func(tx *gorm.DB) error {
 		const (
 			longFamilyName = "Müller-García-Nakamura-Okonkwo-Johanssen-Papadopoulos International Cooperative Homeschooling Family of Greater Metropolitan Austin — Classical Trivium & Charlotte Mason"
 			longParentName = "Administrateur Pédagogique Principal de la Grande Famille Müller-García-Nakamura-Okonkwo, Responsable de l'Éducation Maison Extraordinairement Dénommée"
 		)
 
+		// Stress family — hearth_org_id = stressFamilyID (org-per-family design)
 		if err := tx.Exec(`
 			INSERT INTO iam_families
 				(id, display_name, state_code, primary_methodology_slug,
-				 subscription_tier, coppa_consent_status, coppa_consented_at, coppa_consent_method)
+				 subscription_tier, coppa_consent_status, coppa_consented_at, coppa_consent_method,
+				 hearth_org_id)
 			VALUES (?, ?, 'TX', 'charlotte-mason', 'free',
-				'consented', NOW(), 'credit_card_verification')
+				'consented', NOW(), 'credit_card_verification', ?)
 			ON CONFLICT (id) DO NOTHING`,
-			stressFamilyID, longFamilyName,
+			stressFamilyID, longFamilyName, stressFamilyID,
 		).Error; err != nil {
 			return fmt.Errorf("insert stress family: %w", err)
 		}
 
 		if err := tx.Exec(`
 			INSERT INTO iam_parents
-				(id, family_id, kratos_identity_id, display_name, email, is_primary)
+				(id, family_id, hearth_user_id, display_name, email, is_primary)
 			VALUES (?, ?, ?, ?, 'stress@example.com', true)
 			ON CONFLICT (id) DO NOTHING`,
-			stressParentID, stressFamilyID, stressKratosID, longParentName,
+			stressParentID, stressFamilyID, stressHearthUserID, longParentName,
 		).Error; err != nil {
 			return fmt.Errorf("insert stress parent: %w", err)
 		}

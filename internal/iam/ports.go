@@ -33,11 +33,16 @@ type IamService interface {
 
 	// ─── Commands ─────────────────────────────────────────────────────────────
 
-	// HandlePostRegistration handles the Kratos post-registration webhook.
+	// Register performs app-orchestrated registration via the Hearth admin SDK.
+	// Creates Hearth user+org, then iam_families+iam_parents inside BypassRLSTransaction.
+	// Returns the new family_id. [§10.1, ARCH ADR-019]
+	Register(ctx context.Context, cmd RegisterCommand) (uuid.UUID, error)
+
+	// HandlePostRegistration handles the Kratos post-registration webhook (legacy).
 	// Creates family + parent atomically. Publishes FamilyCreated. [§10.1]
 	HandlePostRegistration(ctx context.Context, payload KratosWebhookPayload) error
 
-	// HandlePostLogin handles the Kratos post-login webhook.
+	// HandlePostLogin handles the Kratos post-login webhook (legacy).
 	// Syncs Kratos identity traits (email, name) to local DB.
 	HandlePostLogin(ctx context.Context, payload KratosWebhookPayload) error
 
@@ -174,6 +179,11 @@ type ParentRepository interface {
 	// auth middleware and login webhook before FamilyScope is constructed.
 	FindByKratosID(ctx context.Context, kratosIdentityID uuid.UUID) (*Parent, error)
 
+	// FindByHearthUserID finds a parent by Hearth user ID (JWT sub claim).
+	// NOT family-scoped — used by Hearth BFF auth middleware before FamilyScope is constructed.
+	// [ARCH ADR-018]
+	FindByHearthUserID(ctx context.Context, hearthUserID uuid.UUID) (*Parent, error)
+
 	// FindByID finds a specific parent by ID. Family-scoped.
 	FindByID(ctx context.Context, scope *shared.FamilyScope, parentID uuid.UUID) (*Parent, error)
 
@@ -275,6 +285,47 @@ type KratosAdapter interface {
 	// InitiateAccountRecovery sends a Kratos recovery email to the given address.
 	// Email enumeration is prevented by the caller. [15-data-lifecycle §13]
 	InitiateAccountRecovery(ctx context.Context, email string) error
+}
+
+// ─── Hearth Adapter Interface ─────────────────────────────────────────────────
+
+// HearthAdapter defines the admin-level Hearth operations used by the IAM service for
+// app-orchestrated registration and lifecycle management. The adapter also implements
+// shared.SessionValidator for auth middleware via ValidateSession.
+// HearthAdapterImpl is in internal/iam/adapters/hearth.go. [CODING §8.1, ARCH ADR-019]
+type HearthAdapter interface {
+	// ─── Admin Operations ────────────────────────────────────────────────────
+
+	// CreateUser creates a new Hearth user for a registering parent.
+	// Returns the hearth_user_id (= JWT sub claim). [§10.1 step 2]
+	CreateUser(ctx context.Context, email, displayName string) (uuid.UUID, error)
+
+	// CreateOrgForFamily creates a new Hearth org for the new family.
+	// Returns the hearth_org_id (= JWT oid claim). [§10.1 step 3]
+	CreateOrgForFamily(ctx context.Context, familyDisplayName string) (uuid.UUID, error)
+
+	// AssignUserToOrg assigns a Hearth user to a family org (sets oid in future JWTs).
+	// [§10.1 step 4]
+	AssignUserToOrg(ctx context.Context, hearthUserID, hearthOrgID uuid.UUID) error
+
+	// RemoveUserFromOrg removes a co-parent from a family org.
+	// Invalidates their oid claim on next token refresh. [§10.3]
+	RemoveUserFromOrg(ctx context.Context, hearthUserID, hearthOrgID uuid.UUID) error
+
+	// DeleteUser deletes a Hearth user identity.
+	// Used as compensating action during registration rollback or family deletion.
+	DeleteUser(ctx context.Context, hearthUserID uuid.UUID) error
+
+	// RevokeUserSessions revokes all active BFF sessions for a Hearth user.
+	// Used when removing a co-parent or locking an account.
+	RevokeUserSessions(ctx context.Context, hearthUserID uuid.UUID) error
+}
+
+// HearthTokenInfo holds the result of a Hearth token introspection.
+type HearthTokenInfo struct {
+	Active bool
+	Sub    uuid.UUID
+	Exp    time.Time
 }
 
 // ─── Cross-Domain Consumer Interfaces ────────────────────────────────────────

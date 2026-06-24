@@ -74,7 +74,7 @@ Each domain SHOULD be independently deployable and maintainable. Domains communi
 
 The following concerns span all domains and MUST be addressed consistently:
 
-- **Authentication & Authorization** — Every request MUST be authenticated (except public Discovery content) and authorized against the permission model (§3).
+- **Authentication & Authorization** — Every request MUST be authenticated (except public Discovery content) and authorized against the permission model (§3). Authentication uses OIDC/PKCE with BFF session management; per-request auth is local JWT verification. `[ARCH ADR-017, ADR-020]`
 - **Audit Logging** — Security-sensitive operations MUST produce audit records.
 - **Rate Limiting** — All public-facing endpoints MUST enforce rate limits.
 - **Data Privacy** — All domains MUST comply with the privacy model (§17.2).
@@ -187,7 +187,7 @@ route groups and `middleware.RequirePremium` for Premium-only gates.
 
 | Event | Requirements |
 |-------|-------------|
-| **Creation** | Requires one parent with verified email. Family account is created simultaneously with the first parent user. |
+| **Creation** | Requires one parent with verified email. Family account and identity-provider record are created atomically via the app-orchestrated registration flow (OIDC). `[ARCH ADR-019]` |
 | **Add co-parent** | Primary parent invites via email. Invited user creates credentials and joins the family. |
 | **Add student** | Any parent in the family creates a Student Profile. |
 | **Remove co-parent** | Primary parent MAY remove a co-parent. The co-parent's personal content (posts, messages) SHOULD be preserved but disassociated from the family. |
@@ -1090,12 +1090,17 @@ Marketplace Listing
 
 ### 17.1 Security
 
+- Authentication MUST use OIDC Authorization Code flow with PKCE. The platform MUST NOT use implicit flow or embed client secrets in the browser. `[ARCH ADR-017]`
 - Authentication MUST support multi-factor authentication (MFA) as an option for all users and SHOULD encourage it during onboarding.
 - All data in transit MUST be encrypted using TLS 1.2 or higher.
 - All sensitive data at rest (credentials, payment information, PII) MUST be encrypted.
 - API endpoints MUST implement authentication, authorization, input validation, and rate limiting.
 - The platform MUST undergo penetration testing before public launch and at least annually thereafter.
-- Session management MUST enforce reasonable timeouts and support remote session revocation (e.g., "log out all devices").
+- **Session management**: The platform MUST use the BFF (Backend-for-Frontend) session pattern. `[ARCH ADR-020]`
+  - OAuth access and refresh tokens MUST be stored server-side only. MUST NOT be sent to the browser, written to disk, or included in logs.
+  - The browser MUST receive only an opaque `sid` session cookie (`HttpOnly; Secure; SameSite=Strict`).
+  - Session management MUST enforce reasonable timeouts and support remote session revocation ("log out all devices").
+  - Logout MUST revoke the refresh token at the identity provider (RFC 7009) and delete the server-side session record.
 - The platform MUST maintain a vulnerability disclosure program.
 
 ### 17.2 Privacy `[V§7, V§12]`

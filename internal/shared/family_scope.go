@@ -41,6 +41,14 @@ func NewFamilyScopeFromID(familyID uuid.UUID) FamilyScope {
 	return newFamilyScope(familyID)
 }
 
+// NewFamilyScopeFromClaims creates a FamilyScope from a verified JWT oid claim.
+// oid = the Hearth org ID, which equals the family_id under the org-per-family model.
+// Use this in the auth middleware to derive the scope directly from the JWT —
+// no DB JOIN required. [ADR-B, CODING §2.4]
+func NewFamilyScopeFromClaims(oid uuid.UUID) FamilyScope {
+	return newFamilyScope(oid)
+}
+
 // GetFamilyScope extracts a FamilyScope from the Echo context's AuthContext.
 // Returns an error if AuthContext is not present (i.e. handler is not behind auth middleware).
 func GetFamilyScope(c echo.Context) (FamilyScope, error) {

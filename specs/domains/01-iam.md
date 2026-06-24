@@ -100,6 +100,7 @@ CREATE TYPE iam_invite_status_enum AS ENUM (
 -- Top-level family entity [S§3.1.1]
 CREATE TABLE iam_families (
     id                        UUID PRIMARY KEY DEFAULT uuidv7(),
+    hearth_org_id             UUID NOT NULL UNIQUE,                      -- Hearth org ID (= oid JWT claim) [ARCH ADR-018]
     display_name              TEXT NOT NULL,                              -- [S§6.2]
     state_code                CHAR(2),                                   -- for compliance [S§6.2]
     location_region           TEXT,                                      -- coarse location [S§7.8]
@@ -131,9 +132,9 @@ CREATE INDEX idx_iam_families_deletion ON iam_families(deletion_requested_at)
 CREATE TABLE iam_parents (
     id                 UUID PRIMARY KEY DEFAULT uuidv7(),
     family_id          UUID NOT NULL REFERENCES iam_families(id) ON DELETE CASCADE,
-    kratos_identity_id UUID NOT NULL UNIQUE,                  -- links to Ory Kratos identity
+    hearth_user_id     UUID NOT NULL UNIQUE,                  -- Hearth user ID (= sub JWT claim) [ARCH ADR-018]
     display_name       TEXT NOT NULL,                          -- [S§6.2]
-    email              TEXT NOT NULL,                          -- synced from Kratos traits
+    email              TEXT NOT NULL,                          -- synced from Hearth claims
     is_primary         BOOLEAN NOT NULL DEFAULT false,         -- [S§3.1.1]
     is_platform_admin  BOOLEAN NOT NULL DEFAULT false,         -- [S§3.1.5, 11-safety §9]
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -141,7 +142,8 @@ CREATE TABLE iam_parents (
 );
 
 CREATE INDEX idx_iam_parents_family ON iam_parents(family_id);
-CREATE INDEX idx_iam_parents_kratos ON iam_parents(kratos_identity_id);
+CREATE INDEX idx_iam_parents_hearth_user ON iam_parents(hearth_user_id);
+CREATE INDEX idx_iam_families_hearth_org ON iam_families(hearth_org_id);
 
 -- Student profiles [S§3.1.3]
 -- Students do NOT have credentials — they are parent-mediated [S§3.3]
@@ -281,8 +283,11 @@ middleware. Error responses follow `AppError` → HTTP status mapping (§12).
 | 7 | `DELETE` | `/v1/families/students/:id` | Required | Remove student profile | 204, 401, 404 |
 | 8 | `POST` | `/v1/families/consent` | Required | Submit COPPA consent | 200, 401, 422 |
 | 9 | `GET` | `/v1/families/consent` | Required | Get consent status | 200, 401 |
-| W1 | `POST` | `/hooks/kratos/post-registration` | Webhook secret | Post-registration: create family + parent | 200, 400, 500 |
-| W2 | `POST` | `/hooks/kratos/post-login` | Webhook secret | Post-login: update last_login, sync traits | 200, 400 |
+| A1 | `GET` | `/v1/auth/login` | None | Initiate OIDC/PKCE flow → redirect to Hearth | 302 |
+| A2 | `GET` | `/v1/auth/callback` | None (PKCE state) | Exchange code → create BFF session + `sid` cookie | 302, 400 |
+| A3 | `POST` | `/v1/auth/logout` | Required (`sid`) | Revoke refresh token, delete session, clear cookie | 204 |
+| A4 | `POST` | `/v1/auth/register` | None | App-orchestrated registration: create Hearth user/org + family row | 201, 400, 409, 500 |
+| W1 | `POST` | `/hooks/hearth/webhook` | Webhook signature (HMAC) | Hearth signed webhook backstop (user.* events) | 200, 400, 500 |
 
 **Phase 1 total**: 9 public endpoints + 2 webhooks = 11 routes.
 
@@ -461,13 +466,15 @@ type IamService interface {
 
     // ─── Commands ──────────────────────────────────────────────────────
 
-    // HandlePostRegistration handles Kratos post-registration webhook.
-    // Creates family + parent atomically. Publishes FamilyCreated.
-    HandlePostRegistration(ctx context.Context, payload KratosWebhookPayload) error
+    // RegisterFamily orchestrates new family registration (app-orchestrated, not webhook-driven).
+    // Creates Hearth user + org + assigns membership, then creates iam_families + iam_parents
+    // atomically via BypassRLSTransaction. Publishes FamilyCreated.
+    // [ARCH ADR-019]
+    RegisterFamily(ctx context.Context, cmd RegisterFamilyCommand) (*RegistrationResult, error)
 
-    // HandlePostLogin handles Kratos post-login webhook.
-    // Syncs traits (email, name) from Kratos to local DB.
-    HandlePostLogin(ctx context.Context, payload KratosWebhookPayload) error
+    // HandleHearthWebhook handles signed Hearth user.* webhook events (backstop for
+    // out-of-band Hearth admin-console changes). Verifies signature before processing.
+    HandleHearthWebhook(ctx context.Context, payload HearthWebhookPayload) error
 
     // UpdateFamilyProfile updates family profile fields (display_name, state_code, location_region).
     // Does NOT handle methodology or subscription changes.
@@ -569,10 +576,10 @@ type ParentRepository interface {
     // and co-parent invite acceptance).
     Create(ctx context.Context, cmd CreateParent) (*Parent, error)
 
-    // FindByKratosID finds a parent by Kratos identity ID. NOT family-scoped — used by
-    // auth middleware before scope is constructed. This is the lookup path
+    // FindByHearthUserID finds a parent by Hearth user ID (= JWT sub claim). NOT family-scoped —
+    // used by auth middleware before scope is constructed. This is the lookup path
     // for every authenticated request.
-    FindByKratosID(ctx context.Context, kratosIdentityID uuid.UUID) (*Parent, error)
+    FindByHearthUserID(ctx context.Context, hearthUserID uuid.UUID) (*Parent, error)
 
     // ListByFamily lists all parents in a family. Family-scoped.
     ListByFamily(ctx context.Context, scope *FamilyScope) ([]Parent, error)
@@ -634,7 +641,7 @@ type CoParentInviteRepository interface {
 **FamilyScope exception documentation**: Methods marked "NOT family-scoped" include a
 comment explaining why. These exceptions are:
 
-1. **`FindByKratosID`** — runs in auth middleware before FamilyScope is constructed
+1. **`FindByHearthUserID`** — runs in auth middleware before FamilyScope is constructed (JWT `sub` → parent lookup)
 2. **`Create` (family/parent)** — entity does not exist yet; no family to scope to
 3. **`FindByToken` (invites)** — accepting user is not yet a family member
 4. **`ExpireStaleInvites`** — batch cleanup job, crosses family boundaries by design
@@ -642,47 +649,73 @@ comment explaining why. These exceptions are:
 
 ---
 
-## §7 Kratos Adapter Interface
+## §7 Hearth Adapter Interface
 
-Defined in `internal/iam/ports.go`. The adapter wraps Kratos SDK calls and returns domain types
-only. `[CODING §8.1, ARCH §4.2]`
+> **Note**: Previously named `KratosAdapter` (Ory Kratos). Replaced by `HearthAdapter` as part of the Hearth auth migration. `[ARCH ADR-017, ADR-018, ADR-019]`
+
+Defined in `internal/iam/ports.go`. The adapter wraps Hearth Go SDK calls and returns domain
+types only. `[CODING §8.1, ARCH §4.2]`
+
+Two distinct responsibilities:
+- **Admin operations** (registration, org management, identity deletion) — calls the Hearth admin SDK.
+- **JWT verification** — delegated to `shared.SessionValidator`; IAM only inspects the resulting claims.
 
 ```go
 // internal/iam/ports.go
 
-type KratosAdapter interface {
-    // ValidateSession validates a Kratos session cookie/token.
-    // Returns the Kratos session if valid.
-    ValidateSession(ctx context.Context, sessionCookie string) (*KratosSession, error)
+type HearthAdapter interface {
+    // ─── Admin Operations (registration + lifecycle) ────────────────────
 
-    // GetIdentity retrieves identity traits (email, name) from Kratos.
-    GetIdentity(ctx context.Context, identityID uuid.UUID) (*KratosIdentity, error)
+    // CreateUser creates a new Hearth user for a parent.
+    // Returns the hearth_user_id (= JWT sub claim).
+    CreateUser(ctx context.Context, email, displayName string) (uuid.UUID, error)
 
-    // DeleteIdentity deletes a Kratos identity (used during family deletion).
-    DeleteIdentity(ctx context.Context, identityID uuid.UUID) error
+    // CreateOrgForFamily creates a new Hearth org and returns the hearth_org_id (= JWT oid claim).
+    CreateOrgForFamily(ctx context.Context, familyDisplayName string) (uuid.UUID, error)
 
-    // RevokeSessions revokes all active sessions for an identity (used when removing a co-parent).
-    RevokeSessions(ctx context.Context, identityID uuid.UUID) error
+    // AssignUserToOrg assigns a Hearth user to a family org (sets oid in future JWTs).
+    AssignUserToOrg(ctx context.Context, hearthUserID, hearthOrgID uuid.UUID) error
+
+    // RemoveUserFromOrg removes a Hearth user from a family org.
+    // Used when removing a co-parent. Invalidates their oid claim on next token refresh.
+    RemoveUserFromOrg(ctx context.Context, hearthUserID, hearthOrgID uuid.UUID) error
+
+    // DeleteUser deletes a Hearth user identity (used during family deletion or registration rollback).
+    DeleteUser(ctx context.Context, hearthUserID uuid.UUID) error
+
+    // RevokeUserSessions revokes all active sessions for a Hearth user.
+    // Used when removing a co-parent.
+    RevokeUserSessions(ctx context.Context, hearthUserID uuid.UUID) error
+
+    // ─── Introspection (high-sensitivity actions only) ──────────────────
+
+    // IntrospectToken performs live token introspection at the Hearth server.
+    // ONLY called for high-sensitivity actions (account deletion, COPPA-state changes).
+    // Normal per-request auth uses local JWT verification via shared.SessionValidator.
+    IntrospectToken(ctx context.Context, accessToken string) (*HearthTokenInfo, error)
 }
 
-// Domain types returned by KratosAdapter — NOT Kratos SDK types
-
-type KratosSession struct {
-    IdentityID      uuid.UUID `json:"identity_id"`
-    Active          bool      `json:"active"`
-    AuthenticatedAt time.Time `json:"authenticated_at"`
+// HearthClaims — the verified claims extracted from a Hearth JWT.
+// Populated by shared.SessionValidator (via JWKS verify), consumed by auth middleware.
+// NOT the same as the HearthAdapter — this is the result of local verification.
+type HearthClaims struct {
+    Sub   uuid.UUID  `json:"sub"`   // Hearth user ID → hearth_user_id
+    Oid   uuid.UUID  `json:"oid"`   // Hearth org ID → hearth_org_id / family_id
+    Email string     `json:"email"` // Synced from Hearth claims (MUST NOT be logged)
+    Roles []string   `json:"roles"` // e.g., ["platform_admin"]
+    Exp   time.Time  `json:"-"`     // Expiry (verified by SDK)
 }
 
-type KratosIdentity struct {
-    ID    uuid.UUID `json:"id"`
-    Email string    `json:"email"`
-    Name  string    `json:"name"`
+type HearthTokenInfo struct {
+    Active    bool      `json:"active"`
+    Sub       uuid.UUID `json:"sub"`
+    Exp       time.Time `json:"exp"`
 }
 ```
 
-**Implementation**: `KratosAdapterImpl` in `internal/iam/adapters/kratos.go`. Uses the Kratos
-Admin API (internal sidecar URL, not public) via `net/http`. The adapter maps Kratos errors to
-`AppError` variants — no Kratos SDK types leak beyond this file.
+**Implementation**: `HearthAdapterImpl` in `internal/iam/adapters/hearth.go`. Uses the Hearth
+Go SDK (`github.com/hearth-auth/hearth/sdks/go`) for admin operations. Maps Hearth SDK errors
+to `AppError` variants — no SDK types leak beyond this file. `[ARCH §4.3]`
 
 ---
 
@@ -808,45 +841,65 @@ type CoParentInviteResponse struct {
 ### §8.3 Internal Types (not API-facing)
 
 ```go
-// KratosWebhookPayload — Payload from Kratos webhooks
-type KratosWebhookPayload struct {
-    IdentityID uuid.UUID    `json:"identity_id"`
-    Traits     KratosTraits `json:"traits"`
+// RegisterFamilyCommand — used by POST /v1/auth/register (app-orchestrated) [ARCH ADR-019]
+type RegisterFamilyCommand struct {
+    Email            string
+    DisplayName      string
+    FamilyName       string
+    PrimaryMethodologySlug string
 }
 
-type KratosTraits struct {
+// RegistrationResult — returned after successful registration
+type RegistrationResult struct {
+    FamilyID     uuid.UUID
+    ParentID     uuid.UUID
+    HearthOrgID  uuid.UUID  // created org (= oid claim)
+    HearthUserID uuid.UUID  // created user (= sub claim)
+}
+
+// HearthWebhookPayload — Payload from Hearth signed webhooks (backstop) [ARCH ADR-019]
+type HearthWebhookPayload struct {
+    EventType string        `json:"event_type"` // e.g., "user.deleted", "user.updated"
+    UserID    uuid.UUID     `json:"user_id"`    // = hearth_user_id
+    Traits    HearthTraits  `json:"traits"`
+    Signature string        `json:"signature"`  // HMAC-SHA256 signature — MUST be verified
+}
+
+type HearthTraits struct {
     Email string `json:"email"`
     Name  string `json:"name"`
 }
 
 // Family — Internal family representation (from DB, not returned directly to API)
 type Family struct {
-    ID                     uuid.UUID
-    DisplayName            string
-    StateCode              *string
-    LocationRegion         *string
-    PrimaryParentID        *uuid.UUID
-    PrimaryMethodologyID   uuid.UUID
+    ID                      uuid.UUID
+    HearthOrgID             uuid.UUID  // = JWT oid claim [ARCH ADR-018]
+    DisplayName             string
+    StateCode               *string
+    LocationRegion          *string
+    PrimaryParentID         *uuid.UUID
+    PrimaryMethodologyID    uuid.UUID
     SecondaryMethodologyIDs []uuid.UUID
-    SubscriptionTier       string
-    CoppaConsentStatus     CoppaConsentStatus
-    CoppaConsentedAt       *time.Time
-    CoppaConsentMethod     *string
-    DeletionRequestedAt    *time.Time
-    CreatedAt              time.Time
-    UpdatedAt              time.Time
+    SubscriptionTier        string
+    CoppaConsentStatus      CoppaConsentStatus
+    CoppaConsentedAt        *time.Time
+    CoppaConsentMethod      *string
+    DeletionRequestedAt     *time.Time
+    CreatedAt               time.Time
+    UpdatedAt               time.Time
 }
 
 // Parent — Internal parent representation
 type Parent struct {
-    ID               uuid.UUID
-    FamilyID         uuid.UUID
-    IdentityID       uuid.UUID
-    DisplayName      string
-    Email            string
-    IsPrimary        bool
-    CreatedAt        time.Time
-    UpdatedAt        time.Time
+    ID              uuid.UUID
+    FamilyID        uuid.UUID
+    HearthUserID    uuid.UUID // = JWT sub claim [ARCH ADR-018]
+    DisplayName     string
+    Email           string
+    IsPrimary       bool
+    IsPlatformAdmin bool
+    CreatedAt       time.Time
+    UpdatedAt       time.Time
 }
 
 // Student — Internal student representation
@@ -1010,26 +1063,30 @@ Step-by-step processes for each lifecycle event. `[S§3.4, S§16.3]`
 
 ### §10.1 Creation
 
-Triggered by Kratos post-registration webhook. `[S§6.1]`
+App-orchestrated via `POST /v1/auth/register`. `[S§6.1, ARCH ADR-019]`
 
-1. Kratos completes registration (email/password or OAuth)
-2. Kratos calls `POST /hooks/kratos/post-registration` with identity ID + traits
-3. Service begins database transaction
-4. Creates `iam_families` row with:
-   - `display_name` from Kratos traits (parent's name + " Family" or just name)
-   - `primary_methodology_id` set to a platform default (e.g., "traditional")
+1. Frontend submits registration form to `POST /v1/auth/register` (app backend).
+2. Backend calls Hearth admin SDK: `HearthAdapter.CreateUser(email, displayName)` → `hearth_user_id`.
+3. Backend calls Hearth admin SDK: `HearthAdapter.CreateOrgForFamily(familyName)` → `hearth_org_id`.
+4. Backend calls Hearth admin SDK: `HearthAdapter.AssignUserToOrg(hearth_user_id, hearth_org_id)`.
+5. Backend begins `BypassRLSTransaction` (family does not exist yet).
+6. Creates `iam_families` row with:
+   - `hearth_org_id` from step 3
+   - `display_name` from registration input
+   - `primary_methodology_slug` set to platform default (e.g., "traditional")
    - `coppa_consent_status` = `Registered`
-   - All other fields at defaults
-5. Creates `iam_parents` row with:
+7. Creates `iam_parents` row with:
    - `family_id` pointing to new family
-   - `kratos_identity_id` from webhook payload
+   - `hearth_user_id` from step 2
    - `is_primary` = true
-6. Updates `iam_families.primary_parent_id` to the new parent's ID
-7. Commits transaction
-8. Publishes `FamilyCreated` event (consumed by `social::` to create profile, `onboard::` to start wizard)
+8. Updates `iam_families.primary_parent_id` to the new parent's ID.
+9. Commits transaction.
+10. Publishes `FamilyCreated` event (consumed by `social::` to create profile, `onboard::` to start wizard).
+11. Returns 201 Created; frontend redirects to `GET /v1/auth/login` to begin OIDC/PKCE flow.
 
-**Atomicity**: Steps 4-7 are a single database transaction. If any step fails, the entire
-registration is rolled back.
+**Atomicity**: Steps 2–9 use a two-phase commit pattern. Hearth calls (steps 2–4) happen before the DB transaction. If the DB transaction fails, the backend calls `HearthAdapter.DeleteUser(hearth_user_id)` as a compensating action. If `DeleteUser` also fails, the incident is logged and an alert is raised — the orphaned Hearth user cannot acquire a `family_id` org membership, so no access is possible.
+
+**Signed webhook backstop**: Hearth fires `user.*` signed webhooks for out-of-band admin changes. The `POST /hooks/hearth/webhook` handler verifies the HMAC signature and syncs state (trait updates, admin-deleted users). The signature MUST be verified before any processing.
 
 ### §10.2 Add Co-Parent (Phase 2)
 
@@ -1122,30 +1179,41 @@ and extractors). This section documents IAM-specific behavior only.
 
 ### §11.1 AuthContext Population
 
+> Updated for Hearth auth. `[ARCH ADR-017, ADR-018, ADR-020]`
+
 IAM owns the *population* of `AuthContext` (type defined in 00-core §7.2). The auth
-middleware (`internal/middleware/auth.go`, defined in 00-core §13.1) calls IAM's
-`KratosAdapter.ValidateSession()` and queries IAM repositories to build the `AuthContext`.
+middleware (`internal/middleware/auth.go`, defined in 00-core §13.1) uses the BFF session
+model: reads the `sid` cookie, loads the server-side session, verifies the JWT locally,
+and queries IAM repositories for profile data.
 
 **Population flow**:
 
-1. Auth middleware extracts session cookie from request
-2. Calls `KratosAdapter.ValidateSession()` (§7) → returns `kratos_identity_id`
-3. Calls `ParentRepository.FindByKratosID()` (§6) → returns parent record
-4. Calls `FamilyRepository.FindByID()` (§6) → returns family record
-5. Constructs `AuthContext` from parent + family data:
+1. Auth middleware reads `sid` cookie from request. Returns 401 if absent.
+2. Loads server-side session from session store by `sid` → obtains `{access_token, expiry}`.
+   Returns 401 if session not found or deleted.
+3. If access token is near expiry (within 60s), silently refreshes using stored refresh token
+   via Hearth token endpoint. Updates session store atomically.
+4. Verifies access-token JWT signature locally using cached JWKS (via `shared.SessionValidator`).
+   Returns 401 if signature invalid or token expired.
+5. Extracts `HearthClaims` from the verified JWT: `sub` (= `hearth_user_id`), `oid` (= `family_id`).
+6. Calls `ParentRepository.FindByHearthUserID()` (§6) → returns parent record (display name, is_primary, is_platform_admin).
+7. Calls `FamilyRepository.FindByID()` (§6) → returns family record (subscription_tier, coppa_status).
+8. Constructs `AuthContext`:
    - `ParentID` from parent record
-   - `FamilyID` from parent record
-   - `IdentityID` from auth provider session
+   - `FamilyID` from `oid` JWT claim (verified) **and** parent record (cross-checked)
+   - `HearthUserID` from `sub` JWT claim
    - `IsPrimaryParent` from parent record
    - `IsPlatformAdmin` from parent record `[S§3.1.5, 11-safety §9]`
    - `SubscriptionTier` from family record
    - `Email` from parent record (NOT logged — PII)
    - `CoppaConsentStatus` from family record (as string, for RequireCoppaConsent)
+9. `FamilyScope` is derived from the verified `oid` claim via `NewFamilyScopeFromClaims(oid)` — no additional DB query needed for scope construction.
 
 **Behavior**: Returns 401 Unauthorized if:
-- No session cookie present
-- Kratos session is invalid or expired
-- Parent not found in local database (orphaned Kratos identity)
+- No `sid` cookie present
+- Session not found in session store
+- JWT signature invalid or expired
+- Parent not found in local database (should not occur with app-orchestrated registration; backstop: return 401 and emit a `OrphanedHearthUser` alert event)
 
 ### §11.2 COPPA Consent Check
 
@@ -1219,7 +1287,9 @@ var (
     ErrPremiumRequired = errors.New("premium subscription required")
 
     // ─── Infrastructure ───────────────────────────────────────────────
-    ErrKratosError = errors.New("kratos communication error")
+    ErrHearthError         = errors.New("hearth communication error")
+    ErrSessionNotFound     = errors.New("session not found")
+    ErrRegistrationFailed  = errors.New("registration failed — Hearth user may need cleanup")
 )
 
 // InvalidConsentTransitionError is a structured error for invalid COPPA transitions.
@@ -1254,7 +1324,9 @@ func (e *InvalidConsentTransitionError) Error() string {
 | `ErrDeletionAlreadyRequested` | 409 Conflict | `deletion_already_requested` |
 | `ErrNoPendingDeletion` | 404 Not Found | `no_pending_deletion` |
 | `ErrPremiumRequired` | 402 Payment Required | `premium_required` |
-| `ErrKratosError` | 502 Bad Gateway | `auth_service_unavailable` |
+| `ErrHearthError` | 502 Bad Gateway | `auth_service_unavailable` |
+| `ErrSessionNotFound` | 401 Unauthorized | `session_not_found` |
+| `ErrRegistrationFailed` | 500 Internal Server Error | `registration_failed` |
 | GORM/database errors | 500 Internal Server Error | `internal_error` |
 
 **API error responses** MUST NOT expose internal details. The error codes above are returned
@@ -1503,6 +1575,87 @@ acceptance criteria for code review and integration testing.
 - [ ] Integration test: family deletion cascade
 - [ ] Integration test: co-parent invite token expires after 72 hours
 - [ ] Integration test: COPPA withdrawal triggers student data export
+
+---
+
+## §18 Hearth Identity Linkage
+
+*Added for Hearth auth migration. `[ARCH ADR-017, ADR-018, ADR-019, ADR-020]`*
+
+### §18.1 Identity Link Model
+
+```
+Hearth Organization  ←──  iam_families.hearth_org_id (= JWT oid claim)
+        │
+        └──  Hearth User  ←──  iam_parents.hearth_user_id (= JWT sub claim)
+```
+
+Every authenticated request carries a JWT. The middleware flow is:
+
+1. `sid` cookie → server-side session store → `access_token`
+2. Local JWT verify (JWKS) → `{sub, oid, email, roles}`
+3. `oid` → `NewFamilyScopeFromClaims(oid)` → `FamilyScope` (no DB query)
+4. `sub` → `ParentRepository.FindByHearthUserID(sub)` → `Parent` (one DB query)
+5. `Parent.FamilyID` → `FamilyRepository.FindByID(familyID)` → `Family` (one DB query)
+
+Total: **1 crypto verify + 2 DB reads** per authenticated request (down from 2 network calls in Kratos era).
+
+### §18.2 Session Store Schema
+
+Server-side BFF sessions are stored in PostgreSQL. `[ARCH ADR-020]`
+
+```sql
+-- =============================================================================
+-- Migration: YYYYMMDD_create_iam_sessions.sql
+-- =============================================================================
+
+CREATE TABLE iam_sessions (
+    sid              TEXT PRIMARY KEY,               -- opaque random ID (set in cookie)
+    hearth_user_id   UUID NOT NULL,                  -- links to iam_parents.hearth_user_id
+    family_id        UUID NOT NULL,                  -- denormalised for fast lookup
+    access_token     TEXT NOT NULL,                  -- encrypted at rest
+    refresh_token    TEXT NOT NULL,                  -- encrypted at rest; MUST NOT appear in logs
+    token_expires_at TIMESTAMPTZ NOT NULL,           -- access token expiry
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_iam_sessions_hearth_user ON iam_sessions(hearth_user_id);
+CREATE INDEX idx_iam_sessions_family ON iam_sessions(family_id);
+CREATE INDEX idx_iam_sessions_expires ON iam_sessions(token_expires_at);
+```
+
+**Security constraints**:
+- `access_token` and `refresh_token` columns MUST be encrypted at rest (AES-256-GCM, key from env).
+- These columns MUST NEVER appear in application logs (treated the same as passwords). `[CODING §5.2 — BFF session rules]`
+- Expired sessions are cleaned up by a background job (every 30 min).
+- `sid` values MUST be generated with 32 bytes of cryptographic randomness (`crypto/rand`).
+
+### §18.3 NewFamilyScopeFromClaims
+
+`internal/shared/family_scope.go` gains a `NewFamilyScopeFromClaims` constructor:
+
+```go
+// NewFamilyScopeFromClaims constructs a FamilyScope from a verified JWT oid claim.
+// The oid claim is set by Hearth to the family's hearth_org_id, which equals the
+// iam_families.id. No DB query required.
+// [ARCH ADR-018]
+func NewFamilyScopeFromClaims(oid uuid.UUID) *FamilyScope {
+    return &FamilyScope{FamilyID: oid}
+}
+```
+
+This is the authoritative way to construct `FamilyScope` from a Hearth JWT. The existing
+`NewFamilyScopeFromID` constructor (used in event handlers where JWT is unavailable) remains.
+
+### §18.4 Cross-Reference
+
+| ADR | What it decides |
+|-----|----------------|
+| [ADR-017](/HOM/issues/HOM-169) | Local JWT verify replaces per-request introspection |
+| [ADR-018](/HOM/issues/HOM-169) | `family_id` in `oid` claim (org-per-family) |
+| [ADR-019](/HOM/issues/HOM-169) | App-orchestrated registration; webhooks as backstop |
+| [ADR-020](/HOM/issues/HOM-169) | BFF token storage; browser holds no OAuth tokens |
 
 ---
 

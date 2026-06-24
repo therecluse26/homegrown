@@ -1,6 +1,6 @@
 module github.com/homegrown-academy/homegrown-academy
 
-go 1.25.11
+go 1.26.2
 
 require (
 	// Sentry (optional error tracking) [ARCH §2.14]
@@ -39,6 +39,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.2
 	github.com/go-pdf/fpdf v0.9.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hearth-auth/hearth/sdks/go v1.0.13
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
@@ -163,8 +164,8 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260618152121-87f3d3e198d3 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
 	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

@@ -34,16 +34,20 @@ type AppConfig struct {
 	// Example: "redis://localhost:6879"
 	RedisURL string
 
-	// ─── Auth Provider ───────────────────────────────────────────────
-	// Auth provider admin API URL (internal sidecar, never public).
-	// Example: "http://kratos:4434"
-	AuthAdminURL string
-
-	// Auth provider public API URL (browser-facing, session validation).
-	// Example: "http://kratos:4433"
+	// ─── Auth Provider (Hearth) ──────────────────────────────────────
+	// Hearth public URL — OIDC / token endpoints. Example: "http://localhost:4433"
 	AuthPublicURL string
 
-	// Shared secret for auth provider webhook signature validation.
+	// Hearth admin URL — internal admin API. Example: "http://localhost:4934"
+	AuthAdminURL string
+
+	// Hearth realm ID. Example: "homegrown"
+	HearthRealmID string
+
+	// Hearth SPA client ID (public client, no secret). Example: "homegrown-spa"
+	HearthClientID string
+
+	// Shared secret for Hearth signed webhook signature validation.
 	AuthWebhookSecret string
 
 	// ─── CORS ───────────────────────────────────────────────────────
@@ -153,6 +157,11 @@ type AppConfig struct {
 	// Thorn Safer API base URL. Default: "https://safer.thorn.org".
 	ThornBaseURL string
 
+	// ─── Session Encryption ──────────────────────────────────────────
+	// AES-256 key (32 bytes) for encrypting access and refresh tokens at rest in iam_sessions.
+	// Loaded from HEARTH_SESSION_KEY (hex-encoded). A dev default is used when not set. [ADR-D]
+	HearthSessionKey []byte
+
 	// ─── Recommendations ─────────────────────────────────────────────
 	// HMAC secret for anonymizing family IDs in recs_anonymized_interactions.
 	// Optional — empty value disables the anonymization task (dev mode). [13-recs §14.3]
@@ -179,15 +188,18 @@ func LoadConfig() (*AppConfig, error) {
 		return nil, err
 	}
 
+	authPublicURL, err := requiredEnv("AUTH_PUBLIC_URL")
+	if err != nil {
+		return nil, err
+	}
+
 	authAdminURL, err := requiredEnv("AUTH_ADMIN_URL")
 	if err != nil {
 		return nil, err
 	}
 
-	authPublicURL, err := requiredEnv("AUTH_PUBLIC_URL")
-	if err != nil {
-		return nil, err
-	}
+	hearthRealmID := envOrDefault("HEARTH_REALM_ID", "homegrown")
+	hearthClientID := envOrDefault("HEARTH_CLIENT_ID", "homegrown-spa")
 
 	authWebhookSecret, err := requiredEnv("AUTH_WEBHOOK_SECRET")
 	if err != nil {
@@ -344,6 +356,13 @@ func LoadConfig() (*AppConfig, error) {
 	// Optional recs anonymization secret (omit to disable anonymization task)
 	recsAnonymizationSecret := envOrDefault("RECS_ANONYMIZATION_SECRET", "")
 
+	// Session token encryption key: 32-byte AES-256 key, hex-encoded in HEARTH_SESSION_KEY.
+	// An insecure dev default is used when the variable is absent; production requires it. [ADR-D]
+	hearthSessionKey, err := loadHearthSessionKey(env)
+	if err != nil {
+		return nil, err
+	}
+
 	origins := strings.Split(corsOrigins, ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
@@ -353,8 +372,11 @@ func LoadConfig() (*AppConfig, error) {
 		DatabaseURL:            databaseURL,
 		DatabaseMaxConnections: maxConns,
 		RedisURL:               redisURL,
-		AuthAdminURL:           authAdminURL,
 		AuthPublicURL:          authPublicURL,
+		AuthAdminURL:           authAdminURL,
+		HearthRealmID:          hearthRealmID,
+		HearthClientID:         hearthClientID,
+		HearthSessionKey:       hearthSessionKey,
 		AuthWebhookSecret:      authWebhookSecret,
 		CORSAllowedOrigins:     origins,
 		ServerHost:             serverHost,
@@ -404,4 +426,30 @@ func envOrDefault(key, defaultVal string) string {
 		return val
 	}
 	return defaultVal
+}
+
+// loadHearthSessionKey loads the 32-byte AES-256 session encryption key.
+// In production the key MUST be set via HEARTH_SESSION_KEY (64 hex chars = 32 bytes).
+// A fixed insecure dev default is used otherwise; warning logged for non-dev environments.
+func loadHearthSessionKey(env Environment) ([]byte, error) {
+	const devDefault = "0000000000000000000000000000000000000000000000000000000000000000"
+	raw := envOrDefault("HEARTH_SESSION_KEY", "")
+	if raw == "" {
+		if env != EnvironmentDevelopment {
+			slog.Warn("HEARTH_SESSION_KEY not set; using insecure dev default — set a real key in production")
+		}
+		raw = devDefault
+	}
+	if len(raw) != 64 {
+		return nil, fmt.Errorf("HEARTH_SESSION_KEY must be 64 hex characters (32 bytes), got %d", len(raw))
+	}
+	key := make([]byte, 32)
+	for i := range 32 {
+		b, err := strconv.ParseUint(raw[i*2:i*2+2], 16, 8)
+		if err != nil {
+			return nil, fmt.Errorf("HEARTH_SESSION_KEY contains invalid hex at position %d: %w", i*2, err)
+		}
+		key[i] = byte(b)
+	}
+	return key, nil
 }

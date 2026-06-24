@@ -1,0 +1,52 @@
+# Hearth authentication server — Homegrown Academy
+# https://github.com/hearth-auth/hearth
+#
+# Embedded storage: no external PostgreSQL required.
+# Dev mailcatcher UI: http://localhost:8420/dev/mail
+
+server:
+  host: 0.0.0.0
+  port: 4433
+  admin_port: 4434
+  mailcatcher_port: 8420
+
+storage:
+  type: embedded
+  path: /var/lib/hearth/db
+
+# Built-in dev mailcatcher; no external SMTP needed in development.
+email:
+  type: dev
+
+logging:
+  level: info
+  format: text
+
+realms:
+  - id: homegrown
+    name: Homegrown Academy
+
+    tokens:
+      # Short-lived access tokens; JWTs verified locally via JWKS (no per-request introspection).
+      access_ttl: 15m
+      refresh_ttl: 720h
+      signing_alg: EdDSA   # Ed25519 / OKP — exposed at /.well-known/jwks.json
+
+    clients:
+      # Public SPA client — PKCE required, no client_secret stored in browser.
+      - id: homegrown-spa
+        name: Homegrown Academy SPA
+        type: public
+        pkce_required: true
+        redirect_uris:
+          - http://localhost:5673/auth/callback
+        post_logout_redirect_uris:
+          - http://localhost:5673/
+        scopes:
+          - openid
+          - email
+          - profile
+          - offline_access
+        flows:
+          - authorization_code
+          - refresh_token

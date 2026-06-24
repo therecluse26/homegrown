@@ -117,6 +117,9 @@ func (m *mockIamService) ListStudents(_ context.Context, _ *shared.FamilyScope) 
 func (m *mockIamService) GetConsentStatus(_ context.Context, _ *shared.FamilyScope) (*ConsentStatusResponse, error) {
 	panic("not implemented")
 }
+func (m *mockIamService) Register(_ context.Context, _ RegisterCommand) (uuid.UUID, error) {
+	panic("not implemented")
+}
 func (m *mockIamService) HandlePostRegistration(_ context.Context, _ KratosWebhookPayload) error {
 	panic("not implemented")
 }

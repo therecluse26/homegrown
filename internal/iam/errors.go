@@ -41,8 +41,13 @@ var (
 	// ─── Subscription ─────────────────────────────────────────────────────────
 	ErrPremiumRequired = errors.New("premium subscription required")
 
+	// ─── Registration ─────────────────────────────────────────────────────────
+	ErrEmailAlreadyRegistered = errors.New("email already registered")
+	ErrRegistrationFailed     = errors.New("registration failed")
+
 	// ─── Infrastructure ───────────────────────────────────────────────────────
 	ErrKratosError = errors.New("kratos communication error")
+	ErrHearthError = errors.New("hearth communication error")
 )
 
 // InvalidConsentTransitionError is a structured error for invalid COPPA state machine transitions.

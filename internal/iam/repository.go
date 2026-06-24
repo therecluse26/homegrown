@@ -42,6 +42,9 @@ func (r *PgFamilyRepository) Create(ctx context.Context, cmd CreateFamily) (*Fam
 		SubscriptionTier:          "free",
 		CoppaConsentStatus:        string(CoppaConsentRegistered),
 	}
+	if cmd.HearthOrgID != uuid.Nil {
+		model.HearthOrgID = &cmd.HearthOrgID
+	}
 	if err := r.unscoped(ctx).Create(model).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
 	}
@@ -162,12 +165,12 @@ func NewPgParentRepository(db *gorm.DB) *PgParentRepository {
 func (r *PgParentRepository) Create(ctx context.Context, cmd CreateParent) (*Parent, error) {
 	// NOT family-scoped — used during registration. [§6]
 	model := &ParentModel{
-		FamilyID:         cmd.FamilyID,
-		KratosIdentityID: cmd.IdentityID,
-		DisplayName:      cmd.DisplayName,
-		Email:            cmd.Email,
-		IsPrimary:        cmd.IsPrimary,
-		IsPlatformAdmin:  false,
+		FamilyID:     cmd.FamilyID,
+		HearthUserID: cmd.HearthUserID,
+		DisplayName:  cmd.DisplayName,
+		Email:        cmd.Email,
+		IsPrimary:    cmd.IsPrimary,
+		IsPlatformAdmin: false,
 	}
 	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
 		return nil, shared.ErrDatabase(err)
@@ -175,11 +178,16 @@ func (r *PgParentRepository) Create(ctx context.Context, cmd CreateParent) (*Par
 	return model.toDomain(), nil
 }
 
-func (r *PgParentRepository) FindByKratosID(ctx context.Context, kratosIdentityID uuid.UUID) (*Parent, error) {
-	// NOT family-scoped — used by auth middleware before FamilyScope is constructed. [§6]
-	// Caller MUST ensure RLS is handled (BypassRLSTransaction). [01-iam §11.1]
+// FindByKratosID is a legacy method retained for interface compatibility.
+// kratos_identity_id was dropped in migration 20260624000037000 — always returns ErrParentNotFound.
+func (r *PgParentRepository) FindByKratosID(_ context.Context, _ uuid.UUID) (*Parent, error) {
+	return nil, ErrParentNotFound
+}
+
+func (r *PgParentRepository) FindByHearthUserID(ctx context.Context, hearthUserID uuid.UUID) (*Parent, error) {
+	// NOT family-scoped — used by Hearth BFF auth middleware before FamilyScope is constructed.
 	var model ParentModel
-	err := r.db.WithContext(ctx).Where("kratos_identity_id = ?", kratosIdentityID).First(&model).Error
+	err := r.db.WithContext(ctx).Where("hearth_user_id = ?", hearthUserID).First(&model).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrParentNotFound

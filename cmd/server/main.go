@@ -21,6 +21,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
+	hearthsdk "github.com/hearth-auth/hearth/sdks/go/hearth"
 	"github.com/labstack/echo/v4"
 	"github.com/pressly/goose/v3"
 
@@ -152,6 +153,15 @@ func main() {
 
 	// ── Step 7: Wire IAM domain ───────────────────────────────────────────────────
 	kratosAdapter := iamadapters.NewKratosAdapter(cfg.AuthAdminURL, cfg.AuthPublicURL)
+
+	// Hearth BFF auth adapter: session store + local JWT decode. [ADR-A, ADR-D]
+	hearthClient := hearthsdk.NewClient(cfg.AuthPublicURL, cfg.HearthRealmID)
+	sidSessionStore, err := iam.NewPgSessionStore(db, cfg.HearthSessionKey)
+	if err != nil {
+		slog.Error("failed to create Hearth session store", "error", err)
+		os.Exit(1)
+	}
+	hearthAdapter := iamadapters.NewHearthAdapter(hearthClient, sidSessionStore)
 
 	familyRepo := iam.NewPgFamilyRepository(db)
 	parentRepo := iam.NewPgParentRepository(db)
@@ -1504,7 +1514,7 @@ func main() {
 	state := &app.AppState{
 		DB:       db,
 		Cache:    cache,
-		Auth:     kratosAdapter, // KratosAdapterImpl implements shared.SessionValidator
+		Auth:     hearthAdapter, // HearthAdapter implements shared.SessionValidator via local JWT decode [ADR-A]
 		Errors:   errReporter,
 		Jobs:     jobs,
 		EventBus: eventBus,

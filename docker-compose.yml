@@ -25,73 +25,22 @@ services:
       timeout: 5s
       retries: 5
 
-  mailhog:
-    image: mailhog/mailhog:latest
+  hearth:
+    image: ghcr.io/hearth-auth/hearth:v1.0.20@sha256:22cb858dc72f87617457b4ea5723f25de6a23cb66142a439e92be4a4060773ab
     ports:
-      - "1525:1025"   # SMTP
-      - "8525:8025"   # Web UI
-
-  kratos:
-    image: oryd/kratos:v1.3
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mailhog:
-        condition: service_started
-    environment:
-      DSN: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
-      SERVE_PUBLIC_BASE_URL: http://localhost:4933
-      SERVE_ADMIN_BASE_URL: http://localhost:4934
-    ports:
-      - "4933:4433"   # Public API
-      - "4934:4434"   # Admin API
+      - "4933:4433"   # OIDC public API (/.well-known/openid-configuration, /authorize, /token, …)
+      - "4934:4434"   # Admin API (/admin/bootstrap, /admin/realms/…)
+      - "8420:8420"   # Dev mailcatcher web UI (/dev/mail)
     volumes:
-      - ./kratos:/etc/kratos
-    command: serve --config /etc/kratos/kratos.yml --dev --watch-courier
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - ./hearth/hearth.yaml:/etc/hearth/hearth.yaml:ro
+      - hearth_data:/var/lib/hearth
+    command: --config /etc/hearth/hearth.yaml --dev
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:4434/health/alive"]
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:4434/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  kratos_agent:
-    image: oryd/kratos:v1.3
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mailhog:
-        condition: service_started
-    environment:
-      DSN: postgres://homegrown:homegrown@postgres:5432/kratos_agent?sslmode=disable
-      LOG_LEVEL: warning
-    command: serve --config /etc/kratos/kratos.yml --dev --watch-courier
-    volumes:
-      - ./kratos:/etc/kratos
-    ports:
-      - "4935:4433"   # Public API (agent)
-      - "4936:4434"   # Admin API (agent)
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:4434/health/alive"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  kratos-migrate:
-    image: oryd/kratos:v1.3
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DSN: postgres://homegrown:homegrown@postgres:5432/kratos?sslmode=disable
-    volumes:
-      - ./kratos:/etc/kratos
-    command: migrate sql -e --yes --config /etc/kratos/kratos.yml
 
   prometheus:
     image: prom/prometheus:v2.53.0
@@ -188,6 +137,7 @@ services:
 
 volumes:
   pg_data:
+  hearth_data:
   hs_pg_data:
   prometheus_data:
   grafana_data:

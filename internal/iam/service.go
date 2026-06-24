@@ -32,6 +32,7 @@ type IamServiceImpl struct {
 	inviteRepo                 CoParentInviteRepository
 	sessionRepo                StudentSessionRepository
 	kratosAdapter              KratosAdapter
+	hearthAdapter              HearthAdapter // nil if Hearth is not configured
 	eventBus                   *shared.EventBus
 	db                         *gorm.DB // for transaction management
 	defaultMethodologyResolver DefaultMethodologyResolver
@@ -72,6 +73,7 @@ func (s *IamServiceImpl) SetDefaultMethodologyResolver(resolver DefaultMethodolo
 func (s *IamServiceImpl) SetBillingService(svc BillingServiceForIam) {
 	s.billingSvc = svc
 }
+
 
 // getDefaultMethodologySlug returns the default methodology slug, falling back to a
 // hardcoded slug on error.
@@ -180,17 +182,52 @@ func (s *IamServiceImpl) GetConsentStatus(ctx context.Context, scope *shared.Fam
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
-func (s *IamServiceImpl) HandlePostRegistration(ctx context.Context, payload KratosWebhookPayload) error {
-	// Creates family + parent atomically. RLS bypassed — family does not exist yet. [§10.1]
-	var familyID, parentID uuid.UUID
+// SetHearthAdapter injects the Hearth adapter after it is wired in main.go.
+func (s *IamServiceImpl) SetHearthAdapter(adapter HearthAdapter) {
+	s.hearthAdapter = adapter
+}
 
-	err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
+// Register performs app-orchestrated Hearth registration. [§10.1, ARCH ADR-019]
+//
+// Phase 1: Hearth calls (CreateUser → CreateOrgForFamily → AssignUserToOrg).
+// Phase 2: DB transaction (iam_families + iam_parents rows).
+// Compensating action: if the DB transaction fails, the Hearth user is deleted.
+func (s *IamServiceImpl) Register(ctx context.Context, cmd RegisterCommand) (uuid.UUID, error) {
+	if s.hearthAdapter == nil {
+		return uuid.Nil, fmt.Errorf("iam: Hearth adapter not configured")
+	}
+
+	// Phase 1: Hearth admin ops (before DB transaction). [§10.1 steps 2-4]
+	hearthUserID, err := s.hearthAdapter.CreateUser(ctx, cmd.Email, cmd.DisplayName)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: create Hearth user: %v", ErrRegistrationFailed, err)
+	}
+
+	hearthOrgID, err := s.hearthAdapter.CreateOrgForFamily(ctx, cmd.FamilyDisplayName)
+	if err != nil {
+		_ = s.hearthAdapter.DeleteUser(ctx, hearthUserID) // compensating action
+		return uuid.Nil, fmt.Errorf("%w: create Hearth org: %v", ErrRegistrationFailed, err)
+	}
+
+	if err := s.hearthAdapter.AssignUserToOrg(ctx, hearthUserID, hearthOrgID); err != nil {
+		_ = s.hearthAdapter.DeleteUser(ctx, hearthUserID)
+		return uuid.Nil, fmt.Errorf("%w: assign Hearth org membership: %v", ErrRegistrationFailed, err)
+	}
+
+	// Phase 2: DB transaction. [§10.1 steps 5-9]
+	var familyID, parentID uuid.UUID
+	dbErr := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		familyRepo := NewPgFamilyRepository(tx)
 		parentRepo := NewPgParentRepository(tx)
 
+		slug := cmd.PrimaryMethodologySlug
+		if slug == "" {
+			slug = s.getDefaultMethodologySlug(ctx)
+		}
 		family, err := familyRepo.Create(ctx, CreateFamily{
-			DisplayName:          displayNameFromTraits(payload.Traits),
-			PrimaryMethodologySlug: s.getDefaultMethodologySlug(ctx),
+			DisplayName:            cmd.FamilyDisplayName,
+			HearthOrgID:            hearthOrgID,
+			PrimaryMethodologySlug: slug,
 		})
 		if err != nil {
 			return err
@@ -198,11 +235,11 @@ func (s *IamServiceImpl) HandlePostRegistration(ctx context.Context, payload Kra
 		familyID = family.ID
 
 		parent, err := parentRepo.Create(ctx, CreateParent{
-			FamilyID:    family.ID,
-			IdentityID:  payload.IdentityID,
-			DisplayName: payload.Traits.Name,
-			Email:       payload.Traits.Email,
-			IsPrimary:   true,
+			FamilyID:     family.ID,
+			HearthUserID: &hearthUserID,
+			DisplayName:  cmd.DisplayName,
+			Email:        cmd.Email,
+			IsPrimary:    true,
 		})
 		if err != nil {
 			return err
@@ -211,14 +248,27 @@ func (s *IamServiceImpl) HandlePostRegistration(ctx context.Context, payload Kra
 
 		return familyRepo.SetPrimaryParent(ctx, family.ID, parent.ID)
 	})
-	if err != nil {
-		return err
+	if dbErr != nil {
+		// Compensating action: delete the Hearth user so the orphaned identity
+		// cannot acquire a family_id org membership. Alert on double-failure. [§10.1]
+		if deleteErr := s.hearthAdapter.DeleteUser(ctx, hearthUserID); deleteErr != nil {
+			slog.Error("iam: ALERT registration rollback failed — orphaned Hearth user",
+				"hearth_user_id", hearthUserID, "error", deleteErr)
+		}
+		return uuid.Nil, fmt.Errorf("%w: %v", ErrRegistrationFailed, dbErr)
 	}
 
-	// Publish event after commit. Handler errors are logged, not propagated. [shared.EventBus]
-	if err := s.eventBus.Publish(ctx, FamilyCreated{FamilyID: familyID, ParentID: parentID}); err != nil {
-		slog.Error("failed to publish FamilyCreated", "family_id", familyID, "error", err)
+	// [§10.1 step 10] Publish FamilyCreated event.
+	if pubErr := s.eventBus.Publish(ctx, FamilyCreated{FamilyID: familyID, ParentID: parentID}); pubErr != nil {
+		slog.Error("iam: failed to publish FamilyCreated", "family_id", familyID, "error", pubErr)
 	}
+	return familyID, nil
+}
+
+func (s *IamServiceImpl) HandlePostRegistration(_ context.Context, _ KratosWebhookPayload) error {
+	// Kratos registration webhook — superseded by app-orchestrated Hearth registration (ADR-019).
+	// Retained for interface compatibility; Hearth is the active auth provider. [HOM-165 WS3]
+	slog.Warn("iam: received Kratos post-registration webhook — Kratos is no longer the auth provider")
 	return nil
 }
 
@@ -504,24 +554,28 @@ func toConsentStatusResponse(family *Family) *ConsentStatusResponse {
 	}
 }
 
-// RevokeFamilySessions revokes all Kratos sessions for every parent in the family.
-// Uses BypassRLSTransaction to list parent identity IDs without a family scope
+// RevokeFamilySessions revokes all Hearth sessions for every parent in the family.
+// Uses BypassRLSTransaction to list parent Hearth user IDs without a family scope
 // (background job and cross-domain context). [15-data-lifecycle §12, 11-safety §7.3]
 func (s *IamServiceImpl) RevokeFamilySessions(ctx context.Context, familyID uuid.UUID) error {
-	var identityIDs []uuid.UUID
+	if s.hearthAdapter == nil {
+		slog.Warn("iam: RevokeFamilySessions called but Hearth adapter not configured")
+		return nil
+	}
+	var hearthUserIDs []uuid.UUID
 	if err := shared.BypassRLSTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		return tx.Table("iam_parents").
-			Select("kratos_identity_id").
-			Where("family_id = ?", familyID).
-			Scan(&identityIDs).Error
+			Select("hearth_user_id").
+			Where("family_id = ? AND hearth_user_id IS NOT NULL", familyID).
+			Scan(&hearthUserIDs).Error
 	}); err != nil {
-		return fmt.Errorf("iam: list family parent identities: %w", err)
+		return fmt.Errorf("iam: list family parent hearth user IDs: %w", err)
 	}
 
 	var lastErr error
-	for _, identityID := range identityIDs {
-		if err := s.kratosAdapter.RevokeSessions(ctx, identityID); err != nil {
-			slog.Error("iam: revoke sessions for identity", "identity_id", identityID, "error", err)
+	for _, userID := range hearthUserIDs {
+		if err := s.hearthAdapter.RevokeUserSessions(ctx, userID); err != nil {
+			slog.Error("iam: revoke Hearth sessions for user", "hearth_user_id", userID, "error", err)
 			lastErr = err
 		}
 	}
@@ -543,12 +597,6 @@ func (s *IamServiceImpl) GetStudentName(ctx context.Context, studentID uuid.UUID
 	return row.DisplayName, nil
 }
 
-func displayNameFromTraits(traits KratosTraits) string {
-	if traits.Name != "" {
-		return traits.Name + " Family"
-	}
-	return "My Family"
-}
 
 // ─── Phase 2: Co-parent Management ───────────────────────────────────────────
 
@@ -655,7 +703,7 @@ func (s *IamServiceImpl) AcceptInvite(ctx context.Context, auth *shared.AuthCont
 		// Check requester is not already in the family.
 		var count int64
 		if err := tx.WithContext(ctx).Model(&ParentModel{}).
-			Where("family_id = ? AND kratos_identity_id = ?", matched.FamilyID, auth.IdentityID).
+			Where("family_id = ? AND hearth_user_id = ?", matched.FamilyID, auth.IdentityID).
 			Count(&count).Error; err != nil {
 			return shared.ErrDatabase(err)
 		}
@@ -663,14 +711,15 @@ func (s *IamServiceImpl) AcceptInvite(ctx context.Context, auth *shared.AuthCont
 			return ErrParentAlreadyInFamily
 		}
 
-		// Create parent row.
+		// Create parent row. auth.IdentityID holds hearth_user_id in the Hearth BFF flow. [ADR-018]
+		hearthUserID := auth.IdentityID
 		scope := shared.NewFamilyScopeFromID(matched.FamilyID)
 		if _, err := parentRepo.Create(ctx, CreateParent{
-			FamilyID:    matched.FamilyID,
-			IdentityID:  auth.IdentityID,
-			DisplayName: auth.DisplayName,
-			Email:       auth.Email,
-			IsPrimary:   false,
+			FamilyID:     matched.FamilyID,
+			HearthUserID: &hearthUserID,
+			DisplayName:  auth.DisplayName,
+			Email:        auth.Email,
+			IsPrimary:    false,
 		}); err != nil {
 			return err
 		}
@@ -699,7 +748,7 @@ func (s *IamServiceImpl) RemoveCoParent(ctx context.Context, scope *shared.Famil
 		return ErrNotPrimaryParent
 	}
 
-	var identityID uuid.UUID
+	var hearthUserID *uuid.UUID
 	err := shared.ScopedTransaction(ctx, s.db, *scope, func(tx *gorm.DB) error {
 		repo := NewPgParentRepository(tx)
 		parent, err := repo.FindByID(ctx, scope, parentID)
@@ -709,16 +758,18 @@ func (s *IamServiceImpl) RemoveCoParent(ctx context.Context, scope *shared.Famil
 		if parent.IsPrimary {
 			return ErrCannotRemovePrimaryParent
 		}
-		identityID = parent.IdentityID
+		hearthUserID = parent.HearthUserID
 		return repo.Delete(ctx, scope, parentID)
 	})
 	if err != nil {
 		return err
 	}
 
-	// Revoke Kratos sessions after DB delete commits.
-	if err := s.kratosAdapter.RevokeSessions(ctx, identityID); err != nil {
-		slog.Error("iam: revoke sessions on co-parent removal", "identity_id", identityID, "error", err)
+	// Revoke Hearth sessions after DB delete commits.
+	if s.hearthAdapter != nil && hearthUserID != nil {
+		if err := s.hearthAdapter.RevokeUserSessions(ctx, *hearthUserID); err != nil {
+			slog.Error("iam: revoke Hearth sessions on co-parent removal", "hearth_user_id", hearthUserID, "error", err)
+		}
 	}
 
 	if pubErr := s.eventBus.Publish(ctx, CoParentRemoved{FamilyID: scope.FamilyID(), CoParentID: parentID}); pubErr != nil {

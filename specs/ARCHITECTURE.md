@@ -205,24 +205,30 @@ Redis also serves as:
 
 **Revision trigger**: If job throughput exceeds Redis single-instance capacity (~100K jobs/sec), add Redis Cluster. This is unlikely before Phase 4.
 
-### 2.8 Authentication: Ory Kratos
+### 2.8 Authentication: Hearth
+
+> **Note**: Ory Kratos was the original selection (ADR-004). It has been superseded by Hearth (ADR-017). The entry below reflects the current decision.
 
 **Satisfies**: `[S§3]` accounts & permissions, `[S§17.1]` security, `[S§17.2]` COPPA
 
 | Attribute | Value |
 |-----------|-------|
-| **Service** | Ory Kratos (self-hosted, sidecar) |
-| **OIDC providers** | Google, Facebook, Apple `[S§6.1]` |
-| **MFA** | TOTP + WebAuthn `[S§17.1]` |
-| **Session management** | Kratos cookie-based sessions |
+| **Service** | Hearth (`ghcr.io/hearth-rs/hearth`), self-hosted sidecar |
+| **Protocol** | OIDC Core 1.0 / OAuth2 Authorization Code + PKCE |
+| **Token format** | Ed25519 (`EdDSA`) JWT; JWKS at `/.well-known/openid-configuration` |
+| **Per-request auth** | Local JWT signature verify (cached JWKS) — no call to Hearth per request |
+| **MFA** | TOTP + WebAuthn (built into Hearth) `[S§17.1]` |
+| **Session management** | BFF pattern: backend holds tokens; browser gets `HttpOnly; Secure; SameSite=Strict` session cookie |
+| **Family tenancy** | One Hearth Organization per family; `oid` claim = `family_id` |
 
-**Rationale**: Building auth from scratch in Go means implementing password hashing, session management, OIDC flows, MFA, account recovery, and email verification. Kratos handles all of this as a battle-tested, self-hosted identity service. Custom COPPA consent flow `[S§17.2]` is built on top of Kratos hooks.
+**Rationale**: Hearth replaces Ory Kratos's opaque-session + per-request introspection model with a standard OIDC flow that issues Ed25519 JWTs. The backend verifies tokens locally using cached JWKS, eliminating the per-request phone-home. The `oid` (organization) claim carries `family_id` directly, making `FamilyScope` derivable from the verified token — no DB JOIN required. The BFF token storage pattern keeps all OAuth tokens server-side; the browser never sees an access or refresh token. See ADR-017 through ADR-020 for the full decision rationale.
 
-**Rejected alternatives**:
-- **Auth0 / Firebase Auth**: SaaS dependency, per-MAU pricing becomes expensive at scale. At 100K+ families, Auth0 costs $1,000+/mo vs. self-hosted Kratos at $0.
-- **Custom Go auth**: Months of development for a solved problem. Security-critical code that should not be custom-written by a solo developer.
+**Rejected alternatives** (see ADR-017 for full analysis):
+- **Ory Kratos**: Per-request `GET /sessions/whoami` introspection call; opaque sessions require network round-trip to validate every request; no built-in org/family tenancy; webhook race conditions during registration.
+- **Auth0 / Firebase Auth**: SaaS dependency, per-MAU pricing ($1,000+/mo at 100K families).
+- **Custom Go auth**: Security-critical code; months of development for a solved problem.
 
-**Revision trigger**: None. Kratos is open-source and self-hosted — no vendor lock-in.
+**Revision trigger**: None. Hearth is open-source and self-hosted. See ADR-017.
 
 ### 2.9 Payments: Hyperswitch + Stripe
 
@@ -519,7 +525,7 @@ HTTP Request
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Auth Middleware      │  Validate Kratos session → extract AuthContext
+│ Auth Middleware      │  Read sid cookie → session store → local JWT verify → AuthContext
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
@@ -3968,7 +3974,7 @@ Key note for §15.6 Learning: Video transcoding is a background job in the exist
 
 ### ADR-004: Ory Kratos for Authentication
 
-**Status**: Accepted
+**Status**: Superseded by ADR-017
 
 **Context**: Building authentication from scratch requires implementing password hashing, session management, OIDC flows (Google, Facebook, Apple), MFA, account recovery, and email verification. These are security-critical features where custom implementations frequently have vulnerabilities.
 
@@ -3976,10 +3982,10 @@ Key note for §15.6 Learning: Video transcoding is a background job in the exist
 
 **Consequences**:
 - **Positive**: Battle-tested auth implementation. OIDC support out of the box. MFA (TOTP + WebAuthn) built in. No per-MAU pricing (self-hosted). Custom COPPA consent layer built on Kratos hooks. Session management with remote revocation.
-- **Negative**: Additional container to operate. Learning Kratos configuration. Custom UI required (Kratos provides API, not UI).
+- **Negative**: Additional container to operate. Learning Kratos configuration. Custom UI required (Kratos provides API, not UI). Per-request `GET /sessions/whoami` introspection adds latency and makes auth availability dependent on Kratos being reachable on every request. Webhook race conditions during registration require orphaned-identity recovery code. No native org/family tenancy — `family_id` requires a DB JOIN on every request.
 - **Mitigation**: Kratos is lightweight (<50MB memory). React handles UI. Kratos configuration is well-documented.
 
-**Revision trigger**: None. Open-source, self-hosted, no vendor lock-in.
+> **Superseded**: Hearth replaces Ory Kratos. The per-request introspection, webhook race conditions, and family-scope DB JOIN are resolved by Hearth's OIDC/JWT model with org tenancy (ADR-017, ADR-018, ADR-019). See `§2.8` for the updated technology selection. The `shared.SessionValidator` seam (§4.2) contains the change to one adapter.
 
 ### ADR-005: React SPA over SSR
 
@@ -4265,6 +4271,107 @@ This causes page splits and write amplification under sustained insert load.
 **Revision trigger**: No revision expected. UUIDv7 is a strict improvement with no
 downside. If a use case requires purely random IDs (e.g., to avoid timing leaks on share
 IDs), use `gonanoid` as already done for `disc_quiz_results.share_id`.
+
+---
+
+### ADR-017: Local JWT Verification Replaces Per-Request Introspection (Hearth Auth — ADR-A)
+
+**Status**: Accepted
+
+**Context**: The existing Ory Kratos integration (ADR-004) validates every authenticated request by calling `GET /sessions/whoami` — a synchronous HTTP call to the Kratos sidecar. This means Kratos must be reachable on every API request; a Kratos restart or network hiccup instantly degrades the entire platform. Average auth overhead is one extra HTTP round-trip per request (~2–5ms plus Kratos's own latency).
+
+**Decision**: Hearth issues Ed25519 (`EdDSA`) JWTs. Auth middleware verifies the access-token signature locally using the realm's public key fetched from Hearth's JWKS endpoint (`/.well-known/openid-configuration`). The Go SDK handles JWKS caching (`kid`-keyed, respecting `Cache-Control`, with a 24-hour hard cap; on unknown `kid` re-fetches once before rejecting). Hearth's `embedded` permission-delivery mode resolves claims at issue time so no `/introspect` call is needed per request.
+
+**Security tradeoff and mitigation**: Stateless JWTs cannot be revoked mid-lifetime. Mitigated by:
+- Short access-token TTL (target 5–15 min) via Hearth realm config.
+- Refresh-token rotation — Hearth rotates automatically; stolen refresh tokens are detected.
+- Revoke-on-logout via RFC 7009 token revocation + RP-initiated logout.
+- Live introspection reserved for narrow high-sensitivity actions only (account deletion, COPPA state changes) — documented exception, not the default.
+
+**Consequences**:
+- **Positive**: Per-request auth is now CPU-bound (Ed25519 verify, ~0.05ms), not I/O-bound. Auth middleware availability decouples from Hearth availability for the 5–15 min access-token lifetime. `AuthContext` is built directly from verified claims — no DB lookup required for token verification.
+- **Negative**: Revoked tokens remain valid until TTL expiry (maximum 15 min). High-sensitivity operations must use live introspection.
+- **Mitigation**: Short TTL + refresh rotation keeps the revocation window narrow. The documented exception list is enforced via code review.
+
+**Revision trigger**: If revocation guarantees below 5 minutes are required without introspection overhead, evaluate JWT revocation lists (JRL) or Redis-backed revocation cache as an intermediate layer.
+
+---
+
+### ADR-018: `family_id` Travels in the JWT `oid` Claim (Org-per-Family) (Hearth Auth — ADR-B)
+
+**Status**: Accepted (board-approved — Q1 resolution in [HOM-161](/HOM/issues/HOM-161))
+
+**Context**: The existing Kratos integration stores the family relationship in the `iam_parents` table. Auth middleware must call `FindByKratosID` (a DB query) on every request to resolve `family_id` from the Kratos identity. This is a second round-trip on top of the `GET /sessions/whoami` introspection call. `FamilyScope` — the foundational privacy invariant — is therefore a DB query, not a claim.
+
+**Decision**: One Hearth **Organization** per family. Membership in the org causes Hearth to embed `oid = family_id` in every issued JWT. Auth middleware derives `FamilyScope` from the verified `oid` claim via `NewFamilyScopeFromClaims(oid)` — no DB JOIN, no network call, no roundtrip.
+
+Schema changes:
+- `iam_parents.hearth_user_id UUID NOT NULL` — links the parent profile row to the Hearth user (`sub` claim).
+- `iam_families.hearth_org_id UUID NOT NULL` — links the family row to the Hearth org (`oid` claim).
+
+The `SessionValidator` seam in `internal/shared/` (§4.2) contains the change to `internal/iam/adapters/hearth.go`; no other domain changes.
+
+**Consequences**:
+- **Positive**: `FamilyScope` is now derived in O(1) from the verified JWT — zero DB lookups per request for auth and family scoping. The **Family scope invariant** is strengthened: it is now cryptographically enforced by the JWT signature, not only by application logic. `AuthContext` construction is purely CPU-bound after the JWT is verified.
+- **Negative**: Changing a family's org membership (removing co-parent, family merges) requires a Hearth admin API call in addition to the DB update. New parents receive a Hearth org membership at registration — failure here must be handled atomically (ADR-019).
+- **Mitigation**: Registration is app-orchestrated (ADR-019), making the Hearth calls part of the same transaction boundary. Co-parent removal revokes membership via Hearth admin SDK as an atomic step.
+
+**Revision trigger**: If Hearth org semantics diverge from family semantics (e.g., creator orgs, admin multi-tenant) and `oid` becomes ambiguous, introduce a dedicated `family_id` custom claim via Hearth's claims extension API.
+
+---
+
+### ADR-019: App-Orchestrated Registration via Hearth Admin SDK; Webhooks as Backstop (Hearth Auth — ADR-C)
+
+**Status**: Accepted
+
+**Context**: Ory Kratos registration used a post-registration webhook to create `iam_families`/`iam_parents` rows. This introduced a race condition: if the webhook failed or was delayed, the identity existed in Kratos but the family did not exist in the app DB. Recovery code in the auth middleware detected and re-created orphaned identities, adding complexity.
+
+**Decision**: Registration is **app-orchestrated**:
+
+1. Frontend calls `POST /v1/auth/register` (the app backend).
+2. Backend uses the Hearth Go SDK (admin client) to create the Hearth user.
+3. Backend creates the Hearth org for the new family.
+4. Backend assigns the user to the org (sets `oid = family_id`).
+5. Backend creates `iam_families` + `iam_parents` rows inside `BypassRLSTransaction` (family does not exist yet).
+6. All Hearth calls + DB writes fail atomically — if any step fails, the Hearth user is deleted (compensating action).
+
+Hearth **signed webhooks** (`user.*` events) are subscribed as a **backstop only** — for out-of-band changes made via the Hearth admin console (e.g., support deleting an identity). The webhook handler verifies the signature and syncs state. This reuses the existing `/hooks/...` handler shape.
+
+**Consequences**:
+- **Positive**: Eliminates the webhook race condition. Registration state is deterministic — either all steps succeed or all are rolled back. Orphaned-identity recovery code can be removed.
+- **Negative**: Registration endpoint now calls Hearth admin API (network call); failure modes are different from a pure DB transaction.
+- **Mitigation**: Compensating action (delete Hearth user on failure) keeps state consistent. The Hearth admin API is a sidecar on the same host — sub-millisecond latency, high reliability.
+
+**Revision trigger**: If registration volume requires async processing, move to an async-safe saga pattern with idempotent steps and a dedicated compensation queue.
+
+---
+
+### ADR-020: BFF Token Storage — Browser Holds No OAuth Tokens (Hearth Auth — ADR-D)
+
+**Status**: Accepted (board-approved — Q4 resolution in [HOM-161](/HOM/issues/HOM-161))
+
+**Context**: Standard PKCE flows for SPAs store tokens in `localStorage` or `sessionStorage`, exposing them to XSS. The alternative — an `HttpOnly` session cookie backed by server-side token storage — is known as the Backend-for-Frontend (BFF) pattern. Hearth's documentation identifies this as the maximum-security SPA approach.
+
+**Decision**: The Go API acts as the BFF (no extra service — same process). Token flow:
+
+1. `GET /v1/auth/login` → backend builds the PKCE `authorize` URL and redirects the browser. State/PKCE verifier stored server-side.
+2. `GET /v1/auth/callback` → backend exchanges the authorization code (with PKCE verifier) for `{access_token, refresh_token, expiry}`. Creates a server-side session record (`sid`, stored in PostgreSQL `iam_sessions` table or Redis). Sets `sid` as an `HttpOnly; Secure; SameSite=Strict` cookie. Access/refresh tokens are **never** sent to the browser.
+3. **Per request** → auth middleware reads `sid` cookie → loads session from store → **verifies access-token JWT locally** (JWKS, ADR-017) → builds `AuthContext`. If access token is near expiry, middleware silently refreshes it using the stored refresh token (Hearth rotates; middleware updates the session store).
+4. `POST /v1/auth/logout` → revoke refresh token via RFC 7009 + RP-initiated logout; delete session record; clear cookie.
+
+Per-request auth is still local JWT verification (ADR-017) — the `sid` lookup is a local database/cache read, not a call to Hearth.
+
+**Privacy compliance**:
+- Access and refresh tokens are never written to disk, logs, or sent to the browser. `[CODING §5 — BFF session rules]`
+- The `sid` cookie carries no identity information — it is an opaque random identifier.
+- The session store may be PostgreSQL or Redis; in either case tokens are stored server-side under the family's data boundary.
+
+**Consequences**:
+- **Positive**: XSS cannot steal OAuth tokens — they are never in the browser. CSRF is mitigated by `SameSite=Strict`. The BFF pattern is Hearth's recommended maximum-security approach for SPAs. Frontend code never handles tokens.
+- **Negative**: Server-side session state introduces horizontal-scaling coordination requirements (session store must be shared). Silent refresh requires atomic compare-and-swap on the session record to avoid refresh-token race conditions under concurrent requests.
+- **Mitigation**: PostgreSQL or Redis session stores are already part of the infrastructure. A `SELECT FOR UPDATE` or Redis `SET NX EX` pattern prevents concurrent refresh races.
+
+**Revision trigger**: If mobile apps are added (Phase 3+), they use the standard PKCE flow with PKCE-secured native token storage — the BFF pattern is SPA-only.
 
 ---
 
