@@ -177,6 +177,21 @@ func main() {
 	sessionRepo := iam.NewPgStudentSessionRepository(db)
 
 	iamSvc := iam.NewIamService(familyRepo, parentRepo, studentRepo, inviteRepo, sessionRepo, kratosAdapter, eventBus, db)
+	iamSvc.SetHearthAdapter(hearthAdapter) // inject Hearth admin adapter [ADR-019]
+
+	// BFF auth handler: login/callback/register/refresh/logout + webhook. [ADR-020]
+	bffAuthHandler := iam.NewAuthHandler(
+		iamSvc,
+		sidSessionStore,
+		hearthClient,
+		cfg.HearthClientID,
+		cfg.HearthCallbackURL,
+		cfg.HearthFrontendURL,
+		cfg.AuthPublicURL, // Hearth base URL for authorize/revoke endpoints
+		cfg.HearthRealmID,
+		cfg.AuthWebhookSecret,
+		cfg.Environment == config.EnvironmentProduction,
+	)
 
 	// ── Step 7b: Wire method:: domain ────────────────────────────────────────────
 	// method:: is constructed after iam:: because iam:: is a dependency of method::.
@@ -1521,7 +1536,8 @@ func main() {
 	state := &app.AppState{
 		DB:       db,
 		Cache:    cache,
-		Auth:     hearthAdapter, // HearthAdapter implements shared.SessionValidator via local JWT decode [ADR-A]
+		Auth:     hearthAdapter, // HearthAdapter implements shared.SessionValidator [ADR-017]
+		BFFAuth:  bffAuthHandler, // BFF auth endpoints [ADR-020]
 		Errors:   errReporter,
 		Jobs:     jobs,
 		EventBus: eventBus,

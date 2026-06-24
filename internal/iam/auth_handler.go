@@ -21,8 +21,9 @@ import (
 	"github.com/homegrown-academy/homegrown-academy/internal/shared"
 )
 
-// bffSidCookieName is the HttpOnly session cookie name for the BFF pattern. [ARCH ADR-020]
-const bffSidCookieName = "_sid"
+// bffSidCookieName is the HttpOnly session cookie name for the BFF pattern.
+// Must match sidCookieName in internal/middleware/auth.go. [ARCH ADR-020]
+const bffSidCookieName = "sid"
 
 // bffStateCookieName stores the PKCE state+verifier during the OAuth redirect. [ARCH ADR-020]
 const bffStateCookieName = "_auth_state"
@@ -84,13 +85,13 @@ func (h *AuthHandler) Register(pub *echo.Group, hooks *echo.Group) {
 func (h *AuthHandler) login(c echo.Context) error {
 	pkce, err := hearthsdk.GeneratePKCE()
 	if err != nil {
-		return shared.ErrInternal(fmt.Errorf("internal error"))
+		return shared.ErrInternal(err)
 	}
 
 	// Generate opaque state to prevent CSRF.
 	stateBuf := make([]byte, 24)
 	if _, err := rand.Read(stateBuf); err != nil {
-		return shared.ErrInternal(fmt.Errorf("internal error"))
+		return shared.ErrInternal(err)
 	}
 	state := hex.EncodeToString(stateBuf)
 
@@ -110,7 +111,7 @@ func (h *AuthHandler) login(c echo.Context) error {
 	// Build the Hearth authorize URL.
 	authorizeURL, err := url.Parse(h.hearthBaseURL + "/authorize")
 	if err != nil {
-		return shared.ErrInternal(fmt.Errorf("internal error"))
+		return shared.ErrInternal(err)
 	}
 	q := authorizeURL.Query()
 	q.Set("response_type", "code")
@@ -207,7 +208,7 @@ func (h *AuthHandler) callback(c echo.Context) error {
 	})
 	if err != nil {
 		slog.Error("hearth callback: failed to create BFF session", "error", err)
-		return shared.ErrInternal(fmt.Errorf("internal error"))
+		return shared.ErrInternal(err)
 	}
 
 	// Set HttpOnly sid cookie — browser never sees OAuth tokens. [ARCH ADR-020]
@@ -283,7 +284,7 @@ func (h *AuthHandler) refresh(c echo.Context) error {
 	expiresAt := time.Now().Add(time.Duration(newTokens.ExpiresIn) * time.Second)
 	if err := h.store.UpdateTokens(c.Request().Context(), sid, newTokens.AccessToken, newTokens.RefreshToken, expiresAt); err != nil {
 		slog.Error("bff refresh: failed to update session store", "error", err)
-		return shared.ErrInternal(fmt.Errorf("internal error"))
+		return shared.ErrInternal(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)

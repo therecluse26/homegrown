@@ -121,6 +121,15 @@ type AppConfig struct {
 	// Required in production; defaults to "http://localhost:5173" in development.
 	AppPublicURL string
 
+	// ─── Hearth BFF Auth ────────────────────────────────────────────
+	// Absolute callback URL registered in hearth.yaml. [ARCH ADR-020]
+	// Example: "http://localhost:3500/v1/auth/callback"
+	HearthCallbackURL string
+
+	// Base URL of the SPA for post-login redirect. [ARCH ADR-020]
+	// Example: "http://localhost:5673"
+	HearthFrontendURL string
+
 	// ─── Notifications (Postmark) ──────────────────────────────────
 	// Postmark server API token. Optional — omit to use NoopEmailAdapter.
 	PostmarkServerToken string
@@ -204,6 +213,8 @@ func LoadConfig() (*AppConfig, error) {
 	hearthRealmID := envOrDefault("HEARTH_REALM_ID", "homegrown")
 	hearthClientID := envOrDefault("HEARTH_CLIENT_ID", "homegrown-spa")
 	hearthAdminToken := envOrDefault("HEARTH_ADMIN_TOKEN", "dev-admin-token")
+	hearthCallbackURL := envOrDefault("HEARTH_CALLBACK_URL", "http://localhost:3500/v1/auth/callback")
+	hearthFrontendURL := envOrDefault("HEARTH_FRONTEND_URL", "http://localhost:5673")
 
 	authWebhookSecret, err := requiredEnv("AUTH_WEBHOOK_SECRET")
 	if err != nil {
@@ -381,6 +392,8 @@ func LoadConfig() (*AppConfig, error) {
 		HearthRealmID:          hearthRealmID,
 		HearthClientID:         hearthClientID,
 		HearthAdminToken:       hearthAdminToken,
+		HearthCallbackURL:      hearthCallbackURL,
+		HearthFrontendURL:      hearthFrontendURL,
 		HearthSessionKey:       hearthSessionKey,
 		AuthWebhookSecret:      authWebhookSecret,
 		CORSAllowedOrigins:     origins,

@@ -49,6 +49,10 @@ type AppState struct {
 	Config   *config.AppConfig
 	Version  string // Set via -ldflags at build time
 
+	// ─── BFF Auth Handler ───────────────────────────────────────────
+	// Handles login/callback/register/refresh/logout + Hearth webhook. [ARCH ADR-020]
+	BFFAuth *iam.AuthHandler
+
 	// ─── Domain Services ────────────────────────────────────────────
 	IAM         iam.IamService
 	Method      method.MethodologyService
@@ -164,6 +168,10 @@ func NewApp(state *AppState) *echo.Echo {
 	studentPub.Use(middleware.RateLimit(state, 10, 60*time.Second)) // 10 req/60s per IP
 
 	// ─── Domain Route Registration ────────────────────────────────────
+	// BFF auth endpoints: login/callback/register/refresh/logout + Hearth webhook. [ARCH ADR-020]
+	if state.BFFAuth != nil {
+		state.BFFAuth.Register(pub, hooks)
+	}
 	iam.NewHandler(state.IAM, state.Config.AuthWebhookSecret).RegisterWithStudentSession(auth, hooks, studentPub)
 	method.NewHandler(state.Method).Register(pub, auth)
 	discover.NewHandler(state.Discover).Register(pub, auth)
