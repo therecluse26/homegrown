@@ -22,31 +22,21 @@ logging:
   level: info
   format: text
 
+# Realm declared here so hearth reconciles it on every start.
+# OAuth client (homegrown-spa) is also declared here; the admin bootstrap
+# endpoint in make hearth-bootstrap creates/updates it on first run.
 realms:
-  - id: homegrown
-    name: Homegrown Academy
+  homegrown:
+    auth:
+      token:
+        access_token_ttl: "15m"
+        refresh_token_ttl: "720h"
 
-    tokens:
-      # Short-lived access tokens; JWTs verified locally via JWKS (no per-request introspection).
-      access_ttl: 15m
-      refresh_ttl: 720h
-      signing_alg: EdDSA   # Ed25519 / OKP — exposed at /.well-known/jwks.json
-
-    clients:
-      # Public SPA client — PKCE required, no client_secret stored in browser.
-      - id: homegrown-spa
-        name: Homegrown Academy SPA
-        type: public
-        pkce_required: true
+    applications:
+      homegrown-spa:
+        name: "Homegrown Academy SPA"
         redirect_uris:
-          - http://localhost:5673/auth/callback
-        post_logout_redirect_uris:
-          - http://localhost:5673/
-        scopes:
-          - openid
-          - email
-          - profile
-          - offline_access
-        flows:
+          - "http://localhost:5673/auth/callback"
+        grant_types:
           - authorization_code
           - refresh_token
