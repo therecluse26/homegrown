@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { useIntl, FormattedMessage } from "react-intl";
 import { Button, Spinner } from "@/components/ui";
@@ -17,29 +17,29 @@ import { redirectToLogin } from "@/lib/hearth-auth";
 export function Login() {
   const { isAuthenticated, isLoading } = useAuthContext();
   const intl = useIntl();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
+      setIsRedirecting(true);
       redirectToLogin();
     }
   }, [isLoading, isAuthenticated]);
 
-  if (isLoading) {
+  if (isRedirecting) {
     return (
-      <div
-        className="flex justify-center py-6"
-        role="status"
-        aria-live="polite"
-        aria-label={intl.formatMessage({ id: "loading.default" })}
-      >
+      <div className="flex flex-col items-center gap-3 py-6" role="status" aria-live="polite">
         <Spinner size="lg" />
+        <p className="text-body-sm text-on-surface-variant">
+          <FormattedMessage id="auth.login.redirecting" defaultMessage="Taking you to sign in…" />
+        </p>
       </div>
     );
   }
 
   return (
     <>
-      <PageTitle title={intl.formatMessage({ id: "auth.login" })} />
+      <PageTitle title={intl.formatMessage({ id: "auth.login" })} className="text-center" />
 
       <div className="space-y-1 text-center">
         <h2 className="text-title-lg font-semibold text-on-surface">

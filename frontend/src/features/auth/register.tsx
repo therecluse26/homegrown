@@ -128,7 +128,7 @@ export function Register() {
 
   return (
     <>
-      <PageTitle title={intl.formatMessage({ id: "auth.register" })} />
+      <PageTitle title={intl.formatMessage({ id: "auth.register" })} className="text-center" />
 
       <div className="space-y-1 text-center">
         <h2 className="text-title-lg font-semibold text-on-surface">
@@ -181,6 +181,7 @@ export function Register() {
               id={id}
               type="text"
               name="family_display_name"
+              placeholder="e.g. The Johnson Family"
               value={form.family_display_name}
               onChange={handleChange("family_display_name")}
               autoComplete="organization"

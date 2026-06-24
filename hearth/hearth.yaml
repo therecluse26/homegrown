@@ -36,7 +36,8 @@ realms:
       homegrown-spa:
         name: "Homegrown Academy SPA"
         redirect_uris:
-          - "http://localhost:5673/auth/callback"
+          - "http://localhost:3500/v1/auth/callback"
+          - "http://localhost:15180/v1/auth/callback"
         grant_types:
           - authorization_code
           - refresh_token

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -36,21 +37,23 @@ type AuthHandler struct {
 	svc           IamService
 	store         SessionStore
 	client        *hearthsdk.Client
-	clientID      string // PKCE public client ID
+	clientID      string // PKCE public client UUID (stable UUID-v5 from app key)
 	callbackURL   string // absolute callback URL e.g. "http://localhost:3500/v1/auth/callback"
 	frontendURL   string // SPA base URL for post-login redirect e.g. "http://localhost:5673"
-	hearthBaseURL string // Hearth public URL for RP-initiated logout
-	realmID       string
+	hearthBaseURL string // Hearth public URL for server-side API calls (revoke, etc.)
+	realmSlug     string // realm slug for browser-facing URL paths (e.g. "homegrown")
+	realmID       string // realm UUID for X-Realm-ID headers on server-side calls
 	webhookSecret string // HMAC-SHA256 secret for Hearth signed webhooks
 	secure        bool   // set true in prod (HTTPS only)
 }
 
 // NewAuthHandler creates an AuthHandler.
+// realmSlug is used in browser redirect URL paths; realmID (UUID) is used in X-Realm-ID headers.
 func NewAuthHandler(
 	svc IamService,
 	store SessionStore,
 	client *hearthsdk.Client,
-	clientID, callbackURL, frontendURL, hearthBaseURL, realmID, webhookSecret string,
+	clientID, callbackURL, frontendURL, hearthBaseURL, realmSlug, realmID, webhookSecret string,
 	secure bool,
 ) *AuthHandler {
 	return &AuthHandler{
@@ -61,6 +64,7 @@ func NewAuthHandler(
 		callbackURL:   callbackURL,
 		frontendURL:   frontendURL,
 		hearthBaseURL: hearthBaseURL,
+		realmSlug:     realmSlug,
 		realmID:       realmID,
 		webhookSecret: webhookSecret,
 		secure:        secure,
@@ -81,7 +85,12 @@ func (h *AuthHandler) Register(pub *echo.Group, hooks *echo.Group) {
 
 // ─── GET /v1/auth/login ───────────────────────────────────────────────────────
 
-// login redirects the browser to Hearth's authorize endpoint with PKCE. [§A2]
+// login initiates the PAR-based PKCE login flow. [§A2, ARCH ADR-020, RFC 9126]
+//
+// Two-step flow:
+//  1. BFF POSTs PKCE params to Hearth /as/par (server-side, X-Realm-ID: <realm-uuid>)
+//     → Hearth returns {"request_uri": "urn:..."}
+//  2. BFF redirects the browser to /ui/login?request_uri=<value>&client_id=<uuid>
 func (h *AuthHandler) login(c echo.Context) error {
 	pkce, err := hearthsdk.GeneratePKCE()
 	if err != nil {
@@ -108,24 +117,59 @@ func (h *AuthHandler) login(c echo.Context) error {
 		SameSite: http.SameSiteLaxMode, // Lax so the redirect back works across origins
 	})
 
-	// Build the Hearth authorize URL.
-	authorizeURL, err := url.Parse(h.hearthBaseURL + "/authorize")
+	// Step 1: POST authorization params to /as/par (RFC 9126). [ARCH ADR-020]
+	// X-Realm-ID requires the realm UUID for all server-side Hearth API calls.
+	parBody := url.Values{}
+	parBody.Set("response_type", "code")
+	parBody.Set("client_id", h.clientID)
+	parBody.Set("redirect_uri", h.callbackURL)
+	parBody.Set("scope", "openid email profile offline_access")
+	parBody.Set("state", state)
+	parBody.Set("code_challenge", pkce.Challenge)
+	parBody.Set("code_challenge_method", pkce.Method)
+
+	parReq, err := http.NewRequestWithContext(c.Request().Context(), http.MethodPost,
+		h.hearthBaseURL+"/as/par", strings.NewReader(parBody.Encode()))
 	if err != nil {
 		return shared.ErrInternal(err)
 	}
-	q := authorizeURL.Query()
-	q.Set("response_type", "code")
-	q.Set("client_id", h.clientID)
-	q.Set("redirect_uri", h.callbackURL)
-	q.Set("scope", "openid email profile offline_access")
-	q.Set("state", state)
-	q.Set("code_challenge", pkce.Challenge)
-	q.Set("code_challenge_method", pkce.Method)
-	authorizeURL.RawQuery = q.Encode()
-	// Pass realm via header convention; some deployments prefer query param
-	authorizeURL.RawQuery += "&realm_id=" + url.QueryEscape(h.realmID)
+	parReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	parReq.Header.Set("X-Realm-ID", h.realmID)
 
-	return c.Redirect(http.StatusFound, authorizeURL.String())
+	parResp, err := http.DefaultClient.Do(parReq)
+	if err != nil {
+		slog.Error("hearth PAR request failed", "error", err)
+		return shared.ErrInternal(err)
+	}
+	defer parResp.Body.Close() //nolint:errcheck
+
+	if parResp.StatusCode >= 400 {
+		_, _ = io.Copy(io.Discard, parResp.Body)
+		slog.Error("hearth PAR error", "status", parResp.StatusCode)
+		return shared.ErrInternal(fmt.Errorf("hearth PAR returned HTTP %d", parResp.StatusCode)) //nolint:goerr113
+	}
+
+	var parResult struct {
+		RequestURI string `json:"request_uri"`
+	}
+	if err := json.NewDecoder(parResp.Body).Decode(&parResult); err != nil {
+		return shared.ErrInternal(err)
+	}
+	if parResult.RequestURI == "" {
+		return shared.ErrInternal(fmt.Errorf("hearth PAR: empty request_uri in response")) //nolint:goerr113
+	}
+
+	// Step 2: Redirect browser to /ui/login with the opaque request_uri. [RFC 9126, ARCH ADR-020]
+	loginURL, err := url.Parse(h.hearthBaseURL + "/ui/login")
+	if err != nil {
+		return shared.ErrInternal(err)
+	}
+	q := loginURL.Query()
+	q.Set("request_uri", parResult.RequestURI)
+	q.Set("client_id", h.clientID)
+	loginURL.RawQuery = q.Encode()
+
+	return c.Redirect(http.StatusFound, loginURL.String())
 }
 
 // ─── GET /v1/auth/callback ────────────────────────────────────────────────────
@@ -189,13 +233,32 @@ func (h *AuthHandler) callback(c echo.Context) error {
 		slog.Error("hearth callback: failed to parse access token claims", "error", err)
 		return shared.ErrUnauthorized()
 	}
-	hearthUserID, uErr := parseUUID(claims.Subject())
+	// Hearth JWT sub is prefixed with "user_" — strip before UUID parsing. [ARCH ADR-020]
+	rawSub := strings.TrimPrefix(claims.Subject(), "user_")
+	hearthUserID, uErr := parseUUID(rawSub)
 	if uErr != nil {
+		slog.Error("hearth callback: invalid sub claim", "sub", claims.Subject())
 		return shared.ErrUnauthorized()
 	}
-	familyID, fErr := parseUUID(claims.OrganizationId())
-	if fErr != nil {
-		return shared.ErrUnauthorized()
+	// Hearth JWT oid is the org/family UUID. It is only populated by Hearth when the
+	// authorization request includes organization_id — which we cannot know before login.
+	// Fallback: look up family_id from app DB using hearth_user_id. [ARCH ADR-020]
+	var familyID uuid.UUID
+	rawOid := claims.OrganizationId()
+	if rawOid != "" {
+		var fErr error
+		familyID, fErr = parseUUID(rawOid)
+		if fErr != nil {
+			slog.Error("hearth callback: invalid oid claim", "oid", rawOid)
+			return shared.ErrUnauthorized()
+		}
+	} else {
+		var lookupErr error
+		familyID, lookupErr = h.svc.GetFamilyIDByHearthUserID(c.Request().Context(), hearthUserID)
+		if lookupErr != nil {
+			slog.Error("hearth callback: family not found for hearth user", "hearth_user_id", hearthUserID)
+			return shared.ErrUnauthorized()
+		}
 	}
 
 	// Create server-side BFF session. Tokens stored encrypted. [ARCH ADR-020]

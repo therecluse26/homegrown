@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -188,7 +189,8 @@ func (a *HearthAdapterImpl) ValidateSession(ctx context.Context, sid string) (*s
 	}
 
 	// sub = Hearth user ID → iam_parents.hearth_user_id [ADR-018]
-	sub := claims.Subject()
+	// Hearth prefixes sub with "user_" — strip before UUID parsing. [ARCH ADR-020]
+	sub := strings.TrimPrefix(claims.Subject(), "user_")
 	if sub == "" {
 		return nil, shared.ErrUnauthorized()
 	}
@@ -197,13 +199,12 @@ func (a *HearthAdapterImpl) ValidateSession(ctx context.Context, sid string) (*s
 		return nil, shared.ErrUnauthorized()
 	}
 
-	// oid = org ID = family_id under the org-per-family model [ADR-018]
-	oid := claims.OrganizationId()
-	if oid == "" {
-		return nil, shared.ErrUnauthorized()
-	}
-	orgID, err := uuid.Parse(oid)
-	if err != nil {
+	// family_id = org/family UUID. Use the value stored in the BFF session (set during
+	// callback) rather than re-reading the JWT oid claim. Hearth v0.1.0 only populates
+	// oid when the authorize request carries organization_id, which login doesn't have.
+	// Authoritative source: session store. Zero-phone-home preserved. [ARCH ADR-020]
+	orgID := sess.FamilyID
+	if orgID == uuid.Nil {
 		return nil, shared.ErrUnauthorized()
 	}
 

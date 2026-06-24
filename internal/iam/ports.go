@@ -132,6 +132,11 @@ type IamService interface {
 	// Used by the student-session middleware — no family scope available.
 	GetStudentSessionMe(ctx context.Context, token string) (*StudentSessionIdentityResponse, error)
 
+	// GetFamilyIDByHearthUserID returns the family_id for a parent identified by their
+	// Hearth user UUID (the JWT sub claim after stripping the "user_" prefix).
+	// Used by the BFF callback when the JWT oid claim is absent. [ARCH ADR-020]
+	GetFamilyIDByHearthUserID(ctx context.Context, hearthUserID uuid.UUID) (uuid.UUID, error)
+
 	// ─── Lifecycle (Deletion) ──────────────────────────────────────────────
 	// HandleFamilyDeletionScheduled deletes all IAM data for a family.
 	// Called by lifecycle:: as the LAST deletion handler (other domains reference IAM records via FK).

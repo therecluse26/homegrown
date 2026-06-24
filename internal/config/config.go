@@ -41,10 +41,18 @@ type AppConfig struct {
 	// Hearth admin URL — internal admin API. Example: "http://localhost:4934"
 	AuthAdminURL string
 
-	// Hearth realm ID. Example: "homegrown"
+	// HearthRealmID is the realm UUID used for X-Realm-ID headers and PAR login flow.
+	// Example: "865db225-95a0-4021-90f6-b129c9fa5a58". Must be a UUID, not a name slug.
 	HearthRealmID string
 
-	// Hearth SPA client ID (public client, no secret). Example: "homegrown-spa"
+	// HearthRealmUUID is the UUID of the realm, resolved at startup from the slug.
+	// Required for X-Realm-ID headers on server-side OIDC/admin calls. [ARCH ADR-020]
+	// Populated by resolveHearthIDs() in main.go — do not set in config directly.
+	HearthRealmUUID string
+
+	// Hearth SPA client UUID (public client, no secret). [ADR-020]
+	// This UUID is deterministically derived from the application key "homegrown-spa"
+	// and is stable across hearth-reset cycles.
 	HearthClientID string
 
 	// Hearth service-account admin token for backend-only admin API calls. [ADR-019]
@@ -210,8 +218,9 @@ func LoadConfig() (*AppConfig, error) {
 		return nil, err
 	}
 
-	hearthRealmID := envOrDefault("HEARTH_REALM_ID", "homegrown")
-	hearthClientID := envOrDefault("HEARTH_CLIENT_ID", "homegrown-spa")
+	hearthRealmID := envOrDefault("HEARTH_REALM_ID", "acfa8f5a-bac0-408b-8278-9e28ac72eab9")
+	// UUID assigned by Hearth at bootstrap. Update after each make hearth-reset + make hearth-bootstrap.
+	hearthClientID := envOrDefault("HEARTH_CLIENT_ID", "38fd40af-5e44-49a0-9430-4523603cc087")
 	hearthAdminToken := envOrDefault("HEARTH_ADMIN_TOKEN", "dev-admin-token")
 	hearthCallbackURL := envOrDefault("HEARTH_CALLBACK_URL", "http://localhost:3500/v1/auth/callback")
 	hearthFrontendURL := envOrDefault("HEARTH_FRONTEND_URL", "http://localhost:5673")
@@ -390,6 +399,7 @@ func LoadConfig() (*AppConfig, error) {
 		AuthPublicURL:          authPublicURL,
 		AuthAdminURL:           authAdminURL,
 		HearthRealmID:          hearthRealmID,
+		HearthRealmUUID:        "", // populated by resolveHearthIDs at server startup
 		HearthClientID:         hearthClientID,
 		HearthAdminToken:       hearthAdminToken,
 		HearthCallbackURL:      hearthCallbackURL,

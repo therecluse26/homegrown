@@ -1003,6 +1003,19 @@ func (s *IamServiceImpl) GetStudentSessionMe(ctx context.Context, token string) 
 	return result, nil
 }
 
+// ─── GetFamilyIDByHearthUserID ────────────────────────────────────────────────
+
+// GetFamilyIDByHearthUserID returns the family_id for a parent by their Hearth user UUID.
+// Used by the BFF callback when the JWT oid claim is absent (Hearth v0.1.0 requires an
+// explicit organization_id in the authorize request for oid to appear in tokens). [ARCH ADR-020]
+func (s *IamServiceImpl) GetFamilyIDByHearthUserID(ctx context.Context, hearthUserID uuid.UUID) (uuid.UUID, error) {
+	parent, err := s.parentRepo.FindByHearthUserID(ctx, hearthUserID)
+	if err != nil {
+		return uuid.Nil, ErrParentNotFound
+	}
+	return parent.FamilyID, nil
+}
+
 // ─── HandleFamilyDeletionScheduled ────────────────────────────────────────────
 
 // HandleFamilyDeletionScheduled deletes all IAM data for a family.

@@ -137,17 +137,28 @@ agent-db-reset:
 	$(MAKE) hearth-reset
 	$(MAKE) seed
 
-# Bootstrap the Hearth dev realm via the admin API (idempotent; safe to re-run).
-# Hearth's --dev flag auto-bootstraps on first start, but this target lets you
-# explicitly (re-)seed the realm config after a hearth-reset.
+# Bootstrap the Hearth dev realm via the admin HTTP API (idempotent; safe to re-run).
+# The admin API is on the public port (4933 host → 4433 container); the admin_port
+# in hearth.yaml is the internal gRPC interface, not the HTTP admin API.
 hearth-bootstrap:
-	@echo "Waiting for Hearth admin API..."
-	@until wget --spider --quiet http://localhost:4434/health 2>/dev/null; do sleep 2; done
-	curl -sf -X POST http://localhost:4434/admin/bootstrap \
+	@echo "Waiting for Hearth..."
+	@until wget --spider --quiet http://localhost:4933/health 2>/dev/null; do sleep 2; done
+	@echo "Bootstrapping Hearth realm 'homegrown'..."
+	@BOOTSTRAP=$$(curl -sf -X POST http://localhost:4933/admin/bootstrap \
 	  -H "Content-Type: application/json" \
-	  -d '{"realm": "homegrown", "dev": true}'
-	@echo ""
-	@echo "Hearth realm 'homegrown' bootstrapped."
+	  -d '{"realm": "homegrown", "dev": true}') && \
+	REALM_ID=$$(echo "$$BOOTSTRAP" | python3 -c "import sys,json; print(json.load(sys.stdin)['realm_id'])") && \
+	ADMIN_TOKEN=$$(echo "$$BOOTSTRAP" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])") && \
+	CLIENT_RESP=$$(curl -sf -X POST http://localhost:4933/admin/applications \
+	  -H "Authorization: Bearer $$ADMIN_TOKEN" \
+	  -H "X-Realm-ID: $$REALM_ID" \
+	  -H "Content-Type: application/json" \
+	  -d '{"client_name":"homegrown-spa","redirect_uris":["http://localhost:3500/v1/auth/callback"],"grant_types":["authorization_code","refresh_token"]}') && \
+	CLIENT_ID=$$(echo "$$CLIENT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_id'])") && \
+	echo "" && \
+	echo "Hearth bootstrap complete. Add these to .env if overriding auto-resolution:" && \
+	echo "  HEARTH_REALM_ID=$$REALM_ID" && \
+	echo "  HEARTH_CLIENT_ID=$$CLIENT_ID"
 
 # Wipe and reinitialise the Hearth identity store (clears embedded DB, re-bootstraps realm).
 # Equivalent to the old agent-kratos-reset but for Hearth's embedded storage.

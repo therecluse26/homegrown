@@ -198,3 +198,6 @@ func (m *mockIamService) GetStudentSessionMe(_ context.Context, _ string) (*Stud
 func (m *mockIamService) HandleFamilyDeletionScheduled(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
+func (m *mockIamService) GetFamilyIDByHearthUserID(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
+	panic("not implemented")
+}

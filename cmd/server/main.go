@@ -154,8 +154,21 @@ func main() {
 	// ── Step 7: Wire IAM domain ───────────────────────────────────────────────────
 	kratosAdapter := iamadapters.NewKratosAdapter(cfg.AuthAdminURL, cfg.AuthPublicURL)
 
+	// Resolve Hearth realm/client UUIDs when env vars hold name slugs (dev mode). [ARCH ADR-020]
+	// After hearth-reset the UUIDs change; auto-resolution means the server self-configures.
+	// Resolve the homegrown realm UUID from slug at startup. [ARCH ADR-020]
+	// The realm UUID changes on hearth-reset; the client UUID (HearthClientID) is UUID-v5 stable.
+	// HearthRealmUUID is set here; HearthRealmID remains the slug for authorize URL paths.
+	if err := resolveHearthIDs(ctx, cfg); err != nil {
+		slog.Warn("hearth realm UUID resolution failed — admin ops may not work", "error", err)
+		cfg.HearthRealmUUID = cfg.HearthRealmID // fallback: try slug (will fail on UUID-required endpoints)
+	} else {
+		slog.Info("hearth realm resolved", "realm_id", cfg.HearthRealmID, "realm_uuid", cfg.HearthRealmUUID, "client_id", cfg.HearthClientID)
+	}
+
 	// Hearth BFF auth adapter: session store + local JWT decode + admin ops. [ADR-A, ADR-D, ADR-019]
-	hearthClient := hearthsdk.NewClient(cfg.AuthPublicURL, cfg.HearthRealmID)
+	// SDK client uses the realm UUID for all X-Realm-ID headers (token, refresh, admin calls).
+	hearthClient := hearthsdk.NewClient(cfg.AuthPublicURL, cfg.HearthRealmUUID)
 	sidSessionStore, err := iam.NewPgSessionStore(db, cfg.HearthSessionKey)
 	if err != nil {
 		slog.Error("failed to create Hearth session store", "error", err)
@@ -164,7 +177,7 @@ func main() {
 	hearthAdapter := iamadapters.NewHearthAdapter(
 		hearthClient,
 		cfg.AuthAdminURL,
-		cfg.HearthRealmID,
+		cfg.HearthRealmUUID,
 		cfg.HearthAdminToken,
 		cfg.HearthClientID,
 		sidSessionStore,
@@ -180,6 +193,7 @@ func main() {
 	iamSvc.SetHearthAdapter(hearthAdapter) // inject Hearth admin adapter [ADR-019]
 
 	// BFF auth handler: login/callback/register/refresh/logout + webhook. [ADR-020]
+	// realmID and realmUUID are both the realm UUID; login uses PAR not slug-path redirects. [ARCH ADR-020]
 	bffAuthHandler := iam.NewAuthHandler(
 		iamSvc,
 		sidSessionStore,
@@ -187,8 +201,9 @@ func main() {
 		cfg.HearthClientID,
 		cfg.HearthCallbackURL,
 		cfg.HearthFrontendURL,
-		cfg.AuthPublicURL, // Hearth base URL for authorize/revoke endpoints
-		cfg.HearthRealmID,
+		cfg.AuthPublicURL,    // Hearth base URL for PAR + revoke endpoints
+		cfg.HearthRealmID,   // realm UUID — used in PAR request URL construction
+		cfg.HearthRealmUUID, // realm UUID — for X-Realm-ID on server-side calls
 		cfg.AuthWebhookSecret,
 		cfg.Environment == config.EnvironmentProduction,
 	)
@@ -2826,6 +2841,95 @@ func (a iamBillingAdapter) VerifyCreditCardMicroCharge(ctx context.Context, scop
 		PaymentMethodID: paymentMethodID,
 	}, *scope)
 	return err
+}
+
+// ─── Hearth startup resolution ────────────────────────────────────────────────
+
+// resolveHearthIDs populates cfg.HearthRealmUUID from cfg.HearthRealmID.
+//
+// When HEARTH_REALM_ID is already a UUID (the normal dev/prod case), it is used
+// directly as HearthRealmUUID with no API roundtrip. When it is a name slug
+// (legacy or migration scenario), the function bootstraps a dev token and lists
+// realms to find the matching UUID. [ARCH ADR-020]
+func resolveHearthIDs(ctx context.Context, cfg *config.AppConfig) error {
+	// If realm UUID is already set (e.g. from env), skip resolution.
+	if cfg.HearthRealmUUID != "" {
+		if _, err := uuid.Parse(cfg.HearthRealmUUID); err == nil {
+			return nil
+		}
+	}
+
+	// If HEARTH_REALM_ID is already a UUID, use it directly — no API roundtrip needed.
+	if _, err := uuid.Parse(cfg.HearthRealmID); err == nil {
+		cfg.HearthRealmUUID = cfg.HearthRealmID
+		return nil
+	}
+
+	type bootstrapResp struct {
+		RealmID     string `json:"realm_id"`
+		AccessToken string `json:"access_token"`
+	}
+	type realmItem struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	type realmsResp struct {
+		Items []realmItem `json:"items"`
+	}
+
+	// Bootstrap to get a dev-realm admin token (creates a dev realm — separate from "homegrown").
+	// Hearth's HTTP admin API shares the same port as the public API (cfg.AuthPublicURL). [ARCH ADR-020]
+	payload := `{"realm":"hearth-dev","dev":true}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		cfg.AuthPublicURL+"/admin/bootstrap", strings.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("hearth bootstrap build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("hearth bootstrap: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	var br bootstrapResp
+	if err := json.NewDecoder(resp.Body).Decode(&br); err != nil {
+		return fmt.Errorf("hearth bootstrap decode: %w", err)
+	}
+	devToken := br.AccessToken
+	devRealmID := br.RealmID
+
+	// Use the dev-realm admin token to list ALL realms and find the one named cfg.HearthRealmID.
+	listReq, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		cfg.AuthPublicURL+"/admin/realms", nil)
+	if err != nil {
+		return fmt.Errorf("hearth realms list request: %w", err)
+	}
+	listReq.Header.Set("Authorization", "Bearer "+devToken)
+	listReq.Header.Set("X-Realm-ID", devRealmID)
+
+	listResp, err := httpClient.Do(listReq)
+	if err != nil {
+		return fmt.Errorf("hearth realms list: %w", err)
+	}
+	defer listResp.Body.Close() //nolint:errcheck
+
+	var realms realmsResp
+	if err := json.NewDecoder(listResp.Body).Decode(&realms); err != nil {
+		return fmt.Errorf("hearth realms decode: %w", err)
+	}
+
+	for _, r := range realms.Items {
+		if r.Name == cfg.HearthRealmID {
+			cfg.HearthRealmUUID = r.ID
+			cfg.HearthAdminToken = devToken // use real bootstrap JWT for admin ops
+			return nil
+		}
+	}
+
+	return fmt.Errorf("hearth realm %q not found in realm list", cfg.HearthRealmID)
 }
 
 // parseLogLevel converts a string log level to slog.Level.
